@@ -16,29 +16,29 @@ export function NewCategoryModal({ open, onClose, onCreate }: {
   if (!open) return null;
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-      <div className="w-full max-w-md rounded bg-white p-6 shadow-lg dark:bg-[#111]">
+      <div className="w-full max-w-md rounded bg-white p-6 shadow-lg text-black dark:bg-slate-900 dark:text-slate-100">
         <h3 className="mb-4 text-lg font-semibold">New Category</h3>
         <label className="block text-sm">Name (必須)</label>
         <input
           value={name}
           onChange={(e) => setName(e.target.value)}
-          className="w-full rounded border px-3 py-2"
+          className="w-full rounded border px-3 py-2 bg-white text-black dark:bg-slate-800 dark:text-slate-100"
           placeholder="Category name"
         />
         <label className="mt-3 block text-sm">Details</label>
         <textarea
           value={details}
           onChange={(e) => setDetails(e.target.value)}
-          className="w-full rounded border px-3 py-2"
+          className="w-full rounded border px-3 py-2 bg-white text-black dark:bg-slate-800 dark:text-slate-100"
           placeholder="Optional details"
         />
         <label className="mt-3 block text-sm">Due date</label>
         <Popover className="relative">
-          <Popover.Button className="w-full text-left rounded border px-3 py-2">
+          <Popover.Button className="w-full text-left rounded border px-3 py-2 bg-white text-black dark:bg-slate-800 dark:text-slate-100">
             {dueDate ? dueDate : "Select date"}
           </Popover.Button>
           <Popover.Panel className="absolute z-10 mt-2">
-            <div className="rounded bg-white p-2 shadow">
+            <div className="rounded bg-white p-2 shadow text-black dark:bg-slate-800 dark:text-slate-100">
               <DayPicker
                 mode="single"
                 selected={dueDate ? new Date(dueDate) : undefined}
@@ -52,7 +52,7 @@ export function NewCategoryModal({ open, onClose, onCreate }: {
           </Popover.Panel>
         </Popover>
         <div className="mt-4 flex justify-end gap-2">
-          <button className="px-4 py-2" onClick={onClose}>
+          <button className="px-4 py-2 text-black dark:text-slate-100" onClick={onClose}>
             Cancel
           </button>
           <button
@@ -104,19 +104,19 @@ export function NewHabitModal({ open, onClose, onCreate, categories }: {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-      <div className="w-full max-w-md rounded bg-white p-6 shadow-lg dark:bg-[#111]">
+      <div className="w-full max-w-md rounded bg-white p-6 shadow-lg text-black dark:bg-slate-900 dark:text-slate-100">
         <h3 className="mb-4 text-lg font-semibold">New Habbit</h3>
         <label className="block text-sm">Name (必須)</label>
         <input
           value={name}
           onChange={(e) => setName(e.target.value)}
-          className="w-full rounded border px-3 py-2"
+          className="w-full rounded border px-3 py-2 bg-white text-black dark:bg-slate-800 dark:text-slate-100"
           placeholder="Habbit name"
         />
 
         <label className="mt-3 block text-sm">Category</label>
         <select
-          className="w-full rounded border px-3 py-2"
+          className="w-full rounded border px-3 py-2 bg-white text-black dark:bg-slate-800 dark:text-slate-100"
           value={categoryId}
           onChange={(e) => setCategoryId(e.target.value)}
         >
@@ -144,14 +144,14 @@ export function NewHabitModal({ open, onClose, onCreate, categories }: {
           type="number"
           value={duration ?? ""}
           onChange={(e) => setDuration(e.target.value ? Number(e.target.value) : undefined)}
-          className="w-full rounded border px-3 py-2"
+          className="w-full rounded border px-3 py-2 bg-white text-black dark:bg-slate-800 dark:text-slate-100"
           placeholder="e.g. 30"
         />
 
         <label className="mt-3 block text-sm">Reminders</label>
         <div className="mb-2">
           <div className="flex gap-2">
-            <input type="time" value={newReminderTime} onChange={(e) => setNewReminderTime(e.target.value)} className="rounded border px-2 py-1" />
+            <input type="time" value={newReminderTime} onChange={(e) => setNewReminderTime(e.target.value)} className="rounded border px-2 py-1 bg-white text-black dark:bg-slate-800 dark:text-slate-100" />
             <div className="flex gap-1">
               {[
                 ["mon", "Mon"],
@@ -167,7 +167,7 @@ export function NewHabitModal({ open, onClose, onCreate, categories }: {
                   <button
                     key={String(val)}
                     type="button"
-                    className={`rounded px-2 py-1 text-sm ${active ? 'bg-blue-600 text-white' : 'bg-gray-100'}`}
+                    className={`rounded px-2 py-1 text-sm ${active ? 'bg-blue-600 text-white' : 'bg-gray-100 text-black dark:bg-slate-700 dark:text-slate-100'}`}
                     onClick={() => {
                       if (active) setNewReminderDays((d) => d.filter((x) => x !== val));
                       else setNewReminderDays((d) => [...d, String(val)]);
@@ -178,7 +178,7 @@ export function NewHabitModal({ open, onClose, onCreate, categories }: {
                 );
               })}
             </div>
-            <button className="rounded bg-gray-200 px-3" onClick={addReminder}>Add</button>
+            <button className="rounded bg-gray-200 px-3 text-black dark:bg-slate-700 dark:text-slate-100" onClick={addReminder}>Add</button>
           </div>
         </div>
 
