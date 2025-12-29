@@ -4,7 +4,7 @@ import { useState } from "react";
 import { NewCategoryModal, NewHabitModal } from "./components/modals";
 
 type Category = { id: string; name: string; details?: string; dueDate?: string; createdAt: string; updatedAt: string };
-type Habit = { id: string; categoryId: string; name: string; active: boolean; type: "do" | "avoid"; duration?: number; reminders?: { time: string; weekdays: string[] }[]; createdAt: string; updatedAt: string };
+type Habit = { id: string; categoryId: string; name: string; active: boolean; type: "do" | "avoid"; duration?: number; reminders?: ({ kind: 'absolute'; time: string; weekdays: string[] } | { kind: 'relative'; minutesBefore: number })[]; createdAt: string; updatedAt: string };
 
 export default function DashboardPage() {
   const now = new Date().toISOString();
@@ -35,7 +35,7 @@ export default function DashboardPage() {
     setSelectedCategory(id);
   }
 
-  function createHabit(payload: { name: string; categoryId: string; type: "do" | "avoid"; duration?: number; reminders?: { time: string; weekdays: string[] }[] }) {
+  function createHabit(payload: { name: string; categoryId: string; type: "do" | "avoid"; duration?: number; reminders?: ({ kind: 'absolute'; time: string; weekdays: string[] } | { kind: 'relative'; minutesBefore: number })[] }) {
     const id = `h${Date.now()}`;
     const now = new Date().toISOString();
     setHabits((s) => [

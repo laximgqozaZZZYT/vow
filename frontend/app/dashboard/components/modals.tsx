@@ -78,7 +78,7 @@ export function NewCategoryModal({ open, onClose, onCreate }: {
 export function NewHabitModal({ open, onClose, onCreate, categories }: {
   open: boolean;
   onClose: () => void;
-  onCreate: (payload: { name: string; categoryId: string; type: "do" | "avoid"; duration?: number; reminders?: { time: string; weekdays: string[] }[] }) => void;
+  onCreate: (payload: { name: string; categoryId: string; type: "do" | "avoid"; duration?: number; reminders?: ({ kind: 'absolute'; time: string; weekdays: string[] } | { kind: 'relative'; minutesBefore: number })[] }) => void;
   categories: { id: string; name: string }[];
 }) {
   const [name, setName] = useState("");
@@ -87,19 +87,31 @@ export function NewHabitModal({ open, onClose, onCreate, categories }: {
   );
   const [type, setType] = useState<"do" | "avoid">("do");
   const [duration, setDuration] = useState<number | undefined>(undefined);
+  const durationPresets = [15, 30, 45, 60];
 
-  // reminders: simple list of {time, weekdays}
-  const [reminders, setReminders] = useState<{ time: string; weekdays: string[] }[]>([]);
+  // reminders: union of absolute and relative
+  type AbsoluteReminder = { kind: 'absolute'; time: string; weekdays: string[] };
+  type RelativeReminder = { kind: 'relative'; minutesBefore: number };
+  const [reminders, setReminders] = useState<(AbsoluteReminder | RelativeReminder)[]>([]);
   const [newReminderTime, setNewReminderTime] = useState("");
   const [newReminderDays, setNewReminderDays] = useState<string[]>([]);
+  const [reminderMode, setReminderMode] = useState<'absolute' | 'relative'>('absolute');
+  const relativePresets = [5, 10, 15, 30, 60];
+  const [newRelativeMinutes, setNewRelativeMinutes] = useState<number | undefined>(undefined);
 
   if (!open) return null;
 
   function addReminder() {
-    if (!newReminderTime) return;
-    setReminders((r) => [...r, { time: newReminderTime, weekdays: newReminderDays }]);
-    setNewReminderTime("");
-    setNewReminderDays([]);
+    if (reminderMode === 'absolute') {
+      if (!newReminderTime) return;
+      setReminders((r) => [...r, { kind: 'absolute', time: newReminderTime, weekdays: newReminderDays }]);
+      setNewReminderTime("");
+      setNewReminderDays([]);
+    } else {
+      const minutes = newRelativeMinutes ?? relativePresets[1];
+      setReminders((r) => [...r, { kind: 'relative', minutesBefore: minutes }]);
+      setNewRelativeMinutes(undefined);
+    }
   }
 
   return (
@@ -140,46 +152,68 @@ export function NewHabitModal({ open, onClose, onCreate, categories }: {
         </div>
 
         <label className="mt-3 block text-sm">Estimated Duration (分)</label>
-        <input
-          type="number"
-          value={duration ?? ""}
-          onChange={(e) => setDuration(e.target.value ? Number(e.target.value) : undefined)}
-          className="w-full rounded border px-3 py-2 bg-white text-black dark:bg-slate-800 dark:text-slate-100"
-          placeholder="e.g. 30"
-        />
+        <div className="flex gap-2 mb-2">
+          {durationPresets.map((p) => (
+            <button key={p} type="button" className={`rounded px-3 py-1 text-sm ${duration === p ? 'bg-blue-600 text-white' : 'bg-gray-100 dark:bg-slate-700 dark:text-slate-100 text-black'}`} onClick={() => setDuration(p)}>
+              {p}m
+            </button>
+          ))}
+          <input
+            type="number"
+            value={duration ?? ""}
+            onChange={(e) => setDuration(e.target.value ? Number(e.target.value) : undefined)}
+            className="ml-2 w-full rounded border px-3 py-2 bg-white text-black dark:bg-slate-800 dark:text-slate-100"
+            placeholder="Custom (min)"
+          />
+        </div>
 
         <label className="mt-3 block text-sm">Reminders</label>
         <div className="mb-2">
-          <div className="flex gap-2">
-            <input type="time" value={newReminderTime} onChange={(e) => setNewReminderTime(e.target.value)} className="rounded border px-2 py-1 bg-white text-black dark:bg-slate-800 dark:text-slate-100" />
-            <div className="flex gap-1">
-              {[
-                ["mon", "Mon"],
-                ["tue", "Tue"],
-                ["wed", "Wed"],
-                ["thu", "Thu"],
-                ["fri", "Fri"],
-                ["sat", "Sat"],
-                ["sun", "Sun"],
-              ].map(([val, label]) => {
-                const active = newReminderDays.includes(String(val));
-                return (
-                  <button
-                    key={String(val)}
-                    type="button"
-                    className={`rounded px-2 py-1 text-sm ${active ? 'bg-blue-600 text-white' : 'bg-gray-100 text-black dark:bg-slate-700 dark:text-slate-100'}`}
-                    onClick={() => {
-                      if (active) setNewReminderDays((d) => d.filter((x) => x !== val));
-                      else setNewReminderDays((d) => [...d, String(val)]);
-                    }}
-                  >
-                    {String(label)}
-                  </button>
-                );
-              })}
-            </div>
-            <button className="rounded bg-gray-200 px-3 text-black dark:bg-slate-700 dark:text-slate-100" onClick={addReminder}>Add</button>
+          <div className="flex gap-2 items-center mb-2">
+            <button type="button" className={`px-3 py-1 rounded ${reminderMode === 'absolute' ? 'bg-blue-600 text-white' : 'bg-gray-100 dark:bg-slate-700 dark:text-slate-100'}`} onClick={() => setReminderMode('absolute')}>Absolute</button>
+            <button type="button" className={`px-3 py-1 rounded ${reminderMode === 'relative' ? 'bg-blue-600 text-white' : 'bg-gray-100 dark:bg-slate-700 dark:text-slate-100'}`} onClick={() => setReminderMode('relative')}>Relative</button>
           </div>
+
+          {reminderMode === 'absolute' ? (
+            <div className="flex gap-2">
+              <input type="time" value={newReminderTime} onChange={(e) => setNewReminderTime(e.target.value)} className="rounded border px-2 py-1 bg-white text-black dark:bg-slate-800 dark:text-slate-100" />
+              <div className="flex gap-1">
+                {[
+                  ["mon", "Mon"],
+                  ["tue", "Tue"],
+                  ["wed", "Wed"],
+                  ["thu", "Thu"],
+                  ["fri", "Fri"],
+                  ["sat", "Sat"],
+                  ["sun", "Sun"],
+                ].map(([val, label]) => {
+                  const active = newReminderDays.includes(String(val));
+                  return (
+                    <button
+                      key={String(val)}
+                      type="button"
+                      className={`rounded px-2 py-1 text-sm ${active ? 'bg-blue-600 text-white' : 'bg-gray-100 text-black dark:bg-slate-700 dark:text-slate-100'}`}
+                      onClick={() => {
+                        if (active) setNewReminderDays((d) => d.filter((x) => x !== val));
+                        else setNewReminderDays((d) => [...d, String(val)]);
+                      }}
+                    >
+                      {String(label)}
+                    </button>
+                  );
+                })}
+              </div>
+              <button className="rounded bg-gray-200 px-3 text-black dark:bg-slate-700 dark:text-slate-100" onClick={addReminder}>Add</button>
+            </div>
+          ) : (
+            <div className="flex gap-2 items-center">
+              {relativePresets.map((p) => (
+                <button key={p} type="button" className={`rounded px-3 py-1 text-sm ${newRelativeMinutes === p ? 'bg-blue-600 text-white' : 'bg-gray-100 dark:bg-slate-700 dark:text-slate-100 text-black'}`} onClick={() => setNewRelativeMinutes(p)}>{p}m</button>
+              ))}
+              <input type="number" placeholder="Custom min" value={newRelativeMinutes ?? ''} onChange={(e) => setNewRelativeMinutes(e.target.value ? Number(e.target.value) : undefined)} className="ml-2 w-24 rounded border px-2 py-1 bg-white text-black dark:bg-slate-800 dark:text-slate-100" />
+              <button className="rounded bg-gray-200 px-3 text-black dark:bg-slate-700 dark:text-slate-100" onClick={addReminder}>Add</button>
+            </div>
+          )}
         </div>
 
         <ul className="mb-3 text-sm">
