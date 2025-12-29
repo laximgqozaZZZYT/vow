@@ -46,58 +46,58 @@ export default function DashboardPage() {
 
   const selectedHabits = habits.filter((h) => h.categoryId === selectedCategory);
 
+  const [openCategories, setOpenCategories] = useState<Record<string, boolean>>({});
+
+  function toggleCategory(id: string) {
+    setOpenCategories((s) => ({ ...s, [id]: !s[id] }));
+  }
+
   return (
     <div className="flex min-h-screen bg-zinc-50 dark:bg-black text-black dark:text-zinc-50">
       {/* Left pane */}
-      <aside className="w-80 border-r border-zinc-200 bg-white dark:bg-[#0b0b0b] p-4">
-        <h2 className="mb-3 text-lg font-semibold">Categories</h2>
-        <div className="mb-4 flex flex-col gap-2">
-          {categories.map((c) => (
-            <button
-              key={c.id}
-              onClick={() => setSelectedCategory(c.id)}
-              className={`flex w-full items-center gap-2 rounded px-3 py-2 text-left hover:bg-zinc-100 dark:hover:bg-white/5 ${
-                selectedCategory === c.id ? "bg-zinc-100 dark:bg-white/5" : ""
-              }`}
-            >
-              <span className="inline-block w-3">📁</span>
-              <span>{c.name}</span>
-            </button>
-          ))}
+      <aside className="w-80 border-r border-zinc-200 bg-white dark:bg-[#071013] p-3">
+        <div className="mb-3 flex items-center justify-between">
+          <h2 className="text-lg font-semibold">VOW</h2>
+          <button className="text-sm text-zinc-500">⋯</button>
         </div>
 
-        <h3 className="mb-2 text-sm font-medium">Habits</h3>
-        <div className="mb-4 flex flex-col gap-2">
-          {selectedHabits.length === 0 && (
-            <div className="px-3 text-sm text-zinc-500">No habits</div>
-          )}
-          {selectedHabits.map((h) => (
-            <div key={h.id} className="flex items-center justify-between rounded px-3 py-2">
-              <div className="flex flex-col">
-                <div className="flex items-center gap-2">
-                  <span>📄</span>
-                  <span className="font-medium">{h.name}</span>
+        <nav className="space-y-2">
+          {categories.map((c) => {
+            const isOpen = !!openCategories[c.id];
+            return (
+              <div key={c.id}>
+                <div
+                  className={`flex items-center justify-between cursor-pointer rounded px-3 py-2 hover:bg-zinc-100 dark:hover:bg-white/5 ${selectedCategory === c.id ? 'bg-zinc-100 dark:bg-white/5' : ''}`}
+                  onClick={() => {
+                    toggleCategory(c.id);
+                    setSelectedCategory(c.id);
+                  }}
+                >
+                  <div className="flex items-center gap-2">
+                    <span className={`inline-block w-3 ${isOpen ? '' : ''}`}>{isOpen ? '▾' : '▸'}</span>
+                    <span className="text-sm font-medium">{c.name}</span>
+                  </div>
+                  <div className="text-xs text-zinc-500">{habits.filter(h => h.categoryId === c.id).length}</div>
                 </div>
-                <div className="text-xs text-zinc-500">
-                  {h.type === "do" ? "やる" : "やらない"}
-                  {h.duration ? ` • ${h.duration}分` : ""}
-                  {h.reminders && h.reminders.length > 0 ? ` • ${h.reminders.length} reminders` : ""}
-                </div>
+                {isOpen && (
+                  <div className="ml-6 mt-1 flex flex-col gap-1">
+                    {habits.filter(h => h.categoryId === c.id).map(h => (
+                      <button key={h.id} onClick={() => setSelectedCategory(c.id)} className="flex items-center gap-2 rounded px-2 py-1 text-sm text-zinc-700 hover:bg-zinc-100 dark:text-zinc-200 dark:hover:bg-white/5">
+                        <span>📄</span>
+                        <span className="truncate">{h.name}</span>
+                      </button>
+                    ))}
+                    {habits.filter(h => h.categoryId === c.id).length === 0 && (
+                      <div className="px-2 py-1 text-xs text-zinc-500">(no habits)</div>
+                    )}
+                  </div>
+                )}
               </div>
-              <div>
-                <input
-                  type="checkbox"
-                  checked={h.active}
-                  onChange={() =>
-                    setHabits((prev) => prev.map((p) => (p.id === h.id ? { ...p, active: !p.active, updatedAt: new Date().toISOString() } : p)))
-                  }
-                />
-              </div>
-            </div>
-          ))}
-        </div>
+            );
+          })}
+        </nav>
 
-        <div className="mt-auto flex gap-2">
+        <div className="mt-auto flex gap-2 pt-4">
           <button
             className="flex-1 rounded border px-3 py-2 text-sm"
             onClick={() => setOpenNewCategory(true)}
