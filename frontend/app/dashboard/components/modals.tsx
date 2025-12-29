@@ -79,7 +79,7 @@ export function NewCategoryModal({ open, onClose, onCreate }: {
 export function NewHabitModal({ open, onClose, onCreate, categories }: {
   open: boolean;
   onClose: () => void;
-  onCreate: (payload: { name: string; categoryId: string; type: "do" | "avoid"; duration?: number; reminders?: ({ kind: 'absolute'; time: string; weekdays: string[] } | { kind: 'relative'; minutesBefore: number })[] }) => void;
+  onCreate: (payload: { name: string; categoryId: string; type: "do" | "avoid"; duration?: number; reminders?: ({ kind: 'absolute'; time: string; weekdays: string[] } | { kind: 'relative'; minutesBefore: number } | { kind: 'none' })[] }) => void;
   categories: { id: string; name: string }[];
 }) {
   const [name, setName] = useState("");
@@ -90,13 +90,14 @@ export function NewHabitModal({ open, onClose, onCreate, categories }: {
   const [duration, setDuration] = useState<number | undefined>(undefined);
   const durationPresets = [15, 30, 45, 60];
 
-  // reminders: union of absolute and relative
+  // reminders: union of absolute, relative, none
   type AbsoluteReminder = { kind: 'absolute'; time: string; weekdays: string[] };
   type RelativeReminder = { kind: 'relative'; minutesBefore: number };
-  const [reminders, setReminders] = useState<(AbsoluteReminder | RelativeReminder)[]>([]);
+  type NoneReminder = { kind: 'none' };
+  const [reminders, setReminders] = useState<(AbsoluteReminder | RelativeReminder | NoneReminder)[]>([]);
   const [newReminderTime, setNewReminderTime] = useState("");
   const [newReminderDays, setNewReminderDays] = useState<string[]>([]);
-  const [reminderMode, setReminderMode] = useState<'absolute' | 'relative'>('absolute');
+  const [reminderMode, setReminderMode] = useState<'absolute' | 'relative' | 'none'>('absolute');
   const relativePresets = [5, 10, 15, 30, 60];
   const [newRelativeMinutes, setNewRelativeMinutes] = useState<number | undefined>(undefined);
 
@@ -108,10 +109,12 @@ export function NewHabitModal({ open, onClose, onCreate, categories }: {
       setReminders((r) => [...r, { kind: 'absolute', time: newReminderTime, weekdays: newReminderDays }]);
       setNewReminderTime("");
       setNewReminderDays([]);
-    } else {
+    } else if (reminderMode === 'relative') {
       const minutes = newRelativeMinutes ?? relativePresets[1];
       setReminders((r) => [...r, { kind: 'relative', minutesBefore: minutes }]);
       setNewRelativeMinutes(undefined);
+    } else if (reminderMode === 'none') {
+      setReminders((r) => [...r, { kind: 'none' }]);
     }
   }
 
@@ -220,7 +223,15 @@ export function NewHabitModal({ open, onClose, onCreate, categories }: {
         <ul className="mb-3 text-sm">
           {reminders.map((r, i) => (
             <li key={i} className="flex items-center justify-between">
-              <div>{r.time} — {r.weekdays.join(", ") || "(every day)"}</div>
+              <div>
+                {r.kind === 'absolute' ? (
+                  <>{r.time} — {r.weekdays.join(", ") || "(every day)"}</>
+                ) : r.kind === 'relative' ? (
+                  <>{r.minutesBefore} minutes before</>
+                ) : (
+                  <>No reminder</>
+                )}
+              </div>
               <button className="text-sm text-red-500" onClick={() => setReminders(reminders.filter((_, idx) => idx !== i))}>Remove</button>
             </li>
           ))}
