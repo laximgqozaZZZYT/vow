@@ -3,18 +3,19 @@
 import { useState } from "react";
 import { NewCategoryModal, NewHabitModal } from "./components/modals";
 
-type Category = { id: string; name: string };
-type Habit = { id: string; categoryId: string; name: string; active: boolean };
+type Category = { id: string; name: string; details?: string; dueDate?: string; createdAt: string; updatedAt: string };
+type Habit = { id: string; categoryId: string; name: string; active: boolean; type: "do" | "avoid"; duration?: number; reminders?: { time: string; weekdays: string[] }[]; createdAt: string; updatedAt: string };
 
 export default function DashboardPage() {
+  const now = new Date().toISOString();
   const [categories, setCategories] = useState<Category[]>([
-    { id: "c1", name: "仕事" },
-    { id: "c2", name: "パーソナル" },
+    { id: "c1", name: "仕事", createdAt: now, updatedAt: now },
+    { id: "c2", name: "パーソナル", createdAt: now, updatedAt: now },
   ]);
   const [habits, setHabits] = useState<Habit[]>([
-    { id: "h1", categoryId: "c1", name: "メール確認", active: true },
-    { id: "h2", categoryId: "c1", name: "タスクレビュー", active: false },
-    { id: "h3", categoryId: "c2", name: "早起き", active: true },
+    { id: "h1", categoryId: "c1", name: "メール確認", active: true, type: "do", createdAt: now, updatedAt: now },
+    { id: "h2", categoryId: "c1", name: "タスクレビュー", active: false, type: "do", createdAt: now, updatedAt: now },
+    { id: "h3", categoryId: "c2", name: "早起き", active: true, type: "do", createdAt: now, updatedAt: now },
   ]);
 
   const [selectedCategory, setSelectedCategory] = useState<string | null>(
@@ -24,15 +25,23 @@ export default function DashboardPage() {
   const [openNewCategory, setOpenNewCategory] = useState(false);
   const [openNewHabit, setOpenNewHabit] = useState(false);
 
-  function createCategory(name: string) {
+  function createCategory(payload: { name: string; details?: string; dueDate?: string }) {
     const id = `c${Date.now()}`;
-    setCategories((s) => [...s, { id, name }]);
+    const now = new Date().toISOString();
+    setCategories((s) => [
+      ...s,
+      { id, name: payload.name, details: payload.details, dueDate: payload.dueDate, createdAt: now, updatedAt: now },
+    ]);
     setSelectedCategory(id);
   }
 
-  function createHabit(name: string, categoryId: string) {
+  function createHabit(payload: { name: string; categoryId: string; type: "do" | "avoid"; duration?: number; reminders?: { time: string; weekdays: string[] }[] }) {
     const id = `h${Date.now()}`;
-    setHabits((s) => [...s, { id, categoryId, name, active: true }]);
+    const now = new Date().toISOString();
+    setHabits((s) => [
+      ...s,
+      { id, categoryId: payload.categoryId, name: payload.name, active: true, type: payload.type, duration: payload.duration, reminders: payload.reminders, createdAt: now, updatedAt: now },
+    ]);
   }
 
   const selectedHabits = habits.filter((h) => h.categoryId === selectedCategory);
@@ -64,16 +73,23 @@ export default function DashboardPage() {
           )}
           {selectedHabits.map((h) => (
             <div key={h.id} className="flex items-center justify-between rounded px-3 py-2">
-              <div className="flex items-center gap-2">
-                <span>📄</span>
-                <span>{h.name}</span>
+              <div className="flex flex-col">
+                <div className="flex items-center gap-2">
+                  <span>📄</span>
+                  <span className="font-medium">{h.name}</span>
+                </div>
+                <div className="text-xs text-zinc-500">
+                  {h.type === "do" ? "やる" : "やらない"}
+                  {h.duration ? ` • ${h.duration}分` : ""}
+                  {h.reminders && h.reminders.length > 0 ? ` • ${h.reminders.length} reminders` : ""}
+                </div>
               </div>
               <div>
                 <input
                   type="checkbox"
                   checked={h.active}
                   onChange={() =>
-                    setHabits((prev) => prev.map((p) => (p.id === h.id ? { ...p, active: !p.active } : p)))
+                    setHabits((prev) => prev.map((p) => (p.id === h.id ? { ...p, active: !p.active, updatedAt: new Date().toISOString() } : p)))
                   }
                 />
               </div>
@@ -131,13 +147,13 @@ export default function DashboardPage() {
       <NewCategoryModal
         open={openNewCategory}
         onClose={() => setOpenNewCategory(false)}
-        onCreate={(name) => createCategory(name)}
+        onCreate={(payload) => createCategory(payload)}
       />
 
       <NewHabitModal
         open={openNewHabit}
         onClose={() => setOpenNewHabit(false)}
-        onCreate={(name, categoryId) => createHabit(name, categoryId)}
+        onCreate={(payload) => createHabit(payload)}
         categories={categories}
       />
     </div>
