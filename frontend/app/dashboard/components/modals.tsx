@@ -37,8 +37,8 @@ export function NewCategoryModal({ open, onClose, onCreate }: {
           <Popover.Button className="w-full text-left rounded border px-3 py-2 bg-white text-black dark:bg-slate-800 dark:text-slate-100">
             {dueDate ? dueDate : "Select date"}
           </Popover.Button>
-          <Popover.Panel className="absolute z-10 mt-2 left-0 w-80">
-            <div className="rounded bg-white p-4 shadow text-black dark:bg-slate-800 dark:text-slate-100">
+          <Popover.Panel className="absolute z-10 mt-2 left-0 w-[min(520px,90vw)]">
+            <div className="rounded bg-white p-4 shadow text-black dark:bg-slate-800 dark:text-slate-100 max-w-full">
               <DayPicker
                 mode="single"
                 selected={dueDate ? new Date(dueDate) : undefined}
