@@ -1,6 +1,9 @@
 "use client";
 
 import { useState } from "react";
+import { Popover } from "@headlessui/react";
+import { DayPicker } from "react-day-picker";
+import "react-day-picker/dist/style.css";
 
 export function NewCategoryModal({ open, onClose, onCreate }: {
   open: boolean;
@@ -30,12 +33,24 @@ export function NewCategoryModal({ open, onClose, onCreate }: {
           placeholder="Optional details"
         />
         <label className="mt-3 block text-sm">Due date</label>
-        <input
-          type="date"
-          value={dueDate ?? ""}
-          onChange={(e) => setDueDate(e.target.value || undefined)}
-          className="w-full rounded border px-3 py-2"
-        />
+        <Popover className="relative">
+          <Popover.Button className="w-full text-left rounded border px-3 py-2">
+            {dueDate ? dueDate : "Select date"}
+          </Popover.Button>
+          <Popover.Panel className="absolute z-10 mt-2">
+            <div className="rounded bg-white p-2 shadow">
+              <DayPicker
+                mode="single"
+                selected={dueDate ? new Date(dueDate) : undefined}
+                onSelect={(date) => {
+                  if (date) {
+                    setDueDate(date.toISOString().slice(0, 10));
+                  }
+                }}
+              />
+            </div>
+          </Popover.Panel>
+        </Popover>
         <div className="mt-4 flex justify-end gap-2">
           <button className="px-4 py-2" onClick={onClose}>
             Cancel
@@ -134,18 +149,37 @@ export function NewHabitModal({ open, onClose, onCreate, categories }: {
         />
 
         <label className="mt-3 block text-sm">Reminders</label>
-        <div className="mb-2 flex gap-2">
-          <input type="time" value={newReminderTime} onChange={(e) => setNewReminderTime(e.target.value)} className="rounded border px-2 py-1" />
-          <select multiple value={newReminderDays} onChange={(e) => setNewReminderDays(Array.from(e.target.selectedOptions, o => o.value))} className="rounded border px-2 py-1">
-            <option value="mon">Mon</option>
-            <option value="tue">Tue</option>
-            <option value="wed">Wed</option>
-            <option value="thu">Thu</option>
-            <option value="fri">Fri</option>
-            <option value="sat">Sat</option>
-            <option value="sun">Sun</option>
-          </select>
-          <button className="rounded bg-gray-200 px-3" onClick={addReminder}>Add</button>
+        <div className="mb-2">
+          <div className="flex gap-2">
+            <input type="time" value={newReminderTime} onChange={(e) => setNewReminderTime(e.target.value)} className="rounded border px-2 py-1" />
+            <div className="flex gap-1">
+              {[
+                ["mon", "Mon"],
+                ["tue", "Tue"],
+                ["wed", "Wed"],
+                ["thu", "Thu"],
+                ["fri", "Fri"],
+                ["sat", "Sat"],
+                ["sun", "Sun"],
+              ].map(([val, label]) => {
+                const active = newReminderDays.includes(String(val));
+                return (
+                  <button
+                    key={String(val)}
+                    type="button"
+                    className={`rounded px-2 py-1 text-sm ${active ? 'bg-blue-600 text-white' : 'bg-gray-100'}`}
+                    onClick={() => {
+                      if (active) setNewReminderDays((d) => d.filter((x) => x !== val));
+                      else setNewReminderDays((d) => [...d, String(val)]);
+                    }}
+                  >
+                    {String(label)}
+                  </button>
+                );
+              })}
+            </div>
+            <button className="rounded bg-gray-200 px-3" onClick={addReminder}>Add</button>
+          </div>
         </div>
 
         <ul className="mb-3 text-sm">
