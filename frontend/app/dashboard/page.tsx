@@ -4,7 +4,7 @@ import { useState } from "react";
 import { NewCategoryModal, NewHabitModal } from "./components/modals";
 
 type Category = { id: string; name: string; details?: string; dueDate?: string; createdAt: string; updatedAt: string };
-type Habit = { id: string; categoryId: string; name: string; active: boolean; type: "do" | "avoid"; duration?: number; reminders?: ({ kind: 'absolute'; time: string; weekdays: string[] } | { kind: 'relative'; minutesBefore: number })[]; createdAt: string; updatedAt: string };
+type Habit = { id: string; categoryId: string; name: string; active: boolean; type: "do" | "avoid"; duration?: number; reminders?: ({ kind: 'absolute'; time: string; weekdays: string[] } | { kind: 'relative'; minutesBefore: number })[]; dueDate?: string; time?: string; allDay?: boolean; notes?: string; createdAt: string; updatedAt: string };
 
 export default function DashboardPage() {
   const now = new Date().toISOString();
@@ -35,12 +35,12 @@ export default function DashboardPage() {
     setSelectedCategory(id);
   }
 
-  function createHabit(payload: { name: string; categoryId: string; type: "do" | "avoid"; duration?: number; reminders?: ({ kind: 'absolute'; time: string; weekdays: string[] } | { kind: 'relative'; minutesBefore: number })[] }) {
+  function createHabit(payload: { name: string; categoryId: string; type: "do" | "avoid"; duration?: number; reminders?: ({ kind: 'absolute'; time: string; weekdays: string[] } | { kind: 'relative'; minutesBefore: number })[]; dueDate?: string; time?: string; allDay?: boolean; notes?: string }) {
     const id = `h${Date.now()}`;
     const now = new Date().toISOString();
     setHabits((s) => [
       ...s,
-      { id, categoryId: payload.categoryId, name: payload.name, active: true, type: payload.type, duration: payload.duration, reminders: payload.reminders, createdAt: now, updatedAt: now },
+      { id, categoryId: payload.categoryId, name: payload.name, active: true, type: payload.type, duration: payload.duration, reminders: payload.reminders, dueDate: payload.dueDate, time: payload.time, allDay: payload.allDay, notes: payload.notes, createdAt: now, updatedAt: now },
     ]);
   }
 

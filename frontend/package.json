@@ -9,9 +9,15 @@
     "lint": "eslint"
   },
   "dependencies": {
+    "@headlessui/react": "^2.2.9",
+    "date-fns": "^4.1.0",
+    "flatpickr": "^4.6.13",
     "next": "16.1.1",
     "react": "19.2.3",
-    "react-dom": "19.2.3"
+    "react-day-picker": "^9.13.0",
+    "react-dom": "19.2.3",
+    "react-flatpickr": "^4.0.11",
+    "rrule": "^2.8.1"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
