@@ -1,0 +1,8 @@
+node_modules/*
+.venv/*
+.env
+.env.local
+.pytest_cache/*
+pycache/*
+.DS_Store
+serviceAccountKey.json
