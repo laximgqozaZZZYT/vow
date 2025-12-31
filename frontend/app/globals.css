@@ -24,3 +24,27 @@ body {
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 }
+
+/* Frame event styles (calendar) */
+.vow-frame {
+  border: 2px dashed rgba(148,163,184,0.95) !important; /* stronger slate */
+  background-color: rgba(96,165,250,0.14) !important; /* stronger translucent blue */
+  color: rgba(255,255,255,0.95) !important;
+  box-shadow: none !important;
+}
+.vow-frame .fc-event-title, .vow-frame .fc-event-time {
+  opacity: 0.9;
+}
+.vow-frame-blank {
+  border-style: dashed !important;
+  background-color: rgba(96,165,250,0.18) !important;
+}
+.vow-frame-full {
+  border-style: solid !important;
+  background-color: rgba(96,165,250,0.16) !important;
+}
+
+/* Ensure habit events appear above frames */
+.fc-event:not(.vow-frame) {
+  z-index: 5 !important;
+}

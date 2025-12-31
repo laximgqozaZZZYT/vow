@@ -20,12 +20,12 @@ function buildTimeOptions() {
   return opts
 }
 
-type Category = { id: string; name: string; details?: string; dueDate?: string | Date | null }
+type Goal = { id: string; name: string; details?: string; dueDate?: string | Date | null }
 
 
 type HabitPayload = {
   name: string
-  categoryId: string
+  goalId: string
   type: "do" | "avoid"
   dueDate?: string
   time?: string
@@ -37,30 +37,32 @@ type HabitPayload = {
   targetCount?: number
 }
 
-export function NewCategoryModal({ open, onClose, onCreate }: { open: boolean; onClose: () => void; onCreate: (c: { name: string; details?: string; dueDate?: string }) => void }) {
+export function NewGoalModal({ open, onClose, onCreate, goals }: { open: boolean; onClose: () => void; onCreate: (c: { name: string; details?: string; dueDate?: string; parentId?: string | null }) => void; goals?: Goal[] }) {
   const [name, setName] = useState("")
   const [details, setDetails] = useState("")
   const [dueDate, setDueDate] = useState<Date | undefined>(undefined)
+  const [parentId, setParentId] = useState<string | null>(null)
 
   if (!open) return null
 
   function handleCreate() {
-    onCreate({ name: name.trim(), details: details.trim() || undefined, dueDate: dueDate ? dueDate.toISOString().slice(0, 10) : undefined })
+    onCreate({ name: name.trim(), details: details.trim() || undefined, dueDate: dueDate ? dueDate.toISOString().slice(0, 10) : undefined, parentId: parentId ?? undefined })
     setName("")
     setDetails("")
     setDueDate(undefined)
+    setParentId(null)
     onClose()
   }
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
       <div className="w-full max-w-md rounded bg-white p-6 shadow-lg text-black dark:bg-slate-900 dark:text-slate-100">
-        <h3 className="mb-4 text-lg font-semibold">New Category</h3>
+  <h3 className="mb-4 text-lg font-semibold">New Goal</h3>
 
         <div className="space-y-3">
           <div>
             <label className="block text-sm">Name</label>
-            <input value={name} onChange={(e) => setName(e.target.value)} className="w-full rounded border px-3 py-2" placeholder="Category name" />
+            <input value={name} onChange={(e) => setName(e.target.value)} className="w-full rounded border px-3 py-2" placeholder="Goal name" />
           </div>
 
           <div>
@@ -82,6 +84,16 @@ export function NewCategoryModal({ open, onClose, onCreate }: { open: boolean; o
             </div>
           </div>
 
+          <div>
+            <label className="block text-sm">Parent goal (optional)</label>
+            <select value={parentId ?? ''} onChange={(e) => setParentId(e.target.value || null)} className="w-full rounded border px-3 py-2 mt-1">
+              <option value="">(no parent)</option>
+              {goals?.map(g => (
+                <option key={g.id} value={g.id}>{g.name}</option>
+              ))}
+            </select>
+          </div>
+
           <div className="mt-4 flex justify-end gap-2">
             <button className="px-4 py-2" onClick={onClose}>Cancel</button>
             <button className="rounded bg-blue-600 px-4 py-2 text-white" onClick={handleCreate}>Create</button>
@@ -92,18 +104,155 @@ export function NewCategoryModal({ open, onClose, onCreate }: { open: boolean; o
   )
 }
 
-export function NewHabitModal({ open, onClose, onCreate, categories }: { open: boolean; onClose: () => void; onCreate: (p: HabitPayload) => void; categories: Category[] }) {
+export function NewFrameModal({ open, onClose, onCreate, initialDate, initialTime }: { open: boolean; onClose: () => void; onCreate: (f: { name?: string; kind: 'Blank' | 'Full'; date?: string; start_time: string; end_time: string; color?: string }) => void; initialDate?: string | Date; initialTime?: string }) {
+  const now = new Date()
+  const fmtTime = (d: Date) => d.toTimeString().slice(0,5)
+  const parseDate = (d?: string | Date) => {
+    if (!d) return undefined
+    return typeof d === 'string' ? new Date(d) : d
+  }
+
+  const [name, setName] = useState<string>("")
+  const [kind, setKind] = useState<'Blank' | 'Full'>('Blank')
+  const [date, setDate] = useState<Date | undefined>(parseDate(initialDate))
+  const [startTime, setStartTime] = useState<string>(initialTime ?? fmtTime(now))
+  const [endTime, setEndTime] = useState<string>(fmtTime(new Date(now.getTime() + 30 * 60 * 1000)))
+  const [color, setColor] = useState<string>("#60A5FA")
+
+  if (!open) return null
+
+  function handleCreate() {
+    onCreate({ name: name.trim() || undefined, kind, date: date ? date.toISOString().slice(0,10) : undefined, start_time: startTime, end_time: endTime, color })
+    setName("")
+    setKind('Blank')
+    setDate(undefined)
+    setStartTime(fmtTime(now))
+    setEndTime(fmtTime(new Date(now.getTime() + 30 * 60 * 1000)))
+    onClose()
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+      <div className="w-full max-w-md rounded bg-white p-6 shadow-lg text-black dark:bg-slate-900 dark:text-slate-100">
+        <h3 className="mb-4 text-lg font-semibold">New Frame</h3>
+
+        <div className="space-y-3">
+          <div>
+            <label className="block text-sm">Name (optional)</label>
+            <input value={name} onChange={(e) => setName(e.target.value)} className="w-full rounded border px-3 py-2" placeholder="Frame name" />
+          </div>
+
+          <div>
+            <label className="block text-sm">Type</label>
+            <div className="mt-1 flex gap-3">
+              <label className="inline-flex items-center gap-2">
+                <input type="radio" name="frame-kind" value="Blank" checked={kind === 'Blank'} onChange={() => setKind('Blank')} />
+                <span className="text-sm">Blank (free)</span>
+              </label>
+              <label className="inline-flex items-center gap-2">
+                <input type="radio" name="frame-kind" value="Full" checked={kind === 'Full'} onChange={() => setKind('Full')} />
+                <span className="text-sm">Full (scheduled)</span>
+              </label>
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-sm">Date</label>
+            <div className="mt-1">
+              <Popover className="relative">
+                <Popover.Button className="w-full text-left rounded border px-3 py-2">{date ? date.toDateString() : 'Select date'}</Popover.Button>
+                <Popover.Panel className="absolute z-10 mt-2 left-0 w-[min(520px,90vw)]">
+                  <div className="rounded bg-white p-4 shadow max-w-full">
+                    <DayPicker mode="single" selected={date} onSelect={(d) => setDate(d ?? undefined)} />
+                  </div>
+                </Popover.Panel>
+              </Popover>
+            </div>
+          </div>
+
+          <div className="flex gap-2">
+            <div className="w-1/2">
+              <label className="block text-sm">Start</label>
+              <div className="mt-1 rounded border bg-white text-black dark:bg-slate-800 dark:text-slate-100">
+                <Popover className="relative">
+                  <Popover.Button className="w-full text-left px-3 py-2 text-sm">{startTime}</Popover.Button>
+                  <Popover.Panel className="absolute z-50 mt-2 left-0 w-40">
+                    <div className="rounded bg-white p-3 shadow text-black dark:bg-slate-800 dark:text-slate-100 max-w-full">
+                      <div className="max-h-56 overflow-auto">
+                        {buildTimeOptions().map((opt) => (
+                          <button key={opt.value} type="button" onClick={() => setStartTime(opt.value)} className={`w-full text-left px-2 py-1 hover:bg-gray-100 ${startTime === opt.value ? 'bg-sky-600 text-white' : ''}`}>{opt.label}</button>
+                        ))}
+                      </div>
+                    </div>
+                  </Popover.Panel>
+                </Popover>
+              </div>
+            </div>
+
+            <div className="w-1/2">
+              <label className="block text-sm">End</label>
+              <div className="mt-1 rounded border bg-white text-black dark:bg-slate-800 dark:text-slate-100">
+                <Popover className="relative">
+                  <Popover.Button className="w-full text-left px-3 py-2 text-sm">{endTime}</Popover.Button>
+                  <Popover.Panel className="absolute z-50 mt-2 left-0 w-40">
+                    <div className="rounded bg-white p-3 shadow text-black dark:bg-slate-800 dark:text-slate-100 max-w-full">
+                      <div className="max-h-56 overflow-auto">
+                        {buildTimeOptions().map((opt) => (
+                          <button key={opt.value} type="button" onClick={() => setEndTime(opt.value)} className={`w-full text-left px-2 py-1 hover:bg-gray-100 ${endTime === opt.value ? 'bg-sky-600 text-white' : ''}`}>{opt.label}</button>
+                        ))}
+                      </div>
+                    </div>
+                  </Popover.Panel>
+                </Popover>
+              </div>
+            </div>
+          </div>
+
+          {kind === 'Full' && (
+            <div>
+              <label className="block text-sm">Color (optional)</label>
+              <input value={color} onChange={(e) => setColor(e.target.value)} className="w-full rounded border px-3 py-2" />
+            </div>
+          )}
+
+          <div className="mt-4 flex justify-end gap-2">
+            <button className="px-4 py-2" onClick={onClose}>Cancel</button>
+            <button className="rounded bg-blue-600 px-4 py-2 text-white" onClick={handleCreate}>Create</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+export function NewHabitModal({ open, onClose, onCreate, categories: goals, initialDate, initialTime, initialType }: { open: boolean; onClose: () => void; onCreate: (p: HabitPayload) => void; categories: Goal[]; initialDate?: string | Date; initialTime?: string; initialType?: "do" | "avoid" }) {
   const now = new Date()
   const defaultStart = new Date(now)
   const defaultEnd = new Date(now.getTime() + 60 * 60 * 1000)
   const fmtTime = (d: Date) => d.toTimeString().slice(0,5)
 
   const [name, setName] = useState("")
-  const [categoryId, setCategoryId] = useState<string | undefined>(categories?.[0]?.id)
-  const [type, setType] = useState<"do" | "avoid">("do")
-  const [dueDate, setDueDate] = useState<Date | undefined>(defaultStart)
-  const [startTime, setStartTime] = useState<string | undefined>(fmtTime(defaultStart))
-  const [endTime, setEndTime] = useState<string | undefined>(fmtTime(defaultEnd))
+  const [goalId, setGoalId] = useState<string | undefined>(goals?.[0]?.id)
+  const [type, setType] = useState<"do" | "avoid">(initialType ?? "do")
+  const parseInitialDate = (d?: string | Date) => {
+    if (!d) return defaultStart
+    const x = typeof d === 'string' ? new Date(d) : d
+    if (isNaN(x.getTime())) return defaultStart
+    return x
+  }
+
+  const [dueDate, setDueDate] = useState<Date | undefined>(parseInitialDate(initialDate))
+  const [startTime, setStartTime] = useState<string | undefined>(initialTime ?? fmtTime(defaultStart))
+  // derive endTime: if initialTime provided, default to +1 hour; otherwise use defaultEnd
+  function addMinutesToTime(t: string, minutes: number) {
+    const [hh, mm] = t.split(':').map((s) => Number(s))
+    if (Number.isNaN(hh) || Number.isNaN(mm)) return t
+    const d = new Date()
+    d.setHours(hh, mm, 0, 0)
+    d.setMinutes(d.getMinutes() + minutes)
+    return d.toTimeString().slice(0,5)
+  }
+  const [endTime, setEndTime] = useState<string | undefined>(initialTime ? addMinutesToTime(initialTime, 60) : fmtTime(defaultEnd))
   const [policy, setPolicy] = useState<"Schedule" | "Count">("Schedule")
   const [targetCount, setTargetCount] = useState<number | undefined>(undefined)
   const [allDay, setAllDay] = useState<boolean>(false)
@@ -127,14 +276,17 @@ export function NewHabitModal({ open, onClose, onCreate, categories }: { open: b
   if (!open) return null
 
   function handleCreate() {
+    // derive a simple repeat string from custom recurrence inputs when enabled
+    const repeatVal = repeatOn ? customUnit : (repeat === 'Does not repeat' ? undefined : repeat)
+
     const payload: HabitPayload = {
       name: name.trim() || "Untitled",
-      categoryId: categoryId ?? categories?.[0]?.id ?? "",
+      goalId: goalId ?? goals?.[0]?.id ?? "",
       type,
       dueDate: dueDate ? dueDate.toISOString().slice(0, 10) : undefined,
       time: startTime ?? undefined,
       endTime: endTime ?? undefined,
-      repeat: repeat ?? undefined,
+      repeat: repeatVal ?? undefined,
       allDay,
       notes: notes.trim() || undefined,
       policy,
@@ -143,8 +295,8 @@ export function NewHabitModal({ open, onClose, onCreate, categories }: { open: b
     onCreate(payload)
     // reset
     setName("")
-    setCategoryId(categories?.[0]?.id)
-    setType("do")
+  setGoalId(goals?.[0]?.id)
+  setType(initialType ?? "do")
     setDueDate(undefined)
     setStartTime("02:00")
     setEndTime("03:00")
@@ -289,7 +441,7 @@ export function NewHabitModal({ open, onClose, onCreate, categories }: { open: b
                     onChange={() => setType('do')}
                     className="form-radio"
                   />
-                  <span className="text-sm">Do</span>
+                  <span className="text-sm">Good</span>
                 </label>
 
                 <label className="inline-flex items-center gap-2">
@@ -301,9 +453,10 @@ export function NewHabitModal({ open, onClose, onCreate, categories }: { open: b
                     onChange={() => setType('avoid')}
                     className="form-radio"
                   />
-                  <span className="text-sm">Avoid</span>
+                  <span className="text-sm">Bad</span>
                 </label>
               </div>
+              <div className="text-xs text-zinc-500 mt-1">Good = show on calendar. Bad = track but hide from calendar.</div>
             </div>
 
               {repeatOn && (
@@ -402,12 +555,12 @@ export function NewHabitModal({ open, onClose, onCreate, categories }: { open: b
 
           <div className="w-72">
             <div className="rounded border bg-gray-50 dark:bg-slate-800 p-3">
-              <div className="text-sm font-medium mb-2">Category</div>
-              <select value={categoryId} onChange={(e) => setCategoryId(e.target.value)} className="w-full rounded border px-3 py-2 bg-white text-black dark:bg-slate-800 dark:text-slate-100">
-                {categories.map((c) => (
-                  <option key={c.id} value={c.id}>{c.name}</option>
-                ))}
-              </select>
+                      <div className="text-sm font-medium mb-2">Goal</div>
+                      <select value={goalId} onChange={(e) => setGoalId(e.target.value)} className="w-full rounded border px-3 py-2 bg-white text-black dark:bg-slate-800 dark:text-slate-100">
+                        {goals.map((c) => (
+                          <option key={c.id} value={c.id}>{c.name}</option>
+                        ))}
+                      </select>
             </div>
           </div>
         </div>
@@ -421,9 +574,9 @@ export function NewHabitModal({ open, onClose, onCreate, categories }: { open: b
   )
 }
 
-type Habit = { id: string; categoryId: string; name: string; active: boolean; type: "do" | "avoid"; count: number; must?: number; duration?: number; reminders?: ({ kind: 'absolute'; time: string; weekdays: string[] } | { kind: 'relative'; minutesBefore: number })[]; dueDate?: string; time?: string; endTime?: string; repeat?: string; allDay?: boolean; notes?: string; policy?: "Schedule" | "Count"; targetCount?: number; createdAt: string; updatedAt: string }
+type Habit = { id: string; goalId: string; name: string; active: boolean; type: "do" | "avoid"; count: number; must?: number; duration?: number; reminders?: ({ kind: 'absolute'; time: string; weekdays: string[] } | { kind: 'relative'; minutesBefore: number })[]; dueDate?: string; time?: string; endTime?: string; repeat?: string; allDay?: boolean; notes?: string; policy?: "Schedule" | "Count"; targetCount?: number; createdAt: string; updatedAt: string }
 
-export function HabitModal({ open, onClose, habit, onUpdate, onDelete, categories }: { open: boolean; onClose: () => void; habit: Habit | null; onUpdate: (h: Habit) => void; onDelete: (id: string) => void; categories?: Category[] }) {
+export function HabitModal({ open, onClose, habit, onUpdate, onDelete, categories: goals }: { open: boolean; onClose: () => void; habit: Habit | null; onUpdate: (h: Habit) => void; onDelete: (id: string) => void; categories?: Goal[] }) {
   // Initialize editable state from habit. The caller should key the modal by habit id so a new
   // component instance is created when a different habit is opened.
   const [name, setName] = useState<string>(habit?.name ?? "")
@@ -439,7 +592,7 @@ export function HabitModal({ open, onClose, habit, onUpdate, onDelete, categorie
   // repeat / recurrence fields (simple)
   const [repeat, setRepeat] = useState<string>("Does not repeat")
   const [repeatOn, setRepeatOn] = useState<boolean>(false)
-  const [categoryId, setCategoryId] = useState<string | undefined>(habit?.categoryId)
+  const [goalId, setGoalId] = useState<string | undefined>(habit?.goalId)
   const [startPickerTab, setStartPickerTab] = useState<'time' | 'datetime'>('time')
   const [endPickerTab, setEndPickerTab] = useState<'time' | 'datetime'>('time')
 
@@ -465,19 +618,35 @@ export function HabitModal({ open, onClose, habit, onUpdate, onDelete, categorie
     setNotes(habit?.notes ?? '')
     setDueDate(habit?.dueDate ? new Date(habit.dueDate) : undefined)
     setTime(habit?.time ?? undefined)
+    setEndTime(habit?.endTime ?? undefined)
     setAllDay(!!habit?.allDay)
     setActive(!!habit?.active)
     setType(habit?.type ?? 'do')
-    setCategoryId(habit?.categoryId)
+  setGoalId(habit?.goalId)
     setRepeat(habit?.repeat ?? 'Does not repeat')
     setRepeatOn((habit?.repeat ?? 'Does not repeat') !== 'Does not repeat')
+    // initialize customUnit so the UI shows Daily/Weekly/Monthly correctly when editing
+    if (habit?.repeat && habit.repeat !== 'Does not repeat') {
+      if (habit.repeat === 'Daily' || habit.repeat === 'Weekly' || habit.repeat === 'Monthly' || habit.repeat === 'Yearly') {
+        setCustomUnit(habit.repeat as "Daily" | "Weekly" | "Monthly" | "Yearly")
+      }
+    }
   }, [habit])
 
   function handleSave() {
+    // derive repeat value from custom options
+    let repeatVal: string | undefined = undefined
+    if (repeatOn) {
+      // prefer explicit customUnit (Daily/Weekly/etc.)
+      repeatVal = customUnit
+    } else if (repeat && repeat !== 'Does not repeat') {
+      repeatVal = repeat
+    }
+
     const updated: Habit = {
       ...habit!,
       id: habit!.id,
-      categoryId: categoryId ?? habit!.categoryId,
+      goalId: goalId ?? habit!.goalId,
       name: name.trim() || "Untitled",
       notes: notes.trim() || undefined,
       time: time ?? undefined,
@@ -489,9 +658,8 @@ export function HabitModal({ open, onClose, habit, onUpdate, onDelete, categorie
   policy,
   ...(targetCount ? { targetCount } as any : {}),
   ...(targetCount ? { must: targetCount } as any : {}),
-  // store simple repeat string for now
   // store simple repeat string and endTime for now
-  repeat,
+  repeat: repeatVal,
   endTime,
       updatedAt: new Date().toISOString(),
     }
@@ -637,7 +805,7 @@ export function HabitModal({ open, onClose, habit, onUpdate, onDelete, categorie
                     onChange={() => setType('do')}
                     className="form-radio"
                   />
-                  <span className="text-sm">Do</span>
+                  <span className="text-sm">Good</span>
                 </label>
 
                 <label className="inline-flex items-center gap-2">
@@ -649,9 +817,10 @@ export function HabitModal({ open, onClose, habit, onUpdate, onDelete, categorie
                     onChange={() => setType('avoid')}
                     className="form-radio"
                   />
-                  <span className="text-sm">Avoid</span>
+                  <span className="text-sm">Bad</span>
                 </label>
               </div>
+              <div className="text-xs text-zinc-500 mt-1">Good = show on calendar. Bad = track but hide from calendar.</div>
             </div>
 
               {repeatOn && (
@@ -750,9 +919,9 @@ export function HabitModal({ open, onClose, habit, onUpdate, onDelete, categorie
 
           <div className="w-72">
             <div className="rounded border bg-gray-50 dark:bg-slate-800 p-3">
-              <div className="text-sm font-medium mb-2">Category</div>
-              <select value={categoryId} onChange={(e) => setCategoryId(e.target.value)} className="w-full rounded border px-3 py-2 bg-white text-black dark:bg-slate-800 dark:text-slate-100">
-                {(categories ?? []).map((c) => (
+              <div className="text-sm font-medium mb-2">Goal</div>
+              <select value={goalId} onChange={(e) => setGoalId(e.target.value)} className="w-full rounded border px-3 py-2 bg-white text-black dark:bg-slate-800 dark:text-slate-100">
+                {(goals ?? []).map((c) => (
                   <option key={c.id} value={c.id}>{c.name}</option>
                 ))}
               </select>
