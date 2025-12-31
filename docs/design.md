@@ -42,6 +42,159 @@
   - executed_at: タイムスタンプ
   - note: テキスト
 
+## データベーススキーマ（MySQL DDL）
+
+以下はアプリで使用する主要テーブルの設計（正規化を念頭に置いた MySQL 用の DDL 例）です。初期実装では SQLAlchemy のモデルと Alembic マイグレーションを用いてこれらを作成します。
+
+-- users
+```sql
+CREATE TABLE users (
+  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  firebase_uid VARCHAR(255) NOT NULL UNIQUE,
+  display_name VARCHAR(255),
+  email VARCHAR(255),
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+);
+```
+
+-- categories
+```sql
+CREATE TABLE categories (
+  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  user_id BIGINT UNSIGNED NOT NULL,
+  name VARCHAR(255) NOT NULL,
+  description TEXT,
+  deadline DATE DEFAULT NULL,
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+CREATE INDEX idx_categories_user ON categories(user_id);
+```
+
+-- habits
+```sql
+CREATE TABLE habits (
+  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  user_id BIGINT UNSIGNED NOT NULL,
+  category_id BIGINT UNSIGNED DEFAULT NULL,
+  name VARCHAR(255) NOT NULL,
+  kind ENUM('do','avoid') NOT NULL DEFAULT 'do',
+  estimated_minutes INT DEFAULT NULL,
+  notes TEXT DEFAULT NULL,
+  due_date DATE DEFAULT NULL,
+  time TIME DEFAULT NULL,
+  all_day BOOLEAN NOT NULL DEFAULT FALSE,
+  active BOOLEAN NOT NULL DEFAULT TRUE,
+  remind_spec JSON DEFAULT NULL,
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+  FOREIGN KEY (category_id) REFERENCES categories(id) ON DELETE SET NULL
+);
+CREATE INDEX idx_habits_user ON habits(user_id);
+CREATE INDEX idx_habits_category ON habits(category_id);
+```
+
+-- habit_recurrences
+```sql
+-- 繰り返しルールを別テーブルで管理（将来的に rrule 文字列や構造化したルールを保存）
+CREATE TABLE habit_recurrences (
+  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  habit_id BIGINT UNSIGNED NOT NULL,
+  rrule TEXT NOT NULL, -- 例: RFC5545 RRULE 文字列や独自の JSON で表現
+  effective_from DATE DEFAULT NULL,
+  effective_to DATE DEFAULT NULL,
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  FOREIGN KEY (habit_id) REFERENCES habits(id) ON DELETE CASCADE
+);
+CREATE INDEX idx_recurrences_habit ON habit_recurrences(habit_id);
+```
+
+-- reminders
+```sql
+-- リマインダー単位で保存（push/通知など）
+CREATE TABLE reminders (
+  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  habit_id BIGINT UNSIGNED NOT NULL,
+  kind ENUM('absolute','relative') NOT NULL,
+  at_time TIME DEFAULT NULL, -- absolute のとき
+  weekdays JSON DEFAULT NULL, -- absolute のとき: [0,1,2] など
+  minutes_before INT DEFAULT NULL, -- relative のとき
+  enabled BOOLEAN NOT NULL DEFAULT TRUE,
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  FOREIGN KEY (habit_id) REFERENCES habits(id) ON DELETE CASCADE
+);
+CREATE INDEX idx_reminders_habit ON reminders(habit_id);
+```
+
+-- reports (実行ログ)
+```sql
+CREATE TABLE reports (
+  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  user_id BIGINT UNSIGNED NOT NULL,
+  habit_id BIGINT UNSIGNED NOT NULL,
+  executed_at TIMESTAMP NOT NULL,
+  note TEXT DEFAULT NULL,
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+  FOREIGN KEY (habit_id) REFERENCES habits(id) ON DELETE CASCADE
+);
+CREATE INDEX idx_reports_habit ON reports(habit_id);
+CREATE INDEX idx_reports_user ON reports(user_id);
+```
+
+### 補足: JSONカラムと互換性
+- `remind_spec` や `reminders.weekdays` は JSON 型で柔軟に保持します。初期はフロントで扱いやすい単純構造（例: { "time":"08:00", "days":[1,2,3,4,5] }）を用います。将来的に `reminders` テーブルで詳細化します。
+
+### マッピング: UI フィールド → DB カラム
+- name -> `habits.name`
+- categoryId -> `habits.category_id`
+- type(kind) -> `habits.kind`
+- dueDate -> `habits.due_date` (YYYY-MM-DD)
+- startTime -> `habits.time` (HH:MM:SS)
+- endTime -> (UI のみ / 将来的に `habits.end_time` を追加可)
+- allDay -> `habits.all_day`
+- notes -> `habits.notes`
+- repeat / カスタム繰り返し -> `habit_recurrences.rrule`（簡易版は `habits.remind_spec` に格納）
+- reminders -> `reminders` テーブル（または `habits.remind_spec` JSON）
+
+### サンプル: 新規 Habit の登録ペイロード → SQL 挿入（簡易）
+```sql
+INSERT INTO habits (user_id, category_id, name, kind, estimated_minutes, due_date, time, all_day, notes, remind_spec)
+VALUES (:user_id, :category_id, :name, :kind, :estimated_minutes, :due_date, :time, :all_day, :notes, JSON_ARRAY(:remind_spec));
+```
+
+### マイグレーション / 実装ノート
+- SQLAlchemy のモデルに合わせて Alembic の初期マイグレーションを作成します。
+- JSON カラムを使う箇所は DB ベンダーのバージョン依存性に注意（MySQL 5.7+ / MariaDB 対応を確認）。
+- 大量データを扱う場合、`reports` はパーティショニング（日時ベース）を検討します。
+- 繰り返しルール（rrule）を文字列で保存するか、独自の正規化テーブルを作るかは運用負荷とクエリ頻度で決定します。
+
+### API レスポンスの例（habit を取得したとき）
+```json
+{
+  "id": 123,
+  "user_id": 1,
+  "category_id": 10,
+  "name": "朝ジョギング",
+  "kind": "do",
+  "due_date": "2025-12-31",
+  "time": "07:00:00",
+  "all_day": false,
+  "notes": "5km",
+  "remind_spec": { "time": "07:00", "days": [1,2,3,4,5] },
+  "created_at": "2025-12-30T10:00:00Z",
+  "updated_at": "2025-12-30T10:00:00Z"
+}
+```
+
+---
+
+
 ## API 仕様（主要）
 - 認証: Authorization: Bearer <idToken>
 - POST /api/categories
