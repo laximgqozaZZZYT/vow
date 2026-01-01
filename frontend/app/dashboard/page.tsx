@@ -3,6 +3,7 @@
 import { useState, useMemo, useEffect, useRef, useId } from "react";
 import ActivityModal, { } from './components/activityModal';
 import mermaid from 'mermaid'
+import { formatTime24, formatDateTime24 } from '../../lib/format'
 import { HabitModal, GoalModal } from "./components/modals";
 import FullCalendar from '@fullcalendar/react'
 import timeGridPlugin from '@fullcalendar/timegrid'
@@ -555,8 +556,8 @@ export default function DashboardPage() {
                   {(() => {
                     const d = c.start;
                     const todayStr = new Date().toISOString().slice(0,10);
-                    if (d.toISOString().slice(0,10) === todayStr) return d.toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'});
-                    return d.toLocaleString();
+                    if (d.toISOString().slice(0,10) === todayStr) return formatTime24(d, { hour: '2-digit', minute: '2-digit' });
+                    return formatDateTime24(d);
                   })()}
                 </div>
               </li>
@@ -575,7 +576,7 @@ export default function DashboardPage() {
           {[...activities].sort((a,b) => b.timestamp.localeCompare(a.timestamp)).map(act => (
             <div key={act.id} className="flex items-center justify-between rounded px-2 py-2 hover:bg-zinc-100 dark:hover:bg-white/5">
               <div className="text-sm">
-                <div className="text-xs text-zinc-500">{new Date(act.timestamp).toLocaleString()}</div>
+                <div className="text-xs text-zinc-500">{formatDateTime24(new Date(act.timestamp))}</div>
                 {act.kind === 'start' && (
                   <div>{act.habitName} — started</div>
                 )}

@@ -30,7 +30,7 @@ function buildTimeOptions() {
         for (let m = 0; m < 60; m += 15) {
             const d = new Date()
             d.setHours(h, m, 0, 0)
-            const label = d.toLocaleTimeString('ja-JP', { hour: 'numeric', minute: '2-digit' })
+            const label = `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`
             const value = d.toTimeString().slice(0, 5)
             opts.push({ label, value })
         }
