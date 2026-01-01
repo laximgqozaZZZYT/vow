@@ -125,8 +125,8 @@ export default function DashboardPage() {
         }
         return { ...x, count: newCount, lastCompletedAt: now, updatedAt: now };
       }
-      // no workload total -> mark as completed (schedule-style)
-      return { ...x, completed: true, lastCompletedAt: now, updatedAt: now };
+  // no workload total -> increment count and mark as completed (schedule-style)
+  return { ...x, count: newCount, completed: true, lastCompletedAt: now, updatedAt: now };
     }));
 
     // avoid recording duplicate activities caused by quick double-clicks: if the latest activity is for the same habit and within 1s, skip
