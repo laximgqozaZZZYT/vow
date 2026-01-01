@@ -187,7 +187,7 @@ export function HabitModal({ open, onClose, habit, onUpdate, onDelete, onCreate,
 
     return (
         <div className="fixed inset-0 z-50 flex items-start justify-center pt-12 bg-black/30">
-            <div className="w-[720px] rounded bg-white px-4 pt-4 pb-0 shadow-lg text-black dark:bg-slate-900 dark:text-slate-100 flex flex-col">
+            <div className="w-[720px] rounded bg-white px-4 pt-4 pb-0 shadow-lg text-black dark:bg-[#0f1724] dark:text-slate-100 flex flex-col">
                 <div className="flex items-center justify-between">
                     <h2 className="text-2xl font-semibold">Habit</h2>
                     <button onClick={onClose} className="text-slate-500">✕</button>
@@ -204,25 +204,25 @@ export function HabitModal({ open, onClose, habit, onUpdate, onDelete, onCreate,
 
                 <div className="mt-4 flex gap-4 habit-scroll-area overflow-auto max-h-[80vh] pr-2 modal-scroll-gap">
                     <div className="flex-1">
-                        <h3 className="text-lg font-medium mb-2">Name</h3>
-                        <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Add title" className="w-full rounded border px-3 py-2 bg-white text-black dark:bg-slate-800 dark:text-slate-100" />
+                        <h3 className="text-lg font-medium mb-2 text-slate-100">Name</h3>
+                        <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Add title" className="w-full rounded border px-3 py-2 bg-white text-black dark:bg-slate-800 dark:text-slate-100 text-sm" />
 
                         <div className="mt-6">
                             {/* Workload section (moved) */}
                             <div className="mt-3">
-                                <h3 className="text-lg font-medium">Workload</h3>
-                                <div className="mt-2 grid grid-cols-3 gap-3">
+                                <h3 className="text-lg font-medium text-slate-100">Workload</h3>
+                                <div className="mt-2 grid grid-cols-3 gap-3 items-center">
                                     <div>
-                                        <div className="text-xs text-slate-500 mb-1">Unit</div>
+                                        <div className="text-xs text-slate-400 mb-1">Unit</div>
                                         <input value={workloadUnit} onChange={(e) => setWorkloadUnit(e.target.value)} placeholder="e.g. hrs, pages" className="w-full rounded border px-3 py-2 bg-white text-black dark:bg-slate-800 dark:text-slate-100" />
                                     </div>
                                     <div>
-                                        <div className="text-xs text-slate-500 mb-1">Load per Count</div>
-                                        <input type="number" min={1} value={workloadPerCount ?? 1} onChange={(e) => setWorkloadPerCount(Number(e.target.value) || 1)} className="w-full rounded border px-3 py-2 bg-white text-black dark:bg-slate-800 dark:text-slate-100" />
+                                        <div className="text-xs text-slate-400 mb-1">Load per Count</div>
+                                        <input type="number" min={1} value={workloadPerCount ?? 1} onChange={(e) => setWorkloadPerCount(Number(e.target.value) || 1)} className="w-full rounded border px-3 py-2 bg-white text-black dark:bg-slate-800 dark:text-slate-100 text-sm" />
                                     </div>
                                     <div>
-                                        <div className="text-xs text-slate-500 mb-1">Load Total</div>
-                                        <input type="number" min={0} value={workloadTotal ?? ''} onChange={(e) => setWorkloadTotal(Number(e.target.value) || undefined)} className="w-full rounded border px-3 py-2 bg-white text-black dark:bg-slate-800 dark:text-slate-100" />
+                                        <div className="text-xs text-slate-400 mb-1">Load Total</div>
+                                        <input type="number" min={0} value={workloadTotal ?? ''} onChange={(e) => setWorkloadTotal(Number(e.target.value) || undefined)} className="w-full rounded border px-3 py-2 bg-white text-black dark:bg-slate-800 dark:text-slate-100 text-sm" />
                                     </div>
                                 </div>
                             </div>
