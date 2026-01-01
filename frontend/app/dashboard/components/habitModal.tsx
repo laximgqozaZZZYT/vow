@@ -48,9 +48,9 @@ type Timing = {
     cron?: string
 }
 
-type Habit = { id: string; goalId: string; name: string; active: boolean; type: "do" | "avoid"; count: number; must?: number; duration?: number; reminders?: ({ kind: 'absolute'; time: string; weekdays: string[] } | { kind: 'relative'; minutesBefore: number })[]; dueDate?: string; time?: string; endTime?: string; repeat?: string; allDay?: boolean; notes?: string; policy?: "Schedule" | "Count"; targetCount?: number; createdAt: string; updatedAt: string }
+type Habit = { id: string; goalId: string; name: string; active: boolean; type: "do" | "avoid"; count: number; must?: number; duration?: number; reminders?: ({ kind: 'absolute'; time: string; weekdays: string[] } | { kind: 'relative'; minutesBefore: number })[]; dueDate?: string; time?: string; endTime?: string; repeat?: string; allDay?: boolean; notes?: string; createdAt: string; updatedAt: string; workloadUnit?: string; workloadTotal?: number; workloadPerCount?: number }
 
-type CreateHabitPayload = { name: string; goalId: string; type: "do" | "avoid"; duration?: number; reminders?: any[]; dueDate?: string; time?: string; endTime?: string; repeat?: string; timings?: any[]; allDay?: boolean; notes?: string; policy?: "Schedule" | "Count"; targetCount?: number }
+type CreateHabitPayload = { name: string; goalId: string; type: "do" | "avoid"; duration?: number; reminders?: any[]; dueDate?: string; time?: string; endTime?: string; repeat?: string; timings?: any[]; allDay?: boolean; notes?: string; workloadUnit?: string; workloadTotal?: number; workloadPerCount?: number }
 
 export function HabitModal({ open, onClose, habit, onUpdate, onDelete, onCreate, initial, categories: goals }: { open: boolean; onClose: () => void; habit: Habit | null; onUpdate?: (h: Habit) => void; onDelete?: (id: string) => void; onCreate?: (payload: CreateHabitPayload) => void; initial?: { date?: string; time?: string; type?: "do" | "avoid"; goalId?: string }; categories?: { id: string; name: string }[] }) {
     const [name, setName] = React.useState<string>(habit?.name ?? "")
@@ -61,8 +61,10 @@ export function HabitModal({ open, onClose, habit, onUpdate, onDelete, onCreate,
     const [allDay, setAllDay] = React.useState<boolean>(!!habit?.allDay)
     const [active, setActive] = React.useState<boolean>(!!habit?.active)
     const [type, setType] = React.useState<"do" | "avoid">(habit?.type ?? "do")
-    const [policy, setPolicy] = React.useState<"Schedule" | "Count">("Schedule")
-    const [targetCount, setTargetCount] = React.useState<number | undefined>(undefined)
+    // workload fields replace the old Policy concept
+    const [workloadUnit, setWorkloadUnit] = React.useState<string>('')
+    const [workloadTotal, setWorkloadTotal] = React.useState<number | undefined>(undefined)
+    const [workloadPerCount, setWorkloadPerCount] = React.useState<number>(1)
     const [goalId, setGoalId] = React.useState<string | undefined>(habit?.goalId)
     // clone incoming arrays to avoid accidentally sharing references between timings/outdates
     const [timings, setTimings] = React.useState<Timing[]>((((habit as any)?.timings ?? []) as Timing[]).map(x => ({ ...x })))
@@ -81,8 +83,9 @@ export function HabitModal({ open, onClose, habit, onUpdate, onDelete, onCreate,
     React.useEffect(() => {
         if (!open) return
         if (habit) {
-            setPolicy(habit?.policy ?? 'Schedule')
-            setTargetCount(habit?.targetCount ?? habit?.must ?? undefined)
+            setWorkloadUnit((habit as any)?.workloadUnit ?? '')
+            setWorkloadTotal((habit as any)?.workloadTotal ?? (habit as any)?.targetCount ?? (habit as any)?.must ?? undefined)
+            setWorkloadPerCount((habit as any)?.workloadPerCount ?? 1)
             setName(habit?.name ?? '')
             setNotes(habit?.notes ?? '')
             setDueDate(habit?.dueDate ? new Date(habit.dueDate) : undefined)
@@ -107,8 +110,9 @@ export function HabitModal({ open, onClose, habit, onUpdate, onDelete, onCreate,
             }
         } else {
             // creation defaults (use optional initial values)
-            setPolicy('Schedule')
-            setTargetCount(undefined)
+            setWorkloadUnit('')
+            setWorkloadTotal(undefined)
+            setWorkloadPerCount(1)
             setName('')
             setNotes('')
             setDueDate(initial?.date ? new Date(initial.date) : undefined)
@@ -143,9 +147,10 @@ export function HabitModal({ open, onClose, habit, onUpdate, onDelete, onCreate,
                 active,
                 type,
                 dueDate: dueDate ? formatLocalDate(dueDate) : undefined,
-                policy,
-                ...(targetCount ? { targetCount } as any : {}),
-                ...(targetCount ? { must: targetCount } as any : {}),
+                // workload fields
+                ...(workloadUnit ? { workloadUnit } as any : {}),
+                ...(workloadTotal ? { workloadTotal } as any : {}),
+                ...(workloadPerCount ? { workloadPerCount } as any : {}),
                 ...(timings && timings.length ? { timings } as any : {}),
                 ...(outdates && outdates.length ? { outdates } as any : {}),
                 endTime,
@@ -165,8 +170,9 @@ export function HabitModal({ open, onClose, habit, onUpdate, onDelete, onCreate,
                 repeat: timingType,
                 timings: timings && timings.length ? timings : undefined,
                 allDay,
-                policy,
-                targetCount: targetCount ?? undefined,
+                workloadUnit: workloadUnit || undefined,
+                workloadTotal: workloadTotal ?? undefined,
+                workloadPerCount: workloadPerCount ?? 1,
                 notes: notes.trim() || undefined,
             }
             onCreate && onCreate(payload)
@@ -202,21 +208,24 @@ export function HabitModal({ open, onClose, habit, onUpdate, onDelete, onCreate,
                         <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Add title" className="w-full rounded border px-3 py-2 bg-white text-black dark:bg-slate-800 dark:text-slate-100" />
 
                         <div className="mt-6">
-                            <h3 className="text-lg font-medium">Policy</h3>
-                            <div className="mt-2 flex flex-col gap-2">
-                                <div className="flex gap-3">
-                                    <label className="inline-flex items-center gap-2">
-                                        <input type="radio" name={`policy-${habit?.id ?? instanceId}`} value="Schedule" checked={policy === 'Schedule'} onChange={() => setPolicy('Schedule')} />
-                                        <span className="text-sm">Schedule</span>
-                                    </label>
-                                    <label className="inline-flex items-center gap-2">
-                                        <input type="radio" name={`policy-${habit?.id ?? instanceId}`} value="Count" checked={policy === 'Count'} onChange={() => setPolicy('Count')} />
-                                        <span className="text-sm">Count</span>
-                                    </label>
+                            {/* Workload section (moved) */}
+                            <div className="mt-3">
+                                <h3 className="text-lg font-medium">Workload</h3>
+                                <div className="mt-2 grid grid-cols-3 gap-3">
+                                    <div>
+                                        <div className="text-xs text-slate-500 mb-1">Unit</div>
+                                        <input value={workloadUnit} onChange={(e) => setWorkloadUnit(e.target.value)} placeholder="e.g. hrs, pages" className="w-full rounded border px-3 py-2 bg-white text-black dark:bg-slate-800 dark:text-slate-100" />
+                                    </div>
+                                    <div>
+                                        <div className="text-xs text-slate-500 mb-1">Load per Count</div>
+                                        <input type="number" min={1} value={workloadPerCount ?? 1} onChange={(e) => setWorkloadPerCount(Number(e.target.value) || 1)} className="w-full rounded border px-3 py-2 bg-white text-black dark:bg-slate-800 dark:text-slate-100" />
+                                    </div>
+                                    <div>
+                                        <div className="text-xs text-slate-500 mb-1">Load Total</div>
+                                        <input type="number" min={0} value={workloadTotal ?? ''} onChange={(e) => setWorkloadTotal(Number(e.target.value) || undefined)} className="w-full rounded border px-3 py-2 bg-white text-black dark:bg-slate-800 dark:text-slate-100" />
+                                    </div>
                                 </div>
                             </div>
-
-                            {policy === 'Schedule' && (
                                 <div className="mt-4">
                                     <h3 className="text-lg font-medium">Timings</h3>
                                     <div className="mt-2 space-y-2">
@@ -309,7 +318,7 @@ export function HabitModal({ open, onClose, habit, onUpdate, onDelete, onCreate,
                                         ))}
                                     </div>
                                 </div>
-                            )}
+                            
 
                             {/* Outdates (collapsible) - Habit modal placement: show directly under Timings */}
                             <div className="mt-4">
@@ -430,12 +439,7 @@ export function HabitModal({ open, onClose, habit, onUpdate, onDelete, onCreate,
                                 )}
                             </div>
 
-                            {policy === 'Count' && (
-                                <div className="mt-3">
-                                    <h3 className="text-lg font-medium">Target count</h3>
-                                    <input type="number" min={1} value={targetCount ?? ''} onChange={(e) => setTargetCount(Number(e.target.value) || undefined)} className="w-full rounded border px-3 py-2 bg-white text-black dark:bg-slate-800 dark:text-slate-100" />
-                                </div>
-                            )}
+                            {/* workload moved above */}
                         </div>
 
                         <div className="mt-6">
