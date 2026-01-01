@@ -149,15 +149,21 @@ export function HabitModal({ open, onClose, habit, onUpdate, onDelete, onCreate,
                 dueDate: dueDate ? formatLocalDate(dueDate) : undefined,
                 // workload fields
                 ...(workloadUnit ? { workloadUnit } as any : {}),
-                ...(workloadTotal ? { workloadTotal } as any : {}),
+                ...(workloadTotal !== undefined ? { workloadTotal } as any : {}),
                 ...(workloadPerCount ? { workloadPerCount } as any : {}),
                 ...(timings && timings.length ? { timings } as any : {}),
                 ...(outdates && outdates.length ? { outdates } as any : {}),
                 endTime,
                 updatedAt: new Date().toISOString(),
-            }
-            onUpdate && onUpdate(updated)
-            onClose()
+            };
+
+            // recompute completed using workloadTotal/must and current count
+            const totalVal = (updated as any).workloadTotal ?? (updated as any).must ?? 0;
+            const currentCount = habit.count ?? 0;
+            (updated as any).completed = totalVal > 0 ? (currentCount >= totalVal) : ((updated as any).completed ?? false);
+
+            onUpdate && onUpdate(updated);
+            onClose();
         } else {
             // creation flow
             const payload: CreateHabitPayload = {
@@ -174,9 +180,9 @@ export function HabitModal({ open, onClose, habit, onUpdate, onDelete, onCreate,
                 workloadTotal: workloadTotal ?? undefined,
                 workloadPerCount: workloadPerCount ?? 1,
                 notes: notes.trim() || undefined,
-            }
-            onCreate && onCreate(payload)
-            onClose()
+            };
+            onCreate && onCreate(payload);
+            onClose();
         }
     }
 
