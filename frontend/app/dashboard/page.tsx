@@ -2,10 +2,12 @@
 
 import { useState, useMemo, useEffect, useRef, useId } from "react";
 import ActivityModal, { } from './components/activityModal';
+import api from '../../lib/api';
 import mermaid from 'mermaid'
 import { formatTime24, formatDateTime24 } from '../../lib/format'
 import { HabitModal, GoalModal } from "./components/modals";
 import FullCalendar from '@fullcalendar/react'
+import EditLayoutModal from './components/editLayoutModal'
 import timeGridPlugin from '@fullcalendar/timegrid'
 import interactionPlugin from '@fullcalendar/interaction'
 import dayGridPlugin from '@fullcalendar/daygrid'
@@ -14,33 +16,47 @@ import rrulePlugin from '@fullcalendar/rrule'
 // If you want FullCalendar's default styles, consider adding them via a global CSS import
 // or linking the CSS from a CDN in _document or app root.
 
-type Goal = { id: string; name: string; details?: string; dueDate?: string | Date | null; parentId?: string | null; createdAt: string; updatedAt: string };
+// Mermaid can throw "Diagram flowchart-v2 already registered" if initialized multiple times.
+// Guard initialization so it's done only once per page runtime.
+let mermaidInitialized = false
+function initMermaidOnce() {
+  if (mermaidInitialized) return
+  try {
+    if ((mermaid as any)?.initialize) {
+      mermaid.initialize({ startOnLoad: false })
+    }
+  } catch {
+    // ignore
+  }
+  mermaidInitialized = true
+}
+
+type Goal = { id: string; name: string; details?: string; dueDate?: string | Date | null; parentId?: string | null; isCompleted?: boolean; createdAt: string; updatedAt: string };
 type Habit = { id: string; goalId: string; name: string; active: boolean; type: "do" | "avoid"; count: number; must?: number; completed?: boolean; lastCompletedAt?: string; duration?: number; reminders?: ({ kind: 'absolute'; time: string; weekdays: string[] } | { kind: 'relative'; minutesBefore: number })[]; dueDate?: string; time?: string; endTime?: string; repeat?: string; allDay?: boolean; notes?: string; createdAt: string; updatedAt: string };
 
 export default function DashboardPage() {
   const now = new Date().toISOString();
-  const [goals, setGoals] = useState<Goal[]>([
-    { id: "g1", name: "Engneer Expert", createdAt: now, updatedAt: now },
-    { id: "g1-1", name: "Infra Expert", parentId: "g1", createdAt: now, updatedAt: now },
-    { id: "g1-1-1", name: "IaC習得", parentId: "g1-1", createdAt: now, updatedAt: now },
-    { id: "g1-1-2", name: "TypeScript", parentId: "g1-1", createdAt: now, updatedAt: now },
-    { id: "g2", name: "健康", createdAt: now, updatedAt: now },
-    { id: "g2-1", name: "タバコをやめる", parentId: "g2", createdAt: now, updatedAt: now },
-    { id: "g2-2", name: "ダイエット", parentId: "g2", createdAt: now, updatedAt: now },
-  ]);
+  const [goals, setGoals] = useState<Goal[]>([]);
 
-  const [habits, setHabits] = useState<Habit[]>([
-    { id: "h1", goalId: "g1-1-1", name: "Ansibleを用いたデプロイ", active: true, type: "do", count: 0, completed: false, createdAt: now, updatedAt: now },
-    { id: "h2", goalId: "g1-1-1", name: "Terraformを用いたデプロイ", active: true, type: "do", count: 0, completed: false, createdAt: now, updatedAt: now },
-  { id: "h3", goalId: "g1-1-2", name: "TODOアプリの作成", active: true, type: "do", count: 0, completed: false, time: "07:00", endTime: "07:30", repeat: "Daily", createdAt: now, updatedAt: now },
+  const [habits, setHabits] = useState<Habit[]>([]);
 
-    { id: "h4", goalId: "g2-1", name: "喫煙", active: true, type: "avoid", count: 0, completed: false, createdAt: now, updatedAt: now },
-    { id: "h5", goalId: "g2-1", name: "ニコチンパッチ", active: true, type: "do", count: 0, completed: false, createdAt: now, updatedAt: now },
-
-    { id: "h6", goalId: "g2-2", name: "おやつを食べる", active: true, type: "avoid", count: 0, completed: false, createdAt: now, updatedAt: now },
-    { id: "h7", goalId: "g2-2", name: "野菜を食べる", active: true, type: "do", count: 0, completed: false, createdAt: now, updatedAt: now },
-    { id: "h8", goalId: "g2-2", name: "運動", active: true, type: "do", count: 0, completed: false, createdAt: now, updatedAt: now },
-  ]);
+  // load data from API on mount
+  useEffect(() => {
+    (async () => {
+      try {
+        const gs = await api.getGoals();
+        setGoals(gs || []);
+        const hs = await api.getHabits();
+        setHabits(hs || []);
+        const acts = await api.getActivities();
+        setActivities(acts || []);
+        const layout = await api.getLayout();
+        if (layout && Array.isArray(layout.sections)) setPageSections(layout.sections as any);
+      } catch (e) {
+        console.error('Failed to load initial data', e);
+      }
+    })()
+  }, [])
 
   const [selectedGoal, setSelectedGoal] = useState<string | null>(
     goals[0]?.id ?? null
@@ -50,6 +66,17 @@ export default function DashboardPage() {
   const [openNewCategory, setOpenNewCategory] = useState(false);
   const [openNewHabit, setOpenNewHabit] = useState(false);
   const [openHabitModal, setOpenHabitModal] = useState(false);
+  
+  const [editLayoutOpen, setEditLayoutOpen] = useState(false);
+  type SectionId = 'next' | 'activity' | 'calendar' | 'goals'
+  const [pageSections, setPageSections] = useState<SectionId[]>(() => {
+    try {
+      const raw = typeof window !== 'undefined' ? window.localStorage.getItem('pageSections') : null;
+      if (raw) return JSON.parse(raw) as SectionId[];
+    } catch (e) {}
+    return ['next','activity','calendar','goals'];
+  })
+  useEffect(() => { try { window.localStorage.setItem('pageSections', JSON.stringify(pageSections)) } catch(e){} }, [pageSections])
   type ActivityKind = 'start' | 'complete' | 'skip' | 'pause'
   type Activity = { id: string; kind: ActivityKind; habitId: string; habitName: string; timestamp: string; amount?: number; prevCount?: number; newCount?: number; durationSeconds?: number }
   const [activities, setActivities] = useState<Activity[]>([]);
@@ -61,33 +88,80 @@ export default function DashboardPage() {
   const [recurringRequest, setRecurringRequest] = useState<null | { habitId: string; start?: string; end?: string }>(null);
   // frames feature removed: no openNewFrame state
   const [selectedHabitId, setSelectedHabitId] = useState<string | null>(null);
-  const [newHabitInitial, setNewHabitInitial] = useState<{ date?: string; time?: string } | null>(null);
+  const [newHabitInitial, setNewHabitInitial] = useState<{ date?: string; time?: string; endTime?: string } | null>(null);
   const [newHabitInitialType, setNewHabitInitialType] = useState<"do" | "avoid" | undefined>(undefined)
   // frames removed
 
   const selectedHabit = habits.find((h) => h.id === selectedHabitId) ?? null;
 
   // Update habit when calendar event is moved/resized
-  function handleEventChange(id: string, updated: { start?: string; end?: string }) {
+  async function handleEventChange(
+    habitId: string,
+    updated: { start?: string; end?: string; timingIndex?: number }
+  ) {
+    const startIso = updated.start
+    const endIso = updated.end
+    const newDue = startIso ? startIso.slice(0, 10) : undefined
+    const newTime = startIso && startIso.length > 10 ? startIso.slice(11, 16) : undefined
+    const newEnd = endIso && endIso.length > 10 ? endIso.slice(11, 16) : undefined
+    const timingIndex = typeof updated.timingIndex === 'number' ? updated.timingIndex : undefined
+
+    const prev = habits.find(h => h.id === habitId)
+    if (!prev) return
+
+    // Optimistic UI update
     setHabits((s) => s.map(h => {
-      if (h.id !== id) return h;
-      const newDue = updated.start ? updated.start.slice(0,10) : h.dueDate
-      const newTime = updated.start && updated.start.length > 10 ? updated.start.slice(11,16) : h.time
-      const newEnd = updated.end && updated.end.length > 10 ? updated.end.slice(11,16) : h.endTime
-      return { ...h, dueDate: newDue, time: newTime, endTime: newEnd, updatedAt: new Date().toISOString() }
+      if (h.id !== habitId) return h;
+      const now = new Date().toISOString()
+      const next: any = {
+        ...h,
+        dueDate: newDue ?? h.dueDate,
+        time: newTime ?? h.time,
+        endTime: newEnd ?? h.endTime,
+        updatedAt: now,
+      }
+
+      // Keep timings in sync if this event corresponds to a timing row
+      if (typeof timingIndex === 'number') {
+        const timings = Array.isArray((h as any).timings) ? (h as any).timings : []
+        if (timings[timingIndex]) {
+          const t = { ...timings[timingIndex] }
+          if (newDue) t.date = newDue
+          if (newTime !== undefined) t.start = newTime
+          if (newEnd !== undefined) t.end = newEnd
+          const newTimings = [...timings]
+          newTimings[timingIndex] = t
+          next.timings = newTimings
+        }
+      }
+      return next
     }))
+
+    // Persist to backend
+    try {
+      const payload: any = {
+        ...(newDue ? { dueDate: newDue } : {}),
+        ...(newTime !== undefined ? { time: newTime } : {}),
+        ...(newEnd !== undefined ? { endTime: newEnd } : {}),
+      }
+      if (typeof timingIndex === 'number') payload.timingIndex = timingIndex
+      const saved = await api.updateHabit(habitId, payload)
+      setHabits((s) => s.map(h => h.id === habitId ? saved : h))
+    } catch (e) {
+      console.error(e)
+      // revert to previous state if persistence fails
+      setHabits((s) => s.map(h => h.id === habitId ? prev : h))
+    }
   }
 
   // frame handlers removed
 
-  function createGoal(payload: { name: string; details?: string; dueDate?: string; parentId?: string | null }) {
-    const id = `c${Date.now()}`;
-    const now = new Date().toISOString();
-    setGoals((s) => [
-      ...s,
-      { id, name: payload.name, details: payload.details, dueDate: payload.dueDate, parentId: payload.parentId ?? null, createdAt: now, updatedAt: now },
-    ]);
-    setSelectedGoal(id);
+  async function createGoal(payload: { name: string; details?: string; dueDate?: string; parentId?: string | null }) {
+    try {
+      const g = await api.createGoal(payload);
+      setGoals((s) => [...s, g]);
+      setSelectedGoal(g.id);
+    } catch (e) { console.error(e) }
   }
 
   // Goal hierarchy helpers
@@ -108,14 +182,14 @@ export default function DashboardPage() {
     if (selectedGoal === sourceId) setSelectedGoal(targetId)
   }
 
-  function createHabit(payload: { name: string; goalId: string; type: "do" | "avoid"; duration?: number; reminders?: ({ kind: 'absolute'; time: string; weekdays: string[] } | { kind: 'relative'; minutesBefore: number })[]; dueDate?: string; time?: string; endTime?: string; repeat?: string; timings?: any[]; allDay?: boolean; notes?: string; workloadUnit?: string; workloadTotal?: number; workloadPerCount?: number }) {
-    const id = `h${Date.now()}`;
-    const now = new Date().toISOString();
-    setHabits((s) => [
-      ...s,
-      { id, goalId: payload.goalId, name: payload.name, active: true, type: payload.type, count: 0, must: payload.workloadTotal ?? undefined, workloadUnit: payload.workloadUnit ?? undefined, workloadTotal: payload.workloadTotal ?? undefined, workloadPerCount: payload.workloadPerCount ?? undefined, completed: false, duration: payload.duration, reminders: payload.reminders, dueDate: payload.dueDate, time: payload.time, endTime: payload.endTime, repeat: payload.repeat, timings: payload.timings, allDay: payload.allDay, notes: payload.notes, createdAt: now, updatedAt: now },
-    ]);
+  async function createHabit(payload: { name: string; goalId?: string; type: "do" | "avoid"; duration?: number; reminders?: ({ kind: 'absolute'; time: string; weekdays: string[] } | { kind: 'relative'; minutesBefore: number })[]; dueDate?: string; time?: string; endTime?: string; repeat?: string; timings?: any[]; allDay?: boolean; notes?: string; workloadUnit?: string; workloadTotal?: number; workloadPerCount?: number }) {
+    try {
+      const h = await api.createHabit(payload);
+      setHabits((s) => [...s, h]);
+    } catch (e) { console.error(e) }
   }
+
+  
 
   function handleComplete(habitId: string) {
     const now = new Date().toISOString();
@@ -136,18 +210,28 @@ export default function DashboardPage() {
     const start = starts[habitId];
     if (start) {
       const durationSeconds = Math.max(0, Math.floor((Date.now() - new Date(start.ts).getTime()) / 1000));
-      setActivities(acts => {
-        const idx = acts.findIndex(a => a.habitId === habitId && a.kind === 'start' && a.timestamp === start.ts);
+      (async () => {
+        const idx = activities.findIndex(a => a.habitId === habitId && a.kind === 'start' && a.timestamp === start.ts);
         if (idx !== -1) {
-          const old = acts[idx];
+          const old = activities[idx];
           const prevCountVal = (typeof old.prevCount === 'number') ? old.prevCount : (typeof old.newCount === 'number' ? old.newCount : (habit.count ?? 0));
-          const updated: Activity = { ...old, kind: 'complete', amount: increment, prevCount: prevCountVal, newCount, durationSeconds };
-          const copy = [...acts];
-          copy.splice(idx, 1);
-          return [updated, ...copy];
+          const updatedAct: Activity = { ...old, kind: 'complete', amount: increment, prevCount: prevCountVal, newCount, durationSeconds };
+          try {
+            if (old.id && !String(old.id).startsWith('a')) {
+              const u = await api.updateActivity(old.id, updatedAct);
+              setActivities(acts => { const copy = [...acts]; const i = copy.findIndex(x => x.id === old.id); if (i !== -1) { copy[i] = u } return copy });
+            } else {
+              const created = await api.createActivity({ kind: 'complete', habitId, habitName: habit.name, timestamp: now, amount: increment, prevCount: prev, newCount, durationSeconds });
+              setActivities(acts => { const copy = acts.filter(a => !(a.habitId === habitId && a.kind === 'start' && a.timestamp === start.ts)); return [created, ...copy] });
+            }
+          } catch (e) { console.error(e) }
+        } else {
+          try {
+            const created = await api.createActivity({ kind: 'complete', habitId, habitName: habit.name, timestamp: now, amount: increment, prevCount: prev, newCount, durationSeconds });
+            setActivities(acts => [created, ...acts]);
+          } catch (e) { console.error(e) }
         }
-        return [{ id: `a${Date.now()}`, kind: 'complete', habitId, habitName: habit.name, timestamp: now, amount: increment, prevCount: prev, newCount, durationSeconds }, ...acts];
-      });
+      })();
       // clear start timer and state
       const to = start.timeoutId;
       if (typeof to === 'number') clearTimeout(to);
@@ -156,7 +240,17 @@ export default function DashboardPage() {
     }
 
   // no start: create a standalone complete activity
-  setActivities(a => [{ id: `a${Date.now()}`, kind: 'complete', habitId, habitName: habit.name, timestamp: now, amount: increment, prevCount: prev, newCount }, ...a]);
+  // Persist the completion so it survives reload.
+  (async () => {
+    try {
+      const created = await api.createActivity({ kind: 'complete', habitId, habitName: habit.name, timestamp: now, amount: increment, prevCount: prev, newCount });
+      setActivities(a => [created, ...a]);
+    } catch (e) {
+      console.error(e);
+      // fallback to local
+      setActivities(a => [{ id: `a${Date.now()}`, kind: 'complete', habitId, habitName: habit.name, timestamp: now, amount: increment, prevCount: prev, newCount }, ...a]);
+    }
+  })();
   // clear pausedLoads for this habit (we consumed it)
   setPausedLoads(s => { const c = { ...s }; delete c[habitId]; return c; });
   }
@@ -174,13 +268,31 @@ export default function DashboardPage() {
     const timeoutId = window.setTimeout(() => {
       setStarts(s => {
         if (!s[habitId]) return s;
-        setActivities(a => [{ id: `a${Date.now()}`, kind: 'skip', habitId, habitName: habit.name, timestamp: new Date().toISOString() }, ...a]);
+        const ts = new Date().toISOString();
+        // Persist skip; fall back to local if backend is unreachable.
+        (async () => {
+          try {
+            const created = await api.createActivity({ kind: 'skip', habitId, habitName: habit.name, timestamp: ts });
+            setActivities(a => [created, ...a]);
+          } catch (e) {
+            console.error(e);
+            setActivities(a => [{ id: `a${Date.now()}`, kind: 'skip', habitId, habitName: habit.name, timestamp: ts }, ...a]);
+          }
+        })();
         const copy = { ...s }; delete copy[habitId]; return copy;
       });
     }, 24 * 60 * 60 * 1000);
 
     setStarts(s => ({ ...s, [habitId]: { ts: now, timeoutId } }));
-    setActivities(a => [{ id: `a${Date.now()}`, kind: 'start', habitId, habitName: habit.name, timestamp: now, prevCount: habit.count ?? 0, newCount: habit.count ?? 0 }, ...a]);
+    (async () => {
+      try {
+        const created = await api.createActivity({ kind: 'start', habitId, habitName: habit.name, timestamp: now, prevCount: habit.count ?? 0, newCount: habit.count ?? 0 });
+        setActivities(a => [created, ...a]);
+      } catch (e) {
+        // fallback to local
+        setActivities(a => [{ id: `a${Date.now()}`, kind: 'start', habitId, habitName: habit.name, timestamp: now, prevCount: habit.count ?? 0, newCount: habit.count ?? 0 }, ...a]);
+      }
+    })();
   }
 
   function handlePause(habitId: string) {
@@ -188,11 +300,23 @@ export default function DashboardPage() {
     const habit = habits.find(h => h.id === habitId);
     if (!habit) return;
     const now = new Date().toISOString();
-    const newAct: Activity = { id: `a${Date.now()}`, kind: 'pause', habitId, habitName: habit.name, timestamp: now, amount: 0, prevCount: habit.count ?? 0, newCount: habit.count ?? 0 };
-    // add placeholder activity and open modal for editing
-    setActivities(a => [newAct, ...a]);
-    setEditingActivityId(newAct.id);
-    setOpenActivityModal(true);
+    const localId = `a${Date.now()}`;
+    const placeholder: Activity = { id: localId, kind: 'pause', habitId, habitName: habit.name, timestamp: now, amount: 0, prevCount: habit.count ?? 0, newCount: habit.count ?? 0 };
+    // Create the pause on backend first so any edits persist across reload.
+    (async () => {
+      try {
+        const created = await api.createActivity({ kind: 'pause', habitId, habitName: habit.name, timestamp: now, amount: 0, prevCount: habit.count ?? 0, newCount: habit.count ?? 0 });
+        setActivities(a => [created, ...a]);
+        setEditingActivityId(created.id);
+        setOpenActivityModal(true);
+      } catch (e) {
+        console.error(e);
+        // fallback to local placeholder
+        setActivities(a => [placeholder, ...a]);
+        setEditingActivityId(localId);
+        setOpenActivityModal(true);
+      }
+    })();
   }
 
   function openEditActivity(activityId: string) {
@@ -266,7 +390,10 @@ export default function DashboardPage() {
       const completed = (total > 0) ? (prevCount >= total) : false;
       return { ...h, count: prevCount, completed, updatedAt: new Date().toISOString() };
     }));
-    // remove activity
+    // remove activity (and delete on backend if persisted)
+    if (!String(activityId).startsWith('a')) {
+      (async () => { try { await api.deleteActivity(activityId); } catch(e) { console.error(e) } })();
+    }
     setActivities(s => s.filter(a => a.id !== activityId));
   }
 
@@ -283,6 +410,8 @@ export default function DashboardPage() {
   // Accept partial updates (createdAt/updatedAt may be omitted by the modal)
   function updateGoal(updated: Partial<Goal> & { id: string }) {
     setGoals((s) => s.map(g => g.id === updated.id ? { ...g, ...updated, updatedAt: new Date().toISOString() } : g));
+    // persist
+    (async () => { try { await api.updateGoal(updated.id, updated) } catch(e) { console.error(e) } })()
   }
 
   function deleteGoal(id: string) {
@@ -290,6 +419,7 @@ export default function DashboardPage() {
     setGoals((s) => s.filter(g => g.id !== id));
     // also reassign or remove habits under that goal: here we remove habits belonging to that goal
     setHabits((s) => s.filter(h => h.goalId !== id));
+    (async () => { try { await api.deleteGoal(id) } catch (e) { console.error(e) } })()
     if (selectedGoal === id) setSelectedGoal(null);
     if (editingGoalId === id) setEditingGoalId(null);
   }
@@ -312,6 +442,16 @@ export default function DashboardPage() {
     }
     return false
   }
+
+  // determine effective completion for a goal: if the goal or any ancestor is completed
+  function effectiveGoalCompleted(goalId: string) {
+    let g: Goal | undefined = goalsById[goalId]
+    while (g) {
+      if (g.isCompleted) return true
+      g = g.parentId ? goalsById[g.parentId] : undefined
+    }
+    return false
+  }
   // helper: is goalA a descendant of goalB (including equality)
   function isDescendantOf(childGoalId: string, ancestorGoalId: string) {
     if (!childGoalId) return false
@@ -324,18 +464,63 @@ export default function DashboardPage() {
     return false
   }
 
+  // Collect descendant goal ids including self.
+  function collectGoalSubtreeIds(rootId: string) {
+    const ids: string[] = []
+    const stack: string[] = [rootId]
+    const seen = new Set<string>()
+    while (stack.length) {
+      const id = stack.pop()!
+      if (seen.has(id)) continue
+      seen.add(id)
+      ids.push(id)
+      for (const g of goals) {
+        if (g.parentId === id) stack.push(g.id)
+      }
+    }
+    return ids
+  }
+
+  async function completeGoalCascade(goalId: string) {
+    // Optimistically update local state first.
+    const subtree = new Set(collectGoalSubtreeIds(goalId))
+    const now = new Date().toISOString()
+    setGoals((s) => s.map(g => subtree.has(g.id) ? ({ ...g, isCompleted: true, updatedAt: now } as any) : g))
+    // Treat descendant habits as "not to be done": inactive + completed.
+    setHabits((s) => s.map(h => subtree.has(h.goalId) ? ({ ...h, active: false, completed: true, updatedAt: now } as any) : h))
+
+    // Persist
+    try {
+      await api.updateGoal(goalId, { isCompleted: true, cascade: true })
+    } catch (e) {
+      // Surface backend error details to make debugging actionable.
+      const anyErr: any = e
+      const details = {
+        name: anyErr?.name,
+        message: anyErr?.message ?? String(anyErr),
+        url: anyErr?.url,
+        status: anyErr?.status,
+        body: anyErr?.body,
+        keys: anyErr && typeof anyErr === 'object' ? Object.keys(anyErr) : undefined,
+      }
+      console.error('[completeGoalCascade] error', details)
+      // If persistence fails, we keep optimistic state; user can refresh.
+    }
+  }
+
   // Recursive goal node renderer (renders up to 3 levels: root, child, grandchild)
   const GoalNode = ({ goal, depth = 1 }: { goal: Goal; depth?: number }) => {
     const isOpen = !!openGoals[goal.id]
     const kids = childrenOf(goal.id)
     const myHabits = habits.filter(h => h.goalId === goal.id)
+    const goalCompleted = effectiveGoalCompleted(goal.id)
 
     return (
       <div key={goal.id}>
         <div className={`flex items-center justify-between cursor-pointer rounded px-3 py-2 hover:bg-zinc-100 dark:hover:bg-white/5 ${selectedGoal === goal.id ? 'bg-zinc-100 dark:bg-white/5' : ''}`}>
           <div className="flex items-center gap-2">
             <button onClick={() => { toggleGoal(goal.id); setSelectedGoal(goal.id); }} className="inline-block w-3">{isOpen ? '▾' : '▸'}</button>
-            <button onClick={() => { setEditingGoalId(goal.id); setOpenGoalModal(true); }} className="text-sm font-medium text-left">{goal.name}</button>
+            <button onClick={() => { setEditingGoalId(goal.id); setOpenGoalModal(true); }} className={`text-sm font-medium text-left ${goalCompleted ? 'line-through text-zinc-400' : ''}`}>{goal.name}</button>
           </div>
           <div className="flex items-center gap-2">
             <label className="flex items-center gap-2 text-xs">
@@ -359,7 +544,7 @@ export default function DashboardPage() {
                   <div
                     key={h.id}
                     onClick={() => { setSelectedGoal(goal.id); setSelectedHabitId(h.id); setOpenHabitModal(true); }}
-                    className={`flex items-center justify-between rounded px-2 py-1 text-sm ${h.completed ? 'line-through text-zinc-400' : 'text-zinc-700'} hover:bg-zinc-100 dark:text-zinc-200 dark:hover:bg-white/5 cursor-pointer`}
+                    className={`flex items-center justify-between rounded px-2 py-1 text-sm ${(h.completed || goalCompleted || !h.active) ? 'line-through text-zinc-400' : 'text-zinc-700'} hover:bg-zinc-100 dark:text-zinc-200 dark:hover:bg-white/5 cursor-pointer`}
                   >
                     <div className="flex items-center gap-2 truncate">
                       <span>📄</span>
@@ -386,7 +571,7 @@ export default function DashboardPage() {
                   <div
                     key={h.id}
                     onClick={() => { setSelectedGoal(goal.id); setSelectedHabitId(h.id); setOpenHabitModal(true); }}
-                    className={`flex items-center justify-between rounded px-2 py-1 text-sm ${h.completed ? 'line-through text-zinc-400' : 'text-zinc-700'} hover:bg-zinc-100 dark:text-zinc-200 dark:hover:bg-white/5 cursor-pointer`}
+                    className={`flex items-center justify-between rounded px-2 py-1 text-sm ${(h.completed || goalCompleted || !h.active) ? 'line-through text-zinc-400' : 'text-zinc-700'} hover:bg-zinc-100 dark:text-zinc-200 dark:hover:bg-white/5 cursor-pointer`}
                   >
                     <div className="flex items-center gap-2 truncate">
                       <span>📄</span>
@@ -437,6 +622,11 @@ export default function DashboardPage() {
         <div className="text-lg font-bold">VOW</div>
       </div>
 
+      {/* Top-right Edit Layout button (styled to match top-left) */}
+      <div className="fixed right-3 top-3 z-50 flex items-center gap-2 rounded bg-white text-black dark:bg-[#071013] dark:text-white px-2 py-1 shadow-md dark:border-slate-700">
+        <button onClick={() => setEditLayoutOpen(true)} className="text-sm font-medium">Edit Layout</button>
+      </div>
+
       {/* Left pane */}
       {showLeftPane && (
         <aside className="fixed left-0 top-0 w-80 h-full border-r border-zinc-200 bg-white dark:bg-[#071013] p-3 z-50">
@@ -478,154 +668,141 @@ export default function DashboardPage() {
 
   {/* Right pane */}
   <main className={`flex-1 p-8 ${showLeftPane ? 'ml-80' : ''}`}>
-        <div className="grid grid-cols-3 gap-4">
-          <div className="col-span-1 rounded bg-white p-4 shadow dark:bg-[#0b0b0b]">
-            <div className="text-sm text-zinc-500">Today</div>
-            <div className="mt-2 text-2xl font-bold">3 / 5</div>
-            <div className="mt-1 text-sm text-zinc-500">Completed habits</div>
-          </div>
-          <div className="col-span-1 rounded bg-white p-4 shadow dark:bg-[#0b0b0b]">
-            <div className="text-sm text-zinc-500">Streak</div>
-            <div className="mt-2 text-2xl font-bold">12</div>
-            <div className="mt-1 text-sm text-zinc-500">days</div>
-          </div>
-          <div className="col-span-1 rounded bg-white p-4 shadow dark:bg-[#0b0b0b]">
-            <div className="text-sm text-zinc-500">This week</div>
-            <div className="mt-2 text-2xl font-bold">7</div>
-            <div className="mt-1 text-sm text-zinc-500">completed</div>
-          </div>
-        </div>
-
-  <div className="mt-6 grid grid-cols-1 gap-4">
-    <section className="rounded bg-white p-4 shadow dark:bg-[#0b0b0b]">
-      <h2 className="mb-3 text-lg font-medium">Next</h2>
-      {/* Show up to 5 habits that start within the next 24 hours (soonest first). */}
-      {(() => {
-        const now = new Date();
-        const windowEnd = new Date(now.getTime() + 24 * 60 * 60 * 1000);
-        const candidates: Array<{ h: Habit; start: Date }> = [];
-
-        for (const h of habits) {
-          if (h.completed) continue;
-          if (h.type === 'avoid') continue;
-          const timings = (h as any).timings ?? [];
-          let found: Date | null = null;
-
-          // check explicit timings first
-          if (timings && timings.length) {
-            for (const t of timings) {
-              try {
-                if (t.start) {
-                  const baseDate = t.date ?? h.dueDate ?? now.toISOString().slice(0,10);
-                  const dt = new Date(`${baseDate}T${t.start}:00`);
-                  if (dt >= now && dt <= windowEnd) { found = dt; break }
-                  const dtNext = new Date(dt.getTime() + 24*60*60*1000);
-                  if (dtNext >= now && dtNext <= windowEnd) { found = dtNext; break }
-                }
-              } catch (e) { /* ignore malformed */ }
-            }
-          }
-
-          // fallback: use h.time / dueDate
-          if (!found && h.time) {
-            try {
-              const baseDate = h.dueDate ?? now.toISOString().slice(0,10);
-              let dt = new Date(`${baseDate}T${h.time}:00`);
-              if (dt < now) dt = new Date(dt.getTime() + 24*60*60*1000);
-              if (dt >= now && dt <= windowEnd) found = dt;
-            } catch (e) { /* ignore malformed */ }
-          }
-
-          if (found) candidates.push({ h, start: found });
-        }
-
-        candidates.sort((a,b) => a.start.getTime() - b.start.getTime());
-        const pick = candidates.slice(0,5);
-
-        if (pick.length === 0) return <div className="text-sm text-zinc-500">No habits starting in the next 24 hours</div>;
-
-        return (
-          <ul className="flex flex-col">
-            {pick.map((c, idx) => (
-              <li key={c.h.id} className={`flex items-center justify-between py-2 ${idx > 0 ? 'mt-2 border-t border-zinc-100 pt-3' : ''}`}>
-                <div className="flex items-center gap-3">
-                  <div className="w-2 h-2 rounded-full bg-sky-500" />
-                  <div className={`text-sm ${c.h.completed ? 'line-through text-zinc-400' : 'text-zinc-800 dark:text-zinc-100'}`}>{c.h.name}</div>
-                </div>
-                <div className="text-xs text-zinc-500">
-                  {(() => {
-                    const d = c.start;
-                    const todayStr = new Date().toISOString().slice(0,10);
-                    if (d.toISOString().slice(0,10) === todayStr) return formatTime24(d, { hour: '2-digit', minute: '2-digit' });
-                    return formatDateTime24(d);
-                  })()}
-                </div>
-              </li>
-            ))}
-          </ul>
-        )
-      })()}
-    </section>
-
-    <section className="rounded bg-white p-4 shadow dark:bg-[#0b0b0b] mt-4">
-      <h2 className="mb-3 text-lg font-medium">Activity</h2>
-      <div className="">
-        {/* Fixed-height scrollable container */}
-        <div className="h-56 overflow-y-auto space-y-2 pr-2">
-          {activities.length === 0 && <div className="text-xs text-zinc-500">No activity yet.</div>}
-          {[...activities].sort((a,b) => b.timestamp.localeCompare(a.timestamp)).map(act => (
-            <div key={act.id} className="flex items-center justify-between rounded px-2 py-2 hover:bg-zinc-100 dark:hover:bg-white/5">
-              <div className="text-sm">
-                <div className="text-xs text-zinc-500">{formatDateTime24(new Date(act.timestamp))}</div>
-                {act.kind === 'start' && (
-                  <div>{act.habitName} — started</div>
-                )}
-                {act.kind === 'pause' && (
-                  <div>{act.habitName} — paused at {act.amount ?? 0} load</div>
-                )}
-                {act.kind === 'complete' && (
-                  <div>
-                    {act.habitName} — completed {act.amount ?? 1} {((act.amount ?? 1) > 1) ? 'units' : 'unit'}.
-                    {typeof act.durationSeconds === 'number' ? ` Took ${Math.floor(act.durationSeconds/3600)}h ${Math.floor((act.durationSeconds%3600)/60)}m ${act.durationSeconds%60}s.` : ''}
-                    {act.newCount !== undefined ? ` (now ${act.newCount})` : ''}
-                  </div>
-                )}
-                {act.kind === 'skip' && (
-                  <div>{act.habitName} — skipped</div>
-                )}
-              </div>
-            <div className="flex items-center gap-2">
-              <button className="text-sm text-blue-600" onClick={() => openEditActivity(act.id)}>Edit</button>
-              <button className="text-sm text-red-600" onClick={() => handleDeleteActivity(act.id)}>Delete</button>
-            </div>
-            </div>
-          ))}
-        </div>
-      </div>
-    </section>
-
-    <FullCalendarWrapper
-    habits={habits}
-    onEventClick={(id: string) => { setSelectedHabitId(id); setOpenHabitModal(true); }}
-    onSlotSelect={(isoDate: string, time?: string) => {
-      // open habit creation prefilled with selected slot
-      setNewHabitInitial({ date: isoDate, time }); setOpenNewHabit(true)
-    }}
-    onEventChange={(id: string, updated) => handleEventChange(id, updated)}
-    
-    onRecurringAttempt={(habitId: string, updated) => {
-      // open modal asking whether to apply to all same-name habits or only this occurrence
-      setRecurringRequest({ habitId, start: updated.start, end: updated.end })
-    }}
-  />
-  </div>
         
 
-        {/* Goal graph (Mermaid TD) shown under the calendar */}
-        <section className="mt-6 rounded bg-white p-4 shadow dark:bg-[#0b0b0b]">
-          <h2 className="mb-3 text-lg font-medium">Goals</h2>
-          <GoalMermaid goals={goals} habits={habits} openGoals={openGoals} toggleGoal={toggleGoal} setGoalParent={setGoalParent} mergeGoals={mergeGoals} />
-        </section>
+        <div className="mt-6 grid grid-cols-1 gap-4">
+          {pageSections.map(sec => (
+            sec === 'next' ? (
+              <section key="next" className="rounded bg-white p-4 shadow dark:bg-[#0b0b0b]">
+                <div className="flex justify-between items-start">
+                  <h2 className="mb-3 text-lg font-medium">Next</h2>
+                </div>
+                {/* Next section content (same as before) */}
+                {(() => {
+                  const now = new Date();
+                  const windowEnd = new Date(now.getTime() + 24 * 60 * 60 * 1000);
+                  const candidates: Array<{ h: Habit; start: Date }> = [];
+
+                  for (const h of habits) {
+                    if (h.completed) continue;
+                    if (h.type === 'avoid') continue;
+                    const timings = (h as any).timings ?? [];
+                    let found: Date | null = null;
+
+                    // check explicit timings first
+                    if (timings && timings.length) {
+                      for (const t of timings) {
+                        try {
+                          if (t.start) {
+                            const baseDate = t.date ?? h.dueDate ?? now.toISOString().slice(0,10);
+                            const dt = new Date(`${baseDate}T${t.start}:00`);
+                            if (dt >= now && dt <= windowEnd) { found = dt; break }
+                            const dtNext = new Date(dt.getTime() + 24*60*60*1000);
+                            if (dtNext >= now && dtNext <= windowEnd) { found = dtNext; break }
+                          }
+                        } catch (e) { /* ignore malformed */ }
+                      }
+                    }
+
+                    // fallback: use h.time / dueDate
+                    if (!found && h.time) {
+                      try {
+                        const baseDate = h.dueDate ?? now.toISOString().slice(0,10);
+                        let dt = new Date(`${baseDate}T${h.time}:00`);
+                        if (dt < now) dt = new Date(dt.getTime() + 24*60*60*1000);
+                        if (dt >= now && dt <= windowEnd) found = dt;
+                      } catch (e) { /* ignore malformed */ }
+                    }
+
+                    if (found) candidates.push({ h, start: found });
+                  }
+
+                  candidates.sort((a,b) => a.start.getTime() - b.start.getTime());
+                  const pick = candidates.slice(0,5);
+
+                  if (pick.length === 0) return <div className="text-sm text-zinc-500">No habits starting in the next 24 hours</div>;
+
+                  return (
+                    <ul className="flex flex-col">
+                      {pick.map((c, idx) => (
+                        <li key={c.h.id} className={`flex items-center justify-between py-2 ${idx > 0 ? 'mt-2 border-t border-zinc-100 pt-3' : ''}`}>
+                          <div className="flex items-center gap-3">
+                            <div className="w-2 h-2 rounded-full bg-sky-500" />
+                            <div className={`text-sm ${c.h.completed ? 'line-through text-zinc-400' : 'text-zinc-800 dark:text-zinc-100'}`}>{c.h.name}</div>
+                          </div>
+                          <div className="text-xs text-zinc-500">
+                            {(() => {
+                              const d = c.start;
+                              const todayStr = new Date().toISOString().slice(0,10);
+                              if (d.toISOString().slice(0,10) === todayStr) return formatTime24(d, { hour: '2-digit', minute: '2-digit' });
+                              return formatDateTime24(d);
+                            })()}
+                          </div>
+                        </li>
+                      ))}
+                    </ul>
+                  )
+                })()}
+              </section>
+            ) : sec === 'activity' ? (
+              <section key="activity" className="rounded bg-white p-4 shadow dark:bg-[#0b0b0b] mt-4">
+                <h2 className="mb-3 text-lg font-medium">Activity</h2>
+                <div className="">
+                  {/* Fixed-height scrollable container */}
+                  <div className="h-56 overflow-y-auto space-y-2 pr-2">
+                    {activities.length === 0 && <div className="text-xs text-zinc-500">No activity yet.</div>}
+                    {[...activities].sort((a,b) => b.timestamp.localeCompare(a.timestamp)).map(act => (
+                      <div key={act.id} className="flex items-center justify-between rounded px-2 py-2 hover:bg-zinc-100 dark:hover:bg-white/5">
+                        <div className="text-sm">
+                          <div className="text-xs text-zinc-500">{formatDateTime24(new Date(act.timestamp))}</div>
+                          {act.kind === 'start' && (
+                            <div>{act.habitName} — started</div>
+                          )}
+                          {act.kind === 'pause' && (
+                            <div>{act.habitName} — paused at {act.amount ?? 0} load</div>
+                          )}
+                          {act.kind === 'complete' && (
+                            <div>
+                              {act.habitName} — completed {act.amount ?? 1} {((act.amount ?? 1) > 1) ? 'units' : 'unit'}.
+                              {typeof act.durationSeconds === 'number' ? ` Took ${Math.floor(act.durationSeconds/3600)}h ${Math.floor((act.durationSeconds%3600)/60)}m ${act.durationSeconds%60}s.` : ''}
+                              {act.newCount !== undefined ? ` (now ${act.newCount})` : ''}
+                            </div>
+                          )}
+                          {act.kind === 'skip' && (
+                            <div>{act.habitName} — skipped</div>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <button className="text-sm text-blue-600" onClick={() => openEditActivity(act.id)}>Edit</button>
+                          <button className="text-sm text-red-600" onClick={() => handleDeleteActivity(act.id)}>Delete</button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </section>
+            ) : sec === 'calendar' ? (
+              <FullCalendarWrapper
+                key="calendar"
+                habits={habits}
+                goals={goals}
+                onEventClick={(id: string) => { setSelectedHabitId(id); setOpenHabitModal(true); }}
+                onSlotSelect={(isoDate: string, time?: string, endTime?: string) => {
+                  setNewHabitInitial({ date: isoDate, time, endTime });
+                  setOpenNewHabit(true)
+                }}
+                onEventChange={(id: string, updated) => handleEventChange(id, updated)}
+                onRecurringAttempt={(habitId: string, updated) => { setRecurringRequest({ habitId, start: updated.start, end: updated.end }) }}
+              />
+            ) : sec === 'goals' ? (
+              <section key="goals" className="mt-6 rounded bg-white p-4 shadow dark:bg-[#0b0b0b]">
+                <h2 className="mb-3 text-lg font-medium">Goals</h2>
+                <GoalMermaid goals={goals} habits={habits} openGoals={openGoals} toggleGoal={toggleGoal} setGoalParent={setGoalParent} mergeGoals={mergeGoals} />
+              </section>
+            ) : null
+          ))}
+        </div>
+        
       </main>
 
       <GoalModal
@@ -636,12 +813,36 @@ export default function DashboardPage() {
         goals={goals}
       />
 
+      
+
+      <EditLayoutModal
+        open={editLayoutOpen}
+        onClose={() => setEditLayoutOpen(false)}
+        sections={pageSections}
+        onChange={(s: any) => setPageSections(s)}
+        onAdd={(id: any) => setPageSections(ps => ps.includes(id) ? ps : [...ps, id])}
+        onDelete={(id: any) => setPageSections(ps => ps.filter(x => x !== id))}
+        onMove={(id: any, dir: any) => {
+          setPageSections(ps => {
+            const idx = ps.indexOf(id);
+            if (idx === -1) return ps;
+            const ni = idx + dir;
+            if (ni < 0 || ni >= ps.length) return ps;
+            const n = [...ps];
+            const [it] = n.splice(idx, 1);
+            n.splice(ni, 0, it);
+            return n;
+          })
+        }}
+      />
+
       <GoalModal
         open={openGoalModal}
         onClose={() => { setOpenGoalModal(false); setEditingGoalId(null); }}
         goal={editingGoal}
         onUpdate={(g) => updateGoal(g)}
         onDelete={(id) => deleteGoal(id)}
+        onComplete={(id) => completeGoalCascade(id)}
         goals={goals}
       />
 
@@ -651,8 +852,10 @@ export default function DashboardPage() {
         open={openHabitModal}
         onClose={() => { setOpenHabitModal(false); setSelectedHabitId(null); }}
         habit={selectedHabit}
-        onUpdate={(updated) => setHabits((s) => s.map(h => h.id === updated.id ? updated : h))}
-        onDelete={(id) => setHabits((s) => s.filter(h => h.id !== id))}
+        onUpdate={async (updated) => {
+          try { const u = await api.updateHabit(updated.id, updated); setHabits((s) => s.map(h => h.id === updated.id ? u : h)) } catch(e) { console.error(e) }
+        }}
+        onDelete={async (id) => { try { await api.deleteHabit(id); setHabits((s) => s.filter(h => h.id !== id)) } catch(e) { console.error(e) } }}
         categories={goals}
       />
 
@@ -661,7 +864,7 @@ export default function DashboardPage() {
         open={openNewHabit}
         onClose={() => { setOpenNewHabit(false); setNewHabitInitial(null); setNewHabitInitialType(undefined); }}
         habit={null}
-        initial={{ date: newHabitInitial?.date, time: newHabitInitial?.time, type: newHabitInitialType }}
+        initial={{ date: newHabitInitial?.date, time: newHabitInitial?.time, endTime: newHabitInitial?.endTime, type: newHabitInitialType }}
         onCreate={(payload) => {
           createHabit(payload as any)
         }}
@@ -736,7 +939,7 @@ export default function DashboardPage() {
   );
 }
 
-function FullCalendarWrapper({ habits, onEventClick, onSlotSelect, onEventChange, onRecurringAttempt }: { habits: Habit[]; onEventClick?: (id: string) => void; onSlotSelect?: (isoDate: string, time?: string) => void; onEventChange?: (id: string, updated: { start?: string; end?: string }) => void; onRecurringAttempt?: (habitId: string, updated: { start?: string; end?: string }) => void }) {
+function FullCalendarWrapper({ habits, goals, onEventClick, onSlotSelect, onEventChange, onRecurringAttempt }: { habits: Habit[]; goals: Goal[]; onEventClick?: (id: string) => void; onSlotSelect?: (isoDate: string, time?: string, endTime?: string) => void; onEventChange?: (id: string, updated: { start?: string; end?: string; timingIndex?: number }) => void; onRecurringAttempt?: (habitId: string, updated: { start?: string; end?: string; timingIndex?: number }) => void }) {
   const now = new Date()
   const EXPAND_DAYS = 90 // when outdates present, expand recurring timings this many days into the future
   function ymd(d: Date) { return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}` }
@@ -868,7 +1071,21 @@ function FullCalendarWrapper({ habits, onEventClick, onSlotSelect, onEventChange
 
   const events = useMemo(() => {
     const ev: any[] = [];
+    const goalsById = Object.fromEntries((goals ?? []).map(g => [g.id, g])) as Record<string, Goal>
+    const goalCompleted = (goalId: string) => {
+      let g: Goal | undefined = goalsById[goalId]
+      while (g) {
+        if (g.isCompleted) return true
+        g = g.parentId ? goalsById[g.parentId] : undefined
+      }
+      return false
+    }
     for (const h of (habits ?? [])) {
+      // If the habit is inactive/completed, or its goal (or any ancestor) is completed,
+      // treat it as "not to be done" and exclude it from the calendar.
+      if (!h.active) continue;
+      if (h.completed) continue;
+      if (goalCompleted(h.goalId)) continue;
       if (h.type === 'avoid') continue;
       const timings = (h as any).timings ?? [];
       if (timings.length) {
@@ -911,7 +1128,7 @@ function FullCalendarWrapper({ habits, onEventClick, onSlotSelect, onEventChange
       }
     }
     return ev;
-  }, [habits]);
+  }, [habits, goals]);
 
   // precompute day events/arcs for today/tomorrow
   const isDayNav = (navSelection === 'today' || navSelection === 'tomorrow')
@@ -995,11 +1212,18 @@ function FullCalendarWrapper({ habits, onEventClick, onSlotSelect, onEventChange
         slotMaxTime="24:00:00"
         selectable={true}
         selectMirror={true}
+        // Force 24-hour times in both the axis and the event time labels
+        slotLabelFormat={{ hour: '2-digit', minute: '2-digit', hour12: false }}
+        eventTimeFormat={{ hour: '2-digit', minute: '2-digit', hour12: false }}
         select={(selectionInfo) => {
-          // selectionInfo has startStr/start and startTimme
+          // selectionInfo provides both start and end for range selections
           const iso = selectionInfo.startStr?.slice(0,10) ?? selectionInfo.start?.toISOString().slice(0,10)
-          const time = selectionInfo.startStr && selectionInfo.startStr.length > 10 ? selectionInfo.startStr.slice(11,16) : undefined
-          if (onSlotSelect && iso) onSlotSelect(iso, time)
+          const startTime = selectionInfo.startStr && selectionInfo.startStr.length > 10 ? selectionInfo.startStr.slice(11,16) : undefined
+          const endSrc = (selectionInfo.endStr && selectionInfo.endStr.length > 10)
+            ? selectionInfo.endStr
+            : (selectionInfo.end ? selectionInfo.end.toISOString() : undefined)
+          const endTime = endSrc && endSrc.length > 10 ? endSrc.slice(11,16) : undefined
+          if (onSlotSelect && iso) onSlotSelect(iso, startTime, endTime)
         }}
         eventClick={(clickInfo) => {
           const id = clickInfo.event.id
@@ -1011,7 +1235,7 @@ function FullCalendarWrapper({ habits, onEventClick, onSlotSelect, onEventChange
           // single click on empty calendar slot
           const iso = dateClickInfo.dateStr?.slice(0,10) ?? dateClickInfo.date?.toISOString().slice(0,10)
           const time = dateClickInfo.dateStr && dateClickInfo.dateStr.length > 10 ? dateClickInfo.dateStr.slice(11,16) : undefined
-          if (onSlotSelect && iso) onSlotSelect(iso, time)
+          if (onSlotSelect && iso) onSlotSelect(iso, time, undefined)
         }}
         eventDrop={(dropInfo) => {
           const id = dropInfo.event.id
@@ -1028,7 +1252,7 @@ function FullCalendarWrapper({ habits, onEventClick, onSlotSelect, onEventChange
             if (onRecurringAttempt) onRecurringAttempt(habitId, { start: startStr, end: endStr })
             return
           }
-          if (onEventChange) onEventChange(habitId, { start: startStr, end: endStr })
+          if (onEventChange) onEventChange(habitId, { start: startStr, end: endStr, timingIndex })
         }}
         eventResize={(resizeInfo) => {
           const id = resizeInfo.event.id
@@ -1043,7 +1267,7 @@ function FullCalendarWrapper({ habits, onEventClick, onSlotSelect, onEventChange
             if (onRecurringAttempt) onRecurringAttempt(habitId, { start: startStr, end: endStr })
             return
           }
-          if (onEventChange) onEventChange(habitId, { start: startStr, end: endStr })
+          if (onEventChange) onEventChange(habitId, { start: startStr, end: endStr, timingIndex })
         }}
         events={events}
         height={600}
@@ -1073,32 +1297,63 @@ function GoalMermaid({ goals }: { goals: Goal[]; habits?: Habit[]; openGoals?: R
     const el = containerRef.current
     if (!el) return
     let cancelled = false
+
+    const formatErr = (e: any) => {
+      if (!e) return 'Unknown error'
+      if (typeof e === 'string') return e
+      if (e instanceof Error) return e.stack || e.message
+      if (typeof e?.message === 'string') return e.message
+      try { return JSON.stringify(e, null, 2) } catch { return String(e) }
+    }
+
     const render = async () => {
       try {
-        // ensure mermaid is initialized
-        if ((mermaid as any).initialize) {
-          try { mermaid.initialize({ startOnLoad: false }) } catch (e) { /* ignore */ }
-        }
-        // mermaid.mermaidAPI.render may return a promise or string depending on version
-        const renderId = id + '-svg'
-        const api = (mermaid as any).mermaidAPI || (mermaid as any)
-        if (!api || !api.render) {
-          // fallback: show plain graph source
+        initMermaidOnce()
+
+        // Render using mermaid.run() (v10+ recommended) to avoid mermaidAPI.render quirks.
+        // We set the graph source into a <pre class="mermaid"> and let mermaid transform it.
+        if (cancelled) return
+        const safe = graph.replace(/&/g, '&amp;').replace(/</g, '&lt;')
+        el.innerHTML = `<pre class="mermaid">${safe}</pre>`
+
+        const run = (mermaid as any)?.run
+        if (typeof run !== 'function') {
+          // Fallback: show plain text if run() isn't available
           el.innerText = graph
           return
         }
-        const res = api.render(renderId, graph)
-        const svg = res && typeof res.then === 'function' ? await res : res
+
+        // Wait a tick to ensure the element is in the DOM and layout is stable.
+        await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()))
         if (cancelled) return
-        if (typeof svg === 'string') {
-          el.innerHTML = svg
-        } else if (svg && typeof svg === 'object' && typeof svg.svg === 'string') {
-          el.innerHTML = svg.svg
-        } else {
-          el.innerText = String(svg)
+
+        // Render only the `.mermaid` node(s) inside this container.
+        const nodes = Array.from(el.querySelectorAll('.mermaid')).filter(Boolean)
+        if (!nodes.length) {
+          el.innerText = graph
+          return
+        }
+
+        try {
+          await run({ nodes })
+        } catch (e) {
+          // Some versions throw internal DOM errors (e.g. appendChild on null).
+          // Fallback to render() if available.
+          const api = (mermaid as any)?.mermaidAPI || (mermaid as any)
+          if (api?.render) {
+            const renderId = `${id}-svg`
+            const res = api.render(renderId, graph)
+            const out = res && typeof (res as any).then === 'function' ? await res : res
+            if (cancelled) return
+            if (typeof out === 'string') el.innerHTML = out
+            else if (out && typeof out === 'object' && typeof (out as any).svg === 'string') el.innerHTML = (out as any).svg
+            else el.innerText = String(out)
+          } else {
+            throw e
+          }
         }
       } catch (e: any) {
-        el.innerText = String(e) || graph
+        el.innerText = formatErr(e)
       }
     }
     render()

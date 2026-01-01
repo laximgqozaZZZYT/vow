@@ -2,12 +2,12 @@
 
 以下はプロジェクトを構築し、MVP をリリースするためのタスク一覧です。小さな単位に分割して優先度順に並べています。
 
-## 重要な前提
-- フロント: Next.js（TypeScript）
-- バックエンド: FastAPI（Python）
+## 重要な前提（現状の実装）
+- フロント: Next.js（TypeScript, App Router）
+- バックエンド: Express + TypeScript + Prisma
 - DB: MySQL
-- 認証: Firebase Auth
-- CI/CD: GitHub Actions
+- 認証: 暫定で `X-User-Id` ヘッダ（将来は Cognito 等で JWT）
+- CI/CD: GitHub Actions（未整備。AWS 移行に合わせて整備する）
 
 ---
 
@@ -17,77 +17,85 @@
    - [ ] `.gitignore` 追加（`node_modules`, `.venv`, `.env` 等）
 - [ ] 2. リポジトリ構成の決定
    - [ ] `/frontend` (Next.js)
-   - [ ] `/backend` (FastAPI)
+   - [ ] `/backend` (Express + Prisma)
    - [ ] `/infra` (任意: Terraform, k8s, db migration scripts)
 
 ## フェーズ1 — スキャフォールド（MVP）
 - [ ] 1. フロント初期化
    - [ ] Next.js + TypeScript の雛形作成
-   - [ ] Firebase SDK を導入し、ログイン画面を作る（Email/Password と OAuth）
+   - [ ] 認証（Cognito など）を見据えたログイン画面を用意（MVP は未実装でも可）
    - [ ] Axios / SWR を導入
    
-  
-   **状態更新 (2025-12-29)**
-   - [ ] フロント側で Firebase Auth を用いたログイン画面の動作確認を完了しました。
-      - 実施内容: `/login` ページ実装、クライアントサイドの認証監視を `src/app/page.tsx` に追加して未認証は `/login` にリダイレクト、認証済みは `/dashboard` に遷移するフローを追加。
-      - `/dashboard` の簡易ページを追加し、サインアウト機能を実装しました。
-      - テスト: ローカル開発サーバーでログイン成功を確認済み。
-
    次の推奨タスク（優先度順）:
-   1. バックエンドの認証検証（FastAPI 側で Authorization ヘッダの ID トークンを検証し、ユーザー情報を取り扱う）
+   1. バックエンドの認証導入（Cognito 等で JWT を検証し、ユーザー情報を取り扱う）
    2. `/dashboard` の UI を本来のランディング（またはダッシュボード）に差し替え
    3. Next.js の `next.config.js` にある `experimental.turbopack` 周りの警告を解消（設定を削除するか Next のサポート状況に合わせて修正）
 - [ ] 2. バックエンド初期化
-   - [ ] FastAPI プロジェクト作成
-   - [ ] SQLAlchemy と Alembic を導入
-   - [ ] MySQL 接続設定（環境変数で管理）
-   - [ ] Firebase Admin SDK を導入（サービスアカウント設定）
+   - [x] Express + TypeScript プロジェクト作成
+   - [x] Prisma を導入
+   - [x] MySQL 接続設定（環境変数で管理）
 - [ ] 3. CI 基本設定
    - [ ] GitHub Actions のワークフローを追加（Lint, Tests）
 
 ## フェーズ2 — 基本機能実装
 - [ ] 1. DB モデル実装
-   - [ ] User, Category, Habit, Report のモデル作成
-   - [ ] 初期マイグレーションを作成して適用
+   - [x] User, Goal, Habit, Activity, Preference を Prisma で定義
+   - [x] migrate により MySQL に反映
 - [ ] 2. 認証ミドルウェア
    - [ ] Authorization ヘッダの ID トークン検証を実装
-   - [ ] トークンから firebase_uid を抽出し、User レコードを作成/参照
-- [ ] 3. カテゴリー CRUD API
-   - [ ] POST/GET/PUT/DELETE を実装。ユーザー単位でのスコープを適用
-- [ ] 4. 習慣 CRUD API
-   - [ ] POST/GET/PUT/DELETE を実装。リマインドは JSON で保存
-- [ ] 5. 報告 API
-   - [ ] POST/GET を実装。報告作成時に habit と user の整合性をチェック
-- [ ] 6. 統計 API
-   - [ ] 習慣別統計（累計回数、最終実行からの経過時間）
-   - [ ] カテゴリー統計（カテゴリ内の合計回数、最終実行日）
+   - [ ] トークンから subject（例: `sub`）を抽出し、User レコードを作成/参照
+- [ ] 3. Goals/Habits/Activities/Prefs CRUD API
+   - [x] Goals CRUD
+   - [x] Habits CRUD（goalId 未指定時 Inbox Goal にアタッチ）
+   - [x] Activities CRUD
+   - [x] Preferences/Layout
 
 ## フェーズ3 — フロント実装
 - [ ] 1. 認証フロー実装（Next.js）
-   - [ ] Firebase UI コンポーネントでログイン
+   - [ ] Cognito 等の Hosted UI / 独自 UI でログイン
    - [ ] トークンを取得して API クライアントに設定
 - [ ] 2. ページ作成
    - [ ] `/habits`: 習慣一覧・作成・編集
-   - [ ] `/categories`: カテゴリー一覧・作成・編集
-   - [ ] `/reports`: 報告作成・一覧
    - [ ] `/stats`: 習慣・カテゴリー統計表示
 - [ ] 3. UI/UX 改善
    - [ ] 日付ピッカー、時間入力、モバイル対応
 
 ## フェーズ4 — テスト、CI/CD、デプロイ
 - [ ] 1. テスト
-   - [ ] FastAPI で pytest によるエンドポイントテスト（認証モック）
+   - [ ] backend（Express）のエンドポイントテスト（認証モック）
    - [ ] Next.js の基本的なレンダリングテスト（Jest）
 - [ ] 2. CI/CD
    - [ ] GitHub Actions で Lint, Tests を実行
    - [ ] 本番デプロイ（例：Vercel for frontend、Cloud Run / ECS for backend）
-- [ ] 3. インフラ
-   - [ ] MySQL（RDS）への接続設定
-   - [ ] 環境変数/Secrets の設定
+- [ ] 3. インフラ（AWS移行）
+    - [ ] VPC 作成（public/private subnet）
+    - [ ] RDS MySQL 作成（private subnet）
+    - [ ] ECR 作成（backend image）
+    - [ ] ECS Fargate + ALB 構築（backend）
+    - [ ] Amplify Hosting 構築（frontend）
+    - [ ] Secrets Manager に `DATABASE_URL` を格納
+    - [ ] 環境変数 `NEXT_PUBLIC_API_URL` を Amplify に設定
+    - [ ] Migration 実行導線（ECS RunTask で `prisma migrate deploy`）
+    - [ ] ログ（CloudWatch Logs）、アラーム、バックアップ（RDS）
+
+## AWS 移行チェックリスト（最小）
+
+- [ ] ドメイン/証明書
+   - [ ] Route53（任意）
+   - [ ] ACM 証明書（ALB/CloudFront/Amplify 用）
+- [ ] API
+   - [ ] ALB 側で HTTPS
+   - [ ] CORS origin を本番ドメインに合わせる
+- [ ] DB
+   - [ ] セキュリティグループが ECS -> RDS のみ許可
+   - [ ] RDS パラメータ/照合順序の確認
+- [ ] データ移行（必要なら）
+   - [ ] 既存 MySQL から dump/restore
+   - [ ] マイグレーション適用順序の確定
 
 ## フェーズ5 — 追加機能（オプション）
 - [ ] リマインダーのスケジューラ（crontab / Celery / Cloud Tasks）
-- [ ] プッシュ通知（Firebase Cloud Messaging）
+- [ ] プッシュ通知（SNS / WebPush / 任意サービス）
 - [ ] UX 向上（分析ダッシュボード、CSVエクスポート）
 
 ## スプリント分割（3週間スプリントの例）
@@ -97,9 +105,9 @@
 - [ ] Sprint 4 (Week10-12): フェーズ3 残り + フェーズ4
 
 ## 受け入れ基準（例）
-- [ ] ユーザーは Firebase でログインできる
-- [ ] ログイン後、カテゴリーと習慣を作成できる
-- [ ] 習慣に対して報告を作成でき、統計が確認できる
+- [ ] (暫定/本番) 認証後、ユーザー毎にデータが分離される
+- [ ] ログイン後、Goal と Habit を作成できる
+- [ ] Activity が保存され、リロード後も履歴が表示される
 
 ## 次のアクション
 - [ ] あなたの確認のあと、リポジトリのスキャフォールドを作成します。

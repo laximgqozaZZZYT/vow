@@ -22,9 +22,9 @@ function parseYMD(s?: string | Date | null) {
     return isNaN(d.getTime()) ? undefined : d
 }
 
-type Goal = { id: string; name: string; details?: string; dueDate?: string | Date | null; parentId?: string | null }
+type Goal = { id: string; name: string; details?: string; dueDate?: string | Date | null; parentId?: string | null; isCompleted?: boolean }
 
-export function GoalModal({ open, onClose, goal, onUpdate, onDelete, onCreate, goals }: { open: boolean; onClose: () => void; goal: Goal | null; onUpdate?: (g: Goal) => void; onDelete?: (id: string) => void; onCreate?: (payload: { name: string; details?: string; dueDate?: string; parentId?: string | null }) => void; goals?: Goal[] }) {
+export function GoalModal({ open, onClose, goal, onUpdate, onDelete, onCreate, onComplete, goals }: { open: boolean; onClose: () => void; goal: Goal | null; onUpdate?: (g: Goal) => void; onDelete?: (id: string) => void; onCreate?: (payload: { name: string; details?: string; dueDate?: string; parentId?: string | null }) => void; onComplete?: (goalId: string) => void; goals?: Goal[] }) {
     const [name, setName] = useState(goal?.name ?? "")
     const [details, setDetails] = useState(goal?.details ?? "")
     const [dueDate, setDueDate] = useState<Date | undefined>(goal?.dueDate ? (typeof goal.dueDate === 'string' ? parseYMD(goal.dueDate) : (goal.dueDate as Date)) : undefined)
@@ -59,6 +59,12 @@ export function GoalModal({ open, onClose, goal, onUpdate, onDelete, onCreate, g
         onClose()
     }
 
+    function handleComplete() {
+        if (!goal) return
+        onComplete && onComplete(goal.id)
+        onClose()
+    }
+
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
             <div className="w-full max-w-md rounded bg-white p-6 shadow-lg text-black dark:bg-slate-900 dark:text-slate-100">
@@ -67,21 +73,21 @@ export function GoalModal({ open, onClose, goal, onUpdate, onDelete, onCreate, g
                 <div className="space-y-3">
                     <div>
                         <label className="block text-sm">Name</label>
-                        <input value={name} onChange={(e) => setName(e.target.value)} className="w-full rounded border px-3 py-2" placeholder="Goal name" />
+                        <input value={name} onChange={(e) => setName(e.target.value)} className="w-full rounded border px-3 py-2 bg-white text-black dark:bg-slate-800 dark:text-slate-100" placeholder="Goal name" />
                     </div>
 
                     <div>
                         <label className="block text-sm">Details</label>
-                        <textarea value={details} onChange={(e) => setDetails(e.target.value)} className="w-full rounded border px-3 py-2" placeholder="Optional details" />
+                        <textarea value={details} onChange={(e) => setDetails(e.target.value)} className="w-full rounded border px-3 py-2 bg-white text-black dark:bg-slate-800 dark:text-slate-100" placeholder="Optional details" />
                     </div>
 
                     <div>
                         <label className="block text-sm">Due date</label>
                         <div className="mt-1">
                             <Popover className="relative">
-                                <Popover.Button className="w-full text-left rounded border px-3 py-2">{dueDate ? dueDate.toDateString() : "Select date"}</Popover.Button>
+                                <Popover.Button className="w-full text-left rounded border px-3 py-2 bg-white text-black dark:bg-slate-800 dark:text-slate-100">{dueDate ? dueDate.toDateString() : "Select date"}</Popover.Button>
                                 <Popover.Panel className="absolute z-10 mt-2 left-0 w-[min(520px,90vw)]">
-                                    <div className="rounded bg-white p-4 shadow max-w-full">
+                                    <div className="rounded bg-white p-4 shadow max-w-full text-black dark:bg-slate-800 dark:text-slate-100">
                                         <DayPicker mode="single" selected={dueDate} onSelect={(d) => setDueDate(d ?? undefined)} />
                                     </div>
                                 </Popover.Panel>
@@ -91,7 +97,7 @@ export function GoalModal({ open, onClose, goal, onUpdate, onDelete, onCreate, g
 
                     <div>
                         <label className="block text-sm">Parent goal (optional)</label>
-                        <select value={parentId ?? ''} onChange={(e) => setParentId(e.target.value || null)} className="w-full rounded border px-3 py-2 mt-1">
+                        <select value={parentId ?? ''} onChange={(e) => setParentId(e.target.value || null)} className="w-full rounded border px-3 py-2 mt-1 bg-white text-black dark:bg-slate-800 dark:text-slate-100">
                             <option value="">(no parent)</option>
                             {goals?.map(g => (
                                 <option key={g.id} value={g.id}>{g.name}</option>
@@ -103,6 +109,7 @@ export function GoalModal({ open, onClose, goal, onUpdate, onDelete, onCreate, g
                         <div>
                             <button className="px-4 py-2" onClick={onClose}>Cancel</button>
                             <button className="ml-2 rounded bg-blue-600 px-4 py-2 text-white" onClick={handleSave}>Save</button>
+                            {goal && <button className="ml-2 rounded bg-emerald-600 px-4 py-2 text-white" onClick={handleComplete}>Completed</button>}
                         </div>
                         <div>
                             {goal && <button className="text-red-600 text-sm" onClick={handleDelete}>Delete goal</button>}

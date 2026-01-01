@@ -50,9 +50,9 @@ type Timing = {
 
 type Habit = { id: string; goalId: string; name: string; active: boolean; type: "do" | "avoid"; count: number; must?: number; duration?: number; reminders?: ({ kind: 'absolute'; time: string; weekdays: string[] } | { kind: 'relative'; minutesBefore: number })[]; dueDate?: string; time?: string; endTime?: string; repeat?: string; allDay?: boolean; notes?: string; createdAt: string; updatedAt: string; workloadUnit?: string; workloadTotal?: number; workloadPerCount?: number }
 
-type CreateHabitPayload = { name: string; goalId: string; type: "do" | "avoid"; duration?: number; reminders?: any[]; dueDate?: string; time?: string; endTime?: string; repeat?: string; timings?: any[]; allDay?: boolean; notes?: string; workloadUnit?: string; workloadTotal?: number; workloadPerCount?: number }
+type CreateHabitPayload = { name: string; goalId?: string; type: "do" | "avoid"; duration?: number; reminders?: any[]; dueDate?: string; time?: string; endTime?: string; repeat?: string; timings?: any[]; allDay?: boolean; notes?: string; workloadUnit?: string; workloadTotal?: number; workloadPerCount?: number }
 
-export function HabitModal({ open, onClose, habit, onUpdate, onDelete, onCreate, initial, categories: goals }: { open: boolean; onClose: () => void; habit: Habit | null; onUpdate?: (h: Habit) => void; onDelete?: (id: string) => void; onCreate?: (payload: CreateHabitPayload) => void; initial?: { date?: string; time?: string; type?: "do" | "avoid"; goalId?: string }; categories?: { id: string; name: string }[] }) {
+export function HabitModal({ open, onClose, habit, onUpdate, onDelete, onCreate, initial, categories: goals }: { open: boolean; onClose: () => void; habit: Habit | null; onUpdate?: (h: Habit) => void; onDelete?: (id: string) => void; onCreate?: (payload: CreateHabitPayload) => void; initial?: { date?: string; time?: string; endTime?: string; type?: "do" | "avoid"; goalId?: string }; categories?: { id: string; name: string }[] }) {
     const [name, setName] = React.useState<string>(habit?.name ?? "")
     const [notes, setNotes] = React.useState<string>(habit?.notes ?? "")
     const [dueDate, setDueDate] = React.useState<Date | undefined>(habit?.dueDate ? new Date(habit.dueDate) : undefined)
@@ -117,15 +117,15 @@ export function HabitModal({ open, onClose, habit, onUpdate, onDelete, onCreate,
             setNotes('')
             setDueDate(initial?.date ? new Date(initial.date) : undefined)
             setTime(initial?.time ?? undefined)
-            setEndTime(undefined)
+            setEndTime(initial?.endTime ?? undefined)
             setAllDay(false)
             setActive(true)
             setType(initial?.type ?? 'do')
             setGoalId(initial?.goalId)
             const tType: TimingType = initial?.date ? 'Date' : 'Daily'
-            setTimings([{ type: tType, date: initial?.date ?? undefined, start: initial?.time ?? undefined, end: undefined }])
+            setTimings([{ type: tType, date: initial?.date ?? undefined, start: initial?.time ?? undefined, end: initial?.endTime ?? undefined }])
             // ensure there's at least one empty outdate row so the UI shows an editable row
-            setOutdates([{ type: tType, date: initial?.date ?? undefined, start: initial?.time ?? undefined, end: undefined }])
+            setOutdates([{ type: tType, date: initial?.date ?? undefined, start: initial?.time ?? undefined, end: initial?.endTime ?? undefined }])
             setTimingType(initial?.date ? 'Date' : 'Daily')
             setTimingWeekdays([])
         }
@@ -168,7 +168,6 @@ export function HabitModal({ open, onClose, habit, onUpdate, onDelete, onCreate,
             // creation flow
             const payload: CreateHabitPayload = {
                 name: name.trim() || "Untitled",
-                goalId: goalId ?? (goals && goals.length ? goals[0].id : ""),
                 type,
                 dueDate: dueDate ? formatLocalDate(dueDate) : undefined,
                 time: time ?? undefined,
@@ -181,6 +180,8 @@ export function HabitModal({ open, onClose, habit, onUpdate, onDelete, onCreate,
                 workloadPerCount: workloadPerCount ?? 1,
                 notes: notes.trim() || undefined,
             };
+            const resolvedGoalId = goalId ?? (goals && goals.length ? goals[0].id : undefined)
+            if (resolvedGoalId) payload.goalId = resolvedGoalId
             onCreate && onCreate(payload);
             onClose();
         }

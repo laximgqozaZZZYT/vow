@@ -1,43 +1,291 @@
-# Data schema — Habit & Availability
+# Data schema（現状の実装）
 
-This document defines the backend schema and API/UX contract for Habits and for calendar availability (free/blocked time slots) used by the dashboard UI.
+このドキュメントは、現在このリポジトリに実装されている Prisma スキーマと API が前提にしているデータ構造をまとめます。
 
-Motivation (per requirements):
-- Users should have reusable "availability" slots (default free windows) on their calendar.
-- When creating a Habit of type `do` with `Schedule` policy, the UI should allow the user to embed scheduled occurrences into existing free availability slots.
-- `Count`-policy habits should be scheduled by repeating into available slots the requested number of times.
-- Availability should also support blocked time (meetings, appointments) and be creatable from Habit popups.
+- Source of truth: `backend/prisma/schema.prisma`
+- API 実装: `backend/src/index.ts`
 
-The frontend lives under `frontend/app/dashboard/*` and will render availability as translucent/uncolored boxes for free slots and as colored/opaque boxes for blocked slots.
+## 全体像
 
-Goals:
-- Define concise models for Habit and AvailabilitySlot that support the new embedding/placement workflow.
-- Provide example DDL/Prisma models and JSON payloads for common operations.
-- Document API endpoints and UI behavior necessary for the frontend changes.
+- `User`
+  - 現状は暫定認証（`X-User-Id`）のため `userId` は optional で運用。
+  - 将来 JWT 認証へ移行する前提で relation を用意。
 
-## Contract (brief)
-- Input: JSON payloads for Habit and AvailabilitySlot creation/upsert.
-- Output: Habit and AvailabilitySlot records with stable `id` and timestamps. For habit creation that requests placement into availability, the API may return one or more concrete calendar instances (materialized occurrences) or references to them.
-- Error modes: validation errors (missing/invalid fields), unavailable availability (requested slot doesn't exist), and scheduling conflicts when attempting to place Habit occurrences into blocked time.
+- `Goal`
+  - ツリー構造（`parentId`）
+  - 完了状態: `isCompleted`
 
-## New conceptual types
+- `Habit`
+  - `goalId` で Goal に所属
+  - スケジューリング/表示設定は JSON（`timings`, `outdates`, `reminders` 等）
 
-AvailabilitySlot (represents both free and blocked time ranges)
-- id: UUID
-- user_id / owner_id: UUID
-- name: string (optional) — e.g. "Morning free", "Client meeting"
-- kind: enum('free','blocked') — free = available for placing Habits, blocked = reserved time like meetings
-- date: date (optional) — the date for single-day slots. For recurring availability use `recurrence`.
-- start_time: time (HH:MM)
-- end_time: time (HH:MM)
-- recurrence: jsonb|null — rrule-like object for repeating availability (freq, interval, byweekday, until, count)
-- all_day: boolean
-- color: string|null — optional color for blocked slots (UI may ignore color for free)
-- opacity / displayHint: optional rendering hints (ui-only)
-- created_at, updated_at
+- `Activity`
+  - 操作履歴（`start|pause|complete|skip` など）
+  - リロード後も履歴が残るよう、原則 API に永続化
 
-Notes:
-- Default free availability slots are created when a user initializes their calendar (or can be managed via settings). The app should include sensible defaults: 07:00-08:00, 12:00-13:00, 19:00-22:00 (see examples below).
+- `Preference`
+  - 任意 key/value（Json）
+  - `@@unique([key, userId])`
+
+## Prisma モデル概要（要点）
+
+> 正確なフィールドは `backend/prisma/schema.prisma` を参照してください。
+
+### User
+
+- `id: String @id @default(cuid())`
+- `email: String @unique`
+- `name: String?`
+
+### Goal
+
+- `id: String @id @default(cuid())`
+- `name: String`
+- `details: String?`
+- `dueDate: DateTime?`
+- `isCompleted: Boolean @default(false)`
+- `parentId: String?`
+- `userId: String?`
+
+### Habit
+
+- `id: String @id @default(cuid())`
+- `goalId: String`
+- `name: String`
+- `active: Boolean @default(true)`
+- `type: String`（UI は `do|avoid` を利用）
+- JSON: `timings`, `outdates`, `reminders` など
+- `userId: String?`
+
+### Activity
+
+- `id: String @id @default(cuid())`
+- `kind: String`（例: `start|pause|complete|skip`）
+- `habitId: String`
+- `habitName: String?`
+- `timestamp: DateTime @default(now())`
+- `amount/prevCount/newCount/durationSeconds: Int?`
+- `userId: String?`
+
+### Preference
+
+- `id: String @id @default(cuid())`
+- `key: String`
+- `value: Json`
+- `userId: String?`
+
+## API とスキーマの対応
+
+- Goals: `GET/POST/PATCH/DELETE /goals`
+- Habits: `GET/POST/PATCH/DELETE /habits`
+- Activities: `GET/POST/PATCH/DELETE /activities`
+- Preferences/Layout: `GET/POST /prefs`, `GET/POST /layout`
+
+## 今後の拡張メモ
+
+- 認証導入後は `userId` を required にし、API 側で所有者チェックを強制する。
+- Activity.kind は enum 化するとバリデーションが強くなる（現状は string）。
+- Habit の JSON フィールドは必要に応じて正規化（別テーブル化）を検討。
+# Data schema（現状の実装）
+
+このドキュメントは、現在このリポジトリに実装されている Prisma スキーマと API が前提にしているデータ構造をまとめます。
+
+- Source of truth: `backend/prisma/schema.prisma`
+- API 実装: `backend/src/index.ts`
+
+## 全体像
+
+- `User`
+  - 現状は暫定認証（`X-User-Id`）のため `userId` は optional で運用。
+  - 将来 JWT 認証へ移行する前提で relation を用意。
+
+- `Goal`
+  - ツリー構造（`parentId`）
+  - 完了状態: `isCompleted`
+
+- `Habit`
+  - `goalId` で Goal に所属
+  - スケジューリングや UI 設定は JSON（`timings`, `outdates`, `reminders` 等）
+
+- `Activity`
+  - 操作履歴（`start|pause|complete|skip` など）
+  - リロード後も履歴が残るよう、原則 API に永続化
+
+- `Preference`
+  - 任意 key/value（Json）
+  - `@@unique([key, userId])`
+
+## Prisma モデル概要（要点）
+
+> 正確なフィールドは `backend/prisma/schema.prisma` を参照してください。
+
+### User
+
+- `id: String @id @default(cuid())`
+- `email: String @unique`
+- `name: String?`
+
+### Goal
+
+- `id: String @id @default(cuid())`
+- `name: String`
+- `details: String?`
+- `dueDate: DateTime?`
+- `isCompleted: Boolean @default(false)`
+- `parentId: String?`
+- `userId: String?`
+
+### Habit
+
+- `id: String @id @default(cuid())`
+- `goalId: String`
+- `name: String`
+- `active: Boolean @default(true)`
+- `type: String`（UI は `do|avoid` を利用）
+- JSON: `timings`, `outdates`, `reminders` など
+- `userId: String?`
+
+### Activity
+
+- `id: String @id @default(cuid())`
+- `kind: String`（例: `start|pause|complete|skip`）
+- `habitId: String`
+- `habitName: String?`
+- `timestamp: DateTime @default(now())`
+- `amount/prevCount/newCount/durationSeconds: Int?`
+- `userId: String?`
+
+### Preference
+
+- `id: String @id @default(cuid())`
+- `key: String`
+- `value: Json`
+- `userId: String?`
+
+## API とスキーマの対応
+
+- Goals: `GET/POST/PATCH/DELETE /goals`
+- Habits: `GET/POST/PATCH/DELETE /habits`
+- Activities: `GET/POST/PATCH/DELETE /activities`
+- Preferences/Layout: `GET/POST /prefs`, `GET/POST /layout`
+
+## 今後の拡張メモ
+
+- 認証導入後は `userId` を required にし、API 側で所有者チェックを強制する。
+- Activity.kind は enum 化するとバリデーションが強くなる（現状は string）。
+- Habit の JSON フィールドは必要に応じて正規化（別テーブル化）を検討。
+﻿# Data schema（現状の実装）
+
+このドキュメントは、現在このリポジトリに実装されている Prisma スキーマと API が前提にしているデータ構造をまとめます。
+
+- Source of truth: `backend/prisma/schema.prisma`
+- API 実装: `backend/src/index.ts`
+
+## 全体像
+
+- `User`
+  - いまは暫定認証（`X-User-Id`）のため `userId` は optional。
+  - 将来 JWT 認証を入れる前提で relation は用意している。
+
+- `Goal`
+  - ツリー構造（`parentId`）
+  - `isCompleted` により完了状態を保持
+
+- `Habit`
+  - `goalId` で Goal に所属
+  - スケジューリング関連（`timings/outdates/reminders`）は JSON
+
+- `Activity`
+  - 望ましい操作履歴（start/pause/complete/skip など）
+  - ページリロード後も履歴が残るように API に永続化
+
+- `Preference`
+  - 任意の key/value（Json）
+  - `@@unique([key, userId])`
+
+## Prisma モデル概略
+
+### User
+
+- `id: String @id @default(cuid())`
+- `email: String @unique`
+- `name: String?`
+- relations: goals/habits/activities/prefs
+
+### Goal
+
+- `id: String @id @default(cuid())`
+- `name: String`
+- `details: String?`
+- `dueDate: DateTime?`
+- `isCompleted: Boolean @default(false)`
+- `parentId: String?`（tree）
+- `userId: String?`
+
+### Habit
+
+- `id: String @id @default(cuid())`
+- `goalId: String`
+- `name: String`
+- `active: Boolean @default(true)`
+- `type: String`（UI は `do|avoid` を利用）
+- カウント/負荷系: `count`, `must`, `workloadTotal`, `workloadPerCount`, `workloadUnit` など
+- スケジュール系: `dueDate`, `time`, `endTime`, `repeat`, `timings(Json?)`, `outdates(Json?)`, `reminders(Json?)`
+- 状態系: `completed`, `lastCompletedAt`
+- `userId: String?`
+
+### Activity
+
+- `id: String @id @default(cuid())`
+- `kind: String`（例: `start|pause|complete|skip`）
+- `habitId: String`
+- `habitName: String?`
+- `timestamp: DateTime @default(now())`
+- `amount: Int?`
+- `prevCount: Int?`
+- `newCount: Int?`
+- `durationSeconds: Int?`
+- `userId: String?`
+
+### Preference
+
+- `id: String @id @default(cuid())`
+- `key: String`
+- `value: Json`
+- `userId: String?`
+- `@@unique([key, userId])`
+
+## API とスキーマの対応
+
+バックエンド API は `backend/src/index.ts` に実装されています。
+
+- Goals
+  - `GET /goals`
+  - `POST /goals`
+  - `PATCH /goals/:id`（`cascade` をサポート）
+  - `DELETE /goals/:id`
+
+- Habits
+  - `GET /habits`
+  - `POST /habits`（goalId 未指定時は `Inbox` を自動作成/紐付け）
+  - `PATCH /habits/:id`
+  - `DELETE /habits/:id`
+
+- Activities
+  - `GET /activities`（timestamp desc）
+  - `POST /activities`
+  - `PATCH /activities/:id`
+  - `DELETE /activities/:id`
+
+- Preferences / Layout
+  - `GET /prefs`, `POST /prefs`
+  - `GET /layout`, `POST /layout`
+
+## 今後のスキーマ拡張メモ
+
+- 認証導入後は `userId` を required とし、API 側で所有者チェックを強制する。
+- Activity の `kind` は enum 化するとバリデーションが強くなる（現状は string）。
+- Habit の JSON フィールドは、必要になったタイミングで正規化（別テーブル化）を検討する。
 
 Frame (UI-level concept)
 - A `Frame` is a lightweight UI concept that references an `AvailabilitySlot` or similar calendar container. Frames are presented on the calendar as the visual areas where Habits can be placed. Conceptually, Frames map 1:1 to AvailabilitySlot records, but the term `Frame` is useful in the frontend and in popup UX text.
@@ -298,49 +546,67 @@ Behavior: server creates the AvailabilitySlot and then, if `habit.embedPreferenc
 
 ## API notes (new endpoints)
 
-- POST /api/availability
-  - Body: AvailabilitySlot payload
-  - Returns: 201 created availability slot
+\# Data schema (current)
 
-- GET /api/availability?ownerId=...
-  - Returns: list of availability slots for calendar rendering (both free and blocked)
+This document describes the schema that is currently implemented in `backend/prisma/schema.prisma`.
 
-- POST /api/habits
-  - Body: habit payload (may include embedPreference and createAvailability)
-  - Behavior: if embedPreference requests placement, the server attempts placement and returns created event/instance references in the response.
+The system is centered around:
 
-- POST /api/habits/:id/place
-  - Body: { availabilityId: UUID, date?: date, start_time?: 'HH:MM' }
-  - Places a specific occurrence of the habit into the provided availability slot (creates an Event/instance)
+- `Goal` (tree structure + completion)
+- `Habit` (belongs to a goal, scheduling metadata stored in JSON)
+- `Activity` (audit trail: start/pause/complete/skip etc.)
+- `Preference` (key/value JSON settings per user)
+- `User` (owner; auth is currently a placeholder using `X-User-Id`)
 
-Notes on server-side scheduling and conflicts:
-- Validate that placements do not overlap blocked slots or existing events unless the user explicitly overrides.
-- When a placement cannot be made, return a helpful validation error and a suggested alternative (e.g., next available slot times).
+## Prisma schema (source of truth)
 
-## Validation & edge-cases (expanded)
+The canonical schema lives in `backend/prisma/schema.prisma`.
 
-- Names: empty/blank names should be rejected for Habits and Availability unless a default name is acceptable (e.g., "Untitled slot").
-- Time format: 'HH:MM' in 24-hour format.
-- Duration: durationMinutes must be positive and less than the slot length when embedding.
-- Recurrence shapes: use rrule-like JSON objects and validate fields server-side.
-- Placement failures: if embed fails for some occurrences (e.g., not enough free slots for Count target), return partial success with details of which occurrences were placed and which were not.
+### Goal
 
-## Implementation notes / suggestions
+- `id`: cuid
+- `name`: string
+- `details`: optional text
+- `dueDate`: optional datetime
+- `isCompleted`: boolean (default false)
+- `parentId`: optional (tree)
+- `userId`: optional (until real auth is enforced)
 
-- Materialize event instances (a separate `events` or `habit_instances` table) when placing habits into availability; this enables fast calendar reads and easier conflict detection.
-- Provide a small server-side utility to expand `recurrence` and match occurrences to `availability_slots` (first-fit/spread strategies).
-- For front-end performance, return availability and events in the same calendar query so the UI can layer rendering (availability behind events).
+### Habit
 
-## Next steps / follow-ups
+- `id`: cuid
+- `goalId`: required
+- `name`: string
+- `active`: boolean (default true)
+- `type`: string (`do`/`avoid` used by the UI)
+- count/workload fields: `count`, `must`, `workloadTotal`, `workloadPerCount`, etc.
+- scheduling metadata: `timings`, `outdates`, `reminders` (JSON)
+- status: `completed`, `lastCompletedAt`
+- `userId`: optional
 
-- Create migrations for the new `availability_slots` table and `habit_instances`/events materialization.
-- Update frontend components: calendar rendering layer to show translucent free slots and colored blocked slots; update Habit popup to include availability creation and placement UX.
-- Add unit tests for placement logic (first-fit, spread) and API contract validation.
+### Activity
 
-Requirements coverage:
-- Default availability slots: described and example provided (Done).
-- Free slots visual: rendering guidance included (Done).
-- Habit type 'Do' embedding into availability for Schedule: schema and payloads described (Done).
-- Count policy repetition into availability: described with examples and strategies (Done).
-- Inline availability creation from Habit popups: API and payload example provided (Done).
+- `id`: cuid
+- `kind`: string (e.g. `start|pause|complete|skip`)
+- `habitId`: string
+- `habitName`: optional
+- `timestamp`: datetime (default now)
+- `amount`, `prevCount`, `newCount`, `durationSeconds`: optional ints
+- `userId`: optional
+
+### Preference
+
+- `key`: string
+- `value`: Json
+- `@@unique([key, userId])`
+
+## API representation
+
+The REST API is implemented in `backend/src/index.ts`.
+
+- `GET /goals`, `POST /goals`, `PATCH /goals/:id`, `DELETE /goals/:id`
+- `GET /habits`, `POST /habits`, `PATCH /habits/:id`, `DELETE /habits/:id`
+- `GET /activities`, `POST /activities`, `PATCH /activities/:id`, `DELETE /activities/:id`
+- `GET /prefs`, `POST /prefs`
+- `GET /layout`, `POST /layout`
 

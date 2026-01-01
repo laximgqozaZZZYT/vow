@@ -1,98 +1,353 @@
-# 設計書
+# 設計書（現状反映 + AWS移行方針）
 
-この設計書はVOWのアーキテクチャ、データモデル、API仕様、認証フロー、及び簡易ER図を記載します。
+この設計書は、現在このリポジトリに実装されている VOW の構成（Next.js + Express + Prisma + MySQL）を前提に、
+アーキテクチャ、主要コンポーネント、API/データモデルの位置づけ、そして AWS への移行方針をまとめます。
 
-## アーキテクチャ概要
-- フロントエンド：Next.js（SSR と SSG を必要に応じて併用）
-- バックエンド：FastAPI（Python）、REST API を提供
-- DB：MySQL（RDS等に移行可能）
-- 認証：Firebase Auth（フロントが直接ログインし、IDトークンをバックエンドに送る）
-- CI/CD：GitHub Actions（テスト・Lint・ビルド・デプロイ）
+- Frontend: Next.js（App Router）+ React + TypeScript
+- Backend: Express + TypeScript + Prisma
+- DB: MySQL
+- 認証（暫定）: `X-User-Id` ヘッダで user scope
 
-フロントはFirebase SDKを使ってログインを行い、取得したIDトークンをAPIリクエストのAuthorization: Bearer <idToken> ヘッダに含めます。バックエンドはFirebase Admin SDK（サービスアカウントキー）でトークン検証を行い、検証が通ればリクエストを許可します。
+> Source of truth
+>
+>- API実装: `backend/src/index.ts`
+>- Prisma schema: `backend/prisma/schema.prisma`
+>- フロントの API クライアント: `frontend/lib/api.ts`
 
-## コンポーネント
-- Next.js アプリ
-  - ページ: /login, /habits, /categories, /reports, /stats
-  - API クライアント: axios 又は fetch をラップして Authorization ヘッダを自動付与
-- FastAPI サービス
-  - ルーター: /api/categories, /api/habits, /api/reports, /api/stats
-  - ミドルウェア: Firebase トークン検証ミドルウェア
-  - DB 層: SQLAlchemy + Alembic（マイグレーション）
+## 現在のアーキテクチャ
 
-## データモデル（概略）
+### Frontend
 
-- User (id, firebase_uid, display_name, email, created_at)
-- Habit (id, user_id, category_id, name, kind, estimated_minutes, remind_spec, created_at, updated_at)
-- Report (id, user_id, habit_id, executed_at, note, created_at)
+- 場所: `frontend/`
+- API呼び出し: `frontend/lib/api.ts`
+  - `NEXT_PUBLIC_API_URL` を参照（未指定は `http://localhost:4000`）
+  - エラー時は `ApiError`（url/status/body）で障害解析しやすい
 
-フィールド詳細
-  - id: 整数, 主キー
-  - firebase_uid: 文字列, 一意
-  - display_name: 文字列
-  - created_at: タイムスタンプ
-- Category
-  - name: 文字列
-  - description: テキスト
-  - deadline: 日付（NULL可）
-- Habit
-  - kind: Enum ('do', 'dont')
-  - remind_spec: JSON （初期は単純な {"time":"08:00","days":[1,2,3,4,5]} など）
-- Report
-  - executed_at: タイムスタンプ
-  - note: テキスト
+### Backend
 
-## データベーススキーマ（MySQL DDL）
+- 場所: `backend/`
+- エントリポイント: `backend/src/index.ts`
+- ポート: `PORT`（未指定は 4000）
 
-以下はアプリで使用する主要テーブルの設計（正規化を念頭に置いた MySQL 用の DDL 例）です。初期実装では SQLAlchemy のモデルと Alembic マイグレーションを用いてこれらを作成します。
+認証（暫定）
 
--- users
-```sql
-CREATE TABLE users (
-  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
-  firebase_uid VARCHAR(255) NOT NULL UNIQUE,
-  display_name VARCHAR(255),
-  email VARCHAR(255),
-  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
-);
-```
+- いまは `X-User-Id` を「スコープキー」として利用
+- 将来は JWT（例: Cognito）に移行して、署名検証 + `userId` 強制を行う想定
 
--- categories
-```sql
-CREATE TABLE categories (
-  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
-  user_id BIGINT UNSIGNED NOT NULL,
-  name VARCHAR(255) NOT NULL,
-  description TEXT,
-  deadline DATE DEFAULT NULL,
-  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
-);
-CREATE INDEX idx_categories_user ON categories(user_id);
-```
+### Database
 
--- habits
-```sql
-CREATE TABLE habits (
-  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
-  user_id BIGINT UNSIGNED NOT NULL,
-  category_id BIGINT UNSIGNED DEFAULT NULL,
-  name VARCHAR(255) NOT NULL,
-  kind ENUM('do','avoid') NOT NULL DEFAULT 'do',
-  estimated_minutes INT DEFAULT NULL,
-  notes TEXT DEFAULT NULL,
-  due_date DATE DEFAULT NULL,
-  time TIME DEFAULT NULL,
-  all_day BOOLEAN NOT NULL DEFAULT FALSE,
-  active BOOLEAN NOT NULL DEFAULT TRUE,
-  remind_spec JSON DEFAULT NULL,
-  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
-  FOREIGN KEY (category_id) REFERENCES categories(id) ON DELETE SET NULL
-);
+- 開発用: Docker Compose（MySQL 8）
+  - 場所: `backend/docker-compose.yml`
+  - 例: `mysql://vowuser:vowpass@127.0.0.1:3307/vowdb`
+
+Prisma migrate
+
+- 開発: `prisma migrate dev`（shadow DB を必要にするケースあり）
+- 本番: `prisma migrate deploy`（shadow DB 不要）
+
+## 主要ドメインと責務
+
+### Goal
+
+- ツリー構造（`parentId`）
+- 完了状態: `isCompleted`
+- `{ isCompleted: true, cascade: true }` 指定時、配下 Goal/Habit をカスケード更新
+
+### Habit
+
+- `goalId` で Goal 配下
+- スケジュール/設定は JSON フィールドに集約（`timings`, `outdates`, `reminders` 等）
+
+### Activity
+
+- `start|pause|complete|skip` 等の操作履歴
+- 重要: ページリロード後も履歴が残るよう、原則 API に永続化する
+
+### Preference / Layout
+
+- 任意 key/value（JSON）を保存
+- レイアウト（ダッシュボード構成など）も同様に保存
+
+## API（実装ベース）
+
+実装は `backend/src/index.ts` を参照。
+
+- Goals: `GET/POST/PATCH/DELETE /goals`
+- Habits: `GET/POST/PATCH/DELETE /habits`
+- Activities: `GET/POST/PATCH/DELETE /activities`
+- Prefs/Layout: `GET/POST /prefs`, `GET/POST /layout`
+
+## AWS 移行（推奨構成）
+
+### 推奨: Amplify + ECS Fargate + RDS
+
+- Frontend（Next.js SSR）: AWS Amplify Hosting
+- Backend（Express）: ECS Fargate（ALB で HTTPS 終端）
+- DB（MySQL）: Amazon RDS for MySQL
+- Secrets: AWS Secrets Manager
+- Logs: CloudWatch Logs
+
+### ネットワーク
+
+- VPC
+  - Public subnets: ALB
+  - Private subnets: ECS tasks, RDS
+- Security Group
+  - ALB -> ECS: backend port（例: 4000）
+  - ECS -> RDS: 3306
+
+### 環境変数 / Secrets
+
+- Backend（ECS）
+  - `DATABASE_URL`（Secrets Manager で管理）
+  - `PORT=4000`
+- Frontend（Amplify）
+  - `NEXT_PUBLIC_API_URL=https://api.<your-domain>`
+
+### Prisma マイグレーション運用
+
+- 本番は `prisma migrate deploy` を使用（shadow DB 不要）
+- `prisma migrate dev` は開発専用
+
+推奨: ECS の one-off task（RunTask）で `prisma migrate deploy` を実行する。
+
+### 将来の認証
+
+現在は `X-User-Id` による暫定スコープです。
+AWS 移行と同時に Cognito（JWT）等へ置き換え、API 側で JWT 検証 + 所有者チェックを導入します。
+# 設計書（現状反映 + AWS移行方針）
+
+この設計書は、現在このリポジトリに実装されている VOW の構成（Next.js + Express + Prisma + MySQL）を前提に、
+アーキテクチャ、主要コンポーネント、API/データモデルの位置づけ、そして AWS への移行方針をまとめます。
+
+- Frontend: Next.js（App Router）+ React + TypeScript
+- Backend: Express + TypeScript + Prisma
+- DB: MySQL
+- 認証（暫定）: `X-User-Id` ヘッダで user scope
+
+> Source of truth
+>- Prisma schema: `backend/prisma/schema.prisma`
+>- フロントのAPIクライアント: `frontend/lib/api.ts`
+
+## 現在のアーキテクチャ
+
+### Frontend
+
+- 場所: `frontend/`
+- API呼び出し: `frontend/lib/api.ts`
+  - `NEXT_PUBLIC_API_URL` を参照（未指定は `http://localhost:4000`）
+  - エラー時は `ApiError`（url/status/body）で障害解析しやすい
+
+### Backend
+
+- 場所: `backend/`
+- エントリポイント: `backend/src/index.ts`
+
+
+> Source of truth
+>
+>- API実装: `backend/src/index.ts`
+>- フロントのAPIクライアント: `frontend/lib/api.ts`
+
+## 現在のアーキテクチャ
+
+### Frontend
+
+- 場所: `frontend/`
+- API呼び出し: `frontend/lib/api.ts`
+  - `NEXT_PUBLIC_API_URL` を参照（未指定は `http://localhost:4000`）
+  - エラー時は `ApiError`（url/status/body）で障害解析しやすい
+
+### Backend
+
+- 場所: `backend/`
+- エントリポイント: `backend/src/index.ts`
+- ポート: `PORT`（未指定は 4000）
+
+認証（暫定）
+
+- いまは `X-User-Id` を「スコープキー」として利用
+- 将来は JWT（例: Cognito）に移行して、署名検証 + `userId` 強制を行う想定
+
+- 開発用: Docker Compose（MySQL 8）
+  - 場所: `backend/docker-compose.yml`
+  - 例: `mysql://vowuser:vowpass@127.0.0.1:3307/vowdb`
+
+Prisma migrate
+
+- 開発: `prisma migrate dev`（shadow DB を必要にするケースあり）
+- 本番: `prisma migrate deploy`（shadow DB 不要）
+
+## 主要ドメインと責務
+
+### Goal
+
+- ツリー構造（`parentId`）
+- 完了状態: `isCompleted`
+- `PATCH /goals/:id` で `{ isCompleted: true, cascade: true }` が指定された場合、配下 Goal/Habit をカスケード更新
+
+### Habit
+
+- `goalId` で Goal 配下
+- スケジュール/設定は JSON フィールドに集約（`timings`, `outdates`, `reminders` 等）
+
+### Activity
+
+- `start|pause|complete|skip` 等の操作履歴
+- 重要: ページリロード後も履歴が残るよう、原則 API に永続化する
+
+### Preference / Layout
+
+- 任意 key/value（JSON）を保存
+- レイアウト（ダッシュボード構成など）も同様に保存
+
+## API（実装ベース）
+
+実装は `backend/src/index.ts` を参照。
+
+- Goals: `GET/POST/PATCH/DELETE /goals`
+- Habits: `GET/POST/PATCH/DELETE /habits`
+- Activities: `GET/POST/PATCH/DELETE /activities`
+- Prefs/Layout: `GET/POST /prefs`, `GET/POST /layout`
+
+## AWS 移行（推奨構成）
+
+### 推奨: Amplify + ECS Fargate + RDS
+
+- Frontend（Next.js SSR）: AWS Amplify Hosting
+- Backend（Express）: ECS Fargate（ALB で HTTPS 終端）
+- DB（MySQL）: Amazon RDS for MySQL
+- Secrets: AWS Secrets Manager
+- Logs: CloudWatch Logs
+
+### ネットワーク
+
+- VPC
+  - Public subnets: ALB
+  - Private subnets: ECS tasks, RDS
+- Security Group
+  - ALB -> ECS: backend port（例: 4000）
+  - ECS -> RDS: 3306
+
+### 環境変数 / Secrets
+
+- Backend（ECS）
+  - `DATABASE_URL`（Secrets Manager で管理）
+  - `PORT=4000`
+- Frontend（Amplify）
+  - `NEXT_PUBLIC_API_URL=https://api.<your-domain>`
+
+### Prisma マイグレーション運用
+
+- 本番は `prisma migrate deploy` を使用（shadow DB 不要）
+- `prisma migrate dev` は開発専用
+
+推奨: ECS の one-off task（RunTask）で `prisma migrate deploy` を実行する。
+
+### 将来の認証
+
+現在は `X-User-Id` による暫定スコープです。
+AWS 移行と同時に Cognito（JWT）等へ置き換え、API 側で JWT 検証 + 所有者チェックを導入します。
+
+認証（暫定）
+
+- いまは `X-User-Id` を「スコープキー」として利用
+- 将来は JWT（例: Cognito）に移行して、署名検証 + `userId` 強制を行う想定
+
+### Database
+
+- 開発用: Docker Compose（MySQL 8）
+  - 場所: `backend/docker-compose.yml`
+  - 例: `mysql://vowuser:vowpass@127.0.0.1:3307/vowdb`
+
+Prisma migrate
+
+- 開発: `prisma migrate dev`（shadow DB を必要にするケースあり）
+- 本番: `prisma migrate deploy`（shadow DB 不要）
+
+## 主要ドメインと責務
+
+### Goal
+
+- ツリー構造（`parentId`）
+- 完了状態: `isCompleted`
+- `PATCH /goals/:id` で `{ isCompleted: true, cascade: true }` が指定された場合、配下 Goal/Habit をカスケード更新
+
+### Habit
+
+- `goalId` で Goal 配下
+- スケジュール/設定は JSON フィールドに集約（`timings`, `outdates`, `reminders` 等）
+
+### Activity
+
+- `start|pause|complete|skip` 等の操作履歴
+- 重要: ページリロード後も履歴が残るよう、原則 API に永続化する
+
+### Preference / Layout
+
+- 任意 key/value（JSON）を保存
+- レイアウト（ダッシュボード構成など）も同様に保存
+
+## API（実装ベース）
+
+実装は `backend/src/index.ts` を参照。
+
+- Goals: `GET/POST/PATCH/DELETE /goals`
+- Habits: `GET/POST/PATCH/DELETE /habits`
+- Activities: `GET/POST/PATCH/DELETE /activities`
+- Prefs/Layout: `GET/POST /prefs`, `GET/POST /layout`
+
+## AWS 移行（推奨構成）
+
+### 推奨: Amplify + ECS Fargate + RDS
+
+- Frontend（Next.js SSR）: AWS Amplify Hosting
+- Backend（Express）: ECS Fargate（ALB で HTTPS 終端）
+- DB（MySQL）: Amazon RDS for MySQL
+- Secrets: AWS Secrets Manager
+- Logs: CloudWatch Logs
+
+### ネットワーク
+
+- VPC
+  - Public subnets: ALB
+  - Private subnets: ECS tasks, RDS
+- Security Group
+  - ALB -> ECS: backend port（例: 4000）
+  - ECS -> RDS: 3306
+
+### 環境変数 / Secrets
+
+- Backend（ECS）
+  - `DATABASE_URL`（Secrets Manager で管理）
+  - `PORT=4000`
+- Frontend（Amplify）
+  - `NEXT_PUBLIC_API_URL=https://api.<your-domain>`
+
+### Prisma マイグレーション運用
+
+- 本番は `prisma migrate deploy` を使用（shadow DB 不要）
+- `prisma migrate dev` は開発専用
+
+推奨: ECS の one-off task（RunTask）で `prisma migrate deploy` を実行する。
+
+### 将来の認証
+
+現在は `X-User-Id` による暫定スコープです。
+AWS 移行と同時に Cognito（JWT）等へ置き換え、API 側で JWT 検証 + 所有者チェックを導入します。
+
+    - `DATABASE_URL`（Secrets Manager で管理）
+    - `PORT=4000`
+
+  - Frontend（Amplify）
+    - `NEXT_PUBLIC_API_URL=https://api.<your-domain>`
+
+  ### Prisma マイグレーション運用
+
+  - 本番は `prisma migrate deploy` を使用（shadow DB 不要）
+  - `prisma migrate dev` は開発専用
+
+ 
 CREATE INDEX idx_habits_user ON habits(user_id);
 CREATE INDEX idx_habits_category ON habits(category_id);
 ```

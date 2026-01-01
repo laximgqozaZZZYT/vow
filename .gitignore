@@ -7,3 +7,22 @@ pycache/*
 .DS_Store
 serviceAccountKey.json
 cookies.txt
+
+# Backend (Node/Prisma)
+backend/node_modules/*
+backend/dist/*
+backend/.env
+backend/.env.*
+!backend/.env.example
+backend/*.log
+backend/npm-debug.log*
+backend/yarn-error.log*
+backend/.DS_Store
+
+# Docker compose local overrides
+backend/docker-compose.override.yml
+backend/docker-compose.*.yml
+
+# Prisma local artifacts
+backend/prisma/dev.db
+backend/prisma/dev.db-journal
