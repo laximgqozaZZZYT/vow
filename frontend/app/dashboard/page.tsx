@@ -431,10 +431,10 @@ export default function DashboardPage() {
     <div className="flex min-h-screen bg-zinc-50 dark:bg-black text-black dark:text-zinc-50">
       {/* Top-left hamburger + label (styled to match sidebar) */}
       <div className="fixed left-3 top-3 z-50 flex items-center gap-3 rounded bg-white text-black dark:bg-[#071013] dark:text-white px-3 py-2 shadow-md dark:border-slate-700">
-        <button onClick={() => setShowLeftPane((s) => !s)} aria-label="Toggle menu" className="px-3 py-2 text-lg leading-none">
+        <button onClick={() => setShowLeftPane((s) => !s)} aria-label="Toggle menu" className="px-3 py-2 text-2xl leading-none">
           ☰
         </button>
-        <div className="text-base font-bold">VOW</div>
+        <div className="text-lg font-bold">VOW</div>
       </div>
 
       {/* Left pane */}
