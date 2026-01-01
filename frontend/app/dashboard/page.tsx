@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useMemo, useEffect, useRef, useId } from "react";
+import ActivityModal, { } from './components/activityModal';
 import mermaid from 'mermaid'
 import { HabitModal, GoalModal } from "./components/modals";
 import FullCalendar from '@fullcalendar/react'
@@ -48,10 +49,14 @@ export default function DashboardPage() {
   const [openNewCategory, setOpenNewCategory] = useState(false);
   const [openNewHabit, setOpenNewHabit] = useState(false);
   const [openHabitModal, setOpenHabitModal] = useState(false);
-  type ActivityKind = 'start' | 'complete' | 'skip'
+  type ActivityKind = 'start' | 'complete' | 'skip' | 'pause'
   type Activity = { id: string; kind: ActivityKind; habitId: string; habitName: string; timestamp: string; amount?: number; prevCount?: number; newCount?: number; durationSeconds?: number }
   const [activities, setActivities] = useState<Activity[]>([]);
+  const [openActivityModal, setOpenActivityModal] = useState(false);
+  const [editingActivityId, setEditingActivityId] = useState<string | null>(null);
   const [starts, setStarts] = useState<Record<string, { ts: string; timeoutId?: number }>>({});
+  // pausedLoads stores the amount of load already completed for the current count when Pause is pressed
+  const [pausedLoads, setPausedLoads] = useState<Record<string, number>>({});
   const [recurringRequest, setRecurringRequest] = useState<null | { habitId: string; start?: string; end?: string }>(null);
   // frames feature removed: no openNewFrame state
   const [selectedHabitId, setSelectedHabitId] = useState<string | null>(null);
@@ -115,9 +120,12 @@ export default function DashboardPage() {
     const now = new Date().toISOString();
     const habit = habits.find(h => h.id === habitId);
     if (!habit) return;
-    const increment = (habit as any).workloadPerCount ?? 1;
-    const prev = habit.count ?? 0;
-    const newCount = prev + increment;
+  const basePerCount = (habit as any).workloadPerCount ?? 1;
+  const paused = pausedLoads[habitId] ?? 0;
+  // amount to add for this completion = basePerCount - paused (but at least 0)
+  const increment = Math.max(0, basePerCount - paused);
+  const prev = habit.count ?? 0;
+  const newCount = prev + increment;
     const total = (habit as any).workloadTotal ?? habit.must ?? 0;
 
     // update habit
@@ -146,8 +154,10 @@ export default function DashboardPage() {
       return;
     }
 
-    // no start: create a standalone complete activity
-    setActivities(a => [{ id: `a${Date.now()}`, kind: 'complete', habitId, habitName: habit.name, timestamp: now, amount: increment, prevCount: prev, newCount }, ...a]);
+  // no start: create a standalone complete activity
+  setActivities(a => [{ id: `a${Date.now()}`, kind: 'complete', habitId, habitName: habit.name, timestamp: now, amount: increment, prevCount: prev, newCount }, ...a]);
+  // clear pausedLoads for this habit (we consumed it)
+  setPausedLoads(s => { const c = { ...s }; delete c[habitId]; return c; });
   }
 
   function handleStart(habitId: string) {
@@ -170,6 +180,78 @@ export default function DashboardPage() {
 
     setStarts(s => ({ ...s, [habitId]: { ts: now, timeoutId } }));
     setActivities(a => [{ id: `a${Date.now()}`, kind: 'start', habitId, habitName: habit.name, timestamp: now, prevCount: habit.count ?? 0, newCount: habit.count ?? 0 }, ...a]);
+  }
+
+  function handlePause(habitId: string) {
+    // open Activity modal in pause mode
+    const habit = habits.find(h => h.id === habitId);
+    if (!habit) return;
+    const now = new Date().toISOString();
+    const newAct: Activity = { id: `a${Date.now()}`, kind: 'pause', habitId, habitName: habit.name, timestamp: now, amount: 0, prevCount: habit.count ?? 0, newCount: habit.count ?? 0 };
+    // add placeholder activity and open modal for editing
+    setActivities(a => [newAct, ...a]);
+    setEditingActivityId(newAct.id);
+    setOpenActivityModal(true);
+  }
+
+  function openEditActivity(activityId: string) {
+    setEditingActivityId(activityId);
+    setOpenActivityModal(true);
+  }
+
+  function propagateActivityChanges(updated: Activity) {
+    // update the specific activity
+    setActivities(prev => {
+      const idx = prev.findIndex(a => a.id === updated.id);
+      if (idx === -1) return prev;
+      const copy = [...prev];
+      copy[idx] = updated;
+      // propagate to subsequent activities for the same habit: adjust their prevCount/newCount and duration if needed
+      // We'll recompute counts for following activities by replaying from the first activity's prevCount
+      let baseCount = updated.prevCount ?? 0;
+      for (let i = idx; i < copy.length; i++) {
+        const a = copy[i];
+        if (a.habitId !== updated.habitId) continue;
+        if (i === idx) {
+          // already set
+          baseCount = (typeof a.newCount === 'number') ? a.newCount : baseCount;
+          continue;
+        }
+        // recompute this activity based on its kind and amount
+        if (a.kind === 'pause') {
+          // pause doesn't change counts but stores paused load
+          // keep prevCount as baseCount
+          a.prevCount = baseCount;
+          a.newCount = baseCount;
+        } else if (a.kind === 'complete') {
+          const per = (habits.find(h => h.id === a.habitId) as any)?.workloadPerCount ?? 1;
+          // if a has amount specified, use it; else use per
+          const amt = (typeof a.amount === 'number' ? a.amount : per);
+          a.prevCount = baseCount;
+          a.newCount = baseCount + amt;
+          baseCount = (typeof a.newCount === 'number') ? a.newCount : baseCount;
+        } else if (a.kind === 'start') {
+          a.prevCount = baseCount;
+          a.newCount = baseCount;
+        } else if (a.kind === 'skip') {
+          a.prevCount = baseCount;
+          a.newCount = baseCount;
+        }
+      }
+      // after propagation, update the habit's stored count to the most recent newCount for this habit (if any)
+      const mostRecent = copy.find(x => x.habitId === updated.habitId && typeof x.newCount === 'number');
+      const latestCount = mostRecent ? (mostRecent.newCount as number) : undefined;
+      if (typeof latestCount === 'number') {
+        setHabits(hs => hs.map(h => h.id === updated.habitId ? { ...h, count: latestCount, updatedAt: new Date().toISOString() } : h));
+      }
+
+      // if the updated activity was a pause, update pausedLoads for that habit
+      if (updated.kind === 'pause') {
+        setPausedLoads(s => ({ ...s, [updated.habitId]: updated.amount ?? 0 }));
+      }
+
+      return copy;
+    });
   }
 
   function handleDeleteActivity(activityId: string) {
@@ -284,6 +366,7 @@ export default function DashboardPage() {
                     </div>
                     <div className="flex items-center gap-2">
                       <button title="Start" onClick={(e) => { e.stopPropagation(); handleStart(h.id) }} className="text-blue-600 hover:bg-blue-50 rounded px-2 py-1">▶️</button>
+                      <button title="Pause" onClick={(e) => { e.stopPropagation(); handlePause(h.id) }} className="text-amber-600 hover:bg-amber-50 rounded px-2 py-1">⏸️</button>
                       <button
                         title="Complete"
                         onClick={(e) => { e.stopPropagation(); handleComplete(h.id) }}
@@ -310,6 +393,7 @@ export default function DashboardPage() {
                     </div>
                     <div className="flex items-center gap-2">
                       <button title="Start" onClick={(e) => { e.stopPropagation(); handleStart(h.id) }} className="text-blue-600 hover:bg-blue-50 rounded px-2 py-1">▶️</button>
+                      <button title="Pause" onClick={(e) => { e.stopPropagation(); handlePause(h.id) }} className="text-amber-600 hover:bg-amber-50 rounded px-2 py-1">⏸️</button>
                       <button title="Complete" onClick={(e) => { e.stopPropagation(); handleComplete(h.id) }} className="text-green-600 hover:bg-green-50 rounded px-2 py-1">✅</button>
                     </div>
                   </div>
@@ -525,32 +609,38 @@ export default function DashboardPage() {
 
     <section className="rounded bg-white p-4 shadow dark:bg-[#0b0b0b] mt-4">
       <h2 className="mb-3 text-lg font-medium">Activity</h2>
-      <div className="space-y-2">
-  {activities.length === 0 && <div className="text-xs text-zinc-500">No activity yet.</div>}
-  {[...activities].sort((a,b) => b.timestamp.localeCompare(a.timestamp)).map(act => (
-          <div key={act.id} className="flex items-center justify-between rounded px-2 py-2 hover:bg-zinc-100 dark:hover:bg-white/5">
-            <div className="text-sm">
-              <div className="text-xs text-zinc-500">{new Date(act.timestamp).toLocaleString()}</div>
-              {act.kind === 'start' && (
-                <div>{act.habitName} — started</div>
-              )}
-              {act.kind === 'complete' && (
-                <div>
-                  {act.habitName} — completed {act.amount ?? 1} {((act.amount ?? 1) > 1) ? 'units' : 'unit'}.
-                  {typeof act.durationSeconds === 'number' ? ` Took ${Math.floor(act.durationSeconds/3600)}h ${Math.floor((act.durationSeconds%3600)/60)}m ${act.durationSeconds%60}s.` : ''}
-                  {act.newCount !== undefined ? ` (now ${act.newCount})` : ''}
-                </div>
-              )}
-              {act.kind === 'skip' && (
-                <div>{act.habitName} — skipped</div>
-              )}
-            </div>
+      <div className="">
+        {/* Fixed-height scrollable container */}
+        <div className="h-56 overflow-y-auto space-y-2 pr-2">
+          {activities.length === 0 && <div className="text-xs text-zinc-500">No activity yet.</div>}
+          {[...activities].sort((a,b) => b.timestamp.localeCompare(a.timestamp)).map(act => (
+            <div key={act.id} className="flex items-center justify-between rounded px-2 py-2 hover:bg-zinc-100 dark:hover:bg-white/5">
+              <div className="text-sm">
+                <div className="text-xs text-zinc-500">{new Date(act.timestamp).toLocaleString()}</div>
+                {act.kind === 'start' && (
+                  <div>{act.habitName} — started</div>
+                )}
+                {act.kind === 'pause' && (
+                  <div>{act.habitName} — paused at {act.amount ?? 0} load</div>
+                )}
+                {act.kind === 'complete' && (
+                  <div>
+                    {act.habitName} — completed {act.amount ?? 1} {((act.amount ?? 1) > 1) ? 'units' : 'unit'}.
+                    {typeof act.durationSeconds === 'number' ? ` Took ${Math.floor(act.durationSeconds/3600)}h ${Math.floor((act.durationSeconds%3600)/60)}m ${act.durationSeconds%60}s.` : ''}
+                    {act.newCount !== undefined ? ` (now ${act.newCount})` : ''}
+                  </div>
+                )}
+                {act.kind === 'skip' && (
+                  <div>{act.habitName} — skipped</div>
+                )}
+              </div>
             <div className="flex items-center gap-2">
-              <button className="text-sm text-blue-600" onClick={() => { setSelectedHabitId(act.habitId); setOpenHabitModal(true); }}>Edit</button>
+              <button className="text-sm text-blue-600" onClick={() => openEditActivity(act.id)}>Edit</button>
               <button className="text-sm text-red-600" onClick={() => handleDeleteActivity(act.id)}>Delete</button>
             </div>
-          </div>
-        ))}
+            </div>
+          ))}
+        </div>
       </div>
     </section>
 
@@ -623,6 +713,17 @@ export default function DashboardPage() {
           createHabit(payload as any)
         }}
         categories={goals}
+      />
+
+      <ActivityModal
+        open={openActivityModal}
+        onClose={() => { setOpenActivityModal(false); setEditingActivityId(null); }}
+        initial={activities.find(a => a.id === editingActivityId) ?? null}
+        onSave={(updated) => {
+          propagateActivityChanges(updated as any);
+          setOpenActivityModal(false);
+          setEditingActivityId(null);
+        }}
       />
 
       {/* Recurring-change confirmation modal */}
