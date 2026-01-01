@@ -48,6 +48,8 @@ export default function DashboardPage() {
   const [openNewCategory, setOpenNewCategory] = useState(false);
   const [openNewHabit, setOpenNewHabit] = useState(false);
   const [openHabitModal, setOpenHabitModal] = useState(false);
+  type Activity = { id: string; habitId: string; habitName: string; timestamp: string; amount: number; prevCount: number; newCount: number }
+  const [activities, setActivities] = useState<Activity[]>([]);
   const [recurringRequest, setRecurringRequest] = useState<null | { habitId: string; start?: string; end?: string }>(null);
   // frames feature removed: no openNewFrame state
   const [selectedHabitId, setSelectedHabitId] = useState<string | null>(null);
@@ -98,13 +100,57 @@ export default function DashboardPage() {
     if (selectedGoal === sourceId) setSelectedGoal(targetId)
   }
 
-  function createHabit(payload: { name: string; goalId: string; type: "do" | "avoid"; duration?: number; reminders?: ({ kind: 'absolute'; time: string; weekdays: string[] } | { kind: 'relative'; minutesBefore: number })[]; dueDate?: string; time?: string; endTime?: string; repeat?: string; timings?: any[]; allDay?: boolean; notes?: string; policy?: "Schedule" | "Count"; targetCount?: number }) {
+  function createHabit(payload: { name: string; goalId: string; type: "do" | "avoid"; duration?: number; reminders?: ({ kind: 'absolute'; time: string; weekdays: string[] } | { kind: 'relative'; minutesBefore: number })[]; dueDate?: string; time?: string; endTime?: string; repeat?: string; timings?: any[]; allDay?: boolean; notes?: string; workloadUnit?: string; workloadTotal?: number; workloadPerCount?: number }) {
     const id = `h${Date.now()}`;
     const now = new Date().toISOString();
     setHabits((s) => [
       ...s,
-      { id, goalId: payload.goalId, name: payload.name, active: true, type: payload.type, count: 0, must: payload.targetCount ?? undefined, policy: payload.policy ?? 'Schedule', targetCount: payload.targetCount ?? undefined, completed: false, duration: payload.duration, reminders: payload.reminders, dueDate: payload.dueDate, time: payload.time, endTime: payload.endTime, repeat: payload.repeat, timings: payload.timings, allDay: payload.allDay, notes: payload.notes, createdAt: now, updatedAt: now },
+      { id, goalId: payload.goalId, name: payload.name, active: true, type: payload.type, count: 0, must: payload.workloadTotal ?? undefined, workloadUnit: payload.workloadUnit ?? undefined, workloadTotal: payload.workloadTotal ?? undefined, workloadPerCount: payload.workloadPerCount ?? undefined, completed: false, duration: payload.duration, reminders: payload.reminders, dueDate: payload.dueDate, time: payload.time, endTime: payload.endTime, repeat: payload.repeat, timings: payload.timings, allDay: payload.allDay, notes: payload.notes, createdAt: now, updatedAt: now },
     ]);
+  }
+
+  function handleComplete(habitId: string) {
+    const now = new Date().toISOString();
+    let recordedActivity: Activity | null = null;
+    setHabits((s) => s.map(x => {
+      if (x.id !== habitId) return x;
+      const increment = (x as any).workloadPerCount ?? 1;
+      const prev = x.count ?? 0;
+      const newCount = prev + increment;
+      const total = (x as any).workloadTotal ?? x.must ?? 0;
+      recordedActivity = { id: `a${Date.now()}`, habitId: x.id, habitName: x.name, timestamp: now, amount: increment, prevCount: prev, newCount };
+      if (total > 0) {
+        if (newCount >= total) {
+          return { ...x, count: newCount, completed: true, lastCompletedAt: now, updatedAt: now };
+        }
+        return { ...x, count: newCount, lastCompletedAt: now, updatedAt: now };
+      }
+      // no workload total -> mark as completed (schedule-style)
+      return { ...x, completed: true, lastCompletedAt: now, updatedAt: now };
+    }));
+
+    // avoid recording duplicate activities caused by quick double-clicks: if the latest activity is for the same habit and within 1s, skip
+    setActivities(a => {
+      if (!recordedActivity) return a;
+      if (a.length && a[0].habitId === habitId && (Date.now() - new Date(a[0].timestamp).getTime() < 1000)) {
+        return a;
+      }
+      return [recordedActivity, ...a];
+    });
+  }
+
+  function handleDeleteActivity(activityId: string) {
+    const act = activities.find(a => a.id === activityId);
+    if (!act) return;
+    // rollback habit count to prevCount and adjust completed flag
+    setHabits(s => s.map(h => {
+      if (h.id !== act.habitId) return h;
+      const total = (h as any).workloadTotal ?? h.must ?? 0;
+      const completed = (typeof act.prevCount === 'number' && total > 0) ? (act.prevCount >= total) : false;
+      return { ...h, count: act.prevCount, completed, updatedAt: new Date().toISOString() };
+    }));
+    // remove activity
+    setActivities(s => s.filter(a => a.id !== activityId));
   }
 
   // frames feature removed: no createFrame function
@@ -205,25 +251,7 @@ export default function DashboardPage() {
                     <div className="flex items-center gap-2">
                       <button
                         title="Complete"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          const now = new Date().toISOString();
-                          setHabits((s) => s.map(x => {
-                            if (x.id !== h.id) return x;
-                            const policy = (x as any).policy ?? 'Schedule';
-                            if (policy === 'Count') {
-                              const prev = x.count ?? 0;
-                              const newCount = prev + 1;
-                              const must = x.must ?? (x as any).targetCount ?? 0;
-                              if (must > 0 && newCount >= must) {
-                                return { ...x, count: newCount, completed: true, lastCompletedAt: now, updatedAt: now };
-                              }
-                              return { ...x, count: newCount, lastCompletedAt: now, updatedAt: now };
-                            } else {
-                              return { ...x, completed: true, lastCompletedAt: now, updatedAt: now };
-                            }
-                          }));
-                        }}
+                        onClick={(e) => { e.stopPropagation(); handleComplete(h.id) }}
                         className="text-green-600 hover:bg-green-50 rounded px-2 py-1"
                       >
                         ✅
@@ -246,31 +274,7 @@ export default function DashboardPage() {
                       <span className="truncate">{h.name}</span>
                     </div>
                     <div className="flex items-center gap-2">
-                      <button
-                        title="Complete"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          const now = new Date().toISOString();
-                          setHabits((s) => s.map(x => {
-                            if (x.id !== h.id) return x;
-                            const policy = (x as any).policy ?? 'Schedule';
-                            if (policy === 'Count') {
-                              const prev = x.count ?? 0;
-                              const newCount = prev + 1;
-                              const must = x.must ?? (x as any).targetCount ?? 0;
-                              if (must > 0 && newCount >= must) {
-                                return { ...x, count: newCount, completed: true, lastCompletedAt: now, updatedAt: now };
-                              }
-                              return { ...x, count: newCount, lastCompletedAt: now, updatedAt: now };
-                            } else {
-                              return { ...x, completed: true, lastCompletedAt: now, updatedAt: now };
-                            }
-                          }));
-                        }}
-                        className="text-green-600 hover:bg-green-50 rounded px-2 py-1"
-                      >
-                        ✅
-                      </button>
+                      <button title="Complete" onClick={(e) => { e.stopPropagation(); handleComplete(h.id) }} className="text-green-600 hover:bg-green-50 rounded px-2 py-1">✅</button>
                     </div>
                   </div>
                 ))}
@@ -483,6 +487,25 @@ export default function DashboardPage() {
       })()}
     </section>
 
+    <section className="rounded bg-white p-4 shadow dark:bg-[#0b0b0b] mt-4">
+      <h2 className="mb-3 text-lg font-medium">Activity</h2>
+      <div className="space-y-2">
+  {activities.length === 0 && <div className="text-xs text-zinc-500">No activity yet.</div>}
+  {[...activities].sort((a,b) => b.timestamp.localeCompare(a.timestamp)).map(act => (
+          <div key={act.id} className="flex items-center justify-between rounded px-2 py-2 hover:bg-zinc-100 dark:hover:bg-white/5">
+            <div className="text-sm">
+              <div className="text-xs text-zinc-500">{new Date(act.timestamp).toLocaleString()}</div>
+              <div>{act.habitName} — completed {act.amount} {act.amount > 1 ? 'units' : 'unit'}. (now {act.newCount})</div>
+            </div>
+            <div className="flex items-center gap-2">
+              <button className="text-sm text-blue-600" onClick={() => { setSelectedHabitId(act.habitId); setOpenHabitModal(true); }}>Edit</button>
+              <button className="text-sm text-red-600" onClick={() => handleDeleteActivity(act.id)}>Delete</button>
+            </div>
+          </div>
+        ))}
+      </div>
+    </section>
+
     <FullCalendarWrapper
     habits={habits}
     onEventClick={(id: string) => { setSelectedHabitId(id); setOpenHabitModal(true); }}
@@ -596,7 +619,7 @@ export default function DashboardPage() {
                   const date = start ? start.slice(0,10) : undefined
                   const time = start && start.length > 10 ? start.slice(11,16) : h.time
                   const endTime = end && end.length > 10 ? end.slice(11,16) : h.endTime
-                  createHabit({ name: h.name, goalId: h.goalId, type: h.type, dueDate: date, time, endTime, repeat: undefined, policy: (h as any).policy ?? 'Schedule' })
+                  createHabit({ name: h.name, goalId: h.goalId, type: h.type, dueDate: date, time, endTime, repeat: undefined, workloadUnit: (h as any).workloadUnit ?? undefined, workloadTotal: (h as any).workloadTotal ?? undefined, workloadPerCount: (h as any).workloadPerCount ?? 1 })
                   setRecurringRequest(null)
                 }}
               >
@@ -742,186 +765,51 @@ function FullCalendarWrapper({ habits, onEventClick, onSlotSelect, onEventChange
   // displayFormat removed: always use calendar TD for today/tomorrow
 
   const events = useMemo(() => {
-    const ev: any[] = []
+    const ev: any[] = [];
     for (const h of (habits ?? [])) {
-      // Skip rendering habits that are 'avoid' (Bad) by default
-      if (h.type === 'avoid') continue
-      const policy = (h as any).policy ?? 'Schedule'
-      // If the habit has explicit timings, materialize events from them (takes precedence)
-      const timings = (h as any).timings ?? []
-      if (timings && timings.length) {
+      if (h.type === 'avoid') continue;
+      const timings = (h as any).timings ?? [];
+      if (timings.length) {
         for (let ti = 0; ti < timings.length; ti++) {
-          const t = timings[ti]
-          try {
-            const evIdBase = `${h.id}-${ti}`
-            const outdates = (h as any).outdates ?? []
-            if (t.type === 'Date' && t.date) {
-              if (t.start) {
-                const startDt = new Date(`${t.date}T${t.start}:00`)
-                const endDt = t.end ? new Date(`${t.date}T${t.end}:00`) : new Date(startDt.getTime() + 60*60*1000)
-                const remain = subtractOutdatesFromInterval(startDt, endDt, outdates, h)
-                for (let ri=0; ri<remain.length; ri++) {
-                  const r = remain[ri]
-                  const startIso = r.start.toISOString()
-                  const endIso = r.end.toISOString()
-                  ev.push({ title: h.name, start: startIso, end: endIso, allDay: false, id: `${evIdBase}-${ri}`, editable: true, className: 'vow-habit', extendedProps: { habitId: h.id, timingIndex: ti } })
-                }
-              } else {
-                // all-day single date: if any outdate excludes whole day, skip
-                const skip = outdates.some((od: any) => od.type === 'Date' && od.date === t.date)
-                if (!skip) ev.push({ title: h.name, start: t.date, allDay: true, id: evIdBase, editable: true, className: 'vow-habit', extendedProps: { habitId: h.id, timingIndex: ti } })
+          const t = timings[ti];
+          const evIdBase = `${h.id}-${ti}`;
+          if (t.type === 'Date' && t.date) {
+            if (t.start) {
+              ev.push({ title: h.name, start: `${t.date}T${t.start}:00`, end: t.end ? `${t.date}T${t.end}:00` : undefined, allDay: false, id: `${evIdBase}`, editable: true, className: 'vow-habit', extendedProps: { habitId: h.id, timingIndex: ti } });
+            } else {
+              ev.push({ title: h.name, start: t.date, allDay: true, id: evIdBase, editable: true, className: 'vow-habit', extendedProps: { habitId: h.id, timingIndex: ti } });
+            }
+          } else {
+            // For recurring timings without a start time, render an all-day placeholder on base date
+            const baseDate = t.date ?? h.dueDate ?? new Date().toISOString().slice(0,10);
+            if (t.start) {
+              // materialize next 7 occurrences (simple fallback)
+              const base = parseYmd(t.date ?? h.dueDate ?? ymd(new Date())) ?? new Date();
+              for (let d = 0; d < 7; d++) {
+                const day = addDays(base, d);
+                const dateS = ymd(day);
+                ev.push({ title: h.name, start: `${dateS}T${t.start}:00`, end: t.end ? `${dateS}T${t.end}:00` : undefined, allDay: false, id: `${evIdBase}-${dateS}`, editable: true, className: 'vow-habit', extendedProps: { habitId: h.id, timingIndex: ti } });
               }
             } else {
-              const freq = t.type === 'Daily' ? 'DAILY' : t.type === 'Weekly' ? 'WEEKLY' : t.type === 'Monthly' ? 'MONTHLY' : undefined
-              if (freq) {
-                const dateStr = t.date ?? h.dueDate ?? ymd(new Date())
-                if (t.start) {
-                  // if there are outdates, expand occurrences and subtract; otherwise use rrule for efficiency
-                  if (outdates.length) {
-                    const base = parseYmd(dateStr) ?? new Date()
-                    for (let d = 0; d < EXPAND_DAYS; d++) {
-                      const day = addDays(base, d)
-                      // decide if this day is an occurrence
-                      let include = false
-                      if (t.type === 'Daily') include = true
-                      else if (t.type === 'Weekly') {
-                        if (t.cron && String(t.cron).startsWith('WEEKDAYS:')) {
-                          const wk = (t.cron.split(':')[1] || '').split(',').map((x: string) => Number(x)).filter((n: number) => !Number.isNaN(n))
-                          include = wk.includes(day.getDay())
-                        } else {
-                          // if no weekdays info, assume same weekday as base
-                          include = day.getDay() === (parseYmd(t.date)?.getDay() ?? base.getDay())
-                        }
-                      } else if (t.type === 'Monthly') {
-                        include = (parseYmd(t.date)?.getDate() ?? base.getDate()) === day.getDate()
-                      }
-                      if (!include) continue
-                      const dateS = ymd(day)
-                      const startDt = new Date(`${dateS}T${t.start}:00`)
-                      const endDt = t.end ? new Date(`${dateS}T${t.end}:00`) : new Date(startDt.getTime() + 60*60*1000)
-                      const remain = subtractOutdatesFromInterval(startDt, endDt, outdates, h)
-                      for (let ri=0; ri<remain.length; ri++) {
-                        const r = remain[ri]
-                        ev.push({ title: h.name, start: r.start.toISOString(), end: r.end.toISOString(), allDay: false, id: `${evIdBase}-${dateS}-${ri}`, editable: true, className: 'vow-habit', extendedProps: { habitId: h.id, timingIndex: ti } })
-                      }
-                    }
-                  } else {
-                    // no outdates -> keep rrule-based event
-                    const dtstart = `${dateStr}T${t.start}:00`
-                    // compute duration like before
-                    let durationIso: string | undefined = undefined
-                    if (t.end) {
-                      const [sh, sm] = t.start.split(':').map((x: string) => parseInt(x, 10))
-                      const [eh, em] = t.end.split(':').map((x: string) => parseInt(x, 10))
-                      let startMinutes = sh * 60 + sm
-                      let endMinutes = eh * 60 + em
-                      if (endMinutes <= startMinutes) endMinutes += 24 * 60
-                      const diff = endMinutes - startMinutes
-                      const hours = Math.floor(diff / 60)
-                      const mins = diff % 60
-                      const hh = String(hours).padStart(2, '0')
-                      const mm = String(mins).padStart(2, '0')
-                      durationIso = `${hh}:${mm}:00`
-                      if (durationIso === '00:00:00') durationIso = '01:00:00'
-                    } else if (h.endTime && h.time) {
-                      const [sh, sm] = (t.start ?? h.time).split(':').map((x: string) => parseInt(x, 10))
-                      const [eh, em] = h.endTime.split(':').map((x: string) => parseInt(x, 10))
-                      let startMinutes = sh * 60 + sm
-                      let endMinutes = eh * 60 + em
-                      if (endMinutes <= startMinutes) endMinutes += 24 * 60
-                      const diff = endMinutes - startMinutes
-                      const hours = Math.floor(diff / 60)
-                      const mins = diff % 60
-                      const hh = String(hours).padStart(2, '0')
-                      const mm = String(mins).padStart(2, '0')
-                      durationIso = `${hh}:${mm}:00`
-                      if (durationIso === '00:00:00') durationIso = '01:00:00'
-                    } else {
-                      durationIso = '01:00:00'
-                    }
-
-                    ev.push({ title: h.name, rrule: { freq, dtstart }, duration: durationIso, id: evIdBase, editable: true, startEditable: true, durationEditable: true, isRecurring: true, extendedProps: { habitId: h.id, timingIndex: ti } })
-                  }
-                } else {
-                  ev.push({ title: h.name, rrule: { freq, dtstart: dateStr }, id: evIdBase, editable: true, startEditable: true, durationEditable: true, isRecurring: true, extendedProps: { habitId: h.id, timingIndex: ti } })
-                }
-              }
+              ev.push({ title: h.name, start: baseDate, allDay: true, id: evIdBase, editable: true, className: 'vow-habit', extendedProps: { habitId: h.id, timingIndex: ti } });
             }
-          } catch (err) {
-            // ignore malformed timing entries
           }
         }
-        continue
+        continue;
       }
 
-      if (policy === 'Count') {
-        // all-day event on dueDate or today if missing
-        const dateStr = h.dueDate ?? new Date().toISOString().slice(0,10)
-        ev.push({ title: h.name, start: dateStr, allDay: true, id: h.id })
+      // no explicit timings: timed event if time exists, otherwise all-day
+      const dateStr = h.dueDate ?? new Date().toISOString().slice(0,10);
+      if ((h as any).time) {
+        const startIso = `${dateStr}T${(h as any).time}:00`;
+        const endIso = (h as any).endTime ? `${dateStr}T${(h as any).endTime}:00` : undefined;
+        ev.push({ title: h.name, start: startIso, end: endIso, allDay: false, id: h.id, editable: true, className: 'vow-habit' });
       } else {
-        // Schedule: timed event if time exists
-        const dateStr = h.dueDate ?? new Date().toISOString().slice(0,10)
-        // If there's a repeat rule, try to create an rrule-backed event
-        if (h.repeat && h.repeat !== 'Does not repeat') {
-          // basic mapping to rrule freq
-          const freq = h.repeat === 'Daily' ? 'DAILY' : h.repeat === 'Weekly' ? 'WEEKLY' : h.repeat === 'Monthly' ? 'MONTHLY' : h.repeat === 'Yearly' ? 'YEARLY' : undefined
-          if (freq) {
-            // If timed, provide dtstart including time and a duration so each occurrence occupies the same time window
-            if (h.time) {
-              const dtstart = `${dateStr}T${h.time}:00`
-              // compute duration from endTime if present, otherwise default to 1 hour
-              let durationIso: string | undefined = undefined
-              if (h.endTime) {
-                const [sh, sm] = h.time.split(':').map((x: string) => parseInt(x, 10))
-                const [eh, em] = h.endTime.split(':').map((x: string) => parseInt(x, 10))
-                let startMinutes = sh * 60 + sm
-                let endMinutes = eh * 60 + em
-                // if end is before or equal to start, assume end is on next day
-                if (endMinutes <= startMinutes) endMinutes += 24 * 60
-                const diff = endMinutes - startMinutes
-                const hours = Math.floor(diff / 60)
-                const mins = diff % 60
-                // FullCalendar expects a duration like "HH:MM:SS" for rrule events — use that format (e.g. 00:30:00)
-                const hh = String(hours).padStart(2, '0')
-                const mm = String(mins).padStart(2, '0')
-                durationIso = `${hh}:${mm}:00`
-                if (durationIso === '00:00:00') durationIso = '01:00:00'
-              } else {
-                durationIso = '01:00:00'
-              }
-
-                ev.push({
-                  title: h.name,
-                  rrule: { freq, dtstart },
-                  duration: durationIso,
-                  id: h.id,
-                  // allow dragging recurring events; we'll intercept the action and ask the user
-                  editable: true,
-                  startEditable: true,
-                  durationEditable: true,
-                  // custom flag so handlers can detect recurring-origin events
-                  isRecurring: true,
-                })
-              continue
-            } else {
-              // all-day recurrence
-                ev.push({ title: h.name, rrule: { freq, dtstart: dateStr }, id: h.id, editable: true, startEditable: true, durationEditable: true, isRecurring: true })
-              continue
-            }
-          }
-        }
-        if (h.time) {
-          const startIso = `${dateStr}T${(h.time)}:00`
-          const endIso = h.endTime ? `${dateStr}T${h.endTime}:00` : undefined
-          ev.push({ title: h.name, start: startIso, end: endIso, allDay: false, id: h.id, editable: true, className: 'vow-habit' })
-        } else {
-          ev.push({ title: h.name, start: dateStr, allDay: true, id: h.id, editable: true, className: 'vow-habit' })
-        }
+        ev.push({ title: h.name, start: dateStr, allDay: true, id: h.id, editable: true, className: 'vow-habit' });
       }
     }
-    // frames removed
-    return ev
-  }, [habits])
+    return ev;
+  }, [habits]);
 
   // precompute day events/arcs for today/tomorrow
   const isDayNav = (navSelection === 'today' || navSelection === 'tomorrow')
