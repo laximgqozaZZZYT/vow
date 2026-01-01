@@ -498,106 +498,65 @@ export default function DashboardPage() {
   <div className="mt-6 grid grid-cols-1 gap-4">
     <section className="rounded bg-white p-4 shadow dark:bg-[#0b0b0b]">
       <h2 className="mb-3 text-lg font-medium">Next</h2>
-      {/* Show up to 3 habits that are in-progress or upcoming (exclude completed) */}
-      {/* Simple heuristic: in-progress = has timed event that overlaps current time today; upcoming = has time today later or has a dueDate in future or recurring timing */}
+      {/* Show up to 5 habits that start within the next 24 hours (soonest first). */}
       {(() => {
-        const now = new Date()
-        const today = now.toISOString().slice(0,10)
-        const inProgress: Habit[] = []
-        const upcoming: Habit[] = []
+        const now = new Date();
+        const windowEnd = new Date(now.getTime() + 24 * 60 * 60 * 1000);
+        const candidates: Array<{ h: Habit; start: Date }> = [];
+
         for (const h of habits) {
-          if (h.completed) continue
-          if (h.type === 'avoid') continue
-          // prefer explicit timings if present
-          const timings = (h as any).timings ?? []
-          let added = false
+          if (h.completed) continue;
+          if (h.type === 'avoid') continue;
+          const timings = (h as any).timings ?? [];
+          let found: Date | null = null;
+
+          // check explicit timings first
           if (timings && timings.length) {
             for (const t of timings) {
               try {
-                if (t.type === 'Date' && t.date === today && t.start && t.end) {
-                  const start = new Date(`${t.date}T${t.start}:00`)
-                  const end = new Date(`${t.date}T${t.end}:00`)
-                  if (start <= now && now <= end) { inProgress.push(h); added = true; break }
-                  if (now < start) { upcoming.push(h); added = true; break }
-                } else if ((t.type === 'Daily' || t.type === 'Weekly' || t.type === 'Monthly') && t.start) {
-                  // check today's start time
-                  const dateStr = t.date ?? h.dueDate ?? today
-                  const start = new Date(`${dateStr}T${t.start}:00`)
-                  const end = t.end ? new Date(`${dateStr}T${t.end}:00`) : new Date(start.getTime() + 60*60*1000)
-                  if (start <= now && now <= end) { inProgress.push(h); added = true; break }
-                  if (now < start) { upcoming.push(h); added = true; break }
+                if (t.start) {
+                  const baseDate = t.date ?? h.dueDate ?? now.toISOString().slice(0,10);
+                  const dt = new Date(`${baseDate}T${t.start}:00`);
+                  if (dt >= now && dt <= windowEnd) { found = dt; break }
+                  const dtNext = new Date(dt.getTime() + 24*60*60*1000);
+                  if (dtNext >= now && dtNext <= windowEnd) { found = dtNext; break }
                 }
               } catch (e) { /* ignore malformed */ }
             }
           }
-          if (added) continue
+
           // fallback: use h.time / dueDate
-          if (h.time) {
-            const dateStr = h.dueDate ?? today
-            const start = new Date(`${dateStr}T${h.time}:00`)
-            const end = h.endTime ? new Date(`${dateStr}T${h.endTime}:00`) : new Date(start.getTime() + 60*60*1000)
-            if (start <= now && now <= end) { inProgress.push(h); continue }
-            if (now < start) { upcoming.push(h); continue }
+          if (!found && h.time) {
+            try {
+              const baseDate = h.dueDate ?? now.toISOString().slice(0,10);
+              let dt = new Date(`${baseDate}T${h.time}:00`);
+              if (dt < now) dt = new Date(dt.getTime() + 24*60*60*1000);
+              if (dt >= now && dt <= windowEnd) found = dt;
+            } catch (e) { /* ignore malformed */ }
           }
-          if (h.dueDate) {
-            const due = new Date(h.dueDate)
-            if (due > now) upcoming.push(h)
-          }
+
+          if (found) candidates.push({ h, start: found });
         }
 
-        // de-duplicate and limit to 3, prefer inProgress first
-        const uniq = new Map<string, Habit>()
-        const pick: Habit[] = []
-        for (const h of inProgress.concat(upcoming)) {
-          if (uniq.has(h.id)) continue
-          uniq.set(h.id, h)
-          pick.push(h)
-          if (pick.length >= 3) break
-        }
+        candidates.sort((a,b) => a.start.getTime() - b.start.getTime());
+        const pick = candidates.slice(0,5);
 
-        if (pick.length === 0) return <div className="text-sm text-zinc-500">No upcoming habits</div>
+        if (pick.length === 0) return <div className="text-sm text-zinc-500">No habits starting in the next 24 hours</div>;
 
         return (
           <ul className="flex flex-col">
-            {pick.map((h, idx) => (
-              <li key={h.id} className={`flex items-center justify-between py-2 ${idx > 0 ? 'mt-2 border-t border-zinc-100 pt-3' : ''}`}>
+            {pick.map((c, idx) => (
+              <li key={c.h.id} className={`flex items-center justify-between py-2 ${idx > 0 ? 'mt-2 border-t border-zinc-100 pt-3' : ''}`}>
                 <div className="flex items-center gap-3">
                   <div className="w-2 h-2 rounded-full bg-sky-500" />
-                  <div className={`text-sm ${h.completed ? 'line-through text-zinc-400' : 'text-zinc-800 dark:text-zinc-100'}`}>{h.name}</div>
+                  <div className={`text-sm ${c.h.completed ? 'line-through text-zinc-400' : 'text-zinc-800 dark:text-zinc-100'}`}>{c.h.name}</div>
                 </div>
                 <div className="text-xs text-zinc-500">
-                  {/* show a small hint: in-progress or time/due */}
                   {(() => {
-                    // simple label
-                    const now = new Date()
-                    const today = now.toISOString().slice(0,10)
-                    const timings = (h as any).timings ?? []
-                    for (const t of timings) {
-                      try {
-                        if (t.type === 'Date' && t.date === today && t.start && t.end) {
-                          const start = new Date(`${t.date}T${t.start}:00`)
-                          const end = new Date(`${t.date}T${t.end}:00`)
-                          if (start <= now && now <= end) return 'In progress'
-                          if (now < start) return `${t.start}`
-                        }
-                        if ((t.type === 'Daily' || t.type === 'Weekly' || t.type === 'Monthly') && t.start) {
-                          const dateStr = t.date ?? h.dueDate ?? today
-                          const start = new Date(`${dateStr}T${t.start}:00`)
-                          const end = t.end ? new Date(`${dateStr}T${t.end}:00`) : new Date(start.getTime() + 60*60*1000)
-                          if (start <= now && now <= end) return 'In progress'
-                          if (now < start) return `${t.start}`
-                        }
-                      } catch (e) {}
-                    }
-                    if (h.time) {
-                      const dateStr = h.dueDate ?? today
-                      const start = new Date(`${dateStr}T${h.time}:00`)
-                      const end = h.endTime ? new Date(`${dateStr}T${h.endTime}:00`) : new Date(start.getTime() + 60*60*1000)
-                      if (start <= now && now <= end) return 'In progress'
-                      if (now < start) return `${h.time}`
-                    }
-                    if (h.dueDate) return `Due ${h.dueDate}`
-                    return 'Planned'
+                    const d = c.start;
+                    const todayStr = new Date().toISOString().slice(0,10);
+                    if (d.toISOString().slice(0,10) === todayStr) return d.toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'});
+                    return d.toLocaleString();
                   })()}
                 </div>
               </li>
