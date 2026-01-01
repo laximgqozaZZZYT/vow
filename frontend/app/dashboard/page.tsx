@@ -48,8 +48,10 @@ export default function DashboardPage() {
   const [openNewCategory, setOpenNewCategory] = useState(false);
   const [openNewHabit, setOpenNewHabit] = useState(false);
   const [openHabitModal, setOpenHabitModal] = useState(false);
-  type Activity = { id: string; habitId: string; habitName: string; timestamp: string; amount: number; prevCount: number; newCount: number }
+  type ActivityKind = 'start' | 'complete' | 'skip'
+  type Activity = { id: string; kind: ActivityKind; habitId: string; habitName: string; timestamp: string; amount?: number; prevCount?: number; newCount?: number; durationSeconds?: number }
   const [activities, setActivities] = useState<Activity[]>([]);
+  const [starts, setStarts] = useState<Record<string, { ts: string; timeoutId?: number }>>({});
   const [recurringRequest, setRecurringRequest] = useState<null | { habitId: string; start?: string; end?: string }>(null);
   // frames feature removed: no openNewFrame state
   const [selectedHabitId, setSelectedHabitId] = useState<string | null>(null);
@@ -111,43 +113,75 @@ export default function DashboardPage() {
 
   function handleComplete(habitId: string) {
     const now = new Date().toISOString();
-    let recordedActivity: Activity | null = null;
-    setHabits((s) => s.map(x => {
-      if (x.id !== habitId) return x;
-      const increment = (x as any).workloadPerCount ?? 1;
-      const prev = x.count ?? 0;
-      const newCount = prev + increment;
-      const total = (x as any).workloadTotal ?? x.must ?? 0;
-      recordedActivity = { id: `a${Date.now()}`, habitId: x.id, habitName: x.name, timestamp: now, amount: increment, prevCount: prev, newCount };
-      if (total > 0) {
-        if (newCount >= total) {
-          return { ...x, count: newCount, completed: true, lastCompletedAt: now, updatedAt: now };
-        }
-        return { ...x, count: newCount, lastCompletedAt: now, updatedAt: now };
-      }
-  // no workload total -> increment count and mark as completed (schedule-style)
-  return { ...x, count: newCount, completed: true, lastCompletedAt: now, updatedAt: now };
-    }));
+    const habit = habits.find(h => h.id === habitId);
+    if (!habit) return;
+    const increment = (habit as any).workloadPerCount ?? 1;
+    const prev = habit.count ?? 0;
+    const newCount = prev + increment;
+    const total = (habit as any).workloadTotal ?? habit.must ?? 0;
 
-    // avoid recording duplicate activities caused by quick double-clicks: if the latest activity is for the same habit and within 1s, skip
-    setActivities(a => {
-      if (!recordedActivity) return a;
-      if (a.length && a[0].habitId === habitId && (Date.now() - new Date(a[0].timestamp).getTime() < 1000)) {
-        return a;
-      }
-      return [recordedActivity, ...a];
-    });
+    // update habit
+    setHabits(s => s.map(h => h.id === habitId ? ({ ...h, count: newCount, completed: total > 0 ? (newCount >= total) : true, lastCompletedAt: now, updatedAt: now }) : h));
+
+    // if there's a start recorded for this habit, convert that start to a complete with duration
+    const start = starts[habitId];
+    if (start) {
+      const durationSeconds = Math.max(0, Math.floor((Date.now() - new Date(start.ts).getTime()) / 1000));
+      setActivities(acts => {
+        const idx = acts.findIndex(a => a.habitId === habitId && a.kind === 'start' && a.timestamp === start.ts);
+        if (idx !== -1) {
+          const old = acts[idx];
+          const prevCountVal = (typeof old.prevCount === 'number') ? old.prevCount : (typeof old.newCount === 'number' ? old.newCount : (habit.count ?? 0));
+          const updated: Activity = { ...old, kind: 'complete', amount: increment, prevCount: prevCountVal, newCount, durationSeconds };
+          const copy = [...acts];
+          copy.splice(idx, 1);
+          return [updated, ...copy];
+        }
+        return [{ id: `a${Date.now()}`, kind: 'complete', habitId, habitName: habit.name, timestamp: now, amount: increment, prevCount: prev, newCount, durationSeconds }, ...acts];
+      });
+      // clear start timer and state
+      const to = start.timeoutId;
+      if (typeof to === 'number') clearTimeout(to);
+      setStarts(s => { const c = { ...s }; delete c[habitId]; return c; });
+      return;
+    }
+
+    // no start: create a standalone complete activity
+    setActivities(a => [{ id: `a${Date.now()}`, kind: 'complete', habitId, habitName: habit.name, timestamp: now, amount: increment, prevCount: prev, newCount }, ...a]);
+  }
+
+  function handleStart(habitId: string) {
+    const now = new Date().toISOString();
+    const habit = habits.find(h => h.id === habitId);
+    if (!habit) return;
+    // if already started, treat as complete
+    if (starts[habitId]) {
+      handleComplete(habitId);
+      return;
+    }
+    // schedule skip after 24h
+    const timeoutId = window.setTimeout(() => {
+      setStarts(s => {
+        if (!s[habitId]) return s;
+        setActivities(a => [{ id: `a${Date.now()}`, kind: 'skip', habitId, habitName: habit.name, timestamp: new Date().toISOString() }, ...a]);
+        const copy = { ...s }; delete copy[habitId]; return copy;
+      });
+    }, 24 * 60 * 60 * 1000);
+
+    setStarts(s => ({ ...s, [habitId]: { ts: now, timeoutId } }));
+    setActivities(a => [{ id: `a${Date.now()}`, kind: 'start', habitId, habitName: habit.name, timestamp: now, prevCount: habit.count ?? 0, newCount: habit.count ?? 0 }, ...a]);
   }
 
   function handleDeleteActivity(activityId: string) {
     const act = activities.find(a => a.id === activityId);
     if (!act) return;
+    const prevCount = act.prevCount ?? 0;
     // rollback habit count to prevCount and adjust completed flag
     setHabits(s => s.map(h => {
       if (h.id !== act.habitId) return h;
       const total = (h as any).workloadTotal ?? h.must ?? 0;
-      const completed = (typeof act.prevCount === 'number' && total > 0) ? (act.prevCount >= total) : false;
-      return { ...h, count: act.prevCount, completed, updatedAt: new Date().toISOString() };
+      const completed = (total > 0) ? (prevCount >= total) : false;
+      return { ...h, count: prevCount, completed, updatedAt: new Date().toISOString() };
     }));
     // remove activity
     setActivities(s => s.filter(a => a.id !== activityId));
@@ -249,6 +283,7 @@ export default function DashboardPage() {
                       <span className="truncate">{h.name}</span>
                     </div>
                     <div className="flex items-center gap-2">
+                      <button title="Start" onClick={(e) => { e.stopPropagation(); handleStart(h.id) }} className="text-blue-600 hover:bg-blue-50 rounded px-2 py-1">▶️</button>
                       <button
                         title="Complete"
                         onClick={(e) => { e.stopPropagation(); handleComplete(h.id) }}
@@ -274,6 +309,7 @@ export default function DashboardPage() {
                       <span className="truncate">{h.name}</span>
                     </div>
                     <div className="flex items-center gap-2">
+                      <button title="Start" onClick={(e) => { e.stopPropagation(); handleStart(h.id) }} className="text-blue-600 hover:bg-blue-50 rounded px-2 py-1">▶️</button>
                       <button title="Complete" onClick={(e) => { e.stopPropagation(); handleComplete(h.id) }} className="text-green-600 hover:bg-green-50 rounded px-2 py-1">✅</button>
                     </div>
                   </div>
@@ -495,7 +531,19 @@ export default function DashboardPage() {
           <div key={act.id} className="flex items-center justify-between rounded px-2 py-2 hover:bg-zinc-100 dark:hover:bg-white/5">
             <div className="text-sm">
               <div className="text-xs text-zinc-500">{new Date(act.timestamp).toLocaleString()}</div>
-              <div>{act.habitName} — completed {act.amount} {act.amount > 1 ? 'units' : 'unit'}. (now {act.newCount})</div>
+              {act.kind === 'start' && (
+                <div>{act.habitName} — started</div>
+              )}
+              {act.kind === 'complete' && (
+                <div>
+                  {act.habitName} — completed {act.amount ?? 1} {((act.amount ?? 1) > 1) ? 'units' : 'unit'}.
+                  {typeof act.durationSeconds === 'number' ? ` Took ${Math.floor(act.durationSeconds/3600)}h ${Math.floor((act.durationSeconds%3600)/60)}m ${act.durationSeconds%60}s.` : ''}
+                  {act.newCount !== undefined ? ` (now ${act.newCount})` : ''}
+                </div>
+              )}
+              {act.kind === 'skip' && (
+                <div>{act.habitName} — skipped</div>
+              )}
             </div>
             <div className="flex items-center gap-2">
               <button className="text-sm text-blue-600" onClick={() => { setSelectedHabitId(act.habitId); setOpenHabitModal(true); }}>Edit</button>
