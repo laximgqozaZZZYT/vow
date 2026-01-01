@@ -430,8 +430,8 @@ export default function DashboardPage() {
   return (
     <div className="flex min-h-screen bg-zinc-50 dark:bg-black text-black dark:text-zinc-50">
       {/* Top-left hamburger + label (styled to match sidebar) */}
-      <div className="fixed left-3 top-3 z-50 flex items-center gap-3 rounded bg-white text-black dark:bg-[#071013] dark:text-white px-3 py-2 shadow-md dark:border-slate-700">
-        <button onClick={() => setShowLeftPane((s) => !s)} aria-label="Toggle menu" className="px-3 py-2 text-2xl leading-none">
+      <div className="fixed left-3 top-3 z-50 flex items-center gap-2 rounded bg-white text-black dark:bg-[#071013] dark:text-white px-2 py-1 shadow-md dark:border-slate-700">
+        <button onClick={() => setShowLeftPane((s) => !s)} aria-label="Toggle menu" className="px-2 py-1 text-2xl leading-none">
           ☰
         </button>
         <div className="text-lg font-bold">VOW</div>
@@ -441,8 +441,8 @@ export default function DashboardPage() {
       {showLeftPane && (
         <aside className="fixed left-0 top-0 w-80 h-full border-r border-zinc-200 bg-white dark:bg-[#071013] p-3 z-50">
           <div className="mb-3 flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <button onClick={() => setShowLeftPane((s) => !s)} aria-label="Toggle menu" className="px-3 py-2 text-2xl leading-none">
+            <div className="flex items-center gap-2">
+              <button onClick={() => setShowLeftPane((s) => !s)} aria-label="Toggle menu" className="px-2 py-1 text-2xl leading-none">
                 ☰
               </button>
               <div className="text-lg font-bold">VOW</div>
