@@ -94,7 +94,8 @@ export function HabitModal({ open, onClose, habit, onUpdate, onDelete, onCreate,
             setGoalId(habit?.goalId)
             // clone arrays when copying from habit to ensure independent state
             setTimings(((habit as any)?.timings ?? []).map((x: any) => ({ ...x })))
-            setOutdates(((habit as any)?.outdates ?? []).map((x: any) => ({ ...x })))
+            const incomingOutdates = ((habit as any)?.outdates ?? []).map((x: any) => ({ ...x }))
+            setOutdates(incomingOutdates.length ? incomingOutdates : [{ type: habit?.dueDate ? 'Date' : 'Daily', date: habit?.dueDate ? (typeof habit.dueDate === 'string' ? habit.dueDate : formatLocalDate(new Date(habit.dueDate))) : undefined, start: habit?.time ?? undefined, end: habit?.endTime ?? undefined }])
             if (!((habit as any)?.timings ?? []).length) {
                 const tType: TimingType = habit?.dueDate ? 'Date' : 'Daily'
                 setTimings([{ type: tType, date: habit?.dueDate ? (typeof habit.dueDate === 'string' ? habit.dueDate : formatLocalDate(new Date(habit.dueDate))) : undefined, start: habit?.time ?? undefined, end: habit?.endTime ?? undefined }])
@@ -119,7 +120,8 @@ export function HabitModal({ open, onClose, habit, onUpdate, onDelete, onCreate,
             setGoalId(initial?.goalId)
             const tType: TimingType = initial?.date ? 'Date' : 'Daily'
             setTimings([{ type: tType, date: initial?.date ?? undefined, start: initial?.time ?? undefined, end: undefined }])
-            setOutdates([])
+            // ensure there's at least one empty outdate row so the UI shows an editable row
+            setOutdates([{ type: tType, date: initial?.date ?? undefined, start: initial?.time ?? undefined, end: undefined }])
             setTimingType(initial?.date ? 'Date' : 'Daily')
             setTimingWeekdays([])
         }
