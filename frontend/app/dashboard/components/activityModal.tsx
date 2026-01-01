@@ -66,40 +66,47 @@ export default function ActivityModal({ open, onClose, initial, onSave }: { open
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center">
-      <div className="absolute inset-0 bg-black/50" onClick={onClose} />
-      <div className="relative w-full max-w-lg rounded bg-white p-6 shadow">
-        <h3 className="text-lg font-semibold mb-3">Edit Activity</h3>
-        <div className="space-y-3">
-          <label className="block text-xs text-zinc-600">Status</label>
-          <select className="w-full rounded border px-2 py-1" value={kind} onChange={(e) => setKind(e.target.value as ActivityKind)}>
-            <option value="start">Start</option>
-            <option value="pause">Pause</option>
-            <option value="complete">Done</option>
-            <option value="skip">Skip</option>
-          </select>
+    <div className="fixed inset-0 z-50 flex items-start justify-center pt-12 bg-black/30">
+      <div className="w-full max-w-lg rounded bg-white px-4 pt-4 pb-0 shadow-lg text-black dark:bg-[#0f1724] dark:text-slate-100 flex flex-col">
+        <div className="flex items-center justify-between">
+          <h3 className="text-2xl font-semibold">Activity</h3>
+          <button onClick={onClose} className="text-slate-500">✕</button>
+        </div>
 
-          <label className="block text-xs text-zinc-600">Load</label>
-          <input ref={amountRef} className="w-full rounded border px-2 py-1 text-sm" type="number" value={amount} onChange={(e) => setAmount(Number(e.target.value))} />
-          {errors.amount && <div className="text-xs text-red-600">{errors.amount}</div>}
+        <div className="mt-4 flex gap-4 habit-scroll-area overflow-auto max-h-[65vh] pr-2 modal-scroll-gap">
+          <div className="flex-1">
+            <div className="space-y-3">
+              <label className="block text-xs text-slate-400">Status</label>
+              <select className="w-full rounded border px-2 py-1 bg-white text-black dark:bg-slate-800 dark:text-slate-100" value={kind} onChange={(e) => setKind(e.target.value as ActivityKind)}>
+                <option value="start">Start</option>
+                <option value="pause">Pause</option>
+                <option value="complete">Done</option>
+                <option value="skip">Skip</option>
+              </select>
 
-          <label className="block text-xs text-zinc-600">Memo</label>
-          <textarea className="w-full rounded border px-2 py-1 text-sm" rows={3} value={memo} onChange={(e) => setMemo(e.target.value)} />
-          {errors.memo && <div className="text-xs text-red-600">{errors.memo}</div>}
+              <label className="block text-xs text-slate-400">Load</label>
+              <input ref={amountRef} className="w-full rounded border px-2 py-1 text-sm bg-white text-black dark:bg-slate-800 dark:text-slate-100" type="number" value={amount} onChange={(e) => setAmount(Number(e.target.value))} />
+              {errors.amount && <div className="text-xs text-red-600">{errors.amount}</div>}
 
-          <div>
-            <div className="text-xs text-zinc-600">Duration (h / m / s)</div>
-            <div className="flex gap-2 mt-1">
-              <input className="w-20 rounded border px-2 py-1 text-sm" type="number" value={hours} onChange={(e) => setHours(Number(e.target.value))} />
-              <input className="w-20 rounded border px-2 py-1 text-sm" type="number" value={minutes} onChange={(e) => setMinutes(Number(e.target.value))} />
-              <input className="w-20 rounded border px-2 py-1 text-sm" type="number" value={seconds} onChange={(e) => setSeconds(Number(e.target.value))} />
+              <label className="block text-xs text-slate-400">Memo</label>
+              <textarea className="w-full rounded border px-2 py-1 text-sm bg-white text-black dark:bg-slate-800 dark:text-slate-100" rows={3} value={memo} onChange={(e) => setMemo(e.target.value)} />
+              {errors.memo && <div className="text-xs text-red-600">{errors.memo}</div>}
+
+              <div>
+                <div className="text-xs text-slate-400">Duration (h / m / s)</div>
+                <div className="flex gap-2 mt-1">
+                  <input className="w-20 rounded border px-2 py-1 text-sm bg-white text-black dark:bg-slate-800 dark:text-slate-100" type="number" value={hours} onChange={(e) => setHours(Number(e.target.value))} />
+                  <input className="w-20 rounded border px-2 py-1 text-sm bg-white text-black dark:bg-slate-800 dark:text-slate-100" type="number" value={minutes} onChange={(e) => setMinutes(Number(e.target.value))} />
+                  <input className="w-20 rounded border px-2 py-1 text-sm bg-white text-black dark:bg-slate-800 dark:text-slate-100" type="number" value={seconds} onChange={(e) => setSeconds(Number(e.target.value))} />
+                </div>
+                {errors.duration && <div className="text-xs text-red-600">{errors.duration}</div>}
+              </div>
+
+              <div className="mt-4 flex items-center gap-2">
+                <button className={`rounded bg-sky-600 px-3 py-2 text-white ${Object.keys(errors).length ? 'opacity-50 cursor-not-allowed' : ''}`} onClick={handleSave} disabled={Object.keys(errors).length > 0}>Save</button>
+                <button className="rounded border px-3 py-2" onClick={onClose}>Cancel</button>
+              </div>
             </div>
-            {errors.duration && <div className="text-xs text-red-600">{errors.duration}</div>}
-          </div>
-
-          <div className="mt-4 flex items-center gap-2">
-            <button className={`rounded bg-sky-600 px-3 py-2 text-white ${Object.keys(errors).length ? 'opacity-50 cursor-not-allowed' : ''}`} onClick={handleSave} disabled={Object.keys(errors).length > 0}>Save</button>
-            <button className="rounded border px-3 py-2" onClick={onClose}>Cancel</button>
           </div>
         </div>
       </div>
