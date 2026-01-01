@@ -439,7 +439,7 @@ export default function DashboardPage() {
 
       {/* Left pane */}
       {showLeftPane && (
-        <aside className="w-80 border-r border-zinc-200 bg-white dark:bg-[#071013] p-3">
+        <aside className="fixed left-0 top-0 w-80 h-full border-r border-zinc-200 bg-white dark:bg-[#071013] p-3 z-50">
           <div className="mb-3 flex items-center justify-between">
             <div className="flex items-center gap-3">
               <button onClick={() => setShowLeftPane((s) => !s)} aria-label="Toggle menu" className="px-3 py-2 text-2xl leading-none">
@@ -477,7 +477,7 @@ export default function DashboardPage() {
   )}
 
   {/* Right pane */}
-      <main className="flex-1 p-8">
+  <main className={`flex-1 p-8 ${showLeftPane ? 'ml-80' : ''}`}>
         <div className="grid grid-cols-3 gap-4">
           <div className="col-span-1 rounded bg-white p-4 shadow dark:bg-[#0b0b0b]">
             <div className="text-sm text-zinc-500">Today</div>
@@ -619,14 +619,7 @@ export default function DashboardPage() {
     }}
   />
   </div>
-        <section className="mt-6 rounded bg-white p-4 shadow dark:bg-[#0b0b0b]">
-          <h2 className="mb-3 text-lg font-medium">Recent Activity</h2>
-          <ul className="flex flex-col gap-2 text-sm text-zinc-600">
-            <li>早起き — completed</li>
-            <li>メール確認 — skipped</li>
-            <li>タスクレビュー — completed</li>
-          </ul>
-        </section>
+        
 
         {/* Goal graph (Mermaid TD) shown under the calendar */}
         <section className="mt-6 rounded bg-white p-4 shadow dark:bg-[#0b0b0b]">
