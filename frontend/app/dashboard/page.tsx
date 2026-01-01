@@ -2,7 +2,7 @@
 
 import { useState, useMemo, useEffect, useRef, useId } from "react";
 import mermaid from 'mermaid'
-import { NewGoalModal, NewHabitModal, HabitModal, NewFrameModal } from "./components/modals";
+import { HabitModal, GoalModal } from "./components/modals";
 import FullCalendar from '@fullcalendar/react'
 import timeGridPlugin from '@fullcalendar/timegrid'
 import interactionPlugin from '@fullcalendar/interaction'
@@ -12,7 +12,7 @@ import rrulePlugin from '@fullcalendar/rrule'
 // If you want FullCalendar's default styles, consider adding them via a global CSS import
 // or linking the CSS from a CDN in _document or app root.
 
-type Goal = { id: string; name: string; details?: string; dueDate?: string; parentId?: string | null; createdAt: string; updatedAt: string };
+type Goal = { id: string; name: string; details?: string; dueDate?: string | Date | null; parentId?: string | null; createdAt: string; updatedAt: string };
 type Habit = { id: string; goalId: string; name: string; active: boolean; type: "do" | "avoid"; count: number; must?: number; completed?: boolean; lastCompletedAt?: string; duration?: number; reminders?: ({ kind: 'absolute'; time: string; weekdays: string[] } | { kind: 'relative'; minutesBefore: number })[]; dueDate?: string; time?: string; endTime?: string; repeat?: string; allDay?: boolean; notes?: string; createdAt: string; updatedAt: string };
 
 export default function DashboardPage() {
@@ -49,18 +49,11 @@ export default function DashboardPage() {
   const [openNewHabit, setOpenNewHabit] = useState(false);
   const [openHabitModal, setOpenHabitModal] = useState(false);
   const [recurringRequest, setRecurringRequest] = useState<null | { habitId: string; start?: string; end?: string }>(null);
-  const [openNewFrame, setOpenNewFrame] = useState(false);
+  // frames feature removed: no openNewFrame state
   const [selectedHabitId, setSelectedHabitId] = useState<string | null>(null);
   const [newHabitInitial, setNewHabitInitial] = useState<{ date?: string; time?: string } | null>(null);
   const [newHabitInitialType, setNewHabitInitialType] = useState<"do" | "avoid" | undefined>(undefined)
-  const [frames, setFrames] = useState<any[]>(() => {
-    const today = new Date().toISOString().slice(0,10)
-    return [
-      { id: 'f-default-morning', name: 'Morning free', kind: 'Blank', date: today, start_time: '07:00', end_time: '08:00', color: undefined },
-      { id: 'f-default-lunch', name: 'Lunch free', kind: 'Blank', date: today, start_time: '12:00', end_time: '13:00', color: undefined },
-      { id: 'f-default-evening', name: 'Evening free', kind: 'Blank', date: today, start_time: '20:00', end_time: '22:00', color: undefined },
-    ]
-  })
+  // frames removed
 
   const selectedHabit = habits.find((h) => h.id === selectedHabitId) ?? null;
 
@@ -75,16 +68,7 @@ export default function DashboardPage() {
     }))
   }
 
-  // Update frame when calendar event (frame) is moved/resized
-  function handleFrameChange(id: string, updated: { start?: string; end?: string }) {
-    setFrames((s) => s.map(f => {
-      if (f.id !== id) return f
-      const newDate = updated.start ? updated.start.slice(0,10) : f.date
-      const newStart = updated.start && updated.start.length > 10 ? updated.start.slice(11,16) : f.start_time
-      const newEnd = updated.end && updated.end.length > 10 ? updated.end.slice(11,16) : f.end_time
-      return { ...f, date: newDate, start_time: newStart, end_time: newEnd }
-    }))
-  }
+  // frame handlers removed
 
   function createGoal(payload: { name: string; details?: string; dueDate?: string; parentId?: string | null }) {
     const id = `c${Date.now()}`;
@@ -114,23 +98,38 @@ export default function DashboardPage() {
     if (selectedGoal === sourceId) setSelectedGoal(targetId)
   }
 
-  function createHabit(payload: { name: string; goalId: string; type: "do" | "avoid"; duration?: number; reminders?: ({ kind: 'absolute'; time: string; weekdays: string[] } | { kind: 'relative'; minutesBefore: number })[]; dueDate?: string; time?: string; endTime?: string; repeat?: string; allDay?: boolean; notes?: string; policy?: "Schedule" | "Count"; targetCount?: number }) {
+  function createHabit(payload: { name: string; goalId: string; type: "do" | "avoid"; duration?: number; reminders?: ({ kind: 'absolute'; time: string; weekdays: string[] } | { kind: 'relative'; minutesBefore: number })[]; dueDate?: string; time?: string; endTime?: string; repeat?: string; timings?: any[]; allDay?: boolean; notes?: string; policy?: "Schedule" | "Count"; targetCount?: number }) {
     const id = `h${Date.now()}`;
     const now = new Date().toISOString();
     setHabits((s) => [
       ...s,
-      { id, goalId: payload.goalId, name: payload.name, active: true, type: payload.type, count: 0, must: payload.targetCount ?? undefined, policy: payload.policy ?? 'Schedule', targetCount: payload.targetCount ?? undefined, completed: false, duration: payload.duration, reminders: payload.reminders, dueDate: payload.dueDate, time: payload.time, endTime: payload.endTime, repeat: payload.repeat, allDay: payload.allDay, notes: payload.notes, createdAt: now, updatedAt: now },
+      { id, goalId: payload.goalId, name: payload.name, active: true, type: payload.type, count: 0, must: payload.targetCount ?? undefined, policy: payload.policy ?? 'Schedule', targetCount: payload.targetCount ?? undefined, completed: false, duration: payload.duration, reminders: payload.reminders, dueDate: payload.dueDate, time: payload.time, endTime: payload.endTime, repeat: payload.repeat, timings: payload.timings, allDay: payload.allDay, notes: payload.notes, createdAt: now, updatedAt: now },
     ]);
   }
 
-  function createFrame(payload: { name?: string; kind: 'Blank' | 'Full'; date?: string; start_time: string; end_time: string; color?: string }) {
-    const id = `f${Date.now()}`
-    setFrames((s) => [...s, { id, name: payload.name, kind: payload.kind, date: payload.date, start_time: payload.start_time, end_time: payload.end_time, color: payload.color }])
-  }
+  // frames feature removed: no createFrame function
 
   // derived when needed
 
   const [openGoals, setOpenGoals] = useState<Record<string, boolean>>({});
+  const [openGoalModal, setOpenGoalModal] = useState(false);
+  const [editingGoalId, setEditingGoalId] = useState<string | null>(null);
+
+  const editingGoal = goals.find(g => g.id === editingGoalId) ?? null;
+
+  // Accept partial updates (createdAt/updatedAt may be omitted by the modal)
+  function updateGoal(updated: Partial<Goal> & { id: string }) {
+    setGoals((s) => s.map(g => g.id === updated.id ? { ...g, ...updated, updatedAt: new Date().toISOString() } : g));
+  }
+
+  function deleteGoal(id: string) {
+    // remove the goal and any child goals (simple approach: filter by id)
+    setGoals((s) => s.filter(g => g.id !== id));
+    // also reassign or remove habits under that goal: here we remove habits belonging to that goal
+    setHabits((s) => s.filter(h => h.goalId !== id));
+    if (selectedGoal === id) setSelectedGoal(null);
+    if (editingGoalId === id) setEditingGoalId(null);
+  }
 
   function toggleGoal(id: string) {
     setOpenGoals((s) => ({ ...s, [id]: !s[id] }));
@@ -173,7 +172,7 @@ export default function DashboardPage() {
         <div className={`flex items-center justify-between cursor-pointer rounded px-3 py-2 hover:bg-zinc-100 dark:hover:bg-white/5 ${selectedGoal === goal.id ? 'bg-zinc-100 dark:bg-white/5' : ''}`}>
           <div className="flex items-center gap-2">
             <button onClick={() => { toggleGoal(goal.id); setSelectedGoal(goal.id); }} className="inline-block w-3">{isOpen ? '▾' : '▸'}</button>
-            <span className="text-sm font-medium">{goal.name}</span>
+            <button onClick={() => { setEditingGoalId(goal.id); setOpenGoalModal(true); }} className="text-sm font-medium text-left">{goal.name}</button>
           </div>
           <div className="flex items-center gap-2">
             <label className="flex items-center gap-2 text-xs">
@@ -347,12 +346,7 @@ export default function DashboardPage() {
           >
             + New Habit
           </button>
-            <button
-              className="flex-1 rounded border px-3 py-2 text-sm"
-              onClick={() => setOpenNewFrame(true)}
-            >
-              + New Frame
-            </button>
+            {/* Frame feature removed */}
         </div>
   </aside>
   )}
@@ -377,39 +371,133 @@ export default function DashboardPage() {
           </div>
         </div>
 
-  <FullCalendarWrapper
+  <div className="mt-6 grid grid-cols-1 gap-4">
+    <section className="rounded bg-white p-4 shadow dark:bg-[#0b0b0b]">
+      <h2 className="mb-3 text-lg font-medium">Next</h2>
+      {/* Show up to 3 habits that are in-progress or upcoming (exclude completed) */}
+      {/* Simple heuristic: in-progress = has timed event that overlaps current time today; upcoming = has time today later or has a dueDate in future or recurring timing */}
+      {(() => {
+        const now = new Date()
+        const today = now.toISOString().slice(0,10)
+        const inProgress: Habit[] = []
+        const upcoming: Habit[] = []
+        for (const h of habits) {
+          if (h.completed) continue
+          if (h.type === 'avoid') continue
+          // prefer explicit timings if present
+          const timings = (h as any).timings ?? []
+          let added = false
+          if (timings && timings.length) {
+            for (const t of timings) {
+              try {
+                if (t.type === 'Date' && t.date === today && t.start && t.end) {
+                  const start = new Date(`${t.date}T${t.start}:00`)
+                  const end = new Date(`${t.date}T${t.end}:00`)
+                  if (start <= now && now <= end) { inProgress.push(h); added = true; break }
+                  if (now < start) { upcoming.push(h); added = true; break }
+                } else if ((t.type === 'Daily' || t.type === 'Weekly' || t.type === 'Monthly') && t.start) {
+                  // check today's start time
+                  const dateStr = t.date ?? h.dueDate ?? today
+                  const start = new Date(`${dateStr}T${t.start}:00`)
+                  const end = t.end ? new Date(`${dateStr}T${t.end}:00`) : new Date(start.getTime() + 60*60*1000)
+                  if (start <= now && now <= end) { inProgress.push(h); added = true; break }
+                  if (now < start) { upcoming.push(h); added = true; break }
+                }
+              } catch (e) { /* ignore malformed */ }
+            }
+          }
+          if (added) continue
+          // fallback: use h.time / dueDate
+          if (h.time) {
+            const dateStr = h.dueDate ?? today
+            const start = new Date(`${dateStr}T${h.time}:00`)
+            const end = h.endTime ? new Date(`${dateStr}T${h.endTime}:00`) : new Date(start.getTime() + 60*60*1000)
+            if (start <= now && now <= end) { inProgress.push(h); continue }
+            if (now < start) { upcoming.push(h); continue }
+          }
+          if (h.dueDate) {
+            const due = new Date(h.dueDate)
+            if (due > now) upcoming.push(h)
+          }
+        }
+
+        // de-duplicate and limit to 3, prefer inProgress first
+        const uniq = new Map<string, Habit>()
+        const pick: Habit[] = []
+        for (const h of inProgress.concat(upcoming)) {
+          if (uniq.has(h.id)) continue
+          uniq.set(h.id, h)
+          pick.push(h)
+          if (pick.length >= 3) break
+        }
+
+        if (pick.length === 0) return <div className="text-sm text-zinc-500">No upcoming habits</div>
+
+        return (
+          <ul className="flex flex-col">
+            {pick.map((h, idx) => (
+              <li key={h.id} className={`flex items-center justify-between py-2 ${idx > 0 ? 'mt-2 border-t border-zinc-100 pt-3' : ''}`}>
+                <div className="flex items-center gap-3">
+                  <div className="w-2 h-2 rounded-full bg-sky-500" />
+                  <div className={`text-sm ${h.completed ? 'line-through text-zinc-400' : 'text-zinc-800 dark:text-zinc-100'}`}>{h.name}</div>
+                </div>
+                <div className="text-xs text-zinc-500">
+                  {/* show a small hint: in-progress or time/due */}
+                  {(() => {
+                    // simple label
+                    const now = new Date()
+                    const today = now.toISOString().slice(0,10)
+                    const timings = (h as any).timings ?? []
+                    for (const t of timings) {
+                      try {
+                        if (t.type === 'Date' && t.date === today && t.start && t.end) {
+                          const start = new Date(`${t.date}T${t.start}:00`)
+                          const end = new Date(`${t.date}T${t.end}:00`)
+                          if (start <= now && now <= end) return 'In progress'
+                          if (now < start) return `${t.start}`
+                        }
+                        if ((t.type === 'Daily' || t.type === 'Weekly' || t.type === 'Monthly') && t.start) {
+                          const dateStr = t.date ?? h.dueDate ?? today
+                          const start = new Date(`${dateStr}T${t.start}:00`)
+                          const end = t.end ? new Date(`${dateStr}T${t.end}:00`) : new Date(start.getTime() + 60*60*1000)
+                          if (start <= now && now <= end) return 'In progress'
+                          if (now < start) return `${t.start}`
+                        }
+                      } catch (e) {}
+                    }
+                    if (h.time) {
+                      const dateStr = h.dueDate ?? today
+                      const start = new Date(`${dateStr}T${h.time}:00`)
+                      const end = h.endTime ? new Date(`${dateStr}T${h.endTime}:00`) : new Date(start.getTime() + 60*60*1000)
+                      if (start <= now && now <= end) return 'In progress'
+                      if (now < start) return `${h.time}`
+                    }
+                    if (h.dueDate) return `Due ${h.dueDate}`
+                    return 'Planned'
+                  })()}
+                </div>
+              </li>
+            ))}
+          </ul>
+        )
+      })()}
+    </section>
+
+    <FullCalendarWrapper
     habits={habits}
     onEventClick={(id: string) => { setSelectedHabitId(id); setOpenHabitModal(true); }}
     onSlotSelect={(isoDate: string, time?: string) => {
-      // If a frame exists at this date/time, open New Habit; otherwise open New Frame
-      const found = frames.find(f => {
-        if (!f.date) return false
-        if (f.date !== isoDate) return false
-        if (!time) return true
-        return time >= f.start_time && time < f.end_time
-      })
-      if (found) {
-        setNewHabitInitial({ date: isoDate, time }); setNewHabitInitialType(found.kind === 'Blank' ? 'do' : undefined); setOpenNewHabit(true)
-      } else {
-        setNewHabitInitial({ date: isoDate, time }); setOpenNewFrame(true)
-      }
+      // open habit creation prefilled with selected slot
+      setNewHabitInitial({ date: isoDate, time }); setOpenNewHabit(true)
     }}
     onEventChange={(id: string, updated) => handleEventChange(id, updated)}
-  onFrameChange={(id: string, updated) => handleFrameChange(id, updated)}
-    frames={frames}
-    onFrameClick={(frame: any, start?: Date) => {
-      // open new habit prefilled with frame date/time and Good type
-      const iso = frame.date ?? (start ? start.toISOString().slice(0,10) : undefined)
-      const time = start ? start.toISOString().slice(11,16) : undefined
-      setNewHabitInitial({ date: iso, time })
-      setNewHabitInitialType('do')
-      setOpenNewHabit(true)
-    }}
+    
     onRecurringAttempt={(habitId: string, updated) => {
       // open modal asking whether to apply to all same-name habits or only this occurrence
       setRecurringRequest({ habitId, start: updated.start, end: updated.end })
     }}
   />
+  </div>
         <section className="mt-6 rounded bg-white p-4 shadow dark:bg-[#0b0b0b]">
           <h2 className="mb-3 text-lg font-medium">Recent Activity</h2>
           <ul className="flex flex-col gap-2 text-sm text-zinc-600">
@@ -426,29 +514,24 @@ export default function DashboardPage() {
         </section>
       </main>
 
-      <NewGoalModal
+      <GoalModal
         open={openNewCategory}
         onClose={() => setOpenNewCategory(false)}
+        goal={null}
         onCreate={(payload: { name: string; details?: string; dueDate?: string; parentId?: string | null }) => createGoal(payload)}
         goals={goals}
       />
 
-      <NewHabitModal
-        open={openNewHabit}
-        onClose={() => { setOpenNewHabit(false); setNewHabitInitial(null); setNewHabitInitialType(undefined); }}
-        onCreate={(payload) => createHabit(payload)}
-        categories={goals}
-        initialDate={newHabitInitial?.date}
-        initialTime={newHabitInitial?.time}
-        initialType={newHabitInitialType}
+      <GoalModal
+        open={openGoalModal}
+        onClose={() => { setOpenGoalModal(false); setEditingGoalId(null); }}
+        goal={editingGoal}
+        onUpdate={(g) => updateGoal(g)}
+        onDelete={(id) => deleteGoal(id)}
+        goals={goals}
       />
-      <NewFrameModal
-        open={openNewFrame}
-        onClose={() => { setOpenNewFrame(false); setNewHabitInitial(null); }}
-        onCreate={(payload) => createFrame(payload)}
-        initialDate={newHabitInitial?.date}
-        initialTime={newHabitInitial?.time}
-      />
+
+      {/* NewHabit: creation modal (Frame feature removed) */}
       <HabitModal
         key={selectedHabit?.id ?? 'none'}
         open={openHabitModal}
@@ -456,6 +539,18 @@ export default function DashboardPage() {
         habit={selectedHabit}
         onUpdate={(updated) => setHabits((s) => s.map(h => h.id === updated.id ? updated : h))}
         onDelete={(id) => setHabits((s) => s.filter(h => h.id !== id))}
+        categories={goals}
+      />
+
+      {/* Creation modal: reuse HabitModal for New Habit */}
+      <HabitModal
+        open={openNewHabit}
+        onClose={() => { setOpenNewHabit(false); setNewHabitInitial(null); setNewHabitInitialType(undefined); }}
+        habit={null}
+        initial={{ date: newHabitInitial?.date, time: newHabitInitial?.time, type: newHabitInitialType }}
+        onCreate={(payload) => {
+          createHabit(payload as any)
+        }}
         categories={goals}
       />
 
@@ -516,8 +611,128 @@ export default function DashboardPage() {
   );
 }
 
-function FullCalendarWrapper({ habits, onEventClick, onSlotSelect, onEventChange, frames, onFrameClick, onFrameChange, onRecurringAttempt }: { habits: Habit[]; onEventClick?: (id: string) => void; onSlotSelect?: (isoDate: string, time?: string) => void; onEventChange?: (id: string, updated: { start?: string; end?: string }) => void; frames?: any[]; onFrameClick?: (frame: any, start?: Date) => void; onFrameChange?: (id: string, updated: { start?: string; end?: string }) => void; onRecurringAttempt?: (habitId: string, updated: { start?: string; end?: string }) => void }) {
+function FullCalendarWrapper({ habits, onEventClick, onSlotSelect, onEventChange, onRecurringAttempt }: { habits: Habit[]; onEventClick?: (id: string) => void; onSlotSelect?: (isoDate: string, time?: string) => void; onEventChange?: (id: string, updated: { start?: string; end?: string }) => void; onRecurringAttempt?: (habitId: string, updated: { start?: string; end?: string }) => void }) {
   const now = new Date()
+  const EXPAND_DAYS = 90 // when outdates present, expand recurring timings this many days into the future
+  function ymd(d: Date) { return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}` }
+  function addDays(d: Date, n: number) { const x = new Date(d); x.setDate(x.getDate()+n); return x }
+  function parseYmd(s?: string) { if (!s) return undefined; const parts = s.split('-').map(x => Number(x)); if (parts.length>=3 && !Number.isNaN(parts[0])) return new Date(parts[0], parts[1]-1, parts[2]); const dd = new Date(s); return isNaN(dd.getTime()) ? undefined : dd }
+
+  // Given an event interval [s,e) and an array of outdate Timing entries, return array of remaining intervals (non-overlapping with outdates)
+  function subtractOutdatesFromInterval(s: Date, e: Date, outdates: any[] = [], habit?: any): Array<{ start: Date; end: Date }> {
+    if (!outdates || outdates.length === 0) return [{ start: s, end: e }]
+    // gather exclusion intervals for the date range of [s,e)
+    const exs: Array<{ start: Date; end: Date }> = []
+    // for each outdate timing, determine occurrences that may overlap (we'll evaluate by day between s and e)
+    const day0 = new Date(s); day0.setHours(0,0,0,0)
+    const dayN = new Date(e); dayN.setHours(0,0,0,0)
+    const days = Math.max(1, Math.ceil((dayN.getTime() - day0.getTime())/(24*3600*1000)) + 1)
+    for (const od of outdates) {
+      for (let i=0;i<days;i++) {
+        const d = addDays(day0, i)
+        // check if outdate applies to this date
+        if (od.type === 'Date') {
+          if (!od.date) continue
+          const odDate = parseYmd(od.date)
+          if (!odDate) continue
+          if (odDate.getFullYear() === d.getFullYear() && odDate.getMonth() === d.getMonth() && odDate.getDate() === d.getDate()) {
+            if (od.start) {
+              const exsStart = new Date(`${od.date}T${od.start}:00`)
+              const exsEnd = od.end ? new Date(`${od.date}T${od.end}:00`) : new Date(exsStart.getTime() + 60*60*1000)
+              exs.push({ start: exsStart, end: exsEnd })
+            } else {
+              // all-day exclusion: exclude whole day
+              const exsStart = new Date(d); exsStart.setHours(0,0,0,0)
+              const exsEnd = new Date(d); exsEnd.setHours(23,59,59,999)
+              exs.push({ start: exsStart, end: exsEnd })
+            }
+          }
+        } else if (od.type === 'Daily') {
+          // applies every day
+          if (od.start) {
+            const dateStr = ymd(d)
+            const exsStart = new Date(`${dateStr}T${od.start}:00`)
+            const exsEnd = od.end ? new Date(`${dateStr}T${od.end}:00`) : new Date(exsStart.getTime() + 60*60*1000)
+            exs.push({ start: exsStart, end: exsEnd })
+          } else {
+            const exsStart = new Date(d); exsStart.setHours(0,0,0,0)
+            const exsEnd = new Date(d); exsEnd.setHours(23,59,59,999)
+            exs.push({ start: exsStart, end: exsEnd })
+          }
+        } else if (od.type === 'Weekly') {
+          // optional cron format WEEKDAYS:0,1,2
+          let weekdays: number[] | null = null
+          if (od.cron && String(od.cron).startsWith('WEEKDAYS:')) weekdays = (od.cron.split(':')[1] || '').split(',').map((x: string) => Number(x)).filter((n: number) => !Number.isNaN(n))
+          if (!weekdays || weekdays.includes(d.getDay())) {
+            if (od.start) {
+              const dateStr = ymd(d)
+              const exsStart = new Date(`${dateStr}T${od.start}:00`)
+              const exsEnd = od.end ? new Date(`${dateStr}T${od.end}:00`) : new Date(exsStart.getTime() + 60*60*1000)
+              exs.push({ start: exsStart, end: exsEnd })
+            } else {
+              const exsStart = new Date(d); exsStart.setHours(0,0,0,0)
+              const exsEnd = new Date(d); exsEnd.setHours(23,59,59,999)
+              exs.push({ start: exsStart, end: exsEnd })
+            }
+          }
+        } else if (od.type === 'Monthly') {
+          // apply if day of month matches od.date day or if od.date omitted, use base
+          const odDay = od.date ? parseYmd(od.date) : null
+          const match = odDay ? (odDay.getDate() === d.getDate()) : true
+          if (match) {
+            if (od.start) {
+              const dateStr = ymd(d)
+              const exsStart = new Date(`${dateStr}T${od.start}:00`)
+              const exsEnd = od.end ? new Date(`${dateStr}T${od.end}:00`) : new Date(exsStart.getTime() + 60*60*1000)
+              exs.push({ start: exsStart, end: exsEnd })
+            } else {
+              const exsStart = new Date(d); exsStart.setHours(0,0,0,0)
+              const exsEnd = new Date(d); exsEnd.setHours(23,59,59,999)
+              exs.push({ start: exsStart, end: exsEnd })
+            }
+          }
+        }
+      }
+    }
+
+    if (exs.length === 0) return [{ start: s, end: e }]
+    // merge exclusion intervals
+    exs.sort((a,b) => a.start.getTime() - b.start.getTime())
+    const merged: Array<{ start: Date; end: Date }> = []
+    for (const x of exs) {
+      if (!merged.length) merged.push({ ...x })
+      else {
+        const last = merged[merged.length-1]
+        if (x.start.getTime() <= last.end.getTime()) {
+          if (x.end.getTime() > last.end.getTime()) last.end = x.end
+        } else merged.push({ ...x })
+      }
+    }
+
+    // subtract merged exclusions from [s,e)
+    let remaining: Array<{ start: Date; end: Date }> = [{ start: s, end: e }]
+    for (const ex of merged) {
+      const next: Array<{ start: Date; end: Date }> = []
+      for (const r of remaining) {
+        // no overlap
+        if (ex.end.getTime() <= r.start.getTime() || ex.start.getTime() >= r.end.getTime()) {
+          next.push(r)
+          continue
+        }
+        // overlap: left piece
+        if (ex.start.getTime() > r.start.getTime()) {
+          next.push({ start: r.start, end: new Date(Math.min(r.end.getTime(), ex.start.getTime())) })
+        }
+        // overlap: right piece
+        if (ex.end.getTime() < r.end.getTime()) {
+          next.push({ start: new Date(Math.max(r.start.getTime(), ex.end.getTime())), end: r.end })
+        }
+      }
+      remaining = next
+      if (!remaining.length) break
+    }
+    return remaining
+  }
   const start = new Date(now)
   start.setHours(0,0,0,0)
   const end = new Date(start)
@@ -532,6 +747,113 @@ function FullCalendarWrapper({ habits, onEventClick, onSlotSelect, onEventChange
       // Skip rendering habits that are 'avoid' (Bad) by default
       if (h.type === 'avoid') continue
       const policy = (h as any).policy ?? 'Schedule'
+      // If the habit has explicit timings, materialize events from them (takes precedence)
+      const timings = (h as any).timings ?? []
+      if (timings && timings.length) {
+        for (let ti = 0; ti < timings.length; ti++) {
+          const t = timings[ti]
+          try {
+            const evIdBase = `${h.id}-${ti}`
+            const outdates = (h as any).outdates ?? []
+            if (t.type === 'Date' && t.date) {
+              if (t.start) {
+                const startDt = new Date(`${t.date}T${t.start}:00`)
+                const endDt = t.end ? new Date(`${t.date}T${t.end}:00`) : new Date(startDt.getTime() + 60*60*1000)
+                const remain = subtractOutdatesFromInterval(startDt, endDt, outdates, h)
+                for (let ri=0; ri<remain.length; ri++) {
+                  const r = remain[ri]
+                  const startIso = r.start.toISOString()
+                  const endIso = r.end.toISOString()
+                  ev.push({ title: h.name, start: startIso, end: endIso, allDay: false, id: `${evIdBase}-${ri}`, editable: true, className: 'vow-habit', extendedProps: { habitId: h.id, timingIndex: ti } })
+                }
+              } else {
+                // all-day single date: if any outdate excludes whole day, skip
+                const skip = outdates.some((od: any) => od.type === 'Date' && od.date === t.date)
+                if (!skip) ev.push({ title: h.name, start: t.date, allDay: true, id: evIdBase, editable: true, className: 'vow-habit', extendedProps: { habitId: h.id, timingIndex: ti } })
+              }
+            } else {
+              const freq = t.type === 'Daily' ? 'DAILY' : t.type === 'Weekly' ? 'WEEKLY' : t.type === 'Monthly' ? 'MONTHLY' : undefined
+              if (freq) {
+                const dateStr = t.date ?? h.dueDate ?? ymd(new Date())
+                if (t.start) {
+                  // if there are outdates, expand occurrences and subtract; otherwise use rrule for efficiency
+                  if (outdates.length) {
+                    const base = parseYmd(dateStr) ?? new Date()
+                    for (let d = 0; d < EXPAND_DAYS; d++) {
+                      const day = addDays(base, d)
+                      // decide if this day is an occurrence
+                      let include = false
+                      if (t.type === 'Daily') include = true
+                      else if (t.type === 'Weekly') {
+                        if (t.cron && String(t.cron).startsWith('WEEKDAYS:')) {
+                          const wk = (t.cron.split(':')[1] || '').split(',').map((x: string) => Number(x)).filter((n: number) => !Number.isNaN(n))
+                          include = wk.includes(day.getDay())
+                        } else {
+                          // if no weekdays info, assume same weekday as base
+                          include = day.getDay() === (parseYmd(t.date)?.getDay() ?? base.getDay())
+                        }
+                      } else if (t.type === 'Monthly') {
+                        include = (parseYmd(t.date)?.getDate() ?? base.getDate()) === day.getDate()
+                      }
+                      if (!include) continue
+                      const dateS = ymd(day)
+                      const startDt = new Date(`${dateS}T${t.start}:00`)
+                      const endDt = t.end ? new Date(`${dateS}T${t.end}:00`) : new Date(startDt.getTime() + 60*60*1000)
+                      const remain = subtractOutdatesFromInterval(startDt, endDt, outdates, h)
+                      for (let ri=0; ri<remain.length; ri++) {
+                        const r = remain[ri]
+                        ev.push({ title: h.name, start: r.start.toISOString(), end: r.end.toISOString(), allDay: false, id: `${evIdBase}-${dateS}-${ri}`, editable: true, className: 'vow-habit', extendedProps: { habitId: h.id, timingIndex: ti } })
+                      }
+                    }
+                  } else {
+                    // no outdates -> keep rrule-based event
+                    const dtstart = `${dateStr}T${t.start}:00`
+                    // compute duration like before
+                    let durationIso: string | undefined = undefined
+                    if (t.end) {
+                      const [sh, sm] = t.start.split(':').map((x: string) => parseInt(x, 10))
+                      const [eh, em] = t.end.split(':').map((x: string) => parseInt(x, 10))
+                      let startMinutes = sh * 60 + sm
+                      let endMinutes = eh * 60 + em
+                      if (endMinutes <= startMinutes) endMinutes += 24 * 60
+                      const diff = endMinutes - startMinutes
+                      const hours = Math.floor(diff / 60)
+                      const mins = diff % 60
+                      const hh = String(hours).padStart(2, '0')
+                      const mm = String(mins).padStart(2, '0')
+                      durationIso = `${hh}:${mm}:00`
+                      if (durationIso === '00:00:00') durationIso = '01:00:00'
+                    } else if (h.endTime && h.time) {
+                      const [sh, sm] = (t.start ?? h.time).split(':').map((x: string) => parseInt(x, 10))
+                      const [eh, em] = h.endTime.split(':').map((x: string) => parseInt(x, 10))
+                      let startMinutes = sh * 60 + sm
+                      let endMinutes = eh * 60 + em
+                      if (endMinutes <= startMinutes) endMinutes += 24 * 60
+                      const diff = endMinutes - startMinutes
+                      const hours = Math.floor(diff / 60)
+                      const mins = diff % 60
+                      const hh = String(hours).padStart(2, '0')
+                      const mm = String(mins).padStart(2, '0')
+                      durationIso = `${hh}:${mm}:00`
+                      if (durationIso === '00:00:00') durationIso = '01:00:00'
+                    } else {
+                      durationIso = '01:00:00'
+                    }
+
+                    ev.push({ title: h.name, rrule: { freq, dtstart }, duration: durationIso, id: evIdBase, editable: true, startEditable: true, durationEditable: true, isRecurring: true, extendedProps: { habitId: h.id, timingIndex: ti } })
+                  }
+                } else {
+                  ev.push({ title: h.name, rrule: { freq, dtstart: dateStr }, id: evIdBase, editable: true, startEditable: true, durationEditable: true, isRecurring: true, extendedProps: { habitId: h.id, timingIndex: ti } })
+                }
+              }
+            }
+          } catch (err) {
+            // ignore malformed timing entries
+          }
+        }
+        continue
+      }
+
       if (policy === 'Count') {
         // all-day event on dueDate or today if missing
         const dateStr = h.dueDate ?? new Date().toISOString().slice(0,10)
@@ -597,16 +919,9 @@ function FullCalendarWrapper({ habits, onEventClick, onSlotSelect, onEventChange
         }
       }
     }
-    // Add frames rendered as styled events so they can have borders and be overlaid by habits
-    for (const f of (frames ?? [])) {
-      if (!f.date) continue
-      const startIso = `${f.date}T${f.start_time}:00`
-      const endIso = `${f.date}T${f.end_time}:00`
-      const cls = `vow-frame ${f.kind === 'Blank' ? 'vow-frame-blank' : 'vow-frame-full'}`
-      ev.push({ title: f.name ?? '', start: startIso, end: endIso, allDay: false, id: f.id, className: cls, editable: true })
-    }
+    // frames removed
     return ev
-  }, [habits, frames])
+  }, [habits])
 
   // precompute day events/arcs for today/tomorrow
   const isDayNav = (navSelection === 'today' || navSelection === 'tomorrow')
@@ -698,13 +1013,9 @@ function FullCalendarWrapper({ habits, onEventClick, onSlotSelect, onEventChange
         }}
         eventClick={(clickInfo) => {
           const id = clickInfo.event.id
-          // if this id is a frame, call onFrameClick
-          const frame = (frames ?? []).find(f => f.id === id)
-          if (frame && onFrameClick) {
-            onFrameClick(frame, clickInfo.event.start ?? undefined)
-            return
-          }
-          if (onEventClick) onEventClick(id)
+          const ext = (clickInfo.event as any).extendedProps ?? {}
+          const habitId = ext.habitId ?? id
+          if (onEventClick) onEventClick(habitId)
         }}
         dateClick={(dateClickInfo) => {
           // single click on empty calendar slot
@@ -716,37 +1027,33 @@ function FullCalendarWrapper({ habits, onEventClick, onSlotSelect, onEventChange
           const id = dropInfo.event.id
           const startStr = (dropInfo.event.startStr as string) ?? (dropInfo.event.start ? dropInfo.event.start.toISOString() : undefined)
           const endStr = (dropInfo.event.endStr as string) ?? (dropInfo.event.end ? dropInfo.event.end.toISOString() : undefined)
-          const frame = (frames ?? []).find(f => f.id === id)
           // if this event came from a recurring rule, revert the change and notify parent
+          const ext = (dropInfo.event as any).extendedProps ?? {}
+          const habitId = ext.habitId ?? id
+          const timingIndex = ext.timingIndex
           const isRecurring = (dropInfo.event.extendedProps && (dropInfo.event.extendedProps as any).isRecurring) || ((dropInfo.event as any)._def && (dropInfo.event as any)._def.recurringDef)
           if (isRecurring) {
             // undo the visual move
             try { dropInfo.revert(); } catch (e) { /* ignore */ }
-            if (onRecurringAttempt) onRecurringAttempt(id, { start: startStr, end: endStr })
+            if (onRecurringAttempt) onRecurringAttempt(habitId, { start: startStr, end: endStr })
             return
           }
-          if (frame && onFrameChange) {
-            onFrameChange(id, { start: startStr, end: endStr })
-            return
-          }
-          if (onEventChange) onEventChange(id, { start: startStr, end: endStr })
+          if (onEventChange) onEventChange(habitId, { start: startStr, end: endStr })
         }}
         eventResize={(resizeInfo) => {
           const id = resizeInfo.event.id
           const startStr = (resizeInfo.event.startStr as string) ?? (resizeInfo.event.start ? resizeInfo.event.start.toISOString() : undefined)
           const endStr = (resizeInfo.event.endStr as string) ?? (resizeInfo.event.end ? resizeInfo.event.end.toISOString() : undefined)
-          const frame = (frames ?? []).find(f => f.id === id)
+          const ext = (resizeInfo.event as any).extendedProps ?? {}
+          const habitId = ext.habitId ?? id
+          const timingIndex = ext.timingIndex
           const isRecurring = (resizeInfo.event.extendedProps && (resizeInfo.event.extendedProps as any).isRecurring) || ((resizeInfo.event as any)._def && (resizeInfo.event as any)._def.recurringDef)
           if (isRecurring) {
             try { resizeInfo.revert(); } catch (e) { /* ignore */ }
-            if (onRecurringAttempt) onRecurringAttempt(id, { start: startStr, end: endStr })
+            if (onRecurringAttempt) onRecurringAttempt(habitId, { start: startStr, end: endStr })
             return
           }
-          if (frame && onFrameChange) {
-            onFrameChange(id, { start: startStr, end: endStr })
-            return
-          }
-          if (onEventChange) onEventChange(id, { start: startStr, end: endStr })
+          if (onEventChange) onEventChange(habitId, { start: startStr, end: endStr })
         }}
         events={events}
         height={600}

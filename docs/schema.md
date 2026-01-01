@@ -64,6 +64,7 @@ Habit (revised to support embedding into Availability)
 - end_time: time|null
 - repeat_label: string|null
 - recurrence: jsonb|null — normalized rrule-like object
+- timings: jsonb|null — array of Timing entries (see below). Each Timing maps UI Date/Daily/Weekly/Monthly to either a simple record or a cron expression used by scheduler.
 - embedPreference: object|null — UI hints about how to embed into availability (see examples)
   - { "embed": true, "preferEarlier": true }
 - created_at, updated_at
@@ -85,6 +86,29 @@ Behavioral notes for Bad habits:
 UX notes:
 - In the popup, place the Type (Good / Bad) selector near the top, with a short explanation: "Good = add as positive habit (shown on calendar). Bad = track as negative habit (hidden from calendar)."
 - If the user chooses Good and the policy is Schedule, allow the same inline flows to create or select Frames (availability) for placement.
+
+Timing / scheduling (new)
+- To support more flexible reminders and scheduler integration we introduce a `timings` array on Habit records. Each Timing has the shape:
+
+```json
+{
+  "type": "Date|Daily|Weekly|Monthly",
+  "date": "YYYY-MM-DD", // only for Date type
+  "start": "HH:MM",
+  "end": "HH:MM",
+  "cron": "(optional) cron expression"
+}
+```
+
+- Server-side, these Timing entries are converted to cron expressions for scheduler/backfill:
+  - Date: converted to a one-off cron (with exact date) or handled as a dated event
+  - Daily: cron expression on the time of `start` repeating every day
+  - Weekly: cron expression with weekday(s) derived from the user input (weekdays selection)
+  - Monthly: cron expression recurring monthly on the day-of-month (or by custom rule)
+
+- The frontend UI will continue to present the existing Date/Start/End controls; when the user clicks "Add timing" the UI will append a Timing object derived from the current Date/Start/End/Repeat settings. Multiple Timing entries are supported.
+
+Note: `cron` is optional in the Timing object; server can compute or validate cron from the timing type and times.
 
 
 ## Prisma schema example (habits + availability)

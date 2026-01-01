@@ -48,3 +48,28 @@ body {
 .fc-event:not(.vow-frame) {
   z-index: 5 !important;
 }
+
+/* Modern scrollbar for modal and other scrollable panels */
+.modern-scrollbar {
+  /* Firefox */
+  scrollbar-width: thin;
+  scrollbar-color: rgba(148,163,184,0.6) transparent;
+}
+.modern-scrollbar::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+.modern-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+.modern-scrollbar::-webkit-scrollbar-thumb {
+  background-color: rgba(96,165,250,0.95);
+  border-radius: 9999px;
+  border: 2px solid transparent;
+}
+.dark .modern-scrollbar::-webkit-scrollbar-thumb {
+  background-color: rgba(148,163,184,0.7);
+}
+
+/* Slight padding helper to ensure scrollbars don't overlap content */
+.modal-scroll-gap { padding-right: 0.6rem; }
