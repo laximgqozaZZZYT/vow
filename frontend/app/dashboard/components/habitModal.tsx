@@ -48,7 +48,7 @@ type Timing = {
     cron?: string
 }
 
-type Habit = { id: string; goalId: string; name: string; active: boolean; type: "do" | "avoid"; count: number; must?: number; duration?: number; reminders?: ({ kind: 'absolute'; time: string; weekdays: string[] } | { kind: 'relative'; minutesBefore: number })[]; dueDate?: string; time?: string; endTime?: string; repeat?: string; allDay?: boolean; notes?: string; createdAt: string; updatedAt: string; workloadUnit?: string; workloadTotal?: number; workloadPerCount?: number }
+type Habit = { id: string; goalId: string; name: string; active: boolean; type: "do" | "avoid"; count: number; must?: number; duration?: number; reminders?: ({ kind: 'absolute'; time: string; weekdays: string[] } | { kind: 'relative'; minutesBefore: number })[]; dueDate?: string; time?: string; endTime?: string; repeat?: string; allDay?: boolean; notes?: string; createdAt: string; updatedAt: string; workloadUnit?: string; workloadTotal?: number; workloadTotalEnd?: number; workloadPerCount?: number }
 
 type CreateHabitPayload = { name: string; goalId?: string; type: "do" | "avoid"; duration?: number; reminders?: any[]; dueDate?: string; time?: string; endTime?: string; repeat?: string; timings?: any[]; allDay?: boolean; notes?: string; workloadUnit?: string; workloadTotal?: number; workloadPerCount?: number }
 
@@ -64,6 +64,7 @@ export function HabitModal({ open, onClose, habit, onUpdate, onDelete, onCreate,
     // workload fields replace the old Policy concept
     const [workloadUnit, setWorkloadUnit] = React.useState<string>('')
     const [workloadTotal, setWorkloadTotal] = React.useState<number | undefined>(undefined)
+    const [workloadTotalEnd, setWorkloadTotalEnd] = React.useState<number | undefined>(undefined)
     const [workloadPerCount, setWorkloadPerCount] = React.useState<number>(1)
     const [goalId, setGoalId] = React.useState<string | undefined>(habit?.goalId)
     // clone incoming arrays to avoid accidentally sharing references between timings/outdates
@@ -85,6 +86,7 @@ export function HabitModal({ open, onClose, habit, onUpdate, onDelete, onCreate,
         if (habit) {
             setWorkloadUnit((habit as any)?.workloadUnit ?? '')
             setWorkloadTotal((habit as any)?.workloadTotal ?? (habit as any)?.targetCount ?? (habit as any)?.must ?? undefined)
+            setWorkloadTotalEnd((habit as any)?.workloadTotalEnd ?? undefined)
             setWorkloadPerCount((habit as any)?.workloadPerCount ?? 1)
             setName(habit?.name ?? '')
             setNotes(habit?.notes ?? '')
@@ -112,6 +114,7 @@ export function HabitModal({ open, onClose, habit, onUpdate, onDelete, onCreate,
             // creation defaults (use optional initial values)
             setWorkloadUnit('')
             setWorkloadTotal(undefined)
+            setWorkloadTotalEnd(undefined)
             setWorkloadPerCount(1)
             setName('')
             setNotes('')
@@ -130,6 +133,55 @@ export function HabitModal({ open, onClose, habit, onUpdate, onDelete, onCreate,
             setTimingWeekdays([])
         }
     }, [habit, initial, open])
+
+    function minutesFromHHMM(s?: string) {
+        if (!s) return null
+        const m = String(s).trim().match(/^(\d{1,2}):(\d{2})$/)
+        if (!m) return null
+        const hh = Number(m[1])
+        const mm = Number(m[2])
+        if (Number.isNaN(hh) || Number.isNaN(mm)) return null
+        return hh * 60 + mm
+    }
+
+    const timingDurations = React.useMemo(() => {
+        // duration in minutes per timing row; if end missing, treat as 0 (meaning "unknown")
+        return (timings ?? []).map((t) => {
+            if (!t.start) return 0
+            const s = minutesFromHHMM(t.start)
+            if (s === null) return 0
+            if (!t.end) return 0
+            const e = minutesFromHHMM(t.end)
+            if (e === null) return 0
+            const d = e - s
+            return d > 0 ? d : 0
+        })
+    }, [timings])
+
+    const totalTimingMinutes = React.useMemo(() => timingDurations.reduce((a, b) => a + b, 0), [timingDurations])
+
+    const autoLoadPerSetByTiming = React.useMemo(() => {
+        const dayTotal = typeof workloadTotal === 'number' && Number.isFinite(workloadTotal) ? workloadTotal : null
+        if (dayTotal === null || dayTotal <= 0) return (timings ?? []).map(() => null as number | null)
+        if (!timingDurations.length) return (timings ?? []).map(() => null as number | null)
+
+        // If we can't compute durations (sum==0), fall back to equal split across timings.
+        const denom = totalTimingMinutes > 0 ? totalTimingMinutes : timingDurations.length
+
+        return timingDurations.map((d) => {
+            const w = totalTimingMinutes > 0 ? d : 1
+            const v = dayTotal * (w / denom)
+            return Number.isFinite(v) ? v : null
+        })
+    }, [timings, timingDurations, totalTimingMinutes, workloadTotal])
+
+    const estimatedDaysToTotalEnd = React.useMemo(() => {
+        const endTotal = typeof workloadTotalEnd === 'number' && Number.isFinite(workloadTotalEnd) ? workloadTotalEnd : null
+        const dayTotal = typeof workloadTotal === 'number' && Number.isFinite(workloadTotal) ? workloadTotal : null
+        if (endTotal === null || endTotal <= 0) return null
+        if (dayTotal === null || dayTotal <= 0) return null
+        return Math.ceil(endTotal / dayTotal)
+    }, [workloadTotalEnd, workloadTotal])
 
     // only render the modal when open; hooks above run unconditionally to preserve order
     if (!open) return null
@@ -218,6 +270,9 @@ export function HabitModal({ open, onClose, habit, onUpdate, onDelete, onCreate,
                             {/* Workload section (moved) */}
                             <div className="mt-3">
                                 <h3 className="text-lg font-medium text-slate-100">Workload</h3>
+                                {estimatedDaysToTotalEnd !== null ? (
+                                    <div className="mt-1 text-xs text-slate-400">Estimated days to reach Load Total(End): <span className="font-semibold text-slate-200">{estimatedDaysToTotalEnd}</span> days</div>
+                                ) : null}
                                 <div className="mt-2 grid grid-cols-3 gap-3 items-center">
                                     <div>
                                         <div className="text-xs text-slate-400 mb-1">Unit</div>
@@ -228,8 +283,18 @@ export function HabitModal({ open, onClose, habit, onUpdate, onDelete, onCreate,
                                         <input type="number" min={1} value={workloadPerCount ?? 1} onChange={(e) => setWorkloadPerCount(Number(e.target.value) || 1)} className="w-full rounded border px-3 py-2 bg-white text-black dark:bg-slate-800 dark:text-slate-100 text-sm" />
                                     </div>
                                     <div>
-                                        <div className="text-xs text-slate-400 mb-1">Load Total</div>
+                                        <div className="text-xs text-slate-400 mb-1">Load Total(Day)</div>
                                         <input type="number" min={0} value={workloadTotal ?? ''} onChange={(e) => setWorkloadTotal(Number(e.target.value) || undefined)} className="w-full rounded border px-3 py-2 bg-white text-black dark:bg-slate-800 dark:text-slate-100 text-sm" />
+                                    </div>
+                                </div>
+
+                                <div className="mt-3 grid grid-cols-3 gap-3 items-center">
+                                    <div className="col-span-1">
+                                        <div className="text-xs text-slate-400 mb-1">Load Total(End) (optional)</div>
+                                        <input type="number" min={0} value={workloadTotalEnd ?? ''} onChange={(e) => setWorkloadTotalEnd(Number(e.target.value) || undefined)} className="w-full rounded border px-3 py-2 bg-white text-black dark:bg-slate-800 dark:text-slate-100 text-sm" />
+                                    </div>
+                                    <div className="col-span-2 text-xs text-slate-500">
+                                        Based on Load Total(Day), we estimate how many days it takes to reach Load Total(End).
                                     </div>
                                 </div>
                             </div>
@@ -303,6 +368,17 @@ export function HabitModal({ open, onClose, habit, onUpdate, onDelete, onCreate,
                                                                 </div>
                                                             </Popover.Panel>
                                                         </Popover>
+                                                    </div>
+                                                </div>
+
+                                                <div className="w-40">
+                                                    <div className="text-xs text-slate-500 mb-1">Auto Load / Set</div>
+                                                    <div className="w-full rounded border px-3 py-2 bg-slate-50 text-black dark:bg-slate-900/40 dark:text-slate-100 text-sm">
+                                                        {autoLoadPerSetByTiming[idx] === null ? (
+                                                            <span className="text-slate-400">-</span>
+                                                        ) : (
+                                                            <span className="font-medium">{autoLoadPerSetByTiming[idx]!.toFixed(2)} {workloadUnit || ''}</span>
+                                                        )}
                                                     </div>
                                                 </div>
 
