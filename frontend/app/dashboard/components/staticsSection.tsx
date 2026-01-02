@@ -4,6 +4,7 @@ import React from 'react'
 import { Popover } from '@headlessui/react'
 import { DayPicker } from 'react-day-picker'
 import 'react-day-picker/dist/style.css'
+import mermaid from 'mermaid'
 
 type TimingType = 'Date' | 'Daily' | 'Weekly' | 'Monthly'
 type Timing = {
@@ -51,6 +52,92 @@ type Goal = {
   isCompleted?: boolean | null
   createdAt?: string | null
   updatedAt?: string | null
+  parentId?: string | null
+}
+
+// Mermaid can throw "Diagram flowchart-v2 already registered" if initialized multiple times.
+// Guard initialization so it's done only once per page runtime.
+let mermaidInitialized = false
+function initMermaidOnce() {
+  if (mermaidInitialized) return
+  try {
+    if ((mermaid as any)?.initialize) {
+      mermaid.initialize({ startOnLoad: false })
+    }
+  } catch {
+    // ignore
+  }
+  mermaidInitialized = true
+}
+
+// Dashboard has a GoalMermaid component in page.tsx; we keep a light local copy here
+// so Statics can show the same "Goals relationships" as one of its pages.
+function GoalMermaidLite({ goals }: { goals: Goal[] }) {
+  const graph = React.useMemo(() => {
+    let s = 'flowchart TD\n'
+    for (const g of goals) {
+      const gid = `G_${String(g.id).replace(/[^a-zA-Z0-9_]/g, '_')}`
+      s += `  ${gid}["${String(g.name).replace(/"/g, '\\"')}"]\n`
+      if (g.parentId) {
+        const pgid = `G_${String(g.parentId).replace(/[^a-zA-Z0-9_]/g, '_')}`
+        s += `  ${pgid} --> ${gid}\n`
+      }
+    }
+    return s
+  }, [goals])
+
+  const containerRef = React.useRef<HTMLDivElement | null>(null)
+  const [renderError, setRenderError] = React.useState<string | null>(null)
+
+  React.useEffect(() => {
+    initMermaidOnce()
+    let cancelled = false
+
+    async function run() {
+      try {
+        const el = containerRef.current
+        if (!el) return
+        el.innerHTML = ''
+
+        // Mermaid renders based on a `.mermaid` element's textContent.
+        const m = document.createElement('div')
+        m.className = 'mermaid'
+        m.textContent = graph
+        el.appendChild(m)
+
+        // Mermaid v10+: run({ nodes }). Legacy: init(undefined, node)
+        const mm: any = mermaid as any
+        if (mm?.run) {
+          await mm.run({ nodes: [m] })
+        } else if (mm?.init) {
+          mm.init(undefined, m)
+        }
+        if (!cancelled) setRenderError(null)
+      } catch (e: any) {
+        if (cancelled) return
+        setRenderError(String(e?.message ?? e ?? 'Failed to render mermaid'))
+      }
+    }
+
+    run()
+    return () => { cancelled = true }
+  }, [graph])
+
+  return (
+    <div className="min-w-0">
+      <div className="mb-2 text-xs text-zinc-500">Parent relationships (Mermaid)</div>
+      <div className="min-w-0 rounded border border-zinc-100 bg-black/10 p-2 dark:border-slate-800 dark:bg-white/5">
+        <div ref={containerRef} className="min-w-0" />
+      </div>
+      {renderError ? (
+        <div className="mt-2 rounded border border-red-500/40 bg-red-500/10 p-2 text-xs text-red-200">
+          {renderError}
+          <div className="mt-2 text-[11px] text-red-200/70">Fallback source:</div>
+          <pre className="mt-1 max-h-48 overflow-auto whitespace-pre-wrap break-words text-[11px] text-red-100/80">{graph}</pre>
+        </div>
+      ) : null}
+    </div>
+  )
 }
 
 type Point = { date: string; value: number }
@@ -873,6 +960,7 @@ export default function StaticsSection({ habits, activities, goals }: { habits: 
   const pages = React.useMemo(() => ([
     { id: 'counts', title: 'Counts vs Time' },
     { id: 'summary', title: 'Summary' },
+    { id: 'goals', title: 'Goals' },
   ] as const), [])
   const [pageIndex, setPageIndex] = React.useState(0)
 
@@ -1171,10 +1259,12 @@ export default function StaticsSection({ habits, activities, goals }: { habits: 
         </div>
       </div>
 
-      <div className="mt-4">
-        {activePage === 'summary' ? (
-          <div className="rounded border border-zinc-100 p-3 dark:border-slate-800">
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+      {/* Fixed-height page viewport so arrow positions don't shift across pages */}
+      <div className="mt-4 rounded border border-zinc-100 dark:border-slate-800 h-[520px] overflow-hidden">
+        <div className="h-full overflow-auto p-3">
+          {activePage === 'summary' ? (
+            <div className="min-w-0">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
               <div className="rounded border border-zinc-100 p-3 dark:border-slate-800">
                 <div className="text-xs text-zinc-500">現在のHabit</div>
                 <div className="mt-1 text-2xl font-semibold">{stats.recurringVisibleHabits.length}</div>
@@ -1232,10 +1322,14 @@ export default function StaticsSection({ habits, activities, goals }: { habits: 
                   )}
                 </div>
               </div>
+              </div>
             </div>
-          </div>
-        ) : (
-          <>
+          ) : activePage === 'goals' ? (
+            <div className="min-w-0">
+              <GoalMermaidLite goals={goals ?? []} />
+            </div>
+          ) : (
+            <>
             {eventPoints.length === 0 && !hasAnyRecurringVisibleHabit ? (
               <div className="text-sm text-zinc-500">No Pause/Done activity points in this range yet.</div>
             ) : (
@@ -1270,8 +1364,9 @@ export default function StaticsSection({ habits, activities, goals }: { habits: 
                 ) : null}
               </div>
             )}
-          </>
-        )}
+            </>
+          )}
+        </div>
       </div>
 
 

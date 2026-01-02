@@ -158,8 +158,8 @@ export default function DashboardPage() {
   const [openHabitModal, setOpenHabitModal] = useState(false);
   
   const [editLayoutOpen, setEditLayoutOpen] = useState(false);
-  type SectionId = 'next' | 'activity' | 'calendar' | 'goals' | 'statics'
-  const [pageSections, setPageSections] = useState<SectionId[]>(['next','activity','calendar','goals'])
+  type SectionId = 'next' | 'activity' | 'calendar' | 'statics'
+  const [pageSections, setPageSections] = useState<SectionId[]>(['next','activity','calendar','statics'])
 
   // Hydration safety: only read localStorage after mount, otherwise server/client HTML can diverge.
   useEffect(() => {
@@ -949,11 +949,6 @@ export default function DashboardPage() {
                 onEventChange={(id: string, updated) => handleEventChange(id, updated)}
                 onRecurringAttempt={(habitId: string, updated) => { setRecurringRequest({ habitId, start: updated.start, end: updated.end }) }}
               />
-            ) : sec === 'goals' ? (
-              <section key="goals" className="mt-6 rounded bg-white p-4 shadow dark:bg-[#0b0b0b]">
-                <h2 className="mb-3 text-lg font-medium">Goals</h2>
-                <GoalMermaid goals={goals} habits={habits} openGoals={openGoals} toggleGoal={toggleGoal} setGoalParent={setGoalParent} mergeGoals={mergeGoals} />
-              </section>
             ) : sec === 'statics' ? (
               <StaticsSection key="statics" habits={habits as any} activities={activities as any} goals={goals as any} />
             ) : null

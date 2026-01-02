@@ -2,7 +2,7 @@
 
 import React from 'react'
 
-type SectionId = 'next' | 'activity' | 'calendar' | 'goals' | 'statics'
+type SectionId = 'next' | 'activity' | 'calendar' | 'statics'
 
 export default function EditLayoutModal({ open, onClose, sections, onChange, onAdd, onDelete }: { open: boolean; onClose: () => void; sections: SectionId[]; onChange: (s: SectionId[]) => void; onAdd: (id: SectionId) => void; onDelete: (id: SectionId) => void }) {
   const [local, setLocal] = React.useState<SectionId[]>(sections || [])
@@ -26,7 +26,6 @@ export default function EditLayoutModal({ open, onClose, sections, onChange, onA
     { id: 'next', label: 'Next' },
     { id: 'activity', label: 'Activity' },
     { id: 'calendar', label: 'Calendar' },
-    { id: 'goals', label: 'Goals' },
     { id: 'statics', label: 'Statics' },
   ]
 
