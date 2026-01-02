@@ -1,6 +1,9 @@
 "use client"
 
 import React from 'react'
+import { Popover } from '@headlessui/react'
+import { DayPicker } from 'react-day-picker'
+import 'react-day-picker/dist/style.css'
 
 type TimingType = 'Date' | 'Daily' | 'Weekly' | 'Monthly'
 type Timing = {
@@ -42,6 +45,14 @@ type Activity = {
   durationSeconds?: number | null
 }
 
+type Goal = {
+  id: string
+  name: string
+  isCompleted?: boolean | null
+  createdAt?: string | null
+  updatedAt?: string | null
+}
+
 type Point = { date: string; value: number }
 
 type EventPoint = {
@@ -61,16 +72,50 @@ type EventPoint = {
 
 type RangeKey = 'auto' | '24h' | '7d' | '1mo' | '1y'
 
-function toLocalDatetimeValue(ts: number) {
-  const d = new Date(ts)
-  const pad = (n: number) => String(n).padStart(2, '0')
-  // For <input type="datetime-local">: YYYY-MM-DDTHH:mm (no seconds)
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`
+function isSameLocalDay(aTs: number, bTs: number) {
+  const a = new Date(aTs)
+  const b = new Date(bTs)
+  return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate()
 }
 
-function fromLocalDatetimeValue(v: string) {
-  // Interpreted in local timezone by Date constructor.
-  const ts = new Date(v).getTime()
+function safePct(n: number, d: number) {
+  if (!Number.isFinite(n) || !Number.isFinite(d) || d <= 0) return 0
+  return Math.max(0, Math.min(1, n / d))
+}
+
+function toLocalDateValue(ts: number) {
+  const d = new Date(ts)
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
+}
+
+function toLocalTimeValue(ts: number) {
+  const d = new Date(ts)
+  const pad = (n: number) => String(n).padStart(2, '0')
+  // For <input type="time">: HH:mm (24h)
+  return `${pad(d.getHours())}:${pad(d.getMinutes())}`
+}
+
+function toTimeMinutes(v: string): number | null {
+  const m = String(v).trim().match(/^([01]?\d|2[0-3]):([0-5]\d)$/)
+  if (!m) return null
+  const hh = Number(m[1])
+  const mm = Number(m[2])
+  return hh * 60 + mm
+}
+
+function combineLocalDateTimeToTs(dateYmd: string, timeHm: string) {
+  // date: YYYY-MM-DD, time: HH:mm
+  const dm = String(dateYmd).trim().match(/^(\d{4})-(\d{2})-(\d{2})$/)
+  const tmin = toTimeMinutes(timeHm)
+  if (!dm || tmin === null) return 0
+  const y = Number(dm[1])
+  const mo = Number(dm[2]) - 1
+  const da = Number(dm[3])
+  const hh = Math.floor(tmin / 60)
+  const mm = tmin % 60
+  const d = new Date(y, mo, da, hh, mm, 0, 0) // local
+  const ts = d.getTime()
   return Number.isFinite(ts) ? ts : 0
 }
 
@@ -85,6 +130,32 @@ function rangeLabel(k: RangeKey) {
 
 function isoDay(ts: string) {
   try { return new Date(ts).toISOString().slice(0, 10) } catch { return '' }
+}
+
+// build a list of time options (15-minute increments) with HH:mm labels
+function buildTimeOptions() {
+  const opts: { label: string; value: string }[] = []
+  for (let h = 0; h < 24; h++) {
+    for (let m = 0; m < 60; m += 15) {
+      const label = `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`
+      opts.push({ label, value: label })
+    }
+  }
+  return opts
+}
+
+function parseYmd(s?: string | null) {
+  if (!s) return undefined
+  const parts = String(s).split('-').map(x => Number(x))
+  if (parts.length >= 3 && !Number.isNaN(parts[0]) && !Number.isNaN(parts[1]) && !Number.isNaN(parts[2])) {
+    return new Date(parts[0], parts[1] - 1, parts[2])
+  }
+  const d = new Date(s)
+  return Number.isFinite(d.getTime()) ? d : undefined
+}
+
+function formatLocalDate(d: Date) {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 }
 
 function buildDailyCountSeries(activities: Activity[], habitId: string): Point[] {
@@ -510,12 +581,14 @@ function MultiEventChart({
   visibleHabitIds,
   onHover,
   range,
+  window,
 }: {
   habits: Habit[]
   points: EventPoint[]
   visibleHabitIds: string[]
   onHover: (p: EventPoint | null) => void
   range: RangeKey
+  window?: { fromTs: number; untilTs: number }
 }) {
   const width = 860
   const height = 220
@@ -536,7 +609,12 @@ function MultiEventChart({
 
   // Planned overlays are also plotted as progress ratio (0..1), so they share y-scale with actual.
 
-  const domain = React.useMemo(() => computeDomainTs(range, points), [range, points])
+  const domain = React.useMemo(() => {
+    if (window && Number.isFinite(window.fromTs) && Number.isFinite(window.untilTs) && window.untilTs > window.fromTs) {
+      return { minTs: window.fromTs, maxTs: window.untilTs }
+    }
+    return computeDomainTs(range, points)
+  }, [range, points, window?.fromTs, window?.untilTs])
   const minTs = domain.minTs
   const maxTs = domain.maxTs
 
@@ -790,10 +868,11 @@ function LineChart({ points, height = 180 }: { points: Point[]; height?: number 
   )
 }
 
-export default function StaticsSection({ habits, activities }: { habits: Habit[]; activities: Activity[] }) {
+export default function StaticsSection({ habits, activities, goals }: { habits: Habit[]; activities: Activity[]; goals?: Goal[] }) {
   // Carousel (we'll add more stat pages later)
   const pages = React.useMemo(() => ([
     { id: 'counts', title: 'Counts vs Time' },
+    { id: 'summary', title: 'Summary' },
   ] as const), [])
   const [pageIndex, setPageIndex] = React.useState(0)
 
@@ -831,13 +910,122 @@ export default function StaticsSection({ habits, activities }: { habits: Habit[]
 
   const eventPoints = baseEventPoints
 
+  const activeWindow = React.useMemo(() => {
+    return (Number.isFinite(fromTs) && Number.isFinite(untilTs) && untilTs > fromTs)
+      ? { fromTs, untilTs }
+      : undefined
+  }, [fromTs, untilTs])
+
+  const activePage = pages[pageIndex]?.id ?? 'counts'
+
   const hasAnyRecurringVisibleHabit = React.useMemo(() => {
     const visible = new Set(visibleHabitIds)
     return habits.some(h => visible.has(h.id) && isRecurring(h.repeat))
   }, [habits, visibleHabitIds])
 
+  const stats = React.useMemo(() => {
+    const now = Date.now()
+    const todayStart = new Date(now)
+    todayStart.setHours(0, 0, 0, 0)
+    const todayStartTs = todayStart.getTime()
+    const todayEndTs = todayStartTs + (24 * 60 - 1) * 60_000
+
+    const visible = new Set(visibleHabitIds)
+    const recurringVisibleHabits = habits.filter(h => visible.has(h.id) && isRecurring(h.repeat))
+
+    // progress ratio is based on planned-total denominator (same logic as chart)
+    const progressByHabit = recurringVisibleHabits
+      .map((h) => {
+        const series = buildPlannedSeriesForHabit(h as any, todayStartTs, todayEndTs)
+        const total = series.length ? series[series.length - 1].v : 0
+        const todayActivities = activities
+          .filter(a => (a.kind === 'pause' || a.kind === 'complete'))
+          .filter(a => a.habitId === h.id)
+          .map(a => safeTs(a.timestamp))
+          .filter(ts => ts >= todayStartTs && ts <= todayEndTs)
+
+        let done = 0
+        for (const ts of todayActivities) {
+          done = Math.max(done, plannedCumulativeAtTs(h, todayStartTs, ts))
+        }
+        const ratio = safePct(done, total)
+        return { habit: h, ratio, total, done }
+      })
+      .sort((a, b) => b.ratio - a.ratio)
+
+    const top3 = progressByHabit.slice(0, 3)
+    const worst3 = [...progressByHabit].sort((a, b) => a.ratio - b.ratio).slice(0, 3)
+
+    // Habit achievement rate
+    // Today: ratio >= 1 at end of day window based on recorded progress
+    const todayAchieved = progressByHabit.filter(x => x.ratio >= 1).length
+    const todayTotal = progressByHabit.length
+
+    // Cumulative: approximate using the selected window (custom if valid else based on range)
+    const windowStartTs = activeWindow?.fromTs ?? getRangeStartTs(range)
+    const windowEndTs = activeWindow?.untilTs ?? now
+
+    const cumulativeProgressByHabit = recurringVisibleHabits.map((h) => {
+      const series = buildPlannedSeriesForHabit(h as any, windowStartTs, windowEndTs)
+      const total = series.length ? series[series.length - 1].v : 0
+      const habitActs = activities
+        .filter(a => (a.kind === 'pause' || a.kind === 'complete'))
+        .filter(a => a.habitId === h.id)
+        .map(a => safeTs(a.timestamp))
+        .filter(ts => ts >= windowStartTs && ts <= windowEndTs)
+
+      let done = 0
+      for (const ts of habitActs) {
+        done = Math.max(done, plannedCumulativeAtTs(h, windowStartTs, ts))
+      }
+      const ratio = safePct(done, total)
+      return { habit: h, ratio, total, done }
+    })
+
+    const cumulativeAchieved = cumulativeProgressByHabit.filter(x => x.ratio >= 1).length
+    const cumulativeTotal = cumulativeProgressByHabit.length
+
+    const goalsArr = goals ?? []
+    // Goal achievement rate: based on isCompleted; "today" uses updatedAt local date.
+    const goalsCompleted = goalsArr.filter(g => !!g.isCompleted)
+    const goalsCompletedToday = goalsCompleted.filter(g => {
+      const ts = safeTs((g.updatedAt ?? g.createdAt ?? '') as any)
+      return ts > 0 && isSameLocalDay(ts, now)
+    })
+
+    return {
+      recurringVisibleHabits,
+      top3,
+      worst3,
+      habitRateToday: { achieved: todayAchieved, total: todayTotal, pct: safePct(todayAchieved, todayTotal) },
+      habitRateTotal: { achieved: cumulativeAchieved, total: cumulativeTotal, pct: safePct(cumulativeAchieved, cumulativeTotal) },
+      goalRateToday: { achieved: goalsCompletedToday.length, total: goalsArr.length, pct: safePct(goalsCompletedToday.length, goalsArr.length) },
+      goalRateTotal: { achieved: goalsCompleted.length, total: goalsArr.length, pct: safePct(goalsCompleted.length, goalsArr.length) },
+    }
+  }, [habits, activities, visibleHabitIds, range, activeWindow, goals])
+
   return (
-    <section className="rounded bg-white p-4 shadow dark:bg-[#0b0b0b]">
+    <section className="relative rounded bg-white p-4 shadow dark:bg-[#0b0b0b]">
+      {/* Edge-attached carousel arrows (replaces old buttons) */}
+      <button
+        type="button"
+        aria-label="Previous"
+        title="Previous"
+        onClick={() => setPageIndex((i) => (i - 1 + pages.length) % pages.length)}
+        className="absolute left-0 top-1/2 z-10 -translate-x-1/2 -translate-y-1/2 h-14 w-14 rounded-full border bg-white/40 shadow-sm backdrop-blur text-zinc-800 transition hover:bg-white/60 dark:border-slate-700 dark:bg-slate-900/35 dark:text-slate-100 dark:hover:bg-slate-900/55 opacity-60 hover:opacity-100"
+      >
+        ←
+      </button>
+      <button
+        type="button"
+        aria-label="Next"
+        title="Next"
+        onClick={() => setPageIndex((i) => (i + 1) % pages.length)}
+        className="absolute right-0 top-1/2 z-10 translate-x-1/2 -translate-y-1/2 h-14 w-14 rounded-full border bg-white/40 shadow-sm backdrop-blur text-zinc-800 transition hover:bg-white/60 dark:border-slate-700 dark:bg-slate-900/35 dark:text-slate-100 dark:hover:bg-slate-900/55 opacity-60 hover:opacity-100"
+      >
+        →
+      </button>
+
       <div className="flex items-start justify-between gap-3">
         <div>
           <h2 className="text-lg font-medium">Statics</h2>
@@ -845,23 +1033,7 @@ export default function StaticsSection({ habits, activities }: { habits: Habit[]
         </div>
 
         <div className="flex items-center gap-2">
-          <button
-            className="rounded border px-2 py-1 text-sm disabled:opacity-40"
-            disabled={pageIndex <= 0}
-            onClick={() => setPageIndex((i) => Math.max(0, i - 1))}
-            title="Previous"
-          >
-            ←
-          </button>
           <div className="text-sm font-medium">{pages[pageIndex]?.title ?? 'Stats'}</div>
-          <button
-            className="rounded border px-2 py-1 text-sm disabled:opacity-40"
-            disabled={pageIndex >= pages.length - 1}
-            onClick={() => setPageIndex((i) => Math.min(pages.length - 1, i + 1))}
-            title="Next"
-          >
-            →
-          </button>
         </div>
       </div>
 
@@ -886,29 +1058,109 @@ export default function StaticsSection({ habits, activities }: { habits: Habit[]
 
           <div className="ml-2 flex items-center gap-2">
             <div className="text-xs text-zinc-500">from</div>
-            <input
-              className="rounded border px-2 py-1 text-xs"
-              type="datetime-local"
-              lang="en-GB"
-              step={60}
-              value={toLocalDatetimeValue(fromTs)}
-              onChange={(e) => {
-                const next = fromLocalDatetimeValue(e.target.value)
-                setCustomWindow((prev) => ({ ...prev, fromTs: next }))
-              }}
-            />
+            <Popover className="relative">
+              <Popover.Button className="w-[140px] rounded border px-3 py-2 bg-white text-black dark:bg-slate-800 dark:text-slate-100 text-xs text-left">
+                {toLocalDateValue(fromTs)}
+              </Popover.Button>
+              <Popover.Panel className="absolute z-50 mt-2 left-0">
+                <div className="rounded bg-white p-4 shadow text-black dark:bg-slate-800 dark:text-slate-100 max-w-full">
+                  <DayPicker
+                    mode="single"
+                    selected={parseYmd(toLocalDateValue(fromTs))}
+                    onSelect={(d) => {
+                      if (!d) return
+                      const nextDate = formatLocalDate(d)
+                      const nextTs = combineLocalDateTimeToTs(nextDate, toLocalTimeValue(fromTs))
+                      setCustomWindow({ fromTs: nextTs, untilTs })
+                    }}
+                  />
+                </div>
+              </Popover.Panel>
+            </Popover>
+
+            <Popover className="relative">
+              {({ close }) => (
+                <>
+                  <Popover.Button className="w-[86px] rounded border px-3 py-2 bg-white text-black dark:bg-slate-800 dark:text-slate-100 text-xs font-mono text-left">
+                    {toLocalTimeValue(fromTs)}
+                  </Popover.Button>
+                  <Popover.Panel className="absolute z-50 mt-2 left-0 w-40">
+                    <div className="rounded bg-white p-2 shadow text-black dark:bg-slate-800 dark:text-slate-100">
+                      <div className="max-h-56 overflow-auto">
+                        {buildTimeOptions().map((t) => {
+                          const selected = t.value === toLocalTimeValue(fromTs)
+                          return (
+                            <button
+                              key={t.value}
+                              className={`w-full text-left px-2 py-1 rounded text-xs font-mono ${selected ? 'bg-sky-600 text-white' : 'hover:bg-gray-100 dark:hover:bg-slate-700'}`}
+                              onClick={() => {
+                                const nextTs = combineLocalDateTimeToTs(toLocalDateValue(fromTs), t.value)
+                                setCustomWindow({ fromTs: nextTs, untilTs })
+                                close()
+                              }}
+                            >
+                              {t.label}
+                            </button>
+                          )
+                        })}
+                      </div>
+                    </div>
+                  </Popover.Panel>
+                </>
+              )}
+            </Popover>
             <div className="text-xs text-zinc-500">until</div>
-            <input
-              className="rounded border px-2 py-1 text-xs"
-              type="datetime-local"
-              lang="en-GB"
-              step={60}
-              value={toLocalDatetimeValue(untilTs)}
-              onChange={(e) => {
-                const next = fromLocalDatetimeValue(e.target.value)
-                setCustomWindow((prev) => ({ ...prev, untilTs: next }))
-              }}
-            />
+            <Popover className="relative">
+              <Popover.Button className="w-[140px] rounded border px-3 py-2 bg-white text-black dark:bg-slate-800 dark:text-slate-100 text-xs text-left">
+                {toLocalDateValue(untilTs)}
+              </Popover.Button>
+              <Popover.Panel className="absolute z-50 mt-2 left-0">
+                <div className="rounded bg-white p-4 shadow text-black dark:bg-slate-800 dark:text-slate-100 max-w-full">
+                  <DayPicker
+                    mode="single"
+                    selected={parseYmd(toLocalDateValue(untilTs))}
+                    onSelect={(d) => {
+                      if (!d) return
+                      const nextDate = formatLocalDate(d)
+                      const nextTs = combineLocalDateTimeToTs(nextDate, toLocalTimeValue(untilTs))
+                      setCustomWindow({ fromTs, untilTs: nextTs })
+                    }}
+                  />
+                </div>
+              </Popover.Panel>
+            </Popover>
+
+            <Popover className="relative">
+              {({ close }) => (
+                <>
+                  <Popover.Button className="w-[86px] rounded border px-3 py-2 bg-white text-black dark:bg-slate-800 dark:text-slate-100 text-xs font-mono text-left">
+                    {toLocalTimeValue(untilTs)}
+                  </Popover.Button>
+                  <Popover.Panel className="absolute z-50 mt-2 left-0 w-40">
+                    <div className="rounded bg-white p-2 shadow text-black dark:bg-slate-800 dark:text-slate-100">
+                      <div className="max-h-56 overflow-auto">
+                        {buildTimeOptions().map((t) => {
+                          const selected = t.value === toLocalTimeValue(untilTs)
+                          return (
+                            <button
+                              key={t.value}
+                              className={`w-full text-left px-2 py-1 rounded text-xs font-mono ${selected ? 'bg-sky-600 text-white' : 'hover:bg-gray-100 dark:hover:bg-slate-700'}`}
+                              onClick={() => {
+                                const nextTs = combineLocalDateTimeToTs(toLocalDateValue(untilTs), t.value)
+                                setCustomWindow({ fromTs, untilTs: nextTs })
+                                close()
+                              }}
+                            >
+                              {t.label}
+                            </button>
+                          )
+                        })}
+                      </div>
+                    </div>
+                  </Popover.Panel>
+                </>
+              )}
+            </Popover>
           </div>
         </div>
 
@@ -920,41 +1172,108 @@ export default function StaticsSection({ habits, activities }: { habits: Habit[]
       </div>
 
       <div className="mt-4">
-        {eventPoints.length === 0 && !hasAnyRecurringVisibleHabit ? (
-          <div className="text-sm text-zinc-500">No Pause/Done activity points in this range yet.</div>
-        ) : (
+        {activePage === 'summary' ? (
           <div className="rounded border border-zinc-100 p-3 dark:border-slate-800">
-            <MultiEventChart habits={habits} points={eventPoints} visibleHabitIds={visibleHabitIds} onHover={setHoverPoint} range={range} />
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+              <div className="rounded border border-zinc-100 p-3 dark:border-slate-800">
+                <div className="text-xs text-zinc-500">現在のHabit</div>
+                <div className="mt-1 text-2xl font-semibold">{stats.recurringVisibleHabits.length}</div>
+                <div className="mt-2 text-xs text-zinc-500">(表示対象・繰り返しHabitのみ)</div>
+              </div>
 
-            {hoverPoint ? (
-              <div className="mt-2 rounded border border-zinc-100 p-2 text-xs text-zinc-700 dark:border-slate-800 dark:text-zinc-200">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <div>
-                    <span className="font-medium">{habits.find(h => h.id === hoverPoint.habitId)?.name ?? hoverPoint.habitId}</span>
-                    <span className="ml-2 rounded bg-zinc-100 px-1.5 py-0.5 text-[10px] dark:bg-slate-800">{hoverPoint.kind === 'pause' ? 'Pause' : 'Done'}</span>
-                  </div>
-                  <div className="text-zinc-500">{new Date(hoverPoint.ts).toLocaleString()}</div>
-                </div>
+              <div className="rounded border border-zinc-100 p-3 dark:border-slate-800">
+                <div className="text-xs text-zinc-500">Habit達成率(本日)</div>
+                <div className="mt-1 text-2xl font-semibold">{Math.round(stats.habitRateToday.pct * 100)}%</div>
+                <div className="mt-1 text-xs text-zinc-500">{stats.habitRateToday.achieved}/{stats.habitRateToday.total}</div>
+              </div>
 
+              <div className="rounded border border-zinc-100 p-3 dark:border-slate-800">
+                <div className="text-xs text-zinc-500">Habit達成率(累計/選択範囲)</div>
+                <div className="mt-1 text-2xl font-semibold">{Math.round(stats.habitRateTotal.pct * 100)}%</div>
+                <div className="mt-1 text-xs text-zinc-500">{stats.habitRateTotal.achieved}/{stats.habitRateTotal.total}</div>
+              </div>
+
+              <div className="rounded border border-zinc-100 p-3 dark:border-slate-800">
+                <div className="text-xs text-zinc-500">Goal達成率(本日)</div>
+                <div className="mt-1 text-2xl font-semibold">{Math.round(stats.goalRateToday.pct * 100)}%</div>
+                <div className="mt-1 text-xs text-zinc-500">{stats.goalRateToday.achieved}/{stats.goalRateToday.total}</div>
+              </div>
+
+              <div className="rounded border border-zinc-100 p-3 dark:border-slate-800">
+                <div className="text-xs text-zinc-500">Goal達成率(累計)</div>
+                <div className="mt-1 text-2xl font-semibold">{Math.round(stats.goalRateTotal.pct * 100)}%</div>
+                <div className="mt-1 text-xs text-zinc-500">{stats.goalRateTotal.achieved}/{stats.goalRateTotal.total}</div>
+              </div>
+
+              <div className="rounded border border-zinc-100 p-3 dark:border-slate-800 sm:col-span-2 lg:col-span-3">
+                <div className="text-xs text-zinc-500">進捗の良いHabit TOP3 (今日)</div>
                 <div className="mt-2 grid grid-cols-1 sm:grid-cols-3 gap-2">
-                  <div className="rounded bg-zinc-50 p-2 dark:bg-slate-900/40">
-                    <div className="text-[10px] text-zinc-500">Workload (this point)</div>
-                    <div className="font-semibold">{hoverPoint.workloadDelta} {hoverPoint.workloadUnit}</div>
-                  </div>
-                  <div className="rounded bg-zinc-50 p-2 dark:bg-slate-900/40">
-                    <div className="text-[10px] text-zinc-500">WorkLoad Cumulative</div>
-                    <div className="font-semibold">{hoverPoint.workloadCumulative} {hoverPoint.workloadUnit}</div>
-                  </div>
-                  <div className="rounded bg-zinc-50 p-2 dark:bg-slate-900/40">
-                    <div className="text-[10px] text-zinc-500">WorkLoad Total</div>
-                    <div className="font-semibold">{hoverPoint.workloadTotal ?? '-'} {hoverPoint.workloadUnit}</div>
-                  </div>
+                  {stats.top3.length ? stats.top3.map((x) => (
+                    <div key={x.habit.id} className="rounded bg-zinc-50 p-2 dark:bg-slate-900/40">
+                      <div className="text-sm font-medium truncate">{x.habit.name}</div>
+                      <div className="mt-1 text-xs text-zinc-500">{Math.round(x.ratio * 100)}%</div>
+                    </div>
+                  )) : (
+                    <div className="text-sm text-zinc-500">No recurring habits.</div>
+                  )}
                 </div>
               </div>
-            ) : null}
+
+              <div className="rounded border border-zinc-100 p-3 dark:border-slate-800 sm:col-span-2 lg:col-span-3">
+                <div className="text-xs text-zinc-500">進捗の悪いHabit Worst3 (今日)</div>
+                <div className="mt-2 grid grid-cols-1 sm:grid-cols-3 gap-2">
+                  {stats.worst3.length ? stats.worst3.map((x) => (
+                    <div key={x.habit.id} className="rounded bg-zinc-50 p-2 dark:bg-slate-900/40">
+                      <div className="text-sm font-medium truncate">{x.habit.name}</div>
+                      <div className="mt-1 text-xs text-zinc-500">{Math.round(x.ratio * 100)}%</div>
+                    </div>
+                  )) : (
+                    <div className="text-sm text-zinc-500">No recurring habits.</div>
+                  )}
+                </div>
+              </div>
+            </div>
           </div>
+        ) : (
+          <>
+            {eventPoints.length === 0 && !hasAnyRecurringVisibleHabit ? (
+              <div className="text-sm text-zinc-500">No Pause/Done activity points in this range yet.</div>
+            ) : (
+              <div className="rounded border border-zinc-100 p-3 dark:border-slate-800">
+                <MultiEventChart habits={habits} points={eventPoints} visibleHabitIds={visibleHabitIds} onHover={setHoverPoint} range={range} />
+
+                {hoverPoint ? (
+                  <div className="mt-2 rounded border border-zinc-100 p-2 text-xs text-zinc-700 dark:border-slate-800 dark:text-zinc-200">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div>
+                        <span className="font-medium">{habits.find(h => h.id === hoverPoint.habitId)?.name ?? hoverPoint.habitId}</span>
+                        <span className="ml-2 rounded bg-zinc-100 px-1.5 py-0.5 text-[10px] dark:bg-slate-800">{hoverPoint.kind === 'pause' ? 'Pause' : 'Done'}</span>
+                      </div>
+                      <div className="text-zinc-500">{new Date(hoverPoint.ts).toLocaleString()}</div>
+                    </div>
+
+                    <div className="mt-2 grid grid-cols-1 sm:grid-cols-3 gap-2">
+                      <div className="rounded bg-zinc-50 p-2 dark:bg-slate-900/40">
+                        <div className="text-[10px] text-zinc-500">Workload (this point)</div>
+                        <div className="font-semibold">{hoverPoint.workloadDelta} {hoverPoint.workloadUnit}</div>
+                      </div>
+                      <div className="rounded bg-zinc-50 p-2 dark:bg-slate-900/40">
+                        <div className="text-[10px] text-zinc-500">WorkLoad Cumulative</div>
+                        <div className="font-semibold">{hoverPoint.workloadCumulative} {hoverPoint.workloadUnit}</div>
+                      </div>
+                      <div className="rounded bg-zinc-50 p-2 dark:bg-slate-900/40">
+                        <div className="text-[10px] text-zinc-500">WorkLoad Total</div>
+                        <div className="font-semibold">{hoverPoint.workloadTotal ?? '-'} {hoverPoint.workloadUnit}</div>
+                      </div>
+                    </div>
+                  </div>
+                ) : null}
+              </div>
+            )}
+          </>
         )}
       </div>
+
 
       {editGraphOpen ? (
         <div className="fixed inset-0 z-50 flex items-start justify-center pt-12 bg-black/30">

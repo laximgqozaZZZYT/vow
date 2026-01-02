@@ -955,7 +955,7 @@ export default function DashboardPage() {
                 <GoalMermaid goals={goals} habits={habits} openGoals={openGoals} toggleGoal={toggleGoal} setGoalParent={setGoalParent} mergeGoals={mergeGoals} />
               </section>
             ) : sec === 'statics' ? (
-              <StaticsSection key="statics" habits={habits as any} activities={activities as any} />
+              <StaticsSection key="statics" habits={habits as any} activities={activities as any} goals={goals as any} />
             ) : null
           ))}
         </div>
