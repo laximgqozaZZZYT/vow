@@ -308,7 +308,22 @@ export function HabitModal({ open, onClose, habit, onUpdate, onDelete, onCreate,
 
                                                 <div className="ml-auto flex items-center gap-2">
                                                     {idx === 0 ? (
-                                                        <button type="button" onClick={() => setTimings(s => [...s, { type: s[0]?.type ?? 'Daily', start: s[0]?.start ?? undefined, end: s[0]?.end ?? undefined }])} className="rounded bg-slate-100 p-1" aria-label="Add row" title="Add row">
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => setTimings(s => [
+                                                                ...s,
+                                                                {
+                                                                    type: s[0]?.type ?? 'Daily',
+                                                                    // preset new rows' date from the first row (if present)
+                                                                    date: s[0]?.date ?? undefined,
+                                                                    start: s[0]?.start ?? undefined,
+                                                                    end: s[0]?.end ?? undefined,
+                                                                },
+                                                            ])}
+                                                            className="rounded bg-slate-100 p-1"
+                                                            aria-label="Add row"
+                                                            title="Add row"
+                                                        >
                                                             <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-slate-700" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                                                                 <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
                                                             </svg>
@@ -420,7 +435,22 @@ export function HabitModal({ open, onClose, habit, onUpdate, onDelete, onCreate,
                                                 <div className="ml-auto flex items-center gap-2">
                                                     {idx === 0 ? (
                                                         <div className="flex items-center gap-2">
-                                                            <button type="button" onClick={() => setOutdates(s => [...s, { type: s[0]?.type ?? 'Daily', start: s[0]?.start ?? undefined, end: s[0]?.end ?? undefined }])} className="rounded bg-slate-100 p-1" aria-label="Add outdate" title="Add outdate">
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => setOutdates(s => [
+                                                                    ...s,
+                                                                    {
+                                                                        type: s[0]?.type ?? 'Daily',
+                                                                        // preset new rows' date from the first row (if present)
+                                                                        date: s[0]?.date ?? undefined,
+                                                                        start: s[0]?.start ?? undefined,
+                                                                        end: s[0]?.end ?? undefined,
+                                                                    },
+                                                                ])}
+                                                                className="rounded bg-slate-100 p-1"
+                                                                aria-label="Add outdate"
+                                                                title="Add outdate"
+                                                            >
                                                                 <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-slate-700" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                                                                     <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
                                                                 </svg>

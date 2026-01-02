@@ -1092,10 +1092,31 @@ export default function DashboardPage() {
 
 function FullCalendarWrapper({ habits, goals, onEventClick, onSlotSelect, onEventChange, onRecurringAttempt }: { habits: Habit[]; goals: Goal[]; onEventClick?: (id: string) => void; onSlotSelect?: (isoDate: string, time?: string, endTime?: string) => void; onEventChange?: (id: string, updated: { start?: string; end?: string; timingIndex?: number }) => void; onRecurringAttempt?: (habitId: string, updated: { start?: string; end?: string; timingIndex?: number }) => void }) {
   const now = new Date()
-  const EXPAND_DAYS = 90 // when outdates present, expand recurring timings this many days into the future
+  // When a habit has recurring timings but no explicit on-disk expansion, we need to materialize
+  // occurrences for the calendar UI.
+  //
+  // Requirement:
+  // - If the habit belongs to a goal with dueDate: expand up to that dueDate.
+  // - If no goal dueDate: expand indefinitely (we approximate with a long horizon).
+  const INDEFINITE_HORIZON_DAYS = 365 * 5
   function ymd(d: Date) { return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}` }
   function addDays(d: Date, n: number) { const x = new Date(d); x.setDate(x.getDate()+n); return x }
   function parseYmd(s?: string) { if (!s) return undefined; const parts = s.split('-').map(x => Number(x)); if (parts.length>=3 && !Number.isNaN(parts[0])) return new Date(parts[0], parts[1]-1, parts[2]); const dd = new Date(s); return isNaN(dd.getTime()) ? undefined : dd }
+
+  function getGoalDueDate(goalId: string): Date | undefined {
+    const g = (goals ?? []).find((x) => x.id === goalId)
+    return g?.dueDate ? parseYmd(String(g.dueDate)) : undefined
+  }
+
+  function computeExpandDays(base: Date, goalDue?: Date): number {
+    const horizon = goalDue ?? addDays(base, INDEFINITE_HORIZON_DAYS)
+    const endDay = new Date(horizon)
+    endDay.setHours(0, 0, 0, 0)
+    const baseDay = new Date(base)
+    baseDay.setHours(0, 0, 0, 0)
+    const days = Math.ceil((endDay.getTime() - baseDay.getTime()) / (24 * 3600 * 1000))
+    return Math.max(1, days + 1)
+  }
 
   // Given an event interval [s,e) and an array of outdate Timing entries, return array of remaining intervals (non-overlapping with outdates)
   function subtractOutdatesFromInterval(s: Date, e: Date, outdates: any[] = [], habit?: any): Array<{ start: Date; end: Date }> {
@@ -1220,6 +1241,23 @@ function FullCalendarWrapper({ habits, goals, onEventClick, onSlotSelect, onEven
   const [navSelection, setNavSelection] = useState<'today' | 'tomorrow' | 'week' | 'month'>('today')
   // displayFormat removed: always use calendar TD for today/tomorrow
 
+  function scrollToNowCenter() {
+    const cal = calendarRef.current?.getApi?.()
+    if (!cal) return
+    try {
+      const now = new Date()
+      // Center: scroll a few hours earlier so "now" is around the middle.
+      const seconds = Math.max(0, now.getHours() * 3600 + now.getMinutes() * 60 - 3 * 3600)
+      cal.scrollToTime(seconds)
+    } catch {
+      // ignore
+    }
+  }
+
+  // Note: scrollToTime only works after the timeGrid view has mounted.
+  // We trigger the scroll from FullCalendar lifecycle callbacks (below),
+  // rather than relying on a bare setTimeout(0).
+
   const events = useMemo(() => {
     const ev: any[] = [];
     const goalsById = Object.fromEntries((goals ?? []).map(g => [g.id, g])) as Record<string, Goal>
@@ -1253,12 +1291,26 @@ function FullCalendarWrapper({ habits, goals, onEventClick, onSlotSelect, onEven
             // For recurring timings without a start time, render an all-day placeholder on base date
             const baseDate = t.date ?? h.dueDate ?? new Date().toISOString().slice(0,10);
             if (t.start) {
-              // materialize next 7 occurrences (simple fallback)
+              // Expand occurrences until the goal dueDate; if no dueDate, use a long horizon.
               const base = parseYmd(t.date ?? h.dueDate ?? ymd(new Date())) ?? new Date();
-              for (let d = 0; d < 7; d++) {
-                const day = addDays(base, d);
-                const dateS = ymd(day);
-                ev.push({ title: h.name, start: `${dateS}T${t.start}:00`, end: t.end ? `${dateS}T${t.end}:00` : undefined, allDay: false, id: `${evIdBase}-${dateS}`, editable: true, className: 'vow-habit', extendedProps: { habitId: h.id, timingIndex: ti } });
+              const goalDue = getGoalDueDate(h.goalId)
+              const expandDays = computeExpandDays(base, goalDue)
+              for (let d = 0; d < expandDays; d++) {
+                const day = addDays(base, d)
+                const dateS = ymd(day)
+                // Respect simple timing types (Daily/Weekly/Monthly); Date is handled earlier.
+                if (t.type === 'Weekly') {
+                  let weekdays: number[] | null = null
+                  if (t.cron && String(t.cron).startsWith('WEEKDAYS:')) {
+                    weekdays = (t.cron.split(':')[1] || '').split(',').map((x: string) => Number(x)).filter((n: number) => !Number.isNaN(n))
+                  }
+                  if (weekdays && !weekdays.includes(day.getDay())) continue
+                }
+                if (t.type === 'Monthly') {
+                  const ref = parseYmd(t.date)
+                  if (ref && ref.getDate() !== day.getDate()) continue
+                }
+                ev.push({ title: h.name, start: `${dateS}T${t.start}:00`, end: t.end ? `${dateS}T${t.end}:00` : undefined, allDay: false, id: `${evIdBase}-${dateS}`, editable: true, className: 'vow-habit', extendedProps: { habitId: h.id, timingIndex: ti } })
               }
             } else {
               ev.push({ title: h.name, start: baseDate, allDay: true, id: evIdBase, editable: true, className: 'vow-habit', extendedProps: { habitId: h.id, timingIndex: ti } });
@@ -1328,6 +1380,8 @@ function FullCalendarWrapper({ habits, goals, onEventClick, onSlotSelect, onEven
                 // show only today's schedule
                 cal.changeView('timeGridDay')
                 setNavSelection('today')
+                // after the view/date updates, scroll the day view to center around now
+                window.setTimeout(() => scrollToNowCenter(), 50)
               } else if (b === 'tomorrow') {
                 const t = new Date(); t.setDate(t.getDate() + 1)
                 cal.gotoDate(t)
@@ -1353,6 +1407,15 @@ function FullCalendarWrapper({ habits, goals, onEventClick, onSlotSelect, onEven
         ref={calendarRef}
         plugins={[ timeGridPlugin, dayGridPlugin, interactionPlugin, rrulePlugin ]}
         initialView={navSelection === 'today' || navSelection === 'tomorrow' ? 'timeGridDay' : navSelection === 'week' ? 'timeGridWeek' : 'dayGridMonth'}
+        nowIndicator={true}
+        viewDidMount={() => {
+          // Run once the view is mounted; for initial load with 'today', this ensures scroll works.
+          if (navSelection === 'today') window.setTimeout(() => scrollToNowCenter(), 0)
+        }}
+        datesSet={() => {
+          // When navigating, the view can re-render; keep 'today' centered on now.
+          if (navSelection === 'today') window.setTimeout(() => scrollToNowCenter(), 0)
+        }}
         editable={true}
         eventStartEditable={true}
         eventDurationEditable={true}

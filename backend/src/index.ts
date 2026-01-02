@@ -268,7 +268,24 @@ app.get('/goals/:id', async (req, res) => {
 app.post('/goals', async (req, res) => {
   const actor = await getActor(req);
   const { name, details, dueDate, parentId } = req.body;
-  const data: any = { name, details, dueDate, parentId };
+  const toDateOrNullOrUndefined = (v: any): Date | null | undefined => {
+    // support: undefined (not provided), null (clear), '' (clear), 'YYYY-MM-DD', ISO strings
+    if (typeof v === 'undefined') return undefined;
+    if (v === null) return null;
+    if (typeof v === 'string' && v.trim() === '') return null;
+    if (v instanceof Date) return v;
+    const d = new Date(String(v));
+    return Number.isNaN(d.getTime()) ? undefined : d;
+  };
+
+  const data: any = { name, details, parentId };
+  if (typeof dueDate !== 'undefined') {
+    const parsed = toDateOrNullOrUndefined(dueDate);
+    if (typeof parsed === 'undefined' && dueDate !== undefined) {
+      return res.status(400).json({ error: 'Invalid dueDate' });
+    }
+    data.dueDate = parsed;
+  }
   if (actor.type !== 'none') {
     data.ownerType = actor.type;
     data.ownerId = actor.id;
@@ -330,6 +347,24 @@ app.patch('/goals/:id', async (req, res) => {
     // Enforce ownership
     const existing = await prisma.goal.findFirst({ where: { id, ...(actor.type === 'none' ? {} : { ownerType: actor.type, ownerId: actor.id }) } as any });
     if (!existing) return res.status(404).json({ error: 'not found' });
+
+    // Normalize date-like strings for Prisma DateTime fields.
+    const toDateOrNullOrUndefined = (v: any): Date | null | undefined => {
+      if (typeof v === 'undefined') return undefined;
+      if (v === null) return null;
+      if (typeof v === 'string' && v.trim() === '') return null;
+      if (v instanceof Date) return v;
+      const d = new Date(String(v));
+      return Number.isNaN(d.getTime()) ? undefined : d;
+    };
+    if (typeof data.dueDate !== 'undefined') {
+      const parsed = toDateOrNullOrUndefined(data.dueDate);
+      if (typeof parsed === 'undefined') {
+        return res.status(400).json({ error: 'Invalid dueDate' });
+      }
+      data.dueDate = parsed;
+    }
+
     const updated = await prisma.goal.update({ where: { id }, data });
     res.json(updated);
   } catch (e: any) {
