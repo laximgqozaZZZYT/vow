@@ -7,6 +7,7 @@ import mermaid from 'mermaid'
 import { formatTime24, formatDateTime24 } from '../../lib/format'
 import { HabitModal, GoalModal } from "./components/modals";
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import { supabase } from '../../lib/supabaseClient'
 import FullCalendar from '@fullcalendar/react'
 import EditLayoutModal from './components/editLayoutModal'
@@ -37,10 +38,13 @@ type Goal = { id: string; name: string; details?: string; dueDate?: string | Dat
 type Habit = { id: string; goalId: string; name: string; active: boolean; type: "do" | "avoid"; count: number; must?: number; completed?: boolean; lastCompletedAt?: string; duration?: number; reminders?: ({ kind: 'absolute'; time: string; weekdays: string[] } | { kind: 'relative'; minutesBefore: number })[]; dueDate?: string; time?: string; endTime?: string; repeat?: string; allDay?: boolean; notes?: string; createdAt: string; updatedAt: string };
 
 export default function DashboardPage() {
+  const router = useRouter()
   const now = new Date().toISOString();
   const [goals, setGoals] = useState<Goal[]>([]);
 
   const [actorLabel, setActorLabel] = useState<string>('');
+  const [isAuthed, setIsAuthed] = useState<boolean>(false)
+  const [authError, setAuthError] = useState<string | null>(null)
 
   const [habits, setHabits] = useState<Habit[]>([]);
 
@@ -48,15 +52,31 @@ export default function DashboardPage() {
   useEffect(() => {
     (async () => {
       try {
+        // If OAuth failed, Supabase will redirect back with ?error=...&error_description=...
+        try {
+          const url = new URL(window.location.href)
+          const err = url.searchParams.get('error')
+          const desc = url.searchParams.get('error_description')
+          if (err) {
+            setAuthError(desc ? `${err}: ${desc}` : err)
+          } else {
+            setAuthError(null)
+          }
+        } catch {}
+
         // If logged in with Supabase, attach Bearer and merge guest data once.
         try {
           if (supabase) {
             const { data } = await supabase.auth.getSession()
             const accessToken = data?.session?.access_token ?? null
+            setIsAuthed(!!accessToken)
             ;(api as any).setBearerToken?.(accessToken)
             if (accessToken) {
               // Best-effort claim; it will no-op if no guest session.
               try { await (api as any).claim?.() } catch {}
+            }
+            if (!accessToken) {
+              ;(api as any).setBearerToken?.(null)
             }
           }
         } catch {}
@@ -82,6 +102,50 @@ export default function DashboardPage() {
       }
     })()
   }, [])
+
+  // Keep header auth state in sync after OAuth redirect/login.
+  useEffect(() => {
+    if (!supabase) return
+    const { data: sub } = supabase.auth.onAuthStateChange(async (_event: any, session: any) => {
+      const token = session?.access_token ?? null
+      setIsAuthed(!!token)
+      try {
+        ;(api as any).setBearerToken?.(token)
+      } catch {}
+      if (token) {
+        // Best-effort claim; safe to call multiple times.
+        try { await (api as any).claim?.() } catch {}
+      }
+    })
+
+    return () => {
+      try { sub?.subscription?.unsubscribe() } catch {}
+    }
+  }, [])
+
+  async function handleLogout() {
+    try {
+      await supabase?.auth.signOut()
+    } catch {}
+    try {
+      ;(api as any).setBearerToken?.(null)
+    } catch {}
+    setIsAuthed(false)
+
+    // Move user to login after logout
+    try {
+      router.push('/login')
+    } catch {}
+
+    // Best-effort refresh of actor label
+    try {
+      const me = await api.me();
+      const a = (me as any)?.actor;
+      if (a?.type === 'user') setActorLabel(`user:${a.id}`)
+      else if (a?.type === 'guest') setActorLabel(`guest:${a.id}`)
+      else setActorLabel('')
+    } catch {}
+  }
 
   const [selectedGoal, setSelectedGoal] = useState<string | null>(
     goals[0]?.id ?? null
@@ -642,29 +706,58 @@ export default function DashboardPage() {
 
   return (
     <div className="flex min-h-screen bg-zinc-50 dark:bg-black text-black dark:text-zinc-50">
-      {/* Top-left hamburger + label (styled to match sidebar) */}
-      <div className="fixed left-3 top-3 z-50 flex items-center gap-2 rounded bg-white text-black dark:bg-[#071013] dark:text-white px-2 py-1 shadow-md dark:border-slate-700">
-        <button onClick={() => setShowLeftPane((s) => !s)} aria-label="Toggle menu" className="px-2 py-1 text-2xl leading-none">
-          ☰
-        </button>
-        <div className="text-lg font-bold">VOW</div>
-      </div>
+      {/* Fixed header (always on top) */}
+      <header className="fixed inset-x-0 top-0 z-50 border-b border-zinc-200 bg-white/90 backdrop-blur dark:border-slate-700 dark:bg-[#071013]/90">
+        <div className="flex h-14 items-center justify-between px-2 sm:px-3">
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setShowLeftPane((s) => !s)}
+              aria-label="Toggle menu"
+              className="rounded px-2 py-1 text-2xl leading-none hover:bg-zinc-100 dark:hover:bg-white/10"
+            >
+              ☰
+            </button>
+            <div className="text-lg font-bold tracking-wide">VOW</div>
+          </div>
 
-      {/* Top-right Edit Layout button (styled to match top-left) */}
-      <div className="fixed right-3 top-3 z-50 flex items-center gap-2 rounded bg-white text-black dark:bg-[#071013] dark:text-white px-2 py-1 shadow-md dark:border-slate-700">
-        <button onClick={() => setEditLayoutOpen(true)} className="text-sm font-medium">Edit Layout</button>
-      </div>
+          <div className="flex items-center gap-2">
+            {actorLabel && (
+              <div className="hidden text-xs text-zinc-500 sm:block">{actorLabel}</div>
+            )}
+            {authError && (
+              <div className="hidden max-w-[420px] truncate text-xs text-amber-700 sm:block dark:text-amber-300" title={authError}>
+                {authError}
+              </div>
+            )}
+            {isAuthed ? (
+              <button
+                onClick={handleLogout}
+                className="rounded border border-red-200 bg-red-50 px-3 py-1.5 text-sm text-red-700 hover:bg-red-100 dark:border-red-900/40 dark:bg-red-950/20 dark:text-red-200 dark:hover:bg-red-950/35"
+              >
+                Logout
+              </button>
+            ) : (
+              <Link
+                href="/login"
+                className="rounded border border-zinc-200 bg-white px-3 py-1.5 text-sm text-zinc-700 hover:bg-zinc-50 dark:border-slate-700 dark:bg-transparent dark:text-zinc-100 dark:hover:bg-white/10"
+              >
+                Login
+              </Link>
+            )}
+            <button
+              onClick={() => setEditLayoutOpen(true)}
+              className="rounded border border-zinc-200 bg-white px-3 py-1.5 text-sm font-medium text-zinc-800 hover:bg-zinc-50 dark:border-slate-700 dark:bg-transparent dark:text-white dark:hover:bg-white/10"
+            >
+              Editor Layout
+            </button>
+          </div>
+        </div>
+      </header>
 
       {/* Left pane */}
       {showLeftPane && (
-        <aside className="fixed left-0 top-0 w-80 h-full border-r border-zinc-200 bg-white dark:bg-[#071013] p-3 z-50">
+        <aside className="fixed left-0 top-14 w-80 h-[calc(100vh-3.5rem)] border-r border-zinc-200 bg-white dark:bg-[#071013] p-3 z-40">
           <div className="mb-3 flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <button onClick={() => setShowLeftPane((s) => !s)} aria-label="Toggle menu" className="px-2 py-1 text-2xl leading-none">
-                ☰
-              </button>
-              <div className="text-lg font-bold">VOW</div>
-            </div>
             <div className="flex items-center gap-2">
               <button onClick={() => setShowLeftPane(false)} className="text-sm text-zinc-500">✕</button>
             </div>
@@ -685,7 +778,11 @@ export default function DashboardPage() {
           </button>
           <button
             className="flex-1 rounded bg-blue-600 px-3 py-2 text-sm text-white"
-            onClick={() => setOpenNewHabit(true)}
+            onClick={() => {
+              const today = new Date().toISOString().slice(0, 10)
+              setNewHabitInitial({ date: today })
+              setOpenNewHabit(true)
+            }}
           >
             + New Habit
           </button>
@@ -695,19 +792,7 @@ export default function DashboardPage() {
   )}
 
   {/* Right pane */}
-  <main className={`flex-1 p-8 ${showLeftPane ? 'ml-80' : ''}`}>
-
-        <div className="flex items-center justify-end gap-3">
-          {actorLabel && (
-            <div className="text-xs text-zinc-500">{actorLabel}</div>
-          )}
-          <Link
-            href="/login"
-            className="rounded border border-zinc-200 px-3 py-1 text-sm text-zinc-700 hover:bg-zinc-50"
-          >
-            Login / Register
-          </Link>
-        </div>
+  <main className={`flex-1 pt-20 p-8 ${showLeftPane ? 'ml-80' : ''}`}>
 
         <div className="mt-6 grid grid-cols-1 gap-4">
           {pageSections.map(sec => (
@@ -765,17 +850,42 @@ export default function DashboardPage() {
                     <ul className="flex flex-col">
                       {pick.map((c, idx) => (
                         <li key={c.h.id} className={`flex items-center justify-between py-2 ${idx > 0 ? 'mt-2 border-t border-zinc-100 pt-3' : ''}`}>
-                          <div className="flex items-center gap-3">
-                            <div className="w-2 h-2 rounded-full bg-sky-500" />
-                            <div className={`text-sm ${c.h.completed ? 'line-through text-zinc-400' : 'text-zinc-800 dark:text-zinc-100'}`}>{c.h.name}</div>
+                          <div className="flex min-w-0 items-center gap-3">
+                            <div className="w-16 shrink-0 text-xs text-zinc-500 tabular-nums">
+                              {(() => {
+                                const d = c.start;
+                                const todayStr = new Date().toISOString().slice(0,10);
+                                if (d.toISOString().slice(0,10) === todayStr) return formatTime24(d, { hour: '2-digit', minute: '2-digit' });
+                                return formatDateTime24(d);
+                              })()}
+                            </div>
+                            <div className="w-2 h-2 shrink-0 rounded-full bg-sky-500" />
+                            <div className={`truncate text-sm ${c.h.completed ? 'line-through text-zinc-400' : 'text-zinc-800 dark:text-zinc-100'}`}>{c.h.name}</div>
                           </div>
-                          <div className="text-xs text-zinc-500">
-                            {(() => {
-                              const d = c.start;
-                              const todayStr = new Date().toISOString().slice(0,10);
-                              if (d.toISOString().slice(0,10) === todayStr) return formatTime24(d, { hour: '2-digit', minute: '2-digit' });
-                              return formatDateTime24(d);
-                            })()}
+                          <div className="flex shrink-0 items-center gap-3">
+                            <div className="flex items-center gap-1">
+                              <button
+                                title="Start"
+                                onClick={(e) => { e.stopPropagation(); handleStart(c.h.id) }}
+                                className="rounded px-2 py-1 text-blue-600 hover:bg-blue-50 dark:hover:bg-white/10"
+                              >
+                                ▶️
+                              </button>
+                              <button
+                                title="Pause"
+                                onClick={(e) => { e.stopPropagation(); handlePause(c.h.id) }}
+                                className="rounded px-2 py-1 text-amber-600 hover:bg-amber-50 dark:hover:bg-white/10"
+                              >
+                                ⏸️
+                              </button>
+                              <button
+                                title="Done"
+                                onClick={(e) => { e.stopPropagation(); handleComplete(c.h.id) }}
+                                className="rounded px-2 py-1 text-green-600 hover:bg-green-50 dark:hover:bg-white/10"
+                              >
+                                ✅
+                              </button>
+                            </div>
                           </div>
                         </li>
                       ))}
@@ -827,7 +937,9 @@ export default function DashboardPage() {
                 goals={goals}
                 onEventClick={(id: string) => { setSelectedHabitId(id); setOpenHabitModal(true); }}
                 onSlotSelect={(isoDate: string, time?: string, endTime?: string) => {
-                  setNewHabitInitial({ date: isoDate, time, endTime });
+                  // isoDate may be a YYYY-MM-DD or full ISO; normalize to YYYY-MM-DD.
+                  const dateOnly = (isoDate || '').slice(0, 10)
+                  setNewHabitInitial({ date: dateOnly, time, endTime });
                   setOpenNewHabit(true)
                 }}
                 onEventChange={(id: string, updated) => handleEventChange(id, updated)}
