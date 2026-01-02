@@ -158,13 +158,16 @@ export default function DashboardPage() {
   
   const [editLayoutOpen, setEditLayoutOpen] = useState(false);
   type SectionId = 'next' | 'activity' | 'calendar' | 'goals'
-  const [pageSections, setPageSections] = useState<SectionId[]>(() => {
+  const [pageSections, setPageSections] = useState<SectionId[]>(['next','activity','calendar','goals'])
+
+  // Hydration safety: only read localStorage after mount, otherwise server/client HTML can diverge.
+  useEffect(() => {
     try {
-      const raw = typeof window !== 'undefined' ? window.localStorage.getItem('pageSections') : null;
-      if (raw) return JSON.parse(raw) as SectionId[];
-    } catch (e) {}
-    return ['next','activity','calendar','goals'];
-  })
+      const raw = window.localStorage.getItem('pageSections')
+      if (raw) setPageSections(JSON.parse(raw) as SectionId[])
+    } catch {}
+  }, [])
+
   useEffect(() => { try { window.localStorage.setItem('pageSections', JSON.stringify(pageSections)) } catch(e){} }, [pageSections])
   type ActivityKind = 'start' | 'complete' | 'skip' | 'pause'
   type Activity = { id: string; kind: ActivityKind; habitId: string; habitName: string; timestamp: string; amount?: number; prevCount?: number; newCount?: number; durationSeconds?: number }
@@ -970,7 +973,10 @@ export default function DashboardPage() {
         open={editLayoutOpen}
         onClose={() => setEditLayoutOpen(false)}
         sections={pageSections}
-        onChange={(s: any) => setPageSections(s)}
+        onChange={async (s: any) => {
+          setPageSections(s)
+          try { await (api as any).setLayout?.(s) } catch (e) { console.error('Failed to persist layout', e) }
+        }}
         onAdd={(id: any) => setPageSections(ps => ps.includes(id) ? ps : [...ps, id])}
         onDelete={(id: any) => setPageSections(ps => ps.filter(x => x !== id))}
       />

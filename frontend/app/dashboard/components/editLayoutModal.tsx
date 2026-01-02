@@ -64,7 +64,6 @@ export default function EditLayoutModal({ open, onClose, sections, onChange, onA
                   const next = reorder(local, from, id)
                   dragIdRef.current = null
                   setLocal(next)
-                  onChange(next)
                 }}
                 onDragEnd={() => { dragIdRef.current = null }}
                 className="flex items-center gap-2 rounded border border-slate-200 bg-white px-2 py-2 shadow-sm dark:border-slate-700 dark:bg-[#0b1220]"
