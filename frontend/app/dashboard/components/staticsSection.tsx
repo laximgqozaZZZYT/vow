@@ -2,7 +2,7 @@
 
 import React from 'react'
 
-type Habit = { id: string; name: string; createdAt?: string | null; workloadUnit?: string | null; workloadTotal?: number | null; must?: number | null; workloadPerCount?: number | null }
+type Habit = { id: string; name: string; createdAt?: string | null; dueDate?: string | null; workloadUnit?: string | null; workloadTotal?: number | null; must?: number | null; workloadPerCount?: number | null }
 
 type Activity = {
   id: string
@@ -86,6 +86,23 @@ function palette(i: number) {
   return colors[i % colors.length]
 }
 
+function clamp01(x: number) {
+  if (x <= 0) return 0
+  if (x >= 1) return 1
+  return x
+}
+
+function plannedValueAt(
+  startTs: number,
+  endTs: number,
+  target: number,
+  ts: number,
+) {
+  if (!Number.isFinite(startTs) || !Number.isFinite(endTs) || endTs <= startTs) return 0
+  const t = clamp01((ts - startTs) / (endTs - startTs))
+  return target * t
+}
+
 function buildEventPoints(
   habits: Habit[],
   activities: Activity[],
@@ -154,10 +171,12 @@ function buildEventPoints(
 function MultiEventChart({
   habits,
   points,
+  visibleHabitIds,
   onHover,
 }: {
   habits: Habit[]
   points: EventPoint[]
+  visibleHabitIds: string[]
   onHover: (p: EventPoint | null) => void
 }) {
   const width = 860
@@ -167,17 +186,18 @@ function MultiEventChart({
   const innerH = height - padding * 2
 
   const habitIds = React.useMemo(() => {
-    const s = new Set(points.map(p => p.habitId))
-    return habits.map(h => h.id).filter(id => s.has(id))
-  }, [habits, points])
+    // Use the user's selection, not only "habits that have points".
+    const existing = new Set(habits.map(h => h.id))
+    return visibleHabitIds.filter(id => existing.has(id))
+  }, [habits, visibleHabitIds])
 
   const yDomainMax = React.useMemo(() => {
     const maxCum = Math.max(1, ...points.map(p => p.workloadCumulative))
     return maxCum
   }, [points])
 
-  const minTs = Math.min(...points.map(p => p.ts))
-  const maxTs = Math.max(...points.map(p => p.ts))
+  const minTs = points.length ? Math.min(...points.map(p => p.ts)) : (Date.now() - 24 * 60 * 60 * 1000)
+  const maxTs = points.length ? Math.max(...points.map(p => p.ts)) : Date.now()
 
   const xOf = (ts: number) => {
     if (!Number.isFinite(minTs) || !Number.isFinite(maxTs) || minTs === maxTs) return padding
@@ -196,6 +216,38 @@ function MultiEventChart({
     for (const [k, arr] of m.entries()) arr.sort((a, b) => a.ts - b.ts)
     return m
   }, [points])
+
+  const plannedPaths = React.useMemo(() => {
+    // Planned progress: linear from habit.createdAt (or chart start) to habit.dueDate (or chart end)
+    // towards habit.workloadTotal/must.
+    const res: Array<{ habitId: string; d: string; color: string }> = []
+
+    for (let i = 0; i < habitIds.length; i++) {
+      const hid = habitIds[i]
+      const h = habits.find(x => x.id === hid)
+      if (!h) continue
+
+      const total = (typeof h.workloadTotal === 'number' ? h.workloadTotal : (typeof h.must === 'number' ? h.must : null))
+        ?? (typeof h.workloadPerCount === 'number' ? h.workloadPerCount : null)
+      if (!total || total <= 0) continue
+
+      const start = h.createdAt ? safeTs(h.createdAt) : minTs
+  const due = h.dueDate ? safeTs(h.dueDate) : maxTs
+      const planStart = Math.max(minTs, start || minTs)
+      const planEnd = Math.min(maxTs, (due && due > 0 ? due : maxTs))
+      if (planEnd <= planStart) continue
+
+      const x1 = xOf(planStart)
+      const y1 = yOf(plannedValueAt(planStart, planEnd, total, planStart))
+      const x2 = xOf(planEnd)
+      const y2 = yOf(plannedValueAt(planStart, planEnd, total, planEnd))
+
+      const color = palette(i)
+      res.push({ habitId: hid, d: `M ${x1.toFixed(2)} ${y1.toFixed(2)} L ${x2.toFixed(2)} ${y2.toFixed(2)}`, color })
+    }
+
+    return res
+  }, [habits, habitIds, minTs, maxTs, yDomainMax])
 
   return (
     <svg viewBox={`0 0 ${width} ${height}`} className="w-full overflow-visible">
@@ -218,6 +270,19 @@ function MultiEventChart({
           .join(' ')
         return d ? <path key={hid} d={d} fill="none" stroke={color} strokeWidth={2} opacity={0.75} /> : null
       })}
+
+      {/* planned guide lines (dashed) */}
+      {plannedPaths.map((p) => (
+        <path
+          key={p.habitId + ':plan'}
+          d={p.d}
+          fill="none"
+          stroke={p.color}
+          strokeWidth={2}
+          opacity={0.45}
+          strokeDasharray="6 5"
+        />
+      ))}
 
       {/* points */}
       {points.map((p) => {
@@ -385,7 +450,7 @@ export default function StaticsSection({ habits, activities }: { habits: Habit[]
           <div className="text-sm text-zinc-500">No Pause/Done activity points in this range yet.</div>
         ) : (
           <div className="rounded border border-zinc-100 p-3 dark:border-slate-800">
-            <MultiEventChart habits={habits} points={eventPoints} onHover={setHoverPoint} />
+            <MultiEventChart habits={habits} points={eventPoints} visibleHabitIds={visibleHabitIds} onHover={setHoverPoint} />
 
             {hoverPoint ? (
               <div className="mt-2 rounded border border-zinc-100 p-2 text-xs text-zinc-700 dark:border-slate-800 dark:text-zinc-200">
