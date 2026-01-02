@@ -11,6 +11,7 @@ import { useRouter } from 'next/navigation'
 import { supabase } from '../../lib/supabaseClient'
 import FullCalendar from '@fullcalendar/react'
 import EditLayoutModal from './components/editLayoutModal'
+import StaticsSection from './components/staticsSection'
 import timeGridPlugin from '@fullcalendar/timegrid'
 import interactionPlugin from '@fullcalendar/interaction'
 import dayGridPlugin from '@fullcalendar/daygrid'
@@ -157,7 +158,7 @@ export default function DashboardPage() {
   const [openHabitModal, setOpenHabitModal] = useState(false);
   
   const [editLayoutOpen, setEditLayoutOpen] = useState(false);
-  type SectionId = 'next' | 'activity' | 'calendar' | 'goals'
+  type SectionId = 'next' | 'activity' | 'calendar' | 'goals' | 'statics'
   const [pageSections, setPageSections] = useState<SectionId[]>(['next','activity','calendar','goals'])
 
   // Hydration safety: only read localStorage after mount, otherwise server/client HTML can diverge.
@@ -953,6 +954,8 @@ export default function DashboardPage() {
                 <h2 className="mb-3 text-lg font-medium">Goals</h2>
                 <GoalMermaid goals={goals} habits={habits} openGoals={openGoals} toggleGoal={toggleGoal} setGoalParent={setGoalParent} mergeGoals={mergeGoals} />
               </section>
+            ) : sec === 'statics' ? (
+              <StaticsSection key="statics" habits={habits as any} activities={activities as any} />
             ) : null
           ))}
         </div>
