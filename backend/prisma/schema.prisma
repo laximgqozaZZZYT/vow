@@ -23,6 +23,7 @@ model Goal {
   parent    Goal?     @relation("GoalParent", fields: [parentId], references: [id])
   children  Goal[]    @relation("GoalParent")
   habits    Habit[]
+  diaryCards DiaryCardGoal[]
 
   @@index([parentId], map: "Goal_parentId_fkey")
   @@index([ownerType, ownerId])
@@ -56,6 +57,7 @@ model Habit {
   createdAt        DateTime  @default(now())
   updatedAt        DateTime  @updatedAt
   goal             Goal      @relation(fields: [goalId], references: [id])
+  diaryCards        DiaryCardHabit[]
   @@index([goalId], map: "Habit_goalId_fkey")
   @@index([ownerType, ownerId])
 }
@@ -87,6 +89,89 @@ model Preference {
 
   @@unique([key, ownerType, ownerId])
   @@index([ownerType, ownerId])
+}
+
+// Diary feature
+model DiaryCard {
+  id        String   @id @default(cuid())
+  // Markdown content (front/back)
+  frontMd   String   @db.LongText
+  backMd    String   @db.LongText
+
+  ownerType String?  // 'user' | 'guest'
+  ownerId   String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tags      DiaryCardTag[]
+  goals     DiaryCardGoal[]
+  habits    DiaryCardHabit[]
+
+  @@index([ownerType, ownerId])
+  @@index([createdAt])
+}
+
+model DiaryTag {
+  id        String   @id @default(cuid())
+  name      String
+  color     String?
+  ownerType String?  // 'user' | 'guest'
+  ownerId   String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  cards     DiaryCardTag[]
+
+  @@unique([ownerType, ownerId, name])
+  @@index([ownerType, ownerId])
+}
+
+model DiaryCardTag {
+  id        String   @id @default(cuid())
+  cardId    String
+  tagId     String
+  ownerType String?  // 'user' | 'guest'
+  ownerId   String?
+  createdAt DateTime @default(now())
+
+  card      DiaryCard @relation(fields: [cardId], references: [id], onDelete: Cascade)
+  tag       DiaryTag  @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@unique([cardId, tagId])
+  @@index([ownerType, ownerId])
+  @@index([tagId])
+}
+
+model DiaryCardGoal {
+  id        String   @id @default(cuid())
+  cardId    String
+  goalId    String
+  ownerType String?  // 'user' | 'guest'
+  ownerId   String?
+  createdAt DateTime @default(now())
+
+  card      DiaryCard @relation(fields: [cardId], references: [id], onDelete: Cascade)
+  goal      Goal      @relation(fields: [goalId], references: [id], onDelete: Cascade)
+
+  @@unique([cardId, goalId])
+  @@index([ownerType, ownerId])
+  @@index([goalId])
+}
+
+model DiaryCardHabit {
+  id        String   @id @default(cuid())
+  cardId    String
+  habitId   String
+  ownerType String?  // 'user' | 'guest'
+  ownerId   String?
+  createdAt DateTime @default(now())
+
+  card      DiaryCard @relation(fields: [cardId], references: [id], onDelete: Cascade)
+  habit     Habit     @relation(fields: [habitId], references: [id], onDelete: Cascade)
+
+  @@unique([cardId, habitId])
+  @@index([ownerType, ownerId])
+  @@index([habitId])
 }
 
 model User {

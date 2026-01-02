@@ -9,6 +9,10 @@ import { jwtVerify, createRemoteJWKSet } from 'jose';
 import jwksRsa from 'jwks-rsa';
 
 const prisma = new PrismaClient();
+// NOTE: VS Code TS service can lag behind newly generated Prisma client typings.
+// Runtime PrismaClient delegates are correct (verified via node script).
+// We use a narrow `any` cast for the new Diary models to keep compilation/editor happy.
+const prismaAny = prisma as any
 const app = express();
 app.use(cors({
   origin: ['http://localhost:3000', 'http://localhost:3001', 'http://localhost:5173', 'http://localhost'],
@@ -655,6 +659,275 @@ app.post('/layout', async (req, res) => {
   }
   return res.json({ sections });
 });
+
+// Diary
+const DiaryTagCreateSchema = z.object({
+  name: z.string().min(1).max(60).transform(s => s.trim()),
+  color: z.string().max(30).optional().nullable(),
+}).passthrough()
+
+app.get('/diary/tags', async (req, res) => {
+  const actor = await getActor(req)
+  const where = actor.type === 'none' ? {} : { ownerType: actor.type, ownerId: actor.id }
+  const tags = await prismaAny.diaryTag.findMany({ where, orderBy: { createdAt: 'asc' } as any })
+  res.json(tags)
+})
+
+app.post('/diary/tags', async (req, res) => {
+  const actor = await getActor(req)
+  const parsed = DiaryTagCreateSchema.safeParse(req.body)
+  if (!parsed.success) return res.status(400).json({ error: 'invalid payload', issues: parsed.error.issues })
+  const data: any = { ...parsed.data }
+  if (actor.type !== 'none') {
+    data.ownerType = actor.type
+    data.ownerId = actor.id
+  }
+  try {
+    const tag = await prismaAny.diaryTag.create({ data })
+    res.status(201).json(tag)
+  } catch (e: any) {
+    res.status(400).json({ error: String(e?.message || e), code: e?.code, meta: e?.meta })
+  }
+})
+
+app.patch('/diary/tags/:id', async (req, res) => {
+  const id = req.params.id
+  const actor = await getActor(req)
+  const whereOwner = actor.type === 'none' ? {} : { ownerType: actor.type, ownerId: actor.id }
+  const existing = await prismaAny.diaryTag.findFirst({ where: { id, ...(whereOwner as any) } as any })
+  if (!existing) return res.status(404).json({ error: 'not found' })
+
+  const updateSchema = DiaryTagCreateSchema.partial()
+  const parsed = updateSchema.safeParse(req.body)
+  if (!parsed.success) return res.status(400).json({ error: 'invalid payload', issues: parsed.error.issues })
+  const data: any = { ...parsed.data }
+  if (typeof data.name === 'string') data.name = data.name.trim()
+  try {
+    const tag = await prismaAny.diaryTag.update({ where: { id }, data })
+    res.json(tag)
+  } catch (e: any) {
+    res.status(400).json({ error: String(e?.message || e), code: e?.code, meta: e?.meta })
+  }
+})
+
+app.delete('/diary/tags/:id', async (req, res) => {
+  const id = req.params.id
+  const actor = await getActor(req)
+  const whereOwner = actor.type === 'none' ? {} : { ownerType: actor.type, ownerId: actor.id }
+  const existing = await prismaAny.diaryTag.findFirst({ where: { id, ...(whereOwner as any) } as any })
+  if (!existing) return res.status(404).json({ error: 'not found' })
+  await prismaAny.diaryTag.delete({ where: { id } })
+  res.status(204).send()
+})
+
+const DiaryCardCreateSchema = z.object({
+  frontMd: z.string().optional().default(''),
+  backMd: z.string().optional().default(''),
+  tagIds: z.array(z.string()).optional().default([]),
+  goalIds: z.array(z.string()).optional().default([]),
+  habitIds: z.array(z.string()).optional().default([]),
+}).passthrough()
+
+function normalizeStringArray(v: any): string[] {
+  if (!Array.isArray(v)) return []
+  const out = v.map(x => String(x)).map(s => s.trim()).filter(Boolean)
+  return Array.from(new Set(out))
+}
+
+app.get('/diary', async (req, res) => {
+  const actor = await getActor(req)
+  const whereOwner = actor.type === 'none' ? {} : { ownerType: actor.type, ownerId: actor.id }
+
+  const q = (req.query.query ? String(req.query.query) : '').trim()
+  const tagIds = normalizeStringArray(req.query.tag)
+  const goalIds = normalizeStringArray(req.query.goal)
+  const habitIds = normalizeStringArray(req.query.habit)
+
+  // NOTE: MySQL string contains is case-insensitive with typical collations.
+  const where: any = { ...whereOwner }
+  if (q) {
+    where.OR = [
+      { frontMd: { contains: q } },
+      { backMd: { contains: q } },
+    ]
+  }
+  if (tagIds.length) where.tags = { some: { tagId: { in: tagIds } } }
+  if (goalIds.length) where.goals = { some: { goalId: { in: goalIds } } }
+  if (habitIds.length) where.habits = { some: { habitId: { in: habitIds } } }
+
+  const cards = await prismaAny.diaryCard.findMany({
+    where,
+    orderBy: { updatedAt: 'desc' } as any,
+    include: {
+      tags: true,
+      goals: true,
+      habits: true,
+    } as any,
+  })
+  res.json(cards)
+})
+
+app.get('/diary/:id', async (req, res) => {
+  const id = req.params.id
+  const actor = await getActor(req)
+  const whereOwner = actor.type === 'none' ? {} : { ownerType: actor.type, ownerId: actor.id }
+  const card = await prismaAny.diaryCard.findFirst({
+    where: { id, ...(whereOwner as any) } as any,
+    include: { tags: true, goals: true, habits: true } as any,
+  })
+  if (!card) return res.status(404).json({ error: 'not found' })
+  res.json(card)
+})
+
+app.post('/diary', async (req, res) => {
+  const actor = await getActor(req)
+  const parsed = DiaryCardCreateSchema.safeParse(req.body)
+  if (!parsed.success) return res.status(400).json({ error: 'invalid payload', issues: parsed.error.issues })
+  const data = parsed.data as any
+
+  const tagIds = normalizeStringArray(data.tagIds)
+  const goalIds = normalizeStringArray(data.goalIds)
+  const habitIds = normalizeStringArray(data.habitIds)
+
+  const ownerType = actor.type === 'none' ? null : actor.type
+  const ownerId = actor.type === 'none' ? null : actor.id
+
+  // Validate ownership for referenced Goal/Habit/Tag (best-effort)
+  if (ownerType && ownerId) {
+    if (tagIds.length) {
+      const count = await prismaAny.diaryTag.count({ where: { id: { in: tagIds }, ownerType, ownerId } as any })
+      if (count !== tagIds.length) return res.status(400).json({ error: 'invalid tagIds' })
+    }
+    if (goalIds.length) {
+      const count = await prisma.goal.count({ where: { id: { in: goalIds }, ownerType, ownerId } as any })
+      if (count !== goalIds.length) return res.status(400).json({ error: 'invalid goalIds' })
+    }
+    if (habitIds.length) {
+      const count = await prisma.habit.count({ where: { id: { in: habitIds }, ownerType, ownerId } as any })
+      if (count !== habitIds.length) return res.status(400).json({ error: 'invalid habitIds' })
+    }
+  }
+
+  const card = await prismaAny.diaryCard.create({
+    data: {
+      frontMd: String(data.frontMd ?? ''),
+      backMd: String(data.backMd ?? ''),
+      ...(ownerType ? { ownerType } : {}),
+      ...(ownerId ? { ownerId } : {}),
+      tags: tagIds.length ? { create: tagIds.map(tagId => ({ tagId, ...(ownerType ? { ownerType } : {}), ...(ownerId ? { ownerId } : {}) })) } : undefined,
+      goals: goalIds.length ? { create: goalIds.map(goalId => ({ goalId, ...(ownerType ? { ownerType } : {}), ...(ownerId ? { ownerId } : {}) })) } : undefined,
+      habits: habitIds.length ? { create: habitIds.map(habitId => ({ habitId, ...(ownerType ? { ownerType } : {}), ...(ownerId ? { ownerId } : {}) })) } : undefined,
+    } as any,
+    include: { tags: true, goals: true, habits: true } as any,
+  })
+  res.status(201).json(card)
+})
+
+app.patch('/diary/:id', async (req, res) => {
+  const id = req.params.id
+  const actor = await getActor(req)
+  const whereOwner = actor.type === 'none' ? {} : { ownerType: actor.type, ownerId: actor.id }
+  const existing = await prismaAny.diaryCard.findFirst({ where: { id, ...(whereOwner as any) } as any })
+  if (!existing) return res.status(404).json({ error: 'not found' })
+
+  const updateSchema = DiaryCardCreateSchema.partial()
+  const parsed = updateSchema.safeParse(req.body)
+  if (!parsed.success) return res.status(400).json({ error: 'invalid payload', issues: parsed.error.issues })
+  const data = parsed.data as any
+
+  const ownerType = actor.type === 'none' ? null : actor.type
+  const ownerId = actor.type === 'none' ? null : actor.id
+
+  const tagIds = (data.tagIds !== undefined) ? normalizeStringArray(data.tagIds) : null
+  const goalIds = (data.goalIds !== undefined) ? normalizeStringArray(data.goalIds) : null
+  const habitIds = (data.habitIds !== undefined) ? normalizeStringArray(data.habitIds) : null
+
+  // validate references
+  if (ownerType && ownerId) {
+    if (tagIds && tagIds.length) {
+      const count = await prismaAny.diaryTag.count({ where: { id: { in: tagIds }, ownerType, ownerId } as any })
+      if (count !== tagIds.length) return res.status(400).json({ error: 'invalid tagIds' })
+    }
+    if (goalIds && goalIds.length) {
+      const count = await prisma.goal.count({ where: { id: { in: goalIds }, ownerType, ownerId } as any })
+      if (count !== goalIds.length) return res.status(400).json({ error: 'invalid goalIds' })
+    }
+    if (habitIds && habitIds.length) {
+      const count = await prisma.habit.count({ where: { id: { in: habitIds }, ownerType, ownerId } as any })
+      if (count !== habitIds.length) return res.status(400).json({ error: 'invalid habitIds' })
+    }
+  }
+
+  const updated = await prisma.$transaction(async (tx) => {
+    const txAny = tx as any
+    // Update content
+    await txAny.diaryCard.update({
+      where: { id },
+      data: {
+        ...(data.frontMd !== undefined ? { frontMd: String(data.frontMd ?? '') } : {}),
+        ...(data.backMd !== undefined ? { backMd: String(data.backMd ?? '') } : {}),
+      } as any,
+    })
+
+    // Replace relations if provided
+    if (tagIds !== null) {
+      await txAny.diaryCardTag.deleteMany({ where: { cardId: id } as any })
+      if (tagIds.length) {
+        await txAny.diaryCardTag.createMany({
+          data: tagIds.map(tagId => ({
+            cardId: id,
+            tagId,
+            ...(ownerType ? { ownerType } : {}),
+            ...(ownerId ? { ownerId } : {}),
+          })) as any,
+          skipDuplicates: true,
+        })
+      }
+    }
+    if (goalIds !== null) {
+      await txAny.diaryCardGoal.deleteMany({ where: { cardId: id } as any })
+      if (goalIds.length) {
+        await txAny.diaryCardGoal.createMany({
+          data: goalIds.map(goalId => ({
+            cardId: id,
+            goalId,
+            ...(ownerType ? { ownerType } : {}),
+            ...(ownerId ? { ownerId } : {}),
+          })) as any,
+          skipDuplicates: true,
+        })
+      }
+    }
+    if (habitIds !== null) {
+      await txAny.diaryCardHabit.deleteMany({ where: { cardId: id } as any })
+      if (habitIds.length) {
+        await txAny.diaryCardHabit.createMany({
+          data: habitIds.map(habitId => ({
+            cardId: id,
+            habitId,
+            ...(ownerType ? { ownerType } : {}),
+            ...(ownerId ? { ownerId } : {}),
+          })) as any,
+          skipDuplicates: true,
+        })
+      }
+    }
+
+    return await txAny.diaryCard.findUnique({ where: { id }, include: { tags: true, goals: true, habits: true } as any })
+  })
+
+  res.json(updated)
+})
+
+app.delete('/diary/:id', async (req, res) => {
+  const id = req.params.id
+  const actor = await getActor(req)
+  const whereOwner = actor.type === 'none' ? {} : { ownerType: actor.type, ownerId: actor.id }
+  const existing = await prismaAny.diaryCard.findFirst({ where: { id, ...(whereOwner as any) } as any })
+  if (!existing) return res.status(404).json({ error: 'not found' })
+  await prismaAny.diaryCard.delete({ where: { id } })
+  res.status(204).send()
+})
 
 // Auth
 app.get('/me', async (req, res) => {

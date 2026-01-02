@@ -1,0 +1,3 @@
+-- AlterTable
+ALTER TABLE `DiaryCard` MODIFY `frontMd` LONGTEXT NOT NULL,
+    MODIFY `backMd` LONGTEXT NOT NULL;

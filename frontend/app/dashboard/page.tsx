@@ -12,6 +12,7 @@ import { supabase } from '../../lib/supabaseClient'
 import FullCalendar from '@fullcalendar/react'
 import EditLayoutModal from './components/editLayoutModal'
 import StaticsSection from './components/staticsSection'
+import DiarySection from './components/diarySection'
 import timeGridPlugin from '@fullcalendar/timegrid'
 import interactionPlugin from '@fullcalendar/interaction'
 import dayGridPlugin from '@fullcalendar/daygrid'
@@ -158,8 +159,8 @@ export default function DashboardPage() {
   const [openHabitModal, setOpenHabitModal] = useState(false);
   
   const [editLayoutOpen, setEditLayoutOpen] = useState(false);
-  type SectionId = 'next' | 'activity' | 'calendar' | 'statics'
-  const [pageSections, setPageSections] = useState<SectionId[]>(['next','activity','calendar','statics'])
+  type SectionId = 'next' | 'activity' | 'calendar' | 'statics' | 'diary'
+  const [pageSections, setPageSections] = useState<SectionId[]>(['next','activity','calendar','statics','diary'])
 
   // Hydration safety: only read localStorage after mount, otherwise server/client HTML can diverge.
   useEffect(() => {
@@ -951,6 +952,8 @@ export default function DashboardPage() {
               />
             ) : sec === 'statics' ? (
               <StaticsSection key="statics" habits={habits as any} activities={activities as any} goals={goals as any} />
+            ) : sec === 'diary' ? (
+              <DiarySection key="diary" goals={goals as any} habits={habits as any} />
             ) : null
           ))}
         </div>
