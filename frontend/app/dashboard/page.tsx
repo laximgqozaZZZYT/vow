@@ -973,18 +973,6 @@ export default function DashboardPage() {
         onChange={(s: any) => setPageSections(s)}
         onAdd={(id: any) => setPageSections(ps => ps.includes(id) ? ps : [...ps, id])}
         onDelete={(id: any) => setPageSections(ps => ps.filter(x => x !== id))}
-        onMove={(id: any, dir: any) => {
-          setPageSections(ps => {
-            const idx = ps.indexOf(id);
-            if (idx === -1) return ps;
-            const ni = idx + dir;
-            if (ni < 0 || ni >= ps.length) return ps;
-            const n = [...ps];
-            const [it] = n.splice(idx, 1);
-            n.splice(ni, 0, it);
-            return n;
-          })
-        }}
       />
 
       <GoalModal

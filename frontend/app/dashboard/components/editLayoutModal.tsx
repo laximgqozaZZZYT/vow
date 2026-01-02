@@ -4,11 +4,23 @@ import React from 'react'
 
 type SectionId = 'next' | 'activity' | 'calendar' | 'goals'
 
-export default function EditLayoutModal({ open, onClose, sections, onChange, onAdd, onDelete, onMove }: { open: boolean; onClose: () => void; sections: SectionId[]; onChange: (s: SectionId[]) => void; onAdd: (id: SectionId) => void; onDelete: (id: SectionId) => void; onMove: (id: SectionId, dir: -1 | 1) => void }) {
+export default function EditLayoutModal({ open, onClose, sections, onChange, onAdd, onDelete }: { open: boolean; onClose: () => void; sections: SectionId[]; onChange: (s: SectionId[]) => void; onAdd: (id: SectionId) => void; onDelete: (id: SectionId) => void }) {
   const [local, setLocal] = React.useState<SectionId[]>(sections || [])
+  const dragIdRef = React.useRef<SectionId | null>(null)
 
   React.useEffect(() => setLocal(sections || []), [sections, open])
   if (!open) return null
+
+  const reorder = (list: SectionId[], fromId: SectionId, toId: SectionId) => {
+    if (fromId === toId) return list
+    const fromIndex = list.indexOf(fromId)
+    const toIndex = list.indexOf(toId)
+    if (fromIndex === -1 || toIndex === -1) return list
+    const next = [...list]
+    const [moved] = next.splice(fromIndex, 1)
+    next.splice(toIndex, 0, moved)
+    return next
+  }
 
   const available: { id: SectionId; label: string }[] = [
     { id: 'next', label: 'Next' },
@@ -28,15 +40,39 @@ export default function EditLayoutModal({ open, onClose, sections, onChange, onA
         <div className="mt-4 flex gap-4 overflow-auto max-h-[65vh] pr-2">
           <div className="flex-1 space-y-3">
             {local.map((id) => (
-              <div key={id} className="flex items-center gap-2">
+              <div
+                key={id}
+                draggable
+                onDragStart={(e) => {
+                  dragIdRef.current = id
+                  try { e.dataTransfer.setData('text/plain', id) } catch {}
+                  e.dataTransfer.effectAllowed = 'move'
+                }}
+                onDragOver={(e) => {
+                  e.preventDefault()
+                  e.dataTransfer.dropEffect = 'move'
+                }}
+                onDrop={(e) => {
+                  e.preventDefault()
+                  const from = (dragIdRef.current ?? ((): SectionId | null => {
+                    try { return (e.dataTransfer.getData('text/plain') as SectionId) || null } catch { return null }
+                  })()) as SectionId | null
+                  if (!from) return
+
+                  // Compute the next order from the latest local value.
+                  // Important: don't call parent setState inside the functional setState updater.
+                  const next = reorder(local, from, id)
+                  dragIdRef.current = null
+                  setLocal(next)
+                  onChange(next)
+                }}
+                onDragEnd={() => { dragIdRef.current = null }}
+                className="flex items-center gap-2 rounded border border-slate-200 bg-white px-2 py-2 shadow-sm dark:border-slate-700 dark:bg-[#0b1220]"
+                title="Drag to reorder"
+              >
+                <div className="select-none cursor-grab text-slate-400">⋮⋮</div>
                 <div className="flex-1 text-sm font-medium">{available.find(a => a.id === id)?.label ?? id}</div>
                 <div className="flex gap-2">
-                  <button className="text-xs rounded border px-2 py-1" onClick={() => { onMove(id, -1); setLocal(l => {
-                    const i = l.indexOf(id); if (i <= 0) return l; const n = [...l]; const [it] = n.splice(i,1); n.splice(i-1,0,it); return n;
-                  })}}>↑</button>
-                  <button className="text-xs rounded border px-2 py-1" onClick={() => { onMove(id, 1); setLocal(l => {
-                    const i = l.indexOf(id); if (i === -1 || i >= l.length-1) return l; const n = [...l]; const [it] = n.splice(i,1); n.splice(i+1,0,it); return n;
-                  })}}>↓</button>
                   <button className="text-xs text-red-600" onClick={() => { onDelete(id); setLocal(l => l.filter(x => x !== id)) }}>Delete</button>
                 </div>
               </div>
