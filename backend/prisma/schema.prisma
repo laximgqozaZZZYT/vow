@@ -15,16 +15,17 @@ model Goal {
   dueDate   DateTime?
   isCompleted Boolean @default(false)
   parentId  String?
-  userId    String?
+  // Owner fields: support both authenticated users and anonymous guests.
+  ownerType String?   // 'user' | 'guest'
+  ownerId   String?
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
   parent    Goal?     @relation("GoalParent", fields: [parentId], references: [id])
   children  Goal[]    @relation("GoalParent")
-  user      User?     @relation(fields: [userId], references: [id])
   habits    Habit[]
 
   @@index([parentId], map: "Goal_parentId_fkey")
-  @@index([userId], map: "Goal_userId_fkey")
+  @@index([ownerType, ownerId])
 }
 
 model Habit {
@@ -50,14 +51,13 @@ model Habit {
   workloadPerCount Int?
   completed        Boolean?  @default(false)
   lastCompletedAt  DateTime?
-  userId           String?
+  ownerType        String?   // 'user' | 'guest'
+  ownerId          String?
   createdAt        DateTime  @default(now())
   updatedAt        DateTime  @updatedAt
   goal             Goal      @relation(fields: [goalId], references: [id])
-  user             User?     @relation(fields: [userId], references: [id])
-
   @@index([goalId], map: "Habit_goalId_fkey")
-  @@index([userId], map: "Habit_userId_fkey")
+  @@index([ownerType, ownerId])
 }
 
 model Activity {
@@ -70,33 +70,91 @@ model Activity {
   prevCount       Int?
   newCount        Int?
   durationSeconds Int?
-  userId          String?
-  user            User?    @relation(fields: [userId], references: [id])
+  ownerType       String?  // 'user' | 'guest'
+  ownerId         String?
 
-  @@index([userId], map: "Activity_userId_fkey")
+  @@index([ownerType, ownerId])
 }
 
 model Preference {
   id        String   @id @default(cuid())
   key       String
   value     Json
-  userId    String?
+  ownerType String?  // 'user' | 'guest'
+  ownerId   String?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
-  user      User?    @relation(fields: [userId], references: [id])
 
-  @@unique([key, userId])
-  @@index([userId], map: "Preference_userId_fkey")
+  @@unique([key, ownerType, ownerId])
+  @@index([ownerType, ownerId])
 }
 
 model User {
   id         String       @id @default(cuid())
   email      String       @unique
+  passwordHash String
   name       String?
+  // If you use Supabase Auth, map its user.id (UUID) here.
+  supabaseUserId String? @unique
   createdAt  DateTime     @default(now())
   updatedAt  DateTime     @updatedAt
-  activities Activity[]
-  goals      Goal[]
-  habits     Habit[]
-  prefs      Preference[]
+
+  oauthAccounts OAuthAccount[]
+}
+
+model Guest {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+  // If the guest has been merged into a user, keep the link for audit/debug.
+  mergedIntoUserId String?
+  mergedAt DateTime?
+}
+
+model Session {
+  id        String   @id @default(cuid())
+  // Exactly one of these is set.
+  userId    String?
+  guestId   String?
+  createdAt DateTime @default(now())
+  expiresAt DateTime
+
+  // Note: we intentionally don't add Prisma relations here to keep migrations simple
+  // and avoid cascading deletes surprises.
+  @@index([userId])
+  @@index([guestId])
+}
+
+model OAuthAccount {
+  id         String   @id @default(cuid())
+  provider   String
+  // Provider-specific account id (Google "sub", GitHub user id, etc)
+  providerAccountId String
+
+  userId     String
+  user       User     @relation(fields: [userId], references: [id])
+
+  // Optional tokens (store only if you need API access). Keep nullable.
+  accessToken  String?
+  refreshToken String?
+  expiresAt    DateTime?
+
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@unique([provider, providerAccountId])
+  @@index([userId])
+}
+
+model OAuthState {
+  id           String   @id @default(cuid())
+  provider     String
+  state        String   @unique
+  codeVerifier String
+  // If the user started OAuth while being a guest, remember it for merge.
+  guestId      String?
+  createdAt    DateTime @default(now())
+  expiresAt    DateTime
+
+  @@index([provider])
+  @@index([guestId])
 }

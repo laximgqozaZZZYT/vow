@@ -1,5 +1,11 @@
 const BASE = (process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000').replace(/\/+$/, '')
 
+let bearerToken: string | null = null
+
+export function setBearerToken(token: string | null) {
+  bearerToken = token
+}
+
 class ApiError extends Error {
   url: string;
   status?: number;
@@ -24,8 +30,10 @@ async function request(path: string, opts: RequestInit = {}) {
   try {
     const res = await fetch(url, {
       ...opts,
+      credentials: 'include',
       headers: {
         'Content-Type': 'application/json',
+        ...(bearerToken ? { Authorization: `Bearer ${bearerToken}` } : {}),
         ...(opts.headers || {}),
       },
     });
@@ -68,4 +76,10 @@ export async function setLayout(sections: any[]) { return await request('/layout
 export async function getPrefs() { return await request('/prefs') }
 export async function setPref(key: string, value: any) { return await request('/prefs', { method: 'POST', body: JSON.stringify({ key, value }) }) }
 
-export default { getGoals, createGoal, updateGoal, deleteGoal, getHabits, createHabit, updateHabit, deleteHabit, getActivities, createActivity, updateActivity, deleteActivity, getLayout, setLayout, getPrefs, setPref }
+export async function me() { return await request('/me') }
+export async function register(payload: { email: string; password: string; name?: string }) { return await request('/auth/register', { method: 'POST', body: JSON.stringify(payload) }) }
+export async function login(payload: { email: string; password: string }) { return await request('/auth/login', { method: 'POST', body: JSON.stringify(payload) }) }
+export async function logout() { return await request('/auth/logout', { method: 'POST' }) }
+export async function claim() { return await request('/auth/claim', { method: 'POST' }) }
+
+export default { getGoals, createGoal, updateGoal, deleteGoal, getHabits, createHabit, updateHabit, deleteHabit, getActivities, createActivity, updateActivity, deleteActivity, getLayout, setLayout, getPrefs, setPref, me, register, login, logout, claim, setBearerToken }

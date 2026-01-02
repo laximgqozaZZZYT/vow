@@ -6,6 +6,8 @@ import api from '../../lib/api';
 import mermaid from 'mermaid'
 import { formatTime24, formatDateTime24 } from '../../lib/format'
 import { HabitModal, GoalModal } from "./components/modals";
+import Link from 'next/link'
+import { supabase } from '../../lib/supabaseClient'
 import FullCalendar from '@fullcalendar/react'
 import EditLayoutModal from './components/editLayoutModal'
 import timeGridPlugin from '@fullcalendar/timegrid'
@@ -38,12 +40,35 @@ export default function DashboardPage() {
   const now = new Date().toISOString();
   const [goals, setGoals] = useState<Goal[]>([]);
 
+  const [actorLabel, setActorLabel] = useState<string>('');
+
   const [habits, setHabits] = useState<Habit[]>([]);
 
   // load data from API on mount
   useEffect(() => {
     (async () => {
       try {
+        // If logged in with Supabase, attach Bearer and merge guest data once.
+        try {
+          if (supabase) {
+            const { data } = await supabase.auth.getSession()
+            const accessToken = data?.session?.access_token ?? null
+            ;(api as any).setBearerToken?.(accessToken)
+            if (accessToken) {
+              // Best-effort claim; it will no-op if no guest session.
+              try { await (api as any).claim?.() } catch {}
+            }
+          }
+        } catch {}
+
+        try {
+          const me = await api.me();
+          const a = (me as any)?.actor;
+          if (a?.type === 'user') setActorLabel(`user:${a.id}`)
+          else if (a?.type === 'guest') setActorLabel(`guest:${a.id}`)
+          else setActorLabel('')
+        } catch {}
+
         const gs = await api.getGoals();
         setGoals(gs || []);
         const hs = await api.getHabits();
@@ -91,6 +116,9 @@ export default function DashboardPage() {
   const [newHabitInitial, setNewHabitInitial] = useState<{ date?: string; time?: string; endTime?: string } | null>(null);
   const [newHabitInitialType, setNewHabitInitialType] = useState<"do" | "avoid" | undefined>(undefined)
   // frames removed
+
+  // Basic top-right auth link
+  // (File is big; we inject UI near the top via a small fixed header block)
 
   const selectedHabit = habits.find((h) => h.id === selectedHabitId) ?? null;
 
@@ -668,7 +696,18 @@ export default function DashboardPage() {
 
   {/* Right pane */}
   <main className={`flex-1 p-8 ${showLeftPane ? 'ml-80' : ''}`}>
-        
+
+        <div className="flex items-center justify-end gap-3">
+          {actorLabel && (
+            <div className="text-xs text-zinc-500">{actorLabel}</div>
+          )}
+          <Link
+            href="/login"
+            className="rounded border border-zinc-200 px-3 py-1 text-sm text-zinc-700 hover:bg-zinc-50"
+          >
+            Login / Register
+          </Link>
+        </div>
 
         <div className="mt-6 grid grid-cols-1 gap-4">
           {pageSections.map(sec => (

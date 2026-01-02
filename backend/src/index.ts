@@ -2,26 +2,248 @@ import express from 'express';
 import cors from 'cors';
 import { PrismaClient } from '@prisma/client';
 import { z } from 'zod';
+import { parse as parseCookie, serialize as serializeCookie } from 'cookie';
+import bcrypt from 'bcryptjs';
+import { createHash, randomBytes } from 'crypto';
+import { jwtVerify, createRemoteJWKSet } from 'jose';
+import jwksRsa from 'jwks-rsa';
 
 const prisma = new PrismaClient();
 const app = express();
-app.use(cors({ origin: ['http://localhost:3000', 'http://localhost:3001', 'http://localhost:5173', 'http://localhost'] }));
+app.use(cors({
+  origin: ['http://localhost:3000', 'http://localhost:3001', 'http://localhost:5173', 'http://localhost'],
+  credentials: true,
+}));
 app.use(express.json());
 
-function getUserId(req: express.Request): string | null {
-  // Placeholder until real auth: allow scoping by user when provided.
-  return req.header('X-User-Id') ?? null;
+const SESSION_COOKIE = 'vow_session';
+const SESSION_TTL_DAYS = 30;
+const OAUTH_STATE_TTL_MIN = 10;
+
+type OAuthProvider = 'google' | 'github'
+
+function baseUrl(req: express.Request) {
+  // Allow override behind proxies.
+  const env = process.env.PUBLIC_BASE_URL;
+  if (env) return env.replace(/\/+$/, '');
+  const proto = (req.headers['x-forwarded-proto'] as string) || 'http';
+  const host = req.headers.host;
+  return `${proto}://${host}`;
 }
 
-async function getOrCreateDefaultGoal(userId: string | null) {
-  // A simple, forward-compatible convention: every user (and anonymous) has an "Inbox" root goal.
-  const where = userId ? { userId } : { userId: null };
+function base64Url(buf: Buffer) {
+  return buf.toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '');
+}
+
+function sha256Base64Url(input: string) {
+  const h = createHash('sha256').update(input).digest();
+  return base64Url(h);
+}
+
+function randomString(bytes = 32) {
+  return base64Url(randomBytes(bytes));
+}
+
+function getOAuthConfig(provider: OAuthProvider) {
+  if (provider === 'google') {
+    const clientId = process.env.GOOGLE_CLIENT_ID;
+    const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
+    if (!clientId || !clientSecret) return null;
+    return {
+      provider,
+      clientId,
+      clientSecret,
+      authUrl: 'https://accounts.google.com/o/oauth2/v2/auth',
+      tokenUrl: 'https://oauth2.googleapis.com/token',
+      // We'll verify the ID token with Google JWKs
+      jwksUrl: 'https://www.googleapis.com/oauth2/v3/certs',
+      scopes: ['openid', 'email', 'profile'],
+    } as const;
+  }
+
+  if (provider === 'github') {
+    const clientId = process.env.GITHUB_CLIENT_ID;
+    const clientSecret = process.env.GITHUB_CLIENT_SECRET;
+    if (!clientId || !clientSecret) return null;
+    return {
+      provider,
+      clientId,
+      clientSecret,
+      authUrl: 'https://github.com/login/oauth/authorize',
+      tokenUrl: 'https://github.com/login/oauth/access_token',
+      scopes: ['read:user', 'user:email'],
+    } as const;
+  }
+
+  return null;
+}
+
+type Actor =
+  | { type: 'guest'; id: string }
+  | { type: 'user'; id: string }
+  | { type: 'none'; id: null };
+
+declare global {
+  // eslint-disable-next-line no-var
+  var __supabaseJwksClient: any | undefined;
+}
+
+function getBearerToken(req: express.Request): string | null {
+  const auth = req.header('authorization') || req.header('Authorization');
+  if (!auth) return null;
+  const m = auth.match(/^Bearer\s+(.+)$/i);
+  return m ? m[1] : null;
+}
+
+async function verifySupabaseJwt(token: string): Promise<{ supabaseUserId: string; email?: string; name?: string } | null> {
+  const url = process.env.SUPABASE_JWKS_URL;
+  const aud = process.env.SUPABASE_JWT_AUD;
+  const issuer = process.env.SUPABASE_JWT_ISS;
+
+  if (!url) return null;
+
+  if (!global.__supabaseJwksClient) {
+    global.__supabaseJwksClient = jwksRsa({ jwksUri: url, cache: true, cacheMaxEntries: 5, cacheMaxAge: 10 * 60 * 1000 });
+  }
+
+  // Minimal JWT verify: signature + (optional) iss/aud.
+  const decodedHeader = JSON.parse(Buffer.from(token.split('.')[0], 'base64').toString('utf8'));
+  const kid = decodedHeader?.kid;
+  if (!kid) throw new Error('JWT missing kid');
+  const key = await global.__supabaseJwksClient.getSigningKey(kid);
+  const pem = key.getPublicKey();
+
+  const { payload } = await jwtVerify(token, pem as any, {
+    ...(aud ? { audience: aud } : {}),
+    ...(issuer ? { issuer } : {}),
+  });
+
+  const sub = String((payload as any).sub || '');
+  if (!sub) return null;
+  const email = (payload as any).email ? String((payload as any).email).toLowerCase() : undefined;
+  const name = (payload as any).user_metadata?.full_name ? String((payload as any).user_metadata.full_name) : undefined;
+  return { supabaseUserId: sub, email, name };
+}
+
+function getCookie(req: express.Request, name: string): string | null {
+  const raw = req.headers.cookie;
+  if (!raw) return null;
+  const parsed = parseCookie(raw);
+  return parsed?.[name] ?? null;
+}
+
+function setSessionCookie(res: express.Response, sessionId: string, expiresAt: Date) {
+  // httpOnly so JS can't steal it; SameSite=Lax works for same-site dev.
+  // In prod behind HTTPS, set secure: true.
+  res.setHeader('Set-Cookie', serializeCookie(SESSION_COOKIE, sessionId, {
+    httpOnly: true,
+    sameSite: 'lax',
+    path: '/',
+    expires: expiresAt,
+  }));
+}
+
+function clearSessionCookie(res: express.Response) {
+  res.setHeader('Set-Cookie', serializeCookie(SESSION_COOKIE, '', {
+    httpOnly: true,
+    sameSite: 'lax',
+    path: '/',
+    expires: new Date(0),
+  }));
+}
+
+async function getActor(req: express.Request, res?: express.Response): Promise<Actor> {
+  // 1) Supabase Bearer token (stateless)
+  const bearer = getBearerToken(req);
+  if (bearer) {
+    try {
+      const v = await verifySupabaseJwt(bearer);
+      if (v?.supabaseUserId) {
+        // Map/create app user
+        let user = await prisma.user.findUnique({ where: { supabaseUserId: v.supabaseUserId } as any });
+        if (!user) {
+          // If the user already exists by email (e.g. already used ID/Pass), link it.
+          if (v.email) {
+            const byEmail = await prisma.user.findUnique({ where: { email: v.email } });
+            if (byEmail && !(byEmail as any).supabaseUserId) {
+              user = await prisma.user.update({ where: { id: byEmail.id }, data: { supabaseUserId: v.supabaseUserId } as any });
+            }
+          }
+        }
+        if (!user) {
+          // Create new app user; passwordHash is unused for Supabase users.
+          const passwordHash = await bcrypt.hash(randomString(24), 10);
+          user = await prisma.user.create({
+            data: {
+              email: v.email || `supabase_${v.supabaseUserId}@example.invalid`,
+              passwordHash,
+              name: v.name,
+              supabaseUserId: v.supabaseUserId,
+            } as any,
+          });
+        }
+        return { type: 'user', id: user.id };
+      }
+    } catch (e) {
+      // fallthrough to guest cookie
+      console.warn('[auth] supabase jwt verify failed', (e as any)?.message || e);
+    }
+  }
+
+  // 2) Backward compat for existing dev flow.
+  const headerUserId = req.header('X-User-Id');
+  if (headerUserId) return { type: 'user', id: headerUserId };
+
+  const sessionId = getCookie(req, SESSION_COOKIE);
+  if (!sessionId) return { type: 'none', id: null };
+
+  const session = await prisma.session.findUnique({ where: { id: sessionId } });
+  if (!session) return { type: 'none', id: null };
+  if (session.expiresAt.getTime() < Date.now()) {
+    // Expired; treat as none.
+    return { type: 'none', id: null };
+  }
+  if (session.userId) return { type: 'user', id: session.userId };
+  if (session.guestId) return { type: 'guest', id: session.guestId };
+  return { type: 'none', id: null };
+}
+
+async function ensureGuestSession(req: express.Request, res: express.Response): Promise<Actor> {
+  const actor = await getActor(req);
+  if (actor.type !== 'none') return actor;
+
+  const guest = await prisma.guest.create({ data: {} });
+  const expiresAt = new Date(Date.now() + SESSION_TTL_DAYS * 24 * 60 * 60 * 1000);
+  const session = await prisma.session.create({ data: { guestId: guest.id, expiresAt } });
+  setSessionCookie(res, session.id, expiresAt);
+  return { type: 'guest', id: guest.id };
+}
+
+async function getOrCreateDefaultGoal(actor: Actor) {
+  // A simple, forward-compatible convention: every actor has an "Inbox" root goal.
+  const where = actor.type === 'none' ? { ownerType: null, ownerId: null } : { ownerType: actor.type, ownerId: actor.id };
   const existing = await prisma.goal.findFirst({ where: { ...where, name: 'Inbox', parentId: null }, orderBy: { createdAt: 'asc' } });
   if (existing) return existing;
-  return await prisma.goal.create({ data: { name: 'Inbox', details: 'Default goal (auto-created)', parentId: null, userId: userId ?? undefined } as any });
+  return await prisma.goal.create({ data: { name: 'Inbox', details: 'Default goal (auto-created)', parentId: null, ownerType: where.ownerType ?? undefined, ownerId: where.ownerId ?? undefined } as any });
 }
 
 app.get('/health', (req, res) => res.json({ ok: true }));
+
+// Ensure every visitor gets a guest session cookie so dashboard actions are scoped.
+app.use(async (req, res, next) => {
+  try {
+    if (req.path === '/health') return next();
+    // If request is already authenticated with Supabase Bearer, don't rotate cookies.
+    const bearer = getBearerToken(req);
+    if (!bearer) {
+      // Keep guest cookie for anonymous usage and for claim flow after OAuth login.
+      await ensureGuestSession(req, res);
+    }
+    next();
+  } catch (e) {
+    next(e);
+  }
+});
 
 // Simple logger
 app.use((req, _res, next) => {
@@ -31,21 +253,26 @@ app.use((req, _res, next) => {
 
 // Goals
 app.get('/goals', async (req, res) => {
-  const userId = getUserId(req);
-  const goals = await prisma.goal.findMany({ where: userId ? { userId } : undefined, orderBy: { createdAt: 'asc' } });
+  const actor = await getActor(req);
+  const where = actor.type === 'none' ? {} : { ownerType: actor.type, ownerId: actor.id };
+  const goals = await prisma.goal.findMany({ where, orderBy: { createdAt: 'asc' } });
   res.json(goals);
 });
 app.get('/goals/:id', async (req, res) => {
   const id = req.params.id;
-  const goal = await prisma.goal.findUnique({ where: { id } });
+  const actor = await getActor(req);
+  const goal = await prisma.goal.findFirst({ where: { id, ...(actor.type === 'none' ? {} : { ownerType: actor.type, ownerId: actor.id }) } as any });
   if (!goal) return res.status(404).json({ error: 'not found' });
   res.json(goal);
 });
 app.post('/goals', async (req, res) => {
-  const userId = getUserId(req) ?? undefined;
+  const actor = await getActor(req);
   const { name, details, dueDate, parentId } = req.body;
   const data: any = { name, details, dueDate, parentId };
-  if (userId) data.userId = userId;
+  if (actor.type !== 'none') {
+    data.ownerType = actor.type;
+    data.ownerId = actor.id;
+  }
   const g = await prisma.goal.create({ data });
   res.status(201).json(g);
 });
@@ -59,9 +286,12 @@ app.patch('/goals/:id', async (req, res) => {
     // Cascade completion: mark this goal + all descendant goals completed,
     // and mark all habits under those goals as "not to be done".
     if (cascade && data.isCompleted === true) {
-      const userId = getUserId(req);
+      const actor = await getActor(req);
       // fetch all goals in scope to compute descendants (simple in-memory BFS)
-      const allGoals = await prisma.goal.findMany({ where: userId ? { userId } : undefined, select: { id: true, parentId: true } });
+      const allGoals = await prisma.goal.findMany({
+        where: actor.type === 'none' ? {} : { ownerType: actor.type, ownerId: actor.id },
+        select: { id: true, parentId: true },
+      });
       const childrenByParent = new Map<string, string[]>();
       for (const g of allGoals) {
         const p = g.parentId ?? ''
@@ -96,6 +326,10 @@ app.patch('/goals/:id', async (req, res) => {
       return res.json(updated);
     }
 
+    const actor = await getActor(req);
+    // Enforce ownership
+    const existing = await prisma.goal.findFirst({ where: { id, ...(actor.type === 'none' ? {} : { ownerType: actor.type, ownerId: actor.id }) } as any });
+    if (!existing) return res.status(404).json({ error: 'not found' });
     const updated = await prisma.goal.update({ where: { id }, data });
     res.json(updated);
   } catch (e: any) {
@@ -110,6 +344,9 @@ app.patch('/goals/:id', async (req, res) => {
 });
 app.delete('/goals/:id', async (req, res) => {
   const id = req.params.id;
+  const actor = await getActor(req);
+  const existing = await prisma.goal.findFirst({ where: { id, ...(actor.type === 'none' ? {} : { ownerType: actor.type, ownerId: actor.id }) } as any });
+  if (!existing) return res.status(404).json({ error: 'not found' });
   await prisma.goal.delete({ where: { id } });
   res.status(204).send();
 });
@@ -117,8 +354,11 @@ app.delete('/goals/:id', async (req, res) => {
 // Habits
 app.get('/habits', async (req, res) => {
   try {
-    const userId = getUserId(req);
-    const habits = await prisma.habit.findMany({ where: userId ? { userId } : undefined, orderBy: { createdAt: 'asc' } as any });
+    const actor = await getActor(req);
+    const habits = await prisma.habit.findMany({
+      where: actor.type === 'none' ? {} : { ownerType: actor.type, ownerId: actor.id },
+      orderBy: { createdAt: 'asc' } as any,
+    });
     // MySQL uses real JSON columns for these fields; return as-is.
     res.json(habits);
   } catch (e: any) { res.status(500).json({ error: String(e.message || e) }) }
@@ -126,7 +366,8 @@ app.get('/habits', async (req, res) => {
 app.get('/habits/:id', async (req, res) => {
   const id = req.params.id;
   try {
-    const h = await prisma.habit.findUnique({ where: { id } });
+    const actor = await getActor(req);
+    const h = await prisma.habit.findFirst({ where: { id, ...(actor.type === 'none' ? {} : { ownerType: actor.type, ownerId: actor.id }) } as any });
     if (!h) return res.status(404).json({ error: 'not found' });
     // MySQL uses real JSON columns for these fields; return as-is.
     res.json(h);
@@ -134,7 +375,7 @@ app.get('/habits/:id', async (req, res) => {
 });
 app.post('/habits', async (req, res) => {
   try {
-    const userId = getUserId(req);
+    const actor = await getActor(req);
 
     // Accept the UI payload as-is but normalize types for Prisma.
     const HabitCreateSchema = z.object({
@@ -190,11 +431,14 @@ app.post('/habits', async (req, res) => {
     if (payload.dueDate) payload.dueDate = toDateOrUndefined(payload.dueDate);
     if (payload.lastCompletedAt) payload.lastCompletedAt = toDateOrUndefined(payload.lastCompletedAt);
 
-    if (userId) payload.userId = userId;
+    if (actor.type !== 'none') {
+      payload.ownerType = actor.type;
+      payload.ownerId = actor.id;
+    }
 
     // Allow creating habits without selecting a goal: attach to an auto-created default goal.
     if (!payload.goalId) {
-      const g = await getOrCreateDefaultGoal(userId);
+      const g = await getOrCreateDefaultGoal(actor);
       payload.goalId = g.id;
     }
 
@@ -264,76 +508,90 @@ app.patch('/habits/:id', async (req, res) => {
         }
       }
     }
+    const actor = await getActor(req);
+    const existing = await prisma.habit.findFirst({ where: { id, ...(actor.type === 'none' ? {} : { ownerType: actor.type, ownerId: actor.id }) } as any });
+    if (!existing) return res.status(404).json({ error: 'not found' });
     const updated = await prisma.habit.update({ where: { id }, data });
     res.json(updated);
   } catch (e: any) { res.status(400).json({ error: String(e.message || e) }) }
 });
 app.delete('/habits/:id', async (req, res) => {
   const id = req.params.id;
+  const actor = await getActor(req);
+  const existing = await prisma.habit.findFirst({ where: { id, ...(actor.type === 'none' ? {} : { ownerType: actor.type, ownerId: actor.id }) } as any });
+  if (!existing) return res.status(404).json({ error: 'not found' });
   await prisma.habit.delete({ where: { id } });
   res.status(204).send();
 });
 
 // Activities
 app.get('/activities', async (req, res) => {
-  const acts = await prisma.activity.findMany({ orderBy: { timestamp: 'desc' } });
+  const actor = await getActor(req);
+  const acts = await prisma.activity.findMany({
+    where: actor.type === 'none' ? {} : { ownerType: actor.type, ownerId: actor.id },
+    orderBy: { timestamp: 'desc' },
+  });
   res.json(acts);
 });
 app.post('/activities', async (req, res) => {
   const payload = req.body;
-  const userId = getUserId(req);
-  if (userId) payload.userId = userId;
+  const actor = await getActor(req);
+  if (actor.type !== 'none') {
+    payload.ownerType = actor.type;
+    payload.ownerId = actor.id;
+  }
   const a = await prisma.activity.create({ data: payload });
   res.status(201).json(a);
 });
 app.patch('/activities/:id', async (req, res) => {
   const id = req.params.id;
+  const actor = await getActor(req);
+  const existing = await prisma.activity.findFirst({ where: { id, ...(actor.type === 'none' ? {} : { ownerType: actor.type, ownerId: actor.id }) } as any });
+  if (!existing) return res.status(404).json({ error: 'not found' });
   const updated = await prisma.activity.update({ where: { id }, data: req.body });
   res.json(updated);
 });
 app.delete('/activities/:id', async (req, res) => {
   const id = req.params.id;
+  const actor = await getActor(req);
+  const existing = await prisma.activity.findFirst({ where: { id, ...(actor.type === 'none' ? {} : { ownerType: actor.type, ownerId: actor.id }) } as any });
+  if (!existing) return res.status(404).json({ error: 'not found' });
   await prisma.activity.delete({ where: { id } });
   res.status(204).send();
 });
 
 // Preferences / Layout
 app.get('/prefs', async (req, res) => {
-  const userId = getUserId(req);
-  const prefs = await prisma.preference.findMany({ where: userId ? { userId } : { userId: null } });
+  const actor = await getActor(req);
+  const prefs = await prisma.preference.findMany({ where: actor.type === 'none' ? {} : { ownerType: actor.type, ownerId: actor.id } });
   res.json(prefs.reduce((acc: Record<string, any>, p: any) => { try { acc[p.key] = p.value } catch(e) { acc[p.key] = p.value } return acc }, {} as Record<string, any>));
 });
 app.post('/prefs', async (req, res) => {
   const { key, value } = req.body;
-  const userId = getUserId(req);
+  const actor = await getActor(req);
   if (!key) return res.status(400).json({ error: 'key required' });
   const stored = (typeof value === 'string') ? value : value;
 
-  // Preference has a compound unique constraint on (key, userId).
-  // When userId is absent, we store it as NULL and must use findFirst + update/create.
-  if (!userId) {
-    const existing = await prisma.preference.findFirst({ where: { key, userId: null } });
-    const saved = existing
-      ? await prisma.preference.update({ where: { id: existing.id }, data: { value: stored } })
-      : await prisma.preference.create({ data: { key, value: stored, userId: null } });
-    return res.status(201).json({ key: saved.key, value: saved.value });
-  }
-
-  const upsert = await prisma.preference.upsert({
-    where: { key_userId: { key, userId } },
-    create: { key, value: stored, userId },
-    update: { value: stored },
-  });
-  res.status(201).json({ key: upsert.key, value: upsert.value });
+  // Preference has a compound unique constraint on (key, ownerType, ownerId).
+  const ownerType = actor.type === 'none' ? null : actor.type;
+  const ownerId = actor.type === 'none' ? null : actor.id;
+  const existing = await prisma.preference.findFirst({ where: { key, ownerType, ownerId } as any });
+  const saved = existing
+    ? await prisma.preference.update({ where: { id: existing.id }, data: { value: stored } })
+    : await prisma.preference.create({ data: { key, value: stored, ownerType: ownerType ?? undefined, ownerId: ownerId ?? undefined } as any });
+  return res.status(201).json({ key: saved.key, value: saved.value });
 });
 
 // Layout convenience endpoint: save pageSections for a single user-less app
 app.get('/layout', async (req, res) => {
-  const userId = getUserId(req);
+  const actor = await getActor(req);
 
-  const p = userId
-    ? await prisma.preference.findUnique({ where: { key_userId: { key: 'layout:pageSections', userId } } })
-    : await prisma.preference.findFirst({ where: { key: 'layout:pageSections', userId: null } });
+  const p = await prisma.preference.findFirst({
+    where: {
+      key: 'layout:pageSections',
+      ...(actor.type === 'none' ? {} : { ownerType: actor.type, ownerId: actor.id }),
+    } as any,
+  });
 
   if (!p) return res.json({ sections: ['next', 'activity', 'calendar', 'goals'] });
 
@@ -351,23 +609,312 @@ app.post('/layout', async (req, res) => {
   const { sections } = req.body;
   if (!Array.isArray(sections)) return res.status(400).json({ error: 'sections must be array' });
 
-  const userId = getUserId(req);
-  if (!userId) {
-    const existing = await prisma.preference.findFirst({ where: { key: 'layout:pageSections', userId: null } });
-    if (existing) {
-      await prisma.preference.update({ where: { id: existing.id }, data: { value: sections } });
-    } else {
-      await prisma.preference.create({ data: { key: 'layout:pageSections', value: sections, userId: null } });
+  const actor = await getActor(req);
+  const ownerType = actor.type === 'none' ? null : actor.type;
+  const ownerId = actor.type === 'none' ? null : actor.id;
+  const existing = await prisma.preference.findFirst({ where: { key: 'layout:pageSections', ownerType, ownerId } as any });
+  if (existing) {
+    await prisma.preference.update({ where: { id: existing.id }, data: { value: sections } });
+  } else {
+    await prisma.preference.create({ data: { key: 'layout:pageSections', value: sections, ownerType: ownerType ?? undefined, ownerId: ownerId ?? undefined } as any });
+  }
+  return res.json({ sections });
+});
+
+// Auth
+app.get('/me', async (req, res) => {
+  const actor = await getActor(req);
+  res.json({ actor });
+});
+
+const RegisterSchema = z.object({
+  email: z.string().email().transform((s) => s.toLowerCase().trim()),
+  password: z.string().min(8),
+  name: z.string().min(1).max(100).optional(),
+});
+
+async function mergeGuestIntoUser(guestId: string, userId: string) {
+  // Move all guest-owned records to user.
+  await prisma.$transaction([
+    prisma.goal.updateMany({ where: { ownerType: 'guest', ownerId: guestId }, data: { ownerType: 'user', ownerId: userId } }),
+    prisma.habit.updateMany({ where: { ownerType: 'guest', ownerId: guestId }, data: { ownerType: 'user', ownerId: userId } }),
+    prisma.activity.updateMany({ where: { ownerType: 'guest', ownerId: guestId }, data: { ownerType: 'user', ownerId: userId } }),
+    prisma.preference.updateMany({ where: { ownerType: 'guest', ownerId: guestId }, data: { ownerType: 'user', ownerId: userId } }),
+    prisma.guest.update({ where: { id: guestId }, data: { mergedIntoUserId: userId, mergedAt: new Date() } }),
+  ]);
+}
+
+async function exchangeToken(url: string, body: Record<string, string>, acceptJson = true) {
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/x-www-form-urlencoded',
+      ...(acceptJson ? { 'Accept': 'application/json' } : {}),
+    },
+    body: new URLSearchParams(body).toString(),
+  });
+  const text = await res.text();
+  if (!res.ok) throw new Error(`token exchange failed: HTTP ${res.status} ${res.statusText}: ${text}`);
+  try { return JSON.parse(text) } catch { return text }
+}
+
+async function githubGetUser(accessToken: string) {
+  const res = await fetch('https://api.github.com/user', {
+    headers: {
+      'Authorization': `Bearer ${accessToken}`,
+      'User-Agent': 'vow',
+      'Accept': 'application/vnd.github+json',
     }
-    return res.json({ sections });
+  });
+  if (!res.ok) throw new Error(`github user fetch failed: ${res.status}`);
+  return await res.json();
+}
+
+app.post('/auth/register', async (req, res) => {
+  const parsed = RegisterSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: 'invalid payload', issues: parsed.error.issues });
+
+  const { email, password, name } = parsed.data;
+  const actor = await getActor(req);
+
+  const existing = await prisma.user.findUnique({ where: { email } });
+  if (existing) return res.status(409).json({ error: 'email already in use' });
+
+  const passwordHash = await bcrypt.hash(password, 10);
+  const user = await prisma.user.create({ data: { email, passwordHash, name } as any });
+
+  if (actor.type === 'guest') {
+    await mergeGuestIntoUser(actor.id, user.id);
   }
 
-  await prisma.preference.upsert({
-    where: { key_userId: { key: 'layout:pageSections', userId } },
-    create: { key: 'layout:pageSections', value: sections, userId },
-    update: { value: sections },
+  const expiresAt = new Date(Date.now() + SESSION_TTL_DAYS * 24 * 60 * 60 * 1000);
+  const session = await prisma.session.create({ data: { userId: user.id, expiresAt } });
+  setSessionCookie(res, session.id, expiresAt);
+  res.status(201).json({ user: { id: user.id, email: user.email, name: user.name } });
+});
+
+const LoginSchema = z.object({
+  email: z.string().email().transform((s) => s.toLowerCase().trim()),
+  password: z.string().min(1),
+});
+
+app.post('/auth/login', async (req, res) => {
+  const parsed = LoginSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: 'invalid payload', issues: parsed.error.issues });
+
+  const { email, password } = parsed.data;
+  const actor = await getActor(req);
+  const user = await prisma.user.findUnique({ where: { email } });
+  if (!user) return res.status(401).json({ error: 'invalid credentials' });
+
+  const ok = await bcrypt.compare(password, (user as any).passwordHash);
+  if (!ok) return res.status(401).json({ error: 'invalid credentials' });
+
+  if (actor.type === 'guest') {
+    await mergeGuestIntoUser(actor.id, user.id);
+  }
+
+  const expiresAt = new Date(Date.now() + SESSION_TTL_DAYS * 24 * 60 * 60 * 1000);
+  const session = await prisma.session.create({ data: { userId: user.id, expiresAt } });
+  setSessionCookie(res, session.id, expiresAt);
+  res.json({ user: { id: user.id, email: user.email, name: user.name } });
+});
+
+// OAuth (Google / GitHub)
+app.get('/auth/oauth/:provider/start', async (req, res) => {
+  const provider = String(req.params.provider) as OAuthProvider;
+  if (provider !== 'google' && provider !== 'github') return res.status(404).json({ error: 'unknown provider' });
+
+  const conf = getOAuthConfig(provider);
+  if (!conf) return res.status(501).json({ error: 'oauth not configured' });
+
+  const actor = await getActor(req);
+  const guestId = actor.type === 'guest' ? actor.id : null;
+
+  const state = randomString(24);
+  const codeVerifier = randomString(48);
+  const codeChallenge = sha256Base64Url(codeVerifier);
+  const expiresAt = new Date(Date.now() + OAUTH_STATE_TTL_MIN * 60 * 1000);
+
+  await prisma.oAuthState.create({
+    data: {
+      provider,
+      state,
+      codeVerifier,
+      guestId: guestId ?? undefined,
+      expiresAt,
+    } as any,
   });
-  return res.json({ sections });
+
+  const redirectUri = `${baseUrl(req)}/auth/oauth/${provider}/callback`;
+  const params: Record<string, string> = {
+    client_id: conf.clientId,
+    redirect_uri: redirectUri,
+    response_type: 'code',
+    scope: conf.scopes.join(' '),
+    state,
+  };
+  // PKCE
+  params.code_challenge = codeChallenge;
+  params.code_challenge_method = 'S256';
+
+  // optional return-to (after login)
+  const returnTo = typeof req.query.returnTo === 'string' ? req.query.returnTo : '';
+  if (returnTo) {
+    // piggyback on state row? store in DB if needed later; keep simple for now.
+  }
+
+  const url = `${conf.authUrl}?${new URLSearchParams(params).toString()}`;
+  res.redirect(url);
+});
+
+app.get('/auth/oauth/:provider/callback', async (req, res) => {
+  const provider = String(req.params.provider) as OAuthProvider;
+  if (provider !== 'google' && provider !== 'github') return res.status(404).json({ error: 'unknown provider' });
+  const conf = getOAuthConfig(provider);
+  if (!conf) return res.status(501).json({ error: 'oauth not configured' });
+
+  const code = typeof req.query.code === 'string' ? req.query.code : null;
+  const state = typeof req.query.state === 'string' ? req.query.state : null;
+
+  if (!code || !state) return res.status(400).json({ error: 'missing code/state' });
+
+  const st = await prisma.oAuthState.findUnique({ where: { state } });
+  if (!st) return res.status(400).json({ error: 'invalid state' });
+  if (st.expiresAt.getTime() < Date.now()) return res.status(400).json({ error: 'state expired' });
+
+  const redirectUri = `${baseUrl(req)}/auth/oauth/${provider}/callback`;
+
+  // Exchange code for token
+  if (provider === 'google') {
+    const token: any = await exchangeToken(conf.tokenUrl, {
+      client_id: conf.clientId,
+      client_secret: conf.clientSecret,
+      code,
+      grant_type: 'authorization_code',
+      redirect_uri: redirectUri,
+      code_verifier: st.codeVerifier,
+    });
+
+    const idToken = token?.id_token;
+    if (!idToken) return res.status(400).json({ error: 'missing id_token' });
+
+    const jwks = createRemoteJWKSet(new URL((conf as any).jwksUrl));
+    const verified = await jwtVerify(idToken, jwks, { audience: conf.clientId });
+    const sub = String((verified.payload as any).sub || '');
+    const email = String((verified.payload as any).email || '').toLowerCase();
+    const name = String((verified.payload as any).name || '').trim();
+    if (!sub) return res.status(400).json({ error: 'invalid id_token payload' });
+
+    let userId: string;
+    const existingAccount = await prisma.oAuthAccount.findUnique({ where: { provider_providerAccountId: { provider, providerAccountId: sub } } as any });
+    if (existingAccount) {
+      userId = existingAccount.userId;
+    } else {
+      // Try link by email if exists.
+      const existingUser = email ? await prisma.user.findUnique({ where: { email } }) : null;
+      const user = existingUser ?? await prisma.user.create({ data: { email: email || `google_${sub}@example.invalid`, passwordHash: await bcrypt.hash(randomString(24), 10), name: name || undefined } as any });
+      userId = user.id;
+      await prisma.oAuthAccount.create({
+        data: {
+          provider,
+          providerAccountId: sub,
+          userId,
+          accessToken: token?.access_token,
+          refreshToken: token?.refresh_token,
+          expiresAt: token?.expires_in ? new Date(Date.now() + Number(token.expires_in) * 1000) : undefined,
+        } as any,
+      });
+    }
+
+    if (st.guestId) await mergeGuestIntoUser(st.guestId, userId);
+
+    const expiresAt = new Date(Date.now() + SESSION_TTL_DAYS * 24 * 60 * 60 * 1000);
+    const session = await prisma.session.create({ data: { userId, expiresAt } });
+    setSessionCookie(res, session.id, expiresAt);
+    await prisma.oAuthState.delete({ where: { state } }).catch(() => {});
+    return res.redirect('http://localhost:3000/dashboard');
+  }
+
+  // GitHub
+  const token: any = await exchangeToken(conf.tokenUrl, {
+    client_id: conf.clientId,
+    client_secret: conf.clientSecret,
+    code,
+    redirect_uri: redirectUri,
+    // GitHub supports PKCE too (as of recent updates). Keep verifier for compatibility.
+    code_verifier: st.codeVerifier,
+  });
+
+  const accessToken = token?.access_token;
+  if (!accessToken) return res.status(400).json({ error: 'missing access_token' });
+
+  const gh = await githubGetUser(accessToken);
+  const ghId = String(gh?.id || '');
+  const ghLogin = String(gh?.login || '');
+  if (!ghId) return res.status(400).json({ error: 'invalid github user' });
+
+  let userId: string;
+  const existingAccount = await prisma.oAuthAccount.findUnique({ where: { provider_providerAccountId: { provider, providerAccountId: ghId } } as any });
+  if (existingAccount) {
+    userId = existingAccount.userId;
+  } else {
+    // GitHub email requires extra call; keep minimal: create placeholder email.
+    const placeholderEmail = `github_${ghId}@example.invalid`;
+    const user = await prisma.user.create({ data: { email: placeholderEmail, passwordHash: await bcrypt.hash(randomString(24), 10), name: ghLogin || undefined } as any });
+    userId = user.id;
+    await prisma.oAuthAccount.create({ data: { provider, providerAccountId: ghId, userId, accessToken } as any });
+  }
+
+  if (st.guestId) await mergeGuestIntoUser(st.guestId, userId);
+
+  const expiresAt = new Date(Date.now() + SESSION_TTL_DAYS * 24 * 60 * 60 * 1000);
+  const session = await prisma.session.create({ data: { userId, expiresAt } });
+  setSessionCookie(res, session.id, expiresAt);
+  await prisma.oAuthState.delete({ where: { state } }).catch(() => {});
+  return res.redirect('http://localhost:3000/dashboard');
+});
+
+app.post('/auth/logout', async (req, res) => {
+  try {
+    const sessionId = getCookie(req, SESSION_COOKIE);
+    if (sessionId) {
+      await prisma.session.delete({ where: { id: sessionId } }).catch(() => {});
+    }
+    clearSessionCookie(res);
+    res.status(204).send();
+  } catch (e: any) {
+    // Logout is best-effort.
+    clearSessionCookie(res);
+    res.status(204).send();
+  }
+});
+
+// Supabase Auth flow: after user signs in on the frontend, call this once to merge
+// the current guest's data into the authenticated user.
+app.post('/auth/claim', async (req, res) => {
+  const bearer = getBearerToken(req);
+  if (!bearer) return res.status(401).json({ error: 'missing bearer token' });
+
+  // Determine authenticated user (by bearer)
+  const userActor = await getActor(req);
+  if (userActor.type !== 'user') return res.status(401).json({ error: 'invalid bearer token' });
+
+  // Determine current guest (by cookie)
+  const sessionId = getCookie(req, SESSION_COOKIE);
+  if (!sessionId) return res.status(200).json({ ok: true, merged: false, reason: 'no guest session' });
+  const session = await prisma.session.findUnique({ where: { id: sessionId } });
+  const guestId = session?.guestId;
+  if (!guestId) return res.status(200).json({ ok: true, merged: false, reason: 'no guest id' });
+
+  await mergeGuestIntoUser(guestId, userActor.id);
+
+  // Optional: convert the existing guest session to a user session so future calls can omit Bearer.
+  // But per requirement we keep Bearer-only for auth; still, clearing guest cookie avoids repeat merges.
+  await prisma.session.delete({ where: { id: sessionId } }).catch(() => {});
+  clearSessionCookie(res);
+
+  return res.json({ ok: true, merged: true });
 });
 
 const port = process.env.PORT ? Number(process.env.PORT) : 4000;
