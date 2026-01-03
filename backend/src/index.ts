@@ -7,6 +7,34 @@ import bcrypt from 'bcryptjs';
 import { createHash, randomBytes } from 'crypto';
 import { jwtVerify, createRemoteJWKSet } from 'jose';
 import jwksRsa from 'jwks-rsa';
+import { ensureDatabaseUrlFromSecrets } from './runtime/dbUrl';
+import DOMPurify from 'dompurify';
+import { JSDOM } from 'jsdom';
+import helmet from 'helmet';
+import rateLimit from 'express-rate-limit';
+
+let dbUrlEnsured = false;
+async function ensureDbUrlOnce() {
+  if (dbUrlEnsured) return;
+  dbUrlEnsured = true;
+  try {
+    await ensureDatabaseUrlFromSecrets();
+  } catch (e: any) {
+    // In local dev we expect DATABASE_URL to be present; in AWS it should be reconstructed.
+    console.warn('[db] ensureDatabaseUrlFromSecrets failed', e?.message || e)
+  }
+}
+
+// Initialize DOMPurify for server-side XSS protection
+const window = new JSDOM('').window;
+const purify = DOMPurify(window as any);
+
+// Sanitize user input to prevent XSS attacks
+function sanitizeInput(input: string): string {
+  if (typeof input !== 'string') return '';
+  // Remove HTML tags and dangerous characters
+  return purify.sanitize(input, { ALLOWED_TAGS: [], ALLOWED_ATTR: [] });
+}
 
 const prisma = new PrismaClient();
 // NOTE: VS Code TS service can lag behind newly generated Prisma client typings.
@@ -14,11 +42,98 @@ const prisma = new PrismaClient();
 // We use a narrow `any` cast for the new Diary models to keep compilation/editor happy.
 const prismaAny = prisma as any
 const app = express();
+
+// Security middleware
+app.use(helmet({
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      styleSrc: ["'self'", "'unsafe-inline'"],
+      scriptSrc: ["'self'"],
+      imgSrc: ["'self'", "data:", "https:"],
+    },
+  },
+  hsts: {
+    maxAge: 31536000,
+    includeSubDomains: true,
+    preload: true
+  }
+}));
+
+// Rate limiting for authentication endpoints
+const authRateLimit = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 10, // limit each IP to 10 requests per windowMs
+  message: {
+    error: 'Too many authentication attempts, please try again later'
+  },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+// General rate limiting
+const generalRateLimit = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 100, // limit each IP to 100 requests per windowMs
+  message: {
+    error: 'Too many requests, please try again later'
+  },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+app.use(generalRateLimit);
+
+// Ensure DB URL is available in serverless environments before hit any route.
+app.use(async (_req, _res, next) => {
+  try {
+    await ensureDbUrlOnce();
+    next();
+  } catch (e) {
+    next(e);
+  }
+});
 app.use(cors({
-  origin: ['http://localhost:3000', 'http://localhost:3001', 'http://localhost:5173', 'http://localhost'],
+  origin: function (origin, callback) {
+    // Allow requests with no origin (mobile apps, Postman, etc.)
+    if (!origin) return callback(null, true);
+    
+    // Development origins
+    const devOrigins = [
+      'http://localhost:3000',
+      'http://localhost:3001', 
+      'http://localhost:5173',
+      'http://localhost'
+    ];
+    
+    // Production origins (add your actual production domains)
+    const prodOrigins: string[] = [
+      // Add your production domains here
+      // 'https://yourdomain.com',
+      // 'https://www.yourdomain.com'
+    ];
+    
+    const allowedOrigins = process.env.NODE_ENV === 'production' ? prodOrigins : [...devOrigins, ...prodOrigins];
+    
+    if (allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      console.warn(`CORS blocked origin: ${origin}`);
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
   credentials: true,
+  methods: ['GET', 'POST', 'PATCH', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['content-type', 'authorization'],
 }));
 app.use(express.json());
+
+// Support running behind a reverse proxy that routes the API under /api/* (e.g. CloudFront behavior).
+// IMPORTANT: also keep serving routes at '/' for local dev (frontend default is http://localhost:4000).
+// This way both /health and /api/health (and the same for /goals etc.) work.
+const api = express();
+api.use(app);
+api.use('/api', app);
 
 const SESSION_COOKIE = 'vow_session';
 const SESSION_TTL_DAYS = 30;
@@ -104,29 +219,64 @@ async function verifySupabaseJwt(token: string): Promise<{ supabaseUserId: strin
   const aud = process.env.SUPABASE_JWT_AUD;
   const issuer = process.env.SUPABASE_JWT_ISS;
 
-  if (!url) return null;
-
-  if (!global.__supabaseJwksClient) {
-    global.__supabaseJwksClient = jwksRsa({ jwksUri: url, cache: true, cacheMaxEntries: 5, cacheMaxAge: 10 * 60 * 1000 });
+  if (!url) {
+    console.error('[auth] SUPABASE_JWKS_URL not configured');
+    return null;
   }
 
-  // Minimal JWT verify: signature + (optional) iss/aud.
-  const decodedHeader = JSON.parse(Buffer.from(token.split('.')[0], 'base64').toString('utf8'));
-  const kid = decodedHeader?.kid;
-  if (!kid) throw new Error('JWT missing kid');
-  const key = await global.__supabaseJwksClient.getSigningKey(kid);
-  const pem = key.getPublicKey();
+  if (!global.__supabaseJwksClient) {
+    global.__supabaseJwksClient = jwksRsa({ 
+      jwksUri: url, 
+      cache: true, 
+      cacheMaxEntries: 5, 
+      cacheMaxAge: 10 * 60 * 1000,
+      timeout: 30000, // 30 second timeout
+      rateLimit: true,
+      jwksRequestsPerMinute: 5
+    });
+  }
 
-  const { payload } = await jwtVerify(token, pem as any, {
-    ...(aud ? { audience: aud } : {}),
-    ...(issuer ? { issuer } : {}),
-  });
+  try {
+    // Validate JWT structure
+    const parts = token.split('.');
+    if (parts.length !== 3) {
+      throw new Error('Invalid JWT structure');
+    }
 
-  const sub = String((payload as any).sub || '');
-  if (!sub) return null;
-  const email = (payload as any).email ? String((payload as any).email).toLowerCase() : undefined;
-  const name = (payload as any).user_metadata?.full_name ? String((payload as any).user_metadata.full_name) : undefined;
-  return { supabaseUserId: sub, email, name };
+    // Decode and validate header
+    const decodedHeader = JSON.parse(Buffer.from(parts[0], 'base64').toString('utf8'));
+    const kid = decodedHeader?.kid;
+    if (!kid) throw new Error('JWT missing kid');
+    
+    // Get signing key
+    const key = await global.__supabaseJwksClient.getSigningKey(kid);
+    const pem = key.getPublicKey();
+
+    // Verify JWT with strict validation
+    const { payload } = await jwtVerify(token, pem as any, {
+      ...(aud ? { audience: aud } : {}),
+      ...(issuer ? { issuer } : {}),
+      clockTolerance: 30, // 30 seconds clock skew tolerance
+    });
+
+    // Validate required claims
+    const sub = String((payload as any).sub || '');
+    if (!sub) throw new Error('JWT missing sub claim');
+    
+    // Validate token expiration
+    const exp = (payload as any).exp;
+    if (!exp || exp < Math.floor(Date.now() / 1000)) {
+      throw new Error('JWT expired');
+    }
+
+    const email = (payload as any).email ? String((payload as any).email).toLowerCase() : undefined;
+    const name = (payload as any).user_metadata?.full_name ? String((payload as any).user_metadata.full_name) : undefined;
+    
+    return { supabaseUserId: sub, email, name };
+  } catch (error) {
+    console.error('[auth] JWT verification failed:', error);
+    return null;
+  }
 }
 
 function getCookie(req: express.Request, name: string): string | null {
@@ -139,18 +289,22 @@ function getCookie(req: express.Request, name: string): string | null {
 function setSessionCookie(res: express.Response, sessionId: string, expiresAt: Date) {
   // httpOnly so JS can't steal it; SameSite=Lax works for same-site dev.
   // In prod behind HTTPS, set secure: true.
+  const cookieSecure = process.env.VOW_COOKIE_SECURE === '1' || process.env.VOW_COOKIE_SECURE === 'true';
   res.setHeader('Set-Cookie', serializeCookie(SESSION_COOKIE, sessionId, {
     httpOnly: true,
     sameSite: 'lax',
+    secure: cookieSecure,
     path: '/',
     expires: expiresAt,
   }));
 }
 
 function clearSessionCookie(res: express.Response) {
+  const cookieSecure = process.env.VOW_COOKIE_SECURE === '1' || process.env.VOW_COOKIE_SECURE === 'true';
   res.setHeader('Set-Cookie', serializeCookie(SESSION_COOKIE, '', {
     httpOnly: true,
     sameSite: 'lax',
+    secure: cookieSecure,
     path: '/',
     expires: new Date(0),
   }));
@@ -177,11 +331,12 @@ async function getActor(req: express.Request, res?: express.Response): Promise<A
         if (!user) {
           // Create new app user; passwordHash is unused for Supabase users.
           const passwordHash = await bcrypt.hash(randomString(24), 10);
+          const sanitizedName = v.name ? sanitizeInput(v.name) : undefined;
           user = await prisma.user.create({
             data: {
               email: v.email || `supabase_${v.supabaseUserId}@example.invalid`,
               passwordHash,
-              name: v.name,
+              name: sanitizedName,
               supabaseUserId: v.supabaseUserId,
             } as any,
           });
@@ -194,9 +349,7 @@ async function getActor(req: express.Request, res?: express.Response): Promise<A
     }
   }
 
-  // 2) Backward compat for existing dev flow.
-  const headerUserId = req.header('X-User-Id');
-  if (headerUserId) return { type: 'user', id: headerUserId };
+  // X-User-Id authentication removed for security
 
   const sessionId = getCookie(req, SESSION_COOKIE);
   if (!sessionId) return { type: 'none', id: null };
@@ -978,18 +1131,21 @@ async function githubGetUser(accessToken: string) {
   return await res.json();
 }
 
-app.post('/auth/register', async (req, res) => {
+app.post('/auth/register', authRateLimit, async (req, res) => {
   const parsed = RegisterSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: 'invalid payload', issues: parsed.error.issues });
 
   const { email, password, name } = parsed.data;
   const actor = await getActor(req);
 
+  // Sanitize user input to prevent XSS
+  const sanitizedName = name ? sanitizeInput(name) : null;
+
   const existing = await prisma.user.findUnique({ where: { email } });
   if (existing) return res.status(409).json({ error: 'email already in use' });
 
   const passwordHash = await bcrypt.hash(password, 10);
-  const user = await prisma.user.create({ data: { email, passwordHash, name } as any });
+  const user = await prisma.user.create({ data: { email, passwordHash, name: sanitizedName } as any });
 
   if (actor.type === 'guest') {
     await mergeGuestIntoUser(actor.id, user.id);
@@ -998,7 +1154,7 @@ app.post('/auth/register', async (req, res) => {
   const expiresAt = new Date(Date.now() + SESSION_TTL_DAYS * 24 * 60 * 60 * 1000);
   const session = await prisma.session.create({ data: { userId: user.id, expiresAt } });
   setSessionCookie(res, session.id, expiresAt);
-  res.status(201).json({ user: { id: user.id, email: user.email, name: user.name } });
+  res.status(201).json({ user: { id: user.id, email: user.email, name: sanitizedName } });
 });
 
 const LoginSchema = z.object({
@@ -1006,7 +1162,7 @@ const LoginSchema = z.object({
   password: z.string().min(1),
 });
 
-app.post('/auth/login', async (req, res) => {
+app.post('/auth/login', authRateLimit, async (req, res) => {
   const parsed = LoginSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: 'invalid payload', issues: parsed.error.issues });
 
@@ -1029,7 +1185,7 @@ app.post('/auth/login', async (req, res) => {
 });
 
 // OAuth (Google / GitHub)
-app.get('/auth/oauth/:provider/start', async (req, res) => {
+app.get('/auth/oauth/:provider/start', authRateLimit, async (req, res) => {
   const provider = String(req.params.provider) as OAuthProvider;
   if (provider !== 'google' && provider !== 'github') return res.status(404).json({ error: 'unknown provider' });
 
@@ -1076,7 +1232,7 @@ app.get('/auth/oauth/:provider/start', async (req, res) => {
   res.redirect(url);
 });
 
-app.get('/auth/oauth/:provider/callback', async (req, res) => {
+app.get('/auth/oauth/:provider/callback', authRateLimit, async (req, res) => {
   const provider = String(req.params.provider) as OAuthProvider;
   if (provider !== 'google' && provider !== 'github') return res.status(404).json({ error: 'unknown provider' });
   const conf = getOAuthConfig(provider);
@@ -1121,7 +1277,8 @@ app.get('/auth/oauth/:provider/callback', async (req, res) => {
     } else {
       // Try link by email if exists.
       const existingUser = email ? await prisma.user.findUnique({ where: { email } }) : null;
-      const user = existingUser ?? await prisma.user.create({ data: { email: email || `google_${sub}@example.invalid`, passwordHash: await bcrypt.hash(randomString(24), 10), name: name || undefined } as any });
+      const sanitizedName = name ? sanitizeInput(name) : undefined;
+      const user = existingUser ?? await prisma.user.create({ data: { email: email || `google_${sub}@example.invalid`, passwordHash: await bcrypt.hash(randomString(24), 10), name: sanitizedName } as any });
       userId = user.id;
       await prisma.oAuthAccount.create({
         data: {
@@ -1169,7 +1326,8 @@ app.get('/auth/oauth/:provider/callback', async (req, res) => {
   } else {
     // GitHub email requires extra call; keep minimal: create placeholder email.
     const placeholderEmail = `github_${ghId}@example.invalid`;
-    const user = await prisma.user.create({ data: { email: placeholderEmail, passwordHash: await bcrypt.hash(randomString(24), 10), name: ghLogin || undefined } as any });
+    const sanitizedGhLogin = ghLogin ? sanitizeInput(ghLogin) : undefined;
+    const user = await prisma.user.create({ data: { email: placeholderEmail, passwordHash: await bcrypt.hash(randomString(24), 10), name: sanitizedGhLogin } as any });
     userId = user.id;
     await prisma.oAuthAccount.create({ data: { provider, providerAccountId: ghId, userId, accessToken } as any });
   }
@@ -1225,5 +1383,10 @@ app.post('/auth/claim', async (req, res) => {
   return res.json({ ok: true, merged: true });
 });
 
+// If running on Lambda, we don't call listen(); the handler will proxy requests to the app.
 const port = process.env.PORT ? Number(process.env.PORT) : 4000;
-app.listen(port, () => console.log(`Server running on http://localhost:${port}`));
+if (!process.env.AWS_LAMBDA_FUNCTION_NAME && !process.env.VOW_NO_LISTEN) {
+  api.listen(port, () => console.log(`Server running on http://localhost:${port}`));
+}
+
+export default api;

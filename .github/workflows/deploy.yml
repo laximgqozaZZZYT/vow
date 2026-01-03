@@ -1,0 +1,70 @@
+name: Deploy to Production
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  security-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+      
+      - name: Install dependencies
+        run: npm install
+      
+      - name: Install backend dependencies
+        run: cd backend && npm install
+      
+      - name: Build backend
+        run: cd backend && npm run build
+      
+      - name: Start backend for testing
+        run: |
+          cd backend
+          npm start &
+          sleep 10
+        env:
+          DATABASE_URL: postgresql://test:test@localhost:5432/test
+          NODE_ENV: test
+      
+      - name: Run security tests
+        run: npm run security-test
+        env:
+          API_URL: http://localhost:4000
+          NEXT_PUBLIC_SUPABASE_URL: https://example.supabase.co
+
+  deploy-backend:
+    needs: security-test
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    steps:
+      - name: Deploy to Railway
+        run: echo "Backend auto-deploys via Railway GitHub integration"
+
+  deploy-frontend:
+    needs: security-test
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    steps:
+      - name: Deploy to Vercel
+        run: echo "Frontend auto-deploys via Vercel GitHub integration"
+
+  notify:
+    needs: [deploy-backend, deploy-frontend]
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    steps:
+      - name: Deployment Success
+        run: |
+          echo "🚀 Deployment completed successfully!"
+          echo "Frontend: https://your-app.vercel.app"
+          echo "Backend: https://your-backend.railway.app"

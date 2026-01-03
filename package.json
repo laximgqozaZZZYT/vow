@@ -1,4 +1,9 @@
 {
+  "scripts": {
+    "security-test": "node scripts/security-test.js",
+    "penetration-test": "node scripts/penetration-test.js",
+    "security-full": "npm run security-test && npm run penetration-test"
+  },
   "dependencies": {
     "axios": "^1.13.2",
     "@fullcalendar/core": "^6.1.8",

@@ -1,0 +1,1098 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: vow - Serverless stack (S3+CloudFront + API Gateway HTTP API + Lambda + Aurora Serverless v2)
+
+Parameters:
+  DeploymentMode:
+    Type: String
+    Default: minimal
+    AllowedValues: [minimal, full]
+    Description: >-
+      Deployment shape. minimal = ECS+ALB+security only (no CloudFront/S3 frontend, no NAT). full = include frontend CloudFront/S3 and NAT for private subnets.
+  EnableDatabase:
+    Type: String
+    Default: 'true'
+    AllowedValues: ['true', 'false']
+    Description: >-
+      If false, skip creating Aurora/Secrets and run API/Lambdas without DB (faster rollback/delete for debug).
+  ProjectName:
+    Type: String
+    Default: vow
+
+  Stage:
+    Type: String
+    Default: prod
+    AllowedPattern: '^[a-z0-9-]+$'
+
+  AllowedCorsOrigin:
+    Type: String
+    Default: '*'
+    Description: CORS origin for the API (use exact CloudFront domain in production).
+
+  ApiRuntime:
+    Type: String
+    Default: lambda
+    AllowedValues:
+      - lambda
+      - ecs
+    Description: Choose API runtime. 'lambda' keeps HTTP API+Lambda, 'ecs' provisions ALB+ECS(Fargate).
+
+  DbName:
+    Type: String
+    Default: vowdb
+
+  DbMasterUsername:
+    Type: String
+    Default: vowadmin
+
+  DbMasterPassword:
+    Type: String
+    NoEcho: true
+    Default: 'DISABLED'
+    Description: >-
+      Aurora master password (<=41 chars). Required when EnableDatabase=true.
+      Ignored when EnableDatabase=false (fast mode).
+
+  DbEngineVersion:
+    Type: String
+    Default: '8.0.mysql_aurora.3.07.1'
+    Description: >-
+      Aurora MySQL engine version (varies by region). If stack creation fails with
+      "Cannot find version ...", list available versions via:
+      aws rds describe-db-engine-versions --engine aurora-mysql --region <region>
+
+  DbServerlessV2MinCapacity:
+    Type: Number
+    Default: 0.5
+    Description: Aurora Serverless v2 minimum ACU (e.g. 0.5, 1, 2)
+
+  DbServerlessV2MaxCapacity:
+    Type: Number
+    Default: 2
+    Description: Aurora Serverless v2 maximum ACU (must be >= min)
+
+  SupabaseJwksUrl:
+    Type: String
+    Default: ''
+  SupabaseJwtAud:
+    Type: String
+    Default: ''
+  SupabaseJwtIss:
+    Type: String
+    Default: ''
+
+  LambdaCodeS3Bucket:
+    Type: String
+    Default: ''
+    Description: Optional. If empty, CloudFormation will create a default artifact bucket and use it for Lambda zip artifacts.
+
+  ApiLambdaCodeS3Key:
+    Type: String
+    Default: ''
+    Description: S3 key for the API Lambda zip artifact.
+
+  MigrateLambdaCodeS3Key:
+    Type: String
+    Default: ''
+    Description: S3 key for the migrate Lambda zip artifact (required to run prisma migrate via the MigrateFunctionName output).
+
+  ApiEcrImageUri:
+    Type: String
+    Default: ''
+    Description: ECR image URI for ECS task (e.g. 123456789012.dkr.ecr.ap-northeast-1.amazonaws.com/vow-api:20260103).
+
+  ApiContainerPort:
+    Type: Number
+    Default: 4000
+
+  ApiTaskCpu:
+    Type: String
+    Default: '512'
+    AllowedValues: ['256', '512', '1024', '2048', '4096']
+
+  ApiTaskMemory:
+    Type: String
+    Default: '1024'
+    AllowedValues: ['512', '1024', '2048', '3072', '4096', '8192', '16384', '30720']
+
+  ApiDesiredCount:
+    Type: Number
+    Default: 1
+
+  ApiAlbCertificateArn:
+    Type: String
+    Default: ''
+    Description: ACM certificate ARN in the same region for the API ALB (required when ApiRuntime=ecs and you want HTTPS).
+
+  ApiActiveColor:
+    Type: String
+    Default: blue
+    AllowedValues:
+      - blue
+      - green
+    Description: Active deployment color for ALB target group routing (foundation for Blue/Green).
+
+  ApiEnableBlueGreen:
+    Type: String
+    Default: 'false'
+    AllowedValues:
+      - 'true'
+      - 'false'
+    Description: If true, run two ECS services (blue+green) concurrently for Blue/Green deployments.
+
+  GoogleClientId:
+    Type: String
+    Default: ''
+  GoogleClientSecret:
+    Type: String
+    Default: ''
+  GithubClientId:
+    Type: String
+    Default: ''
+  GithubClientSecret:
+    Type: String
+    Default: ''
+
+Conditions:
+  EnableDatabaseCond: !Equals [!Ref EnableDatabase, 'true']
+  IsFullMode: !Equals [!Ref DeploymentMode, 'full']
+  HasWildcardCorsOrigin: !Equals [!Ref AllowedCorsOrigin, '*']
+  HasSupabaseJwksUrl: !Not [!Equals [!Ref SupabaseJwksUrl, '']]
+  HasSupabaseAud: !Not [!Equals [!Ref SupabaseJwtAud, '']]
+  HasSupabaseIss: !Not [!Equals [!Ref SupabaseJwtIss, '']]
+  HasGoogleOAuth: !Not [!Equals [!Ref GoogleClientId, '']]
+  HasGithubOAuth: !Not [!Equals [!Ref GithubClientId, '']]
+  HasApiLambdaCodeS3: !Not [!Equals [!Ref ApiLambdaCodeS3Key, '']]
+  HasMigrateLambdaCodeS3: !Not [!Equals [!Ref MigrateLambdaCodeS3Key, '']]
+  HasApiEcrImageUri: !Not [!Equals [!Ref ApiEcrImageUri, '']]
+
+  UseManagedLambdaArtifactBucket: !Equals [!Ref LambdaCodeS3Bucket, '']
+
+  UseLambdaApi: !Equals [!Ref ApiRuntime, 'lambda']
+  UseEcsApi: !Equals [!Ref ApiRuntime, 'ecs']
+  UseEcsApiWithImage: !And
+    - !Condition UseEcsApi
+    - !Condition HasApiEcrImageUri
+  UseEcsApiAndDatabase: !And
+    - !Condition UseEcsApi
+    - !Condition EnableDatabaseCond
+  HasApiAlbCertificateArn: !Not [!Equals [!Ref ApiAlbCertificateArn, '']]
+  UseEcsApiWithHttps: !And
+    - !Condition UseEcsApiWithImage
+    - !Condition HasApiAlbCertificateArn
+
+  IsApiActiveBlue: !Equals [!Ref ApiActiveColor, 'blue']
+  IsApiActiveGreen: !Equals [!Ref ApiActiveColor, 'green']
+
+  EnableBlueGreen: !Equals [!Ref ApiEnableBlueGreen, 'true']
+  DisableBlueGreen: !Not [!Condition EnableBlueGreen]
+
+  UseEcsApiWithImageBlueGreenEnabled: !And
+    - !Condition UseEcsApiWithImage
+    - !Condition EnableBlueGreen
+  UseEcsApiWithImageBlueGreenDisabled: !And
+    - !Condition UseEcsApiWithImage
+    - !Condition DisableBlueGreen
+
+Resources:
+  # -----------------------------
+  # Networking (minimal VPC)
+  # -----------------------------
+  Vpc:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: 10.0.0.0/16
+      EnableDnsHostnames: true
+      EnableDnsSupport: true
+      Tags:
+        - Key: Name
+          Value: !Sub '${ProjectName}-${Stage}-vpc'
+
+  InternetGateway:
+    Type: AWS::EC2::InternetGateway
+
+  VpcGatewayAttachment:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      InternetGatewayId: !Ref InternetGateway
+      VpcId: !Ref Vpc
+
+  PublicSubnetA:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref Vpc
+      AvailabilityZone: !Select [0, !GetAZs '']
+      CidrBlock: 10.0.0.0/24
+      MapPublicIpOnLaunch: true
+
+  PublicSubnetB:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref Vpc
+      AvailabilityZone: !Select [1, !GetAZs '']
+      CidrBlock: 10.0.1.0/24
+      MapPublicIpOnLaunch: true
+
+  PrivateSubnetA:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref Vpc
+      AvailabilityZone: !Select [0, !GetAZs '']
+      CidrBlock: 10.0.10.0/24
+
+  PrivateSubnetB:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref Vpc
+      AvailabilityZone: !Select [1, !GetAZs '']
+      CidrBlock: 10.0.11.0/24
+
+  PublicRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref Vpc
+
+  PublicRoute:
+    Type: AWS::EC2::Route
+    DependsOn: VpcGatewayAttachment
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref InternetGateway
+
+  PublicSubnetARouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      SubnetId: !Ref PublicSubnetA
+
+  PublicSubnetBRouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      SubnetId: !Ref PublicSubnetB
+
+  # For Lambda->RDS in private subnets we need NAT to reach public internet (JWKS fetch).
+  NatEip:
+    Type: AWS::EC2::EIP
+    Condition: IsFullMode
+    Properties:
+      Domain: vpc
+
+  NatGateway:
+    Type: AWS::EC2::NatGateway
+    Condition: IsFullMode
+    Properties:
+      AllocationId: !GetAtt NatEip.AllocationId
+      SubnetId: !Ref PublicSubnetA
+
+  PrivateRouteTable:
+    Type: AWS::EC2::RouteTable
+    Condition: IsFullMode
+    Properties:
+      VpcId: !Ref Vpc
+
+  PrivateRoute:
+    Type: AWS::EC2::Route
+    Condition: IsFullMode
+    Properties:
+      RouteTableId: !Ref PrivateRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      NatGatewayId: !Ref NatGateway
+
+  PrivateSubnetARouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Condition: IsFullMode
+    Properties:
+      RouteTableId: !Ref PrivateRouteTable
+      SubnetId: !Ref PrivateSubnetA
+
+  PrivateSubnetBRouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Condition: IsFullMode
+    Properties:
+      RouteTableId: !Ref PrivateRouteTable
+      SubnetId: !Ref PrivateSubnetB
+
+  # -----------------------------
+  # Database (Aurora Serverless v2 - MySQL)
+  # -----------------------------
+  DbSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: !Sub '${ProjectName}-${Stage} DB SG'
+      VpcId: !Ref Vpc
+
+  LambdaSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: !Sub '${ProjectName}-${Stage} Lambda SG'
+      VpcId: !Ref Vpc
+
+  ApiAlbSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Condition: UseEcsApiWithImage
+    Properties:
+      GroupDescription: !Sub '${ProjectName}-${Stage} API ALB SG'
+      VpcId: !Ref Vpc
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0
+
+  ApiEcsSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Condition: UseEcsApiWithImage
+    Properties:
+      GroupDescription: !Sub '${ProjectName}-${Stage} API ECS SG'
+      VpcId: !Ref Vpc
+
+  ApiEcsIngressFromAlb:
+    Type: AWS::EC2::SecurityGroupIngress
+    Condition: UseEcsApiWithImage
+    Properties:
+      GroupId: !Ref ApiEcsSecurityGroup
+      IpProtocol: tcp
+      FromPort: !Ref ApiContainerPort
+      ToPort: !Ref ApiContainerPort
+      SourceSecurityGroupId: !Ref ApiAlbSecurityGroup
+
+  DbIngressFromLambda:
+    Type: AWS::EC2::SecurityGroupIngress
+    Condition: EnableDatabaseCond
+    Properties:
+      GroupId: !Ref DbSecurityGroup
+      IpProtocol: tcp
+      FromPort: 3306
+      ToPort: 3306
+      SourceSecurityGroupId: !Ref LambdaSecurityGroup
+
+  DbSubnetGroup:
+    Type: AWS::RDS::DBSubnetGroup
+    Condition: EnableDatabaseCond
+    Properties:
+      DBSubnetGroupDescription: !Sub '${ProjectName}-${Stage} DB subnet group'
+      SubnetIds:
+        - !Ref PrivateSubnetA
+        - !Ref PrivateSubnetB
+
+  DbSecret:
+    Type: AWS::SecretsManager::Secret
+    Condition: EnableDatabaseCond
+    Properties:
+      Name: !Sub '${ProjectName}/${Stage}/db'
+      Description: !Sub 'DB credentials for ${ProjectName}-${Stage}'
+      SecretString: !Sub |
+        {"username":"${DbMasterUsername}","password":"${DbMasterPassword}"}
+
+  DbCluster:
+    Type: AWS::RDS::DBCluster
+    Condition: EnableDatabaseCond
+    Properties:
+      Engine: aurora-mysql
+      EngineMode: provisioned
+      EngineVersion: !Ref DbEngineVersion
+      DatabaseName: !Ref DbName
+      MasterUsername: !Ref DbMasterUsername
+      MasterUserPassword: !Ref DbMasterPassword
+      # Required when using Aurora Serverless v2 (db.serverless DBInstanceClass)
+      ServerlessV2ScalingConfiguration:
+        MinCapacity: !Ref DbServerlessV2MinCapacity
+        MaxCapacity: !Ref DbServerlessV2MaxCapacity
+      DBSubnetGroupName: !Ref DbSubnetGroup
+      VpcSecurityGroupIds:
+        - !Ref DbSecurityGroup
+      BackupRetentionPeriod: 7
+      StorageEncrypted: true
+
+  DbInstanceA:
+    Type: AWS::RDS::DBInstance
+    Condition: EnableDatabaseCond
+    Properties:
+      Engine: aurora-mysql
+      DBClusterIdentifier: !Ref DbCluster
+      DBInstanceClass: db.serverless
+
+  # -----------------------------
+  # API: Lambda + HTTP API Gateway
+  # -----------------------------
+  ApiLogGroup:
+    Type: AWS::Logs::LogGroup
+    Condition: UseLambdaApi
+    Properties:
+      LogGroupName: !Sub '/aws/lambda/${ProjectName}-${Stage}-api'
+      RetentionInDays: 14
+
+  ApiLambdaRole:
+    Type: AWS::IAM::Role
+    Condition: UseLambdaApi
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: VpcNetworking
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - ec2:CreateNetworkInterface
+                  - ec2:DescribeNetworkInterfaces
+                  - ec2:DeleteNetworkInterface
+                  - ec2:AssignPrivateIpAddresses
+                  - ec2:UnassignPrivateIpAddresses
+                Resource: '*'
+
+  ApiLambdaRoleDbSecrets:
+    Type: AWS::IAM::Policy
+    Condition: EnableDatabaseCond
+    Properties:
+      PolicyName: ApiLambdaDbSecrets
+      Roles:
+        - !Ref ApiLambdaRole
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Action:
+              - secretsmanager:GetSecretValue
+            Resource: !Ref DbSecret
+
+  MigrateLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub '/aws/lambda/${ProjectName}-${Stage}-migrate'
+      RetentionInDays: 30
+
+  MigrateLambdaRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: VpcAndSecrets
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - ec2:CreateNetworkInterface
+                  - ec2:DescribeNetworkInterfaces
+                  - ec2:DeleteNetworkInterface
+                  - ec2:AssignPrivateIpAddresses
+                  - ec2:UnassignPrivateIpAddresses
+                Resource: '*'
+
+  MigrateLambdaRoleDbSecrets:
+    Type: AWS::IAM::Policy
+    Condition: EnableDatabaseCond
+    Properties:
+      PolicyName: MigrateLambdaDbSecrets
+      Roles:
+        - !Ref MigrateLambdaRole
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Action:
+              - secretsmanager:GetSecretValue
+            Resource: !Ref DbSecret
+
+  MigrateLambda:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub '${ProjectName}-${Stage}-migrate'
+      Role: !GetAtt MigrateLambdaRole.Arn
+      Runtime: nodejs20.x
+      Handler: migrate.handler
+      MemorySize: 1024
+      Timeout: 300
+      LoggingConfig:
+        LogGroup: !Ref MigrateLogGroup
+      VpcConfig:
+        SecurityGroupIds:
+          - !Ref LambdaSecurityGroup
+        SubnetIds:
+          - !Ref PrivateSubnetA
+          - !Ref PrivateSubnetB
+      Environment:
+        Variables:
+          NODE_ENV: production
+          DB_HOST: !If [EnableDatabaseCond, !GetAtt DbCluster.Endpoint.Address, '']
+          DB_PORT: '3306'
+          DB_NAME: !Ref DbName
+          DB_SECRET_ARN: !If [EnableDatabaseCond, !Ref DbSecret, '']
+      Code: !If
+        - HasMigrateLambdaCodeS3
+        - S3Bucket: !If [UseManagedLambdaArtifactBucket, !Ref LambdaArtifactBucket, !Ref LambdaCodeS3Bucket]
+          S3Key: !Ref MigrateLambdaCodeS3Key
+        - ZipFile: |
+            exports.handler = async () => {
+              return { ok: false, message: 'Not deployed. Upload migrate artifact or set LambdaCodeS3Bucket/MigrateLambdaCodeS3Key.' };
+            };
+
+  ApiLambda:
+    Type: AWS::Lambda::Function
+    Condition: UseLambdaApi
+    Properties:
+      FunctionName: !Sub '${ProjectName}-${Stage}-api'
+      Role: !GetAtt ApiLambdaRole.Arn
+      Runtime: nodejs20.x
+      # NOTE: This stack supports an inline fallback (ZipFile) when ApiLambdaCodeS3Key is empty.
+      # Inline code always uses the `index.handler` entrypoint.
+      Handler: index.handler
+      MemorySize: 1024
+      Timeout: 30
+      LoggingConfig:
+        LogGroup: !Ref ApiLogGroup
+      VpcConfig:
+        SecurityGroupIds:
+          - !Ref LambdaSecurityGroup
+        SubnetIds:
+          - !Ref PrivateSubnetA
+          - !Ref PrivateSubnetB
+      Environment:
+        Variables:
+          NODE_ENV: production
+          # Used for OAuth redirect URL building behind proxies.
+          PUBLIC_BASE_URL: !Sub 'https://${HttpApi}.execute-api.${AWS::Region}.amazonaws.com'
+          ALLOWED_CORS_ORIGIN: !Ref AllowedCorsOrigin
+          DB_HOST: !If [EnableDatabaseCond, !GetAtt DbCluster.Endpoint.Address, '']
+          DB_PORT: '3306'
+          DB_NAME: !Ref DbName
+          DB_SECRET_ARN: !If [EnableDatabaseCond, !Ref DbSecret, '']
+          SUPABASE_JWKS_URL: !If [HasSupabaseJwksUrl, !Ref SupabaseJwksUrl, '']
+          SUPABASE_JWT_AUD: !If [HasSupabaseAud, !Ref SupabaseJwtAud, '']
+          SUPABASE_JWT_ISS: !If [HasSupabaseIss, !Ref SupabaseJwtIss, '']
+          GOOGLE_CLIENT_ID: !If [HasGoogleOAuth, !Ref GoogleClientId, '']
+          GOOGLE_CLIENT_SECRET: !If [HasGoogleOAuth, !Ref GoogleClientSecret, '']
+          GITHUB_CLIENT_ID: !If [HasGithubOAuth, !Ref GithubClientId, '']
+          GITHUB_CLIENT_SECRET: !If [HasGithubOAuth, !Ref GithubClientSecret, '']
+      Code: !If
+        - HasApiLambdaCodeS3
+        - S3Bucket: !If [UseManagedLambdaArtifactBucket, !Ref LambdaArtifactBucket, !Ref LambdaCodeS3Bucket]
+          S3Key: !Ref ApiLambdaCodeS3Key
+        - ZipFile: |
+            exports.handler = async () => {
+              return {
+                statusCode: 501,
+                headers: { 'content-type': 'application/json' },
+                body: JSON.stringify({ ok: false, message: 'Not deployed. Upload API artifact or set LambdaCodeS3Bucket/ApiLambdaCodeS3Key.' }),
+              };
+            };
+
+  HttpApi:
+    Type: AWS::ApiGatewayV2::Api
+    Condition: UseLambdaApi
+    Properties:
+      Name: !Sub '${ProjectName}-${Stage}-http'
+      ProtocolType: HTTP
+      CorsConfiguration:
+        AllowCredentials: !If [HasWildcardCorsOrigin, false, true]
+        AllowHeaders:
+          - content-type
+          - authorization
+        AllowMethods:
+          - GET
+          - POST
+          - PATCH
+          - DELETE
+          - OPTIONS
+        AllowOrigins:
+          - !Ref AllowedCorsOrigin
+
+  ApiIntegration:
+    Type: AWS::ApiGatewayV2::Integration
+    Condition: UseLambdaApi
+    Properties:
+      ApiId: !Ref HttpApi
+      IntegrationType: AWS_PROXY
+      IntegrationUri: !Sub 'arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${ApiLambda.Arn}/invocations'
+      PayloadFormatVersion: '2.0'
+
+  ApiRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Condition: UseLambdaApi
+    Properties:
+      ApiId: !Ref HttpApi
+      RouteKey: '$default'
+      Target: !Sub 'integrations/${ApiIntegration}'
+
+  ApiStage:
+    Type: AWS::ApiGatewayV2::Stage
+    Condition: UseLambdaApi
+    Properties:
+      ApiId: !Ref HttpApi
+      StageName: '$default'
+      AutoDeploy: true
+
+  ApiPermission:
+    Type: AWS::Lambda::Permission
+    Condition: UseLambdaApi
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !Ref ApiLambda
+      Principal: apigateway.amazonaws.com
+      # NOTE: HTTP API ($default stage) can be finicky about execute-api ARN matching.
+      # Grant invocation for the whole API ID across all stages/methods/paths.
+      SourceArn: !Sub 'arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${HttpApi}/*'
+
+  ApiAlb:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Condition: UseEcsApiWithImage
+    Properties:
+      Name: !Sub '${ProjectName}-${Stage}-api'
+      Scheme: internet-facing
+      Type: application
+      SecurityGroups:
+        - !Ref ApiAlbSecurityGroup
+      Subnets:
+        - !Ref PublicSubnetA
+        - !Ref PublicSubnetB
+
+  ApiTargetGroupBlue:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Condition: UseEcsApiWithImage
+    Properties:
+      Name: !Sub '${ProjectName}-${Stage}-api-blue'
+      VpcId: !Ref Vpc
+      TargetType: ip
+      Port: !Ref ApiContainerPort
+      Protocol: HTTP
+      HealthCheckPath: /health
+      Matcher:
+        HttpCode: '200'
+
+  ApiTargetGroupGreen:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Condition: UseEcsApiWithImage
+    Properties:
+      Name: !Sub '${ProjectName}-${Stage}-api-green'
+      VpcId: !Ref Vpc
+      TargetType: ip
+      Port: !Ref ApiContainerPort
+      Protocol: HTTP
+      HealthCheckPath: /health
+      Matcher:
+        HttpCode: '200'
+
+  ApiAlbListenerHttp:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Condition: UseEcsApiWithImage
+    Properties:
+      LoadBalancerArn: !Ref ApiAlb
+      Port: 80
+      Protocol: HTTP
+      DefaultActions:
+        - !If
+          - HasApiAlbCertificateArn
+          - Type: redirect
+            RedirectConfig:
+              Protocol: HTTPS
+              Port: '443'
+              StatusCode: HTTP_301
+          - Type: forward
+            ForwardConfig:
+              TargetGroups:
+                - TargetGroupArn: !Ref ApiTargetGroupBlue
+                  Weight: !If [IsApiActiveBlue, 100, 0]
+                - TargetGroupArn: !Ref ApiTargetGroupGreen
+                  Weight: !If [IsApiActiveGreen, 100, 0]
+
+  ApiAlbListenerHttps:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Condition: UseEcsApiWithHttps
+    Properties:
+      LoadBalancerArn: !Ref ApiAlb
+      Port: 443
+      Protocol: HTTPS
+      Certificates:
+        - CertificateArn: !Ref ApiAlbCertificateArn
+      DefaultActions:
+        - Type: forward
+          ForwardConfig:
+            TargetGroups:
+              - TargetGroupArn: !Ref ApiTargetGroupBlue
+                Weight: !If [IsApiActiveBlue, 100, 0]
+              - TargetGroupArn: !Ref ApiTargetGroupGreen
+                Weight: !If [IsApiActiveGreen, 100, 0]
+
+  ApiEcsCluster:
+    Type: AWS::ECS::Cluster
+    Condition: UseEcsApiWithImage
+    Properties:
+      ClusterName: !Sub '${ProjectName}-${Stage}-api'
+
+  ApiEcsLogGroup:
+    Type: AWS::Logs::LogGroup
+    Condition: UseEcsApiWithImage
+    Properties:
+      LogGroupName: !Sub '/aws/ecs/${ProjectName}-${Stage}-api'
+      RetentionInDays: 14
+
+  ApiEcsExecutionRole:
+    Type: AWS::IAM::Role
+    Condition: UseEcsApiWithImage
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ecs-tasks.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy
+
+  ApiEcsTaskRole:
+    Type: AWS::IAM::Role
+    Condition: UseEcsApiWithImage
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ecs-tasks.amazonaws.com
+            Action: sts:AssumeRole
+
+  ApiEcsExecutionRoleDbSecrets:
+    Type: AWS::IAM::Policy
+    Condition: UseEcsApiAndDatabase
+    Properties:
+      PolicyName: ApiEcsExecutionDbSecrets
+      Roles:
+        - !Ref ApiEcsExecutionRole
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Action:
+              - secretsmanager:GetSecretValue
+            Resource: !Ref DbSecret
+
+  ApiEcsTaskRoleDbSecrets:
+    Type: AWS::IAM::Policy
+    Condition: UseEcsApiAndDatabase
+    Properties:
+      PolicyName: ApiEcsTaskDbSecrets
+      Roles:
+        - !Ref ApiEcsTaskRole
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Action:
+              - secretsmanager:GetSecretValue
+            Resource: !Ref DbSecret
+
+  ApiEcsTaskDefinition:
+    Type: AWS::ECS::TaskDefinition
+    Condition: UseEcsApiWithImage
+    Properties:
+      Family: !Sub '${ProjectName}-${Stage}-api'
+      RequiresCompatibilities: [FARGATE]
+      NetworkMode: awsvpc
+      Cpu: !Ref ApiTaskCpu
+      Memory: !Ref ApiTaskMemory
+      ExecutionRoleArn: !GetAtt ApiEcsExecutionRole.Arn
+      TaskRoleArn: !GetAtt ApiEcsTaskRole.Arn
+      ContainerDefinitions:
+        - Name: api
+          Image: !Ref ApiEcrImageUri
+          Essential: true
+          PortMappings:
+            - ContainerPort: !Ref ApiContainerPort
+              Protocol: tcp
+          LogConfiguration:
+            LogDriver: awslogs
+            Options:
+              awslogs-group: !Ref ApiEcsLogGroup
+              awslogs-region: !Ref AWS::Region
+              awslogs-stream-prefix: api
+          Environment:
+            - Name: NODE_ENV
+              Value: production
+            - Name: PUBLIC_BASE_URL
+              Value: !Sub 'https://${ApiAlb.DNSName}'
+            - Name: VOW_COOKIE_SECURE
+              Value: 'true'
+            - Name: ALLOWED_CORS_ORIGIN
+              Value: !Ref AllowedCorsOrigin
+            - Name: DB_HOST
+              Value: !If [EnableDatabaseCond, !GetAtt DbCluster.Endpoint.Address, '']
+            - Name: DB_PORT
+              Value: '3306'
+            - Name: DB_NAME
+              Value: !Ref DbName
+            - Name: DB_SECRET_ARN
+              Value: !If [EnableDatabaseCond, !Ref DbSecret, '']
+            - Name: SUPABASE_JWKS_URL
+              Value: !If [HasSupabaseJwksUrl, !Ref SupabaseJwksUrl, '']
+            - Name: SUPABASE_JWT_AUD
+              Value: !If [HasSupabaseAud, !Ref SupabaseJwtAud, '']
+            - Name: SUPABASE_JWT_ISS
+              Value: !If [HasSupabaseIss, !Ref SupabaseJwtIss, '']
+            - Name: GOOGLE_CLIENT_ID
+              Value: !If [HasGoogleOAuth, !Ref GoogleClientId, '']
+            - Name: GOOGLE_CLIENT_SECRET
+              Value: !If [HasGoogleOAuth, !Ref GoogleClientSecret, '']
+            - Name: GITHUB_CLIENT_ID
+              Value: !If [HasGithubOAuth, !Ref GithubClientId, '']
+            - Name: GITHUB_CLIENT_SECRET
+              Value: !If [HasGithubOAuth, !Ref GithubClientSecret, '']
+
+  ApiEcsService:
+    Type: AWS::ECS::Service
+    Condition: UseEcsApiWithImageBlueGreenDisabled
+    DependsOn:
+      - ApiAlbListenerHttp
+      - ApiTargetGroupBlue
+      - ApiTargetGroupGreen
+    Properties:
+      ServiceName: !Sub '${ProjectName}-${Stage}-api'
+      Cluster: !Ref ApiEcsCluster
+      LaunchType: FARGATE
+      DesiredCount: !Ref ApiDesiredCount
+      TaskDefinition: !Ref ApiEcsTaskDefinition
+      NetworkConfiguration:
+        AwsvpcConfiguration:
+          AssignPublicIp: ENABLED
+          SecurityGroups:
+            - !Ref ApiEcsSecurityGroup
+          Subnets:
+            - !Ref PublicSubnetA
+            - !Ref PublicSubnetB
+      LoadBalancers:
+        - ContainerName: api
+          ContainerPort: !Ref ApiContainerPort
+          TargetGroupArn: !If [IsApiActiveBlue, !Ref ApiTargetGroupBlue, !Ref ApiTargetGroupGreen]
+
+  ApiEcsServiceBlue:
+    Type: AWS::ECS::Service
+    Condition: UseEcsApiWithImageBlueGreenEnabled
+    DependsOn:
+      - ApiAlbListenerHttp
+      - ApiTargetGroupBlue
+      - ApiTargetGroupGreen
+    Properties:
+      ServiceName: !Sub '${ProjectName}-${Stage}-api-blue'
+      Cluster: !Ref ApiEcsCluster
+      LaunchType: FARGATE
+      DesiredCount: !Ref ApiDesiredCount
+      TaskDefinition: !Ref ApiEcsTaskDefinition
+      NetworkConfiguration:
+        AwsvpcConfiguration:
+          AssignPublicIp: ENABLED
+          SecurityGroups:
+            - !Ref ApiEcsSecurityGroup
+          Subnets:
+            - !Ref PublicSubnetA
+            - !Ref PublicSubnetB
+      LoadBalancers:
+        - ContainerName: api
+          ContainerPort: !Ref ApiContainerPort
+          TargetGroupArn: !Ref ApiTargetGroupBlue
+
+  ApiEcsServiceGreen:
+    Type: AWS::ECS::Service
+    Condition: UseEcsApiWithImageBlueGreenEnabled
+    DependsOn:
+      - ApiAlbListenerHttp
+      - ApiTargetGroupBlue
+      - ApiTargetGroupGreen
+    Properties:
+      ServiceName: !Sub '${ProjectName}-${Stage}-api-green'
+      Cluster: !Ref ApiEcsCluster
+      LaunchType: FARGATE
+      DesiredCount: 0
+      TaskDefinition: !Ref ApiEcsTaskDefinition
+      NetworkConfiguration:
+        AwsvpcConfiguration:
+          AssignPublicIp: ENABLED
+          SecurityGroups:
+            - !Ref ApiEcsSecurityGroup
+          Subnets:
+            - !Ref PublicSubnetA
+            - !Ref PublicSubnetB
+      LoadBalancers:
+        - ContainerName: api
+          ContainerPort: !Ref ApiContainerPort
+          TargetGroupArn: !Ref ApiTargetGroupGreen
+
+  # -----------------------------
+  # Frontend: S3 + CloudFront
+  # -----------------------------
+  LambdaArtifactBucket:
+    Type: AWS::S3::Bucket
+    Condition: UseManagedLambdaArtifactBucket
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      LifecycleConfiguration:
+        Rules:
+          - Id: abort-multipart
+            Status: Enabled
+            AbortIncompleteMultipartUpload:
+              DaysAfterInitiation: 7
+          - Id: expire-old-artifacts
+            Status: Enabled
+            ExpirationInDays: 30
+  FrontendBucket:
+    Type: AWS::S3::Bucket
+    Condition: IsFullMode
+    Properties:
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+
+  FrontendBucketOai:
+    Type: AWS::CloudFront::CloudFrontOriginAccessIdentity
+    Condition: IsFullMode
+    Properties:
+      CloudFrontOriginAccessIdentityConfig:
+        Comment: !Sub '${ProjectName}-${Stage} OAI'
+
+  FrontendBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Condition: IsFullMode
+    Properties:
+      Bucket: !Ref FrontendBucket
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              CanonicalUser: !GetAtt FrontendBucketOai.S3CanonicalUserId
+            Action: s3:GetObject
+            Resource: !Sub '${FrontendBucket.Arn}/*'
+
+  CloudFrontDistribution:
+    Type: AWS::CloudFront::Distribution
+    Condition: IsFullMode
+    Properties:
+      DistributionConfig:
+        Enabled: true
+        DefaultRootObject: index.html
+        Origins:
+          - Id: s3origin
+            DomainName: !GetAtt FrontendBucket.RegionalDomainName
+            S3OriginConfig:
+              OriginAccessIdentity: !Sub 'origin-access-identity/cloudfront/${FrontendBucketOai}'
+          - Id: apiorigin
+            DomainName: !GetAtt ApiAlb.DNSName
+            CustomOriginConfig:
+              OriginProtocolPolicy: https-only
+        DefaultCacheBehavior:
+          TargetOriginId: s3origin
+          ViewerProtocolPolicy: redirect-to-https
+          AllowedMethods: [GET, HEAD, OPTIONS]
+          CachedMethods: [GET, HEAD, OPTIONS]
+          Compress: true
+          ForwardedValues:
+            QueryString: true
+            Cookies:
+              Forward: none
+        CacheBehaviors:
+          - PathPattern: /api/*
+            TargetOriginId: apiorigin
+            ViewerProtocolPolicy: redirect-to-https
+            AllowedMethods: [GET, HEAD, OPTIONS, PUT, POST, PATCH, DELETE]
+            CachedMethods: [GET, HEAD, OPTIONS]
+            Compress: true
+            # Do not cache API responses. This keeps CloudFront as a simple reverse proxy for /api/*.
+            # AWS managed policy: CachingDisabled
+            CachePolicyId: 4135ea2d-6df8-44a3-9df3-4b5a84be39ad
+            # Minimize what CloudFront forwards to the origin.
+            # We still need cookies (session) and a few headers.
+            # NOTE: CloudFront OriginRequestPolicy does NOT allow forwarding the standard `Authorization` header.
+            OriginRequestPolicyId: !Ref ApiOriginRequestPolicy
+        PriceClass: PriceClass_100
+
+  ApiOriginRequestPolicy:
+    Type: AWS::CloudFront::OriginRequestPolicy
+    Condition: IsFullMode
+    Properties:
+      OriginRequestPolicyConfig:
+        Name: !Sub '${ProjectName}-${Stage}-api-origin-req'
+        Comment: Forward only headers/cookies needed by API auth (Supabase JWT + app session + OAuth) and CORS.
+        CookiesConfig:
+          CookieBehavior: all
+        QueryStringsConfig:
+          QueryStringBehavior: all
+        HeadersConfig:
+          HeaderBehavior: whitelist
+          Headers:
+            # Browser/CORS
+            - Origin
+            - Referer
+            - Access-Control-Request-Headers
+            - Access-Control-Request-Method
+            # OAuth callback + absolute URL construction behind the proxy
+            - Host
+            # NOTE: CloudFront OriginRequestPolicy does not allow X-Forwarded-Proto.
+
+Outputs:
+  DatabaseEnabled:
+    Description: Whether this stack created the database resources.
+    Value: !If [EnableDatabaseCond, 'true', 'false']
+  LambdaArtifactBucketName:
+    Description: S3 bucket for Lambda zip artifacts (migrate lambda; and API lambda when ApiRuntime=lambda). If you passed LambdaCodeS3Bucket, that value is returned.
+    Value: !If
+      - UseManagedLambdaArtifactBucket
+      - !Ref LambdaArtifactBucket
+      - !Ref LambdaCodeS3Bucket
+  FrontendBucketName:
+    Value: !If [IsFullMode, !Ref FrontendBucket, '']
+  CloudFrontDomainName:
+    Value: !If
+      - IsFullMode
+      - !GetAtt CloudFrontDistribution.DomainName
+      - ''
+
+  ApiBaseUrl:
+    Description: Base URL for the API (ALB direct; useful for testing / health checks).
+    Value: !If
+      - UseEcsApi
+      - !Sub 'https://${ApiAlb.DNSName}'
+      - !Sub 'https://${HttpApi}.execute-api.${AWS::Region}.amazonaws.com'
+
+  ApiCloudFrontBaseUrl:
+    Description: Recommended API base for the frontend when using CloudFront same-domain proxy (/api).
+    Value: !If
+      - IsFullMode
+      - !Sub 'https://${CloudFrontDistribution.DomainName}/api'
+      - !Sub 'https://${HttpApi}.execute-api.${AWS::Region}.amazonaws.com'
+  MigrateFunctionName:
+    Value: !Ref MigrateLambda
+  DbEndpoint:
+    Value: !If [EnableDatabaseCond, !GetAtt DbCluster.Endpoint.Address, '']

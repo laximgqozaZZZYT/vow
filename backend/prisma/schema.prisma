@@ -3,9 +3,8 @@ generator client {
 }
 
 datasource db {
-  provider          = "mysql"
-  url               = env("DATABASE_URL")
-  shadowDatabaseUrl = env("SHADOW_DATABASE_URL")
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
 }
 
 model Goal {
@@ -95,8 +94,8 @@ model Preference {
 model DiaryCard {
   id        String   @id @default(cuid())
   // Markdown content (front/back)
-  frontMd   String   @db.LongText
-  backMd    String   @db.LongText
+  frontMd   String   @db.Text
+  backMd    String   @db.Text
 
   ownerType String?  // 'user' | 'guest'
   ownerId   String?

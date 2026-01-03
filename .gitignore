@@ -26,3 +26,11 @@ backend/docker-compose.*.yml
 # Prisma local artifacts
 backend/prisma/dev.db
 backend/prisma/dev.db-journal
+node_modules
+
+# Build/deploy artifacts (do not commit)
+backend/dist-bundle/
+backend/.lambda-artifact/
+backend/.lambda-artifact-api/
+backend/.lambda-artifact-migrate/
+backend/lambda-*.zip

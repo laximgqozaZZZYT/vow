@@ -1,0 +1,10 @@
+node_modules
+dist
+.lambda-artifact*
+dist-bundle
+*.zip
+.env
+.env.*
+Dockerfile
+.dockerignore
+npm-debug.log*
