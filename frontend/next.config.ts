@@ -6,6 +6,10 @@ const nextConfig: NextConfig = {
   trailingSlash: false, // Vercel handles this better
   images: { unoptimized: false }, // Enable Next.js image optimization
   
+  // Explicitly disable static export for Vercel
+  output: undefined,
+  distDir: '.next',
+  
   // Environment variables validation
   env: {
     NEXT_PUBLIC_API_URL: process.env.NEXT_PUBLIC_API_URL,
