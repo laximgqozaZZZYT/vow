@@ -99,11 +99,13 @@ async function request(path: string, opts: RequestInit = {}) {
 
 // API functions with Supabase fallback
 export async function getGoals() { 
+  if (USE_NEXTJS_API) return await request('/api/goals');
   if (FORCE_SUPABASE_DIRECT || USE_SUPABASE_DIRECT) return await supabaseDirectClient.getGoals();
   return await request('/goals');
 }
 
 export async function createGoal(payload: any) { 
+  if (USE_NEXTJS_API) return await request('/api/goals', { method: 'POST', body: JSON.stringify(payload) });
   if (USE_SUPABASE_DIRECT) return await supabaseDirectClient.createGoal(payload);
   return await request('/goals', { method: 'POST', body: JSON.stringify(payload) });
 }
@@ -141,26 +143,31 @@ export async function deleteHabit(id: string) {
 }
 
 export async function getActivities() { 
+  if (USE_NEXTJS_API) return await request('/api/activities');
   if (FORCE_SUPABASE_DIRECT || USE_SUPABASE_DIRECT) return await supabaseDirectClient.getActivities();
   return await request('/activities');
 }
 
 export async function createActivity(payload: any) { 
+  if (USE_NEXTJS_API) return await request('/api/activities', { method: 'POST', body: JSON.stringify(payload) });
   if (USE_SUPABASE_DIRECT) return await supabaseDirectClient.createActivity(payload);
   return await request('/activities', { method: 'POST', body: JSON.stringify(payload) });
 }
 
 export async function me() { 
+  if (USE_NEXTJS_API) return await request('/api/me');
   if (FORCE_SUPABASE_DIRECT || USE_SUPABASE_DIRECT) return await supabaseDirectClient.me();
   return await request('/me');
 }
 
 export async function getLayout() { 
+  if (USE_NEXTJS_API) return await request('/api/layout');
   if (USE_SUPABASE_DIRECT) return await supabaseDirectClient.getLayout();
   return await request('/layout');
 }
 
 export async function setLayout(sections: any[]) { 
+  if (USE_NEXTJS_API) return await request('/api/layout', { method: 'POST', body: JSON.stringify({ sections }) });
   if (USE_SUPABASE_DIRECT) return await supabaseDirectClient.setLayout(sections);
   return await request('/layout', { method: 'POST', body: JSON.stringify({ sections }) });
 }
@@ -198,20 +205,25 @@ export type DiaryCard = {
 }
 
 export async function getDiaryTags(): Promise<DiaryTag[]> {
+  // 本番環境では空配列を返す（Diary機能は未実装）
+  if (USE_NEXTJS_API) return [];
   // 一時的に無効化 - Express APIを呼び出さないように
   return [];
   // return await request('/diary/tags')
 }
 
 export async function createDiaryTag(payload: { name: string; color?: string | null }): Promise<DiaryTag> {
+  if (USE_NEXTJS_API) throw new Error('Diary feature not implemented in production');
   return await request('/diary/tags', { method: 'POST', body: JSON.stringify(payload) })
 }
 
 export async function updateDiaryTag(id: string, payload: { name?: string; color?: string | null }): Promise<DiaryTag> {
+  if (USE_NEXTJS_API) throw new Error('Diary feature not implemented in production');
   return await request(`/diary/tags/${id}`, { method: 'PATCH', body: JSON.stringify(payload) })
 }
 
 export async function deleteDiaryTag(id: string): Promise<{ ok: true }> {
+  if (USE_NEXTJS_API) throw new Error('Diary feature not implemented in production');
   return await request(`/diary/tags/${id}`, { method: 'DELETE' })
 }
 
@@ -221,6 +233,8 @@ export async function getDiaryCards(params: {
   goal?: string[]
   habit?: string[]
 } = {}): Promise<DiaryCard[]> {
+  // 本番環境では空配列を返す（Diary機能は未実装）
+  if (USE_NEXTJS_API) return [];
   // 一時的に無効化 - Express APIを呼び出さないように
   return [];
   // const qs = new URLSearchParams()
