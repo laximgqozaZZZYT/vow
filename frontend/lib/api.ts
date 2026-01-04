@@ -1,13 +1,5 @@
-import { supabaseDirectClient } from './supabase-direct';
-
 // Next.js環境変数は実行時ではなくビルド時に解決される
 const BASE = (process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000').replace(/\/+$/, '')
-// 開発環境でのみSupabase Direct APIを使用（本番環境では絶対に使用しない）
-const USE_SUPABASE_DIRECT = process.env.NEXT_PUBLIC_USE_SUPABASE_API === 'true' && process.env.NODE_ENV === 'development'
-
-// 強制的にSupabase Direct APIを使用（デバッグ用 - 開発環境のみ）
-const FORCE_SUPABASE_DIRECT = false && process.env.NODE_ENV === 'development';
-
 // 本番環境では必ずNext.js API Routesを使用（CORS問題を完全に回避）
 const USE_NEXTJS_API = process.env.NODE_ENV === 'production';
 
@@ -15,20 +7,12 @@ const USE_NEXTJS_API = process.env.NODE_ENV === 'production';
 if (typeof window !== 'undefined') {
   console.log('=== API Configuration Debug ===');
   console.log('BASE:', BASE);
-  console.log('USE_SUPABASE_DIRECT:', USE_SUPABASE_DIRECT);
-  console.log('FORCE_SUPABASE_DIRECT:', FORCE_SUPABASE_DIRECT);
   console.log('USE_NEXTJS_API:', USE_NEXTJS_API);
-  console.log('NEXT_PUBLIC_USE_SUPABASE_API:', process.env.NEXT_PUBLIC_USE_SUPABASE_API);
   console.log('NEXT_PUBLIC_API_URL:', process.env.NEXT_PUBLIC_API_URL);
   console.log('NODE_ENV:', process.env.NODE_ENV);
   
-  const finalChoice = USE_NEXTJS_API ? 'Next.js API Routes (Production)' : (FORCE_SUPABASE_DIRECT || USE_SUPABASE_DIRECT) ? 'Supabase Direct (Development)' : 'Express API (Development)';
+  const finalChoice = USE_NEXTJS_API ? 'Next.js API Routes (Production)' : 'Express API (Development)';
   console.log('🚀 Using:', finalChoice);
-  
-  // 本番環境でSupabase Directが使用されようとした場合の警告
-  if (process.env.NODE_ENV === 'production' && (FORCE_SUPABASE_DIRECT || USE_SUPABASE_DIRECT)) {
-    console.error('❌ CRITICAL: Supabase Direct API attempted in production! This will cause CORS errors.');
-  }
 }
 
 let bearerToken: string | null = null
@@ -102,79 +86,66 @@ async function request(path: string, opts: RequestInit = {}) {
 // API functions with Next.js API Routes priority
 export async function getGoals() { 
   if (USE_NEXTJS_API) return await request('/api/goals');
-  if (FORCE_SUPABASE_DIRECT || USE_SUPABASE_DIRECT) return await supabaseDirectClient.getGoals();
   return await request('/goals');
 }
 
 export async function createGoal(payload: any) { 
   if (USE_NEXTJS_API) return await request('/api/goals', { method: 'POST', body: JSON.stringify(payload) });
-  if (FORCE_SUPABASE_DIRECT || USE_SUPABASE_DIRECT) return await supabaseDirectClient.createGoal(payload);
   return await request('/goals', { method: 'POST', body: JSON.stringify(payload) });
 }
 
 export async function updateGoal(id: string, payload: any) { 
   if (USE_NEXTJS_API) throw new Error('Update goal not implemented in Next.js API');
-  if (FORCE_SUPABASE_DIRECT || USE_SUPABASE_DIRECT) return await supabaseDirectClient.updateGoal(id, payload);
   return await request(`/goals/${id}`, { method: 'PATCH', body: JSON.stringify(payload) });
 }
 
 export async function deleteGoal(id: string) { 
   if (USE_NEXTJS_API) throw new Error('Delete goal not implemented in Next.js API');
-  if (FORCE_SUPABASE_DIRECT || USE_SUPABASE_DIRECT) return await supabaseDirectClient.deleteGoal(id);
   return await request(`/goals/${id}`, { method: 'DELETE' });
 }
 
 export async function getHabits() { 
   if (USE_NEXTJS_API) return await request('/api/habits');
-  if (FORCE_SUPABASE_DIRECT || USE_SUPABASE_DIRECT) return await supabaseDirectClient.getHabits();
   return await request('/habits');
 }
 
 export async function createHabit(payload: any) { 
   if (USE_NEXTJS_API) return await request('/api/habits', { method: 'POST', body: JSON.stringify(payload) });
-  if (FORCE_SUPABASE_DIRECT || USE_SUPABASE_DIRECT) return await supabaseDirectClient.createHabit(payload);
   return await request('/habits', { method: 'POST', body: JSON.stringify(payload) });
 }
 
 export async function updateHabit(id: string, payload: any) { 
   if (USE_NEXTJS_API) throw new Error('Update habit not implemented in Next.js API');
-  if (FORCE_SUPABASE_DIRECT || USE_SUPABASE_DIRECT) return await supabaseDirectClient.updateHabit(id, payload);
   return await request(`/habits/${id}`, { method: 'PATCH', body: JSON.stringify(payload) });
 }
 
 export async function deleteHabit(id: string) { 
   if (USE_NEXTJS_API) throw new Error('Delete habit not implemented in Next.js API');
-  if (FORCE_SUPABASE_DIRECT || USE_SUPABASE_DIRECT) return await supabaseDirectClient.deleteHabit(id);
   return await request(`/habits/${id}`, { method: 'DELETE' });
 }
 
 export async function getActivities() { 
   if (USE_NEXTJS_API) return await request('/api/activities');
-  if (FORCE_SUPABASE_DIRECT || USE_SUPABASE_DIRECT) return await supabaseDirectClient.getActivities();
   return await request('/activities');
 }
 
 export async function createActivity(payload: any) { 
   if (USE_NEXTJS_API) return await request('/api/activities', { method: 'POST', body: JSON.stringify(payload) });
-  if (FORCE_SUPABASE_DIRECT || USE_SUPABASE_DIRECT) return await supabaseDirectClient.createActivity(payload);
   return await request('/activities', { method: 'POST', body: JSON.stringify(payload) });
 }
 
 export async function me() { 
   if (USE_NEXTJS_API) return await request('/api/me');
-  if (FORCE_SUPABASE_DIRECT || USE_SUPABASE_DIRECT) return await supabaseDirectClient.me();
   return await request('/me');
 }
 
 export async function getLayout() { 
   if (USE_NEXTJS_API) return await request('/api/layout');
-  if (USE_SUPABASE_DIRECT) return await supabaseDirectClient.getLayout();
   return await request('/layout');
 }
 
 export async function setLayout(sections: any[]) { 
   if (USE_NEXTJS_API) return await request('/api/layout', { method: 'POST', body: JSON.stringify({ sections }) });
-  if (USE_SUPABASE_DIRECT) return await supabaseDirectClient.setLayout(sections);
   return await request('/layout', { method: 'POST', body: JSON.stringify({ sections }) });
 }
 
