@@ -1,11 +1,8 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  // Vercel deployment configuration
+  // Minimal configuration for Vercel deployment
   trailingSlash: false,
-  images: { 
-    unoptimized: false 
-  },
   
   // Environment variables
   env: {
