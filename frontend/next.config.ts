@@ -1,6 +1,9 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  // Explicitly disable static export for Vercel SSR
+  output: undefined,
+  
   // Minimal configuration for Vercel deployment
   trailingSlash: false,
   
