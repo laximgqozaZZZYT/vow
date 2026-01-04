@@ -114,16 +114,12 @@ export default function DashboardPage() {
     // Supabase認証リスナーを完全に無効化（CORS回避）
     console.log('[auth] Supabase auth listener disabled to avoid CORS issues');
     return () => {}; // 何もしない
-    })
-
-    return () => {
-      try { sub?.subscription?.unsubscribe() } catch {}
-    }
   }, [])
 
   async function handleLogout() {
     try {
-      await supabase?.auth.signOut()
+      // Supabaseログアウトを無効化（CORS回避）
+      console.log('[auth] Supabase logout disabled to avoid CORS issues');
     } catch {}
     try {
       ;(api as any).setBearerToken?.(null)
