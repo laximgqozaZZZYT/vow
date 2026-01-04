@@ -181,9 +181,16 @@ export class SupabaseDirectClient {
       throw new Error(error);
     }
     
+    // goalIdが指定されていない場合、デフォルトゴールを作成または取得
+    let goalId = payload.goalId;
+    if (!goalId) {
+      console.log('[createHabit] No goalId provided, creating/finding default goal');
+      goalId = await this.getOrCreateDefaultGoal(session.session.user.id);
+    }
+    
     const now = new Date().toISOString();
     const insertData = {
-      goal_id: payload.goalId,
+      goal_id: goalId,
       name: payload.name,
       type: payload.type,
       active: true,
@@ -409,6 +416,57 @@ export class SupabaseDirectClient {
   async setLayout(sections: any[]) { return { sections }; }
   async getPrefs() { return {}; }
   async setPref(key: string, value: any) { return { [key]: value }; }
+
+  // デフォルトゴール作成または取得
+  private async getOrCreateDefaultGoal(userId: string): Promise<string> {
+    if (!supabase) throw new Error('Supabase not configured');
+    
+    console.log('[getOrCreateDefaultGoal] Looking for default goal for user:', userId);
+    
+    // 既存のデフォルトゴールを検索
+    const { data: existingGoals, error: searchError } = await supabase
+      .from('goals')
+      .select('*')
+      .eq('owner_type', 'user')
+      .eq('owner_id', userId)
+      .eq('name', 'My Goals')
+      .limit(1);
+    
+    if (searchError) {
+      console.error('[getOrCreateDefaultGoal] Search error:', searchError);
+      throw searchError;
+    }
+    
+    if (existingGoals && existingGoals.length > 0) {
+      console.log('[getOrCreateDefaultGoal] Found existing default goal:', existingGoals[0].id);
+      return existingGoals[0].id;
+    }
+    
+    // デフォルトゴールを作成
+    console.log('[getOrCreateDefaultGoal] Creating new default goal');
+    const now = new Date().toISOString();
+    const { data: newGoal, error: createError } = await supabase
+      .from('goals')
+      .insert({
+        name: 'My Goals',
+        details: 'Default goal for organizing habits',
+        owner_type: 'user',
+        owner_id: userId,
+        is_completed: false,
+        created_at: now,
+        updated_at: now
+      })
+      .select()
+      .single();
+    
+    if (createError) {
+      console.error('[getOrCreateDefaultGoal] Create error:', createError);
+      throw createError;
+    }
+    
+    console.log('[getOrCreateDefaultGoal] Created new default goal:', newGoal.id);
+    return newGoal.id;
+  }
 }
 
 export const supabaseDirectClient = new SupabaseDirectClient();
