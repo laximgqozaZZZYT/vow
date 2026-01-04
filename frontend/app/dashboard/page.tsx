@@ -159,8 +159,8 @@ export default function DashboardPage() {
   const [openHabitModal, setOpenHabitModal] = useState(false);
   
   const [editLayoutOpen, setEditLayoutOpen] = useState(false);
-  type SectionId = 'next' | 'activity' | 'calendar' | 'statics' | 'diary'
-  const [pageSections, setPageSections] = useState<SectionId[]>(['next','activity','calendar','statics','diary'])
+  type SectionId = 'next' | 'activity' | 'calendar' | 'statics' // | 'diary' - 一時的に無効化
+  const [pageSections, setPageSections] = useState<SectionId[]>(['next','activity','calendar','statics']) // 'diary'を削除
 
   // Hydration safety: only read localStorage after mount, otherwise server/client HTML can diverge.
   useEffect(() => {
@@ -952,8 +952,8 @@ export default function DashboardPage() {
               />
             ) : sec === 'statics' ? (
               <StaticsSection key="statics" habits={habits as any} activities={activities as any} goals={goals as any} />
-            ) : sec === 'diary' ? (
-              <DiarySection key="diary" goals={goals as any} habits={habits as any} />
+            // ) : sec === 'diary' ? (
+            //   <DiarySection key="diary" goals={goals as any} habits={habits as any} />
             ) : null
           ))}
         </div>

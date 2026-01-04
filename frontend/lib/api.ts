@@ -174,7 +174,9 @@ export type DiaryCard = {
 }
 
 export async function getDiaryTags(): Promise<DiaryTag[]> {
-  return await request('/diary/tags')
+  // 一時的に無効化 - Express APIを呼び出さないように
+  return [];
+  // return await request('/diary/tags')
 }
 
 export async function createDiaryTag(payload: { name: string; color?: string | null }): Promise<DiaryTag> {
@@ -195,13 +197,15 @@ export async function getDiaryCards(params: {
   goal?: string[]
   habit?: string[]
 } = {}): Promise<DiaryCard[]> {
-  const qs = new URLSearchParams()
-  if (params.query) qs.set('query', params.query)
-  for (const id of params.tag ?? []) qs.append('tag', id)
-  for (const id of params.goal ?? []) qs.append('goal', id)
-  for (const id of params.habit ?? []) qs.append('habit', id)
-  const suffix = qs.toString() ? `?${qs.toString()}` : ''
-  return await request(`/diary${suffix}`)
+  // 一時的に無効化 - Express APIを呼び出さないように
+  return [];
+  // const qs = new URLSearchParams()
+  // if (params.query) qs.set('query', params.query)
+  // for (const id of params.tag ?? []) qs.append('tag', id)
+  // for (const id of params.goal ?? []) qs.append('goal', id)
+  // for (const id of params.habit ?? []) qs.append('habit', id)
+  // const suffix = qs.toString() ? `?${qs.toString()}` : ''
+  // return await request(`/diary${suffix}`)
 }
 
 export async function getDiaryCard(id: string): Promise<DiaryCard> {
