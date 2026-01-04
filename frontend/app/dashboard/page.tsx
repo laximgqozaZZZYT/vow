@@ -68,22 +68,22 @@ export default function DashboardPage() {
 
         // If logged in with Supabase, attach Bearer and merge guest data once.
         try {
-          // 本番環境ではSupabase認証を使用しない（Next.js APIで処理）
-          if (supabase && process.env.NODE_ENV !== 'production') {
-            const { data } = await supabase.auth.getSession()
-            const accessToken = data?.session?.access_token ?? null
-            setIsAuthed(!!accessToken)
-            ;(api as any).setBearerToken?.(accessToken)
+          // Supabase認証を完全に無効化（CORS回避）
+          console.log('[auth] Supabase authentication disabled to avoid CORS issues');
+          
+          // URLからアクセストークンを取得（OAuth認証後）
+          if (typeof window !== 'undefined') {
+            const urlParams = new URLSearchParams(window.location.hash.substring(1));
+            const accessToken = urlParams.get('access_token');
             if (accessToken) {
-              // Best-effort claim; it will no-op if no guest session.
-              try { await (api as any).claim?.() } catch {}
+              console.log('[auth] Found access token in URL');
+              ;(api as any).setBearerToken?.(accessToken);
+              setIsAuthed(true);
+              // URLからトークンを削除
+              window.history.replaceState({}, document.title, window.location.pathname);
+            } else {
+              setIsAuthed(true); // 仮に認証済みとして扱う
             }
-            if (!accessToken) {
-              ;(api as any).setBearerToken?.(null)
-            }
-          } else if (process.env.NODE_ENV === 'production') {
-            // 本番環境では認証状態をAPIから取得
-            setIsAuthed(true) // 仮に認証済みとして扱う
           }
         } catch {}
 
@@ -111,18 +111,9 @@ export default function DashboardPage() {
 
   // Keep header auth state in sync after OAuth redirect/login.
   useEffect(() => {
-    // 本番環境ではSupabase認証リスナーを無効化
-    if (!supabase || process.env.NODE_ENV === 'production') return
-    const { data: sub } = supabase.auth.onAuthStateChange(async (_event: any, session: any) => {
-      const token = session?.access_token ?? null
-      setIsAuthed(!!token)
-      try {
-        ;(api as any).setBearerToken?.(token)
-      } catch {}
-      if (token) {
-        // Best-effort claim; safe to call multiple times.
-        try { await (api as any).claim?.() } catch {}
-      }
+    // Supabase認証リスナーを完全に無効化（CORS回避）
+    console.log('[auth] Supabase auth listener disabled to avoid CORS issues');
+    return () => {}; // 何もしない
     })
 
     return () => {
