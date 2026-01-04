@@ -1,17 +1,31 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  // Explicitly disable static export for Vercel SSR
-  output: undefined,
-  
-  // Minimal configuration for Vercel deployment
+  // Standard Vercel deployment configuration
   trailingSlash: false,
+  poweredByHeader: false,
   
-  // Environment variables
-  env: {
-    NEXT_PUBLIC_API_URL: process.env.NEXT_PUBLIC_API_URL,
-    NEXT_PUBLIC_SUPABASE_URL: process.env.NEXT_PUBLIC_SUPABASE_URL,
-    NEXT_PUBLIC_SUPABASE_ANON_KEY: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
+  // Security headers (moved from vercel.json)
+  async headers() {
+    return [
+      {
+        source: '/(.*)',
+        headers: [
+          {
+            key: 'X-Frame-Options',
+            value: 'DENY',
+          },
+          {
+            key: 'X-Content-Type-Options',
+            value: 'nosniff',
+          },
+          {
+            key: 'Referrer-Policy',
+            value: 'strict-origin-when-cross-origin',
+          },
+        ],
+      },
+    ];
   },
 };
 
