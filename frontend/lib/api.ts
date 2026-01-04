@@ -5,17 +5,21 @@ const BASE = (process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000').replac
 // 本番環境では強制的にSupabase Direct APIを使用
 const USE_SUPABASE_DIRECT = process.env.NEXT_PUBLIC_USE_SUPABASE_API === 'true' || process.env.NODE_ENV === 'production'
 
+// 強制的にSupabase Direct APIを使用（デバッグ用）
+const FORCE_SUPABASE_DIRECT = true;
+
 // デバッグ用ログ（本番環境で確認）
 if (typeof window !== 'undefined') {
-  console.log('API Configuration:', {
-    BASE,
-    USE_SUPABASE_DIRECT,
-    NEXT_PUBLIC_USE_SUPABASE_API: process.env.NEXT_PUBLIC_USE_SUPABASE_API,
-    NEXT_PUBLIC_API_URL: process.env.NEXT_PUBLIC_API_URL,
-    NODE_ENV: process.env.NODE_ENV
-  });
+  console.log('=== API Configuration Debug ===');
+  console.log('BASE:', BASE);
+  console.log('USE_SUPABASE_DIRECT:', USE_SUPABASE_DIRECT);
+  console.log('FORCE_SUPABASE_DIRECT:', FORCE_SUPABASE_DIRECT);
+  console.log('NEXT_PUBLIC_USE_SUPABASE_API:', process.env.NEXT_PUBLIC_USE_SUPABASE_API);
+  console.log('NEXT_PUBLIC_API_URL:', process.env.NEXT_PUBLIC_API_URL);
+  console.log('NODE_ENV:', process.env.NODE_ENV);
   
-  if (USE_SUPABASE_DIRECT) {
+  const finalChoice = FORCE_SUPABASE_DIRECT || USE_SUPABASE_DIRECT;
+  if (finalChoice) {
     console.log('✅ Using Supabase Direct API');
   } else {
     console.log('❌ Using Express API');
@@ -75,12 +79,10 @@ async function request(path: string, opts: RequestInit = {}) {
   }
 }
 
-// 一時的に全てのAPI呼び出しを無効化
+// API functions with Supabase fallback
 export async function getGoals() { 
-  console.log('getGoals called - returning empty array');
-  return [];
-  // if (USE_SUPABASE_DIRECT) return await supabaseDirectClient.getGoals();
-  // return await request('/goals');
+  if (FORCE_SUPABASE_DIRECT || USE_SUPABASE_DIRECT) return await supabaseDirectClient.getGoals();
+  return await request('/goals');
 }
 
 export async function createGoal(payload: any) { 
@@ -99,10 +101,8 @@ export async function deleteGoal(id: string) {
 }
 
 export async function getHabits() { 
-  console.log('getHabits called - returning empty array');
-  return [];
-  // if (USE_SUPABASE_DIRECT) return await supabaseDirectClient.getHabits();
-  // return await request('/habits');
+  if (FORCE_SUPABASE_DIRECT || USE_SUPABASE_DIRECT) return await supabaseDirectClient.getHabits();
+  return await request('/habits');
 }
 
 export async function createHabit(payload: any) { 
@@ -121,10 +121,8 @@ export async function deleteHabit(id: string) {
 }
 
 export async function getActivities() { 
-  console.log('getActivities called - returning empty array');
-  return [];
-  // if (USE_SUPABASE_DIRECT) return await supabaseDirectClient.getActivities();
-  // return await request('/activities');
+  if (FORCE_SUPABASE_DIRECT || USE_SUPABASE_DIRECT) return await supabaseDirectClient.getActivities();
+  return await request('/activities');
 }
 
 export async function createActivity(payload: any) { 
@@ -133,16 +131,8 @@ export async function createActivity(payload: any) {
 }
 
 export async function me() { 
-  console.log('me called - returning mock user');
-  return {
-    actor: {
-      type: 'user',
-      id: 'test-user-id',
-      email: 'test@example.com'
-    }
-  };
-  // if (USE_SUPABASE_DIRECT) return await supabaseDirectClient.me();
-  // return await request('/me');
+  if (FORCE_SUPABASE_DIRECT || USE_SUPABASE_DIRECT) return await supabaseDirectClient.me();
+  return await request('/me');
 }
 
 export async function getLayout() { 
@@ -165,11 +155,7 @@ export async function setPref(key: string, value: any) { return await request('/
 export async function register(payload: { email: string; password: string; name?: string }) { return await request('/auth/register', { method: 'POST', body: JSON.stringify(payload) }) }
 export async function login(payload: { email: string; password: string }) { return await request('/auth/login', { method: 'POST', body: JSON.stringify(payload) }) }
 export async function logout() { return await request('/auth/logout', { method: 'POST' }) }
-export async function claim() { 
-  console.log('claim called - returning success');
-  return { success: true };
-  // return await request('/auth/claim', { method: 'POST' }) 
-}
+export async function claim() { return await request('/auth/claim', { method: 'POST' }) }
 
 // Diary
 export type DiaryTag = {
