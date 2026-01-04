@@ -2,16 +2,16 @@ import { supabaseDirectClient } from './supabase-direct';
 
 // Next.js環境変数は実行時ではなくビルド時に解決される
 const BASE = (process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000').replace(/\/+$/, '')
-// 開発環境でのみSupabase Direct APIを使用（本番環境では完全に無効化）
+// 開発環境でのみSupabase Direct APIを使用（本番環境では絶対に使用しない）
 const USE_SUPABASE_DIRECT = process.env.NEXT_PUBLIC_USE_SUPABASE_API === 'true' && process.env.NODE_ENV === 'development'
 
 // 強制的にSupabase Direct APIを使用（デバッグ用 - 開発環境のみ）
 const FORCE_SUPABASE_DIRECT = false && process.env.NODE_ENV === 'development';
 
-// 本番環境でCORSエラーを回避するため、Next.js API Routesを使用
-const USE_NEXTJS_API = process.env.NODE_ENV === 'production'; // 本番環境のみNext.js API使用
+// 本番環境では必ずNext.js API Routesを使用（CORS問題を完全に回避）
+const USE_NEXTJS_API = process.env.NODE_ENV === 'production';
 
-// デバッグ用ログ（本番環境で確認）
+// デバッグ用ログ
 if (typeof window !== 'undefined') {
   console.log('=== API Configuration Debug ===');
   console.log('BASE:', BASE);
@@ -22,8 +22,13 @@ if (typeof window !== 'undefined') {
   console.log('NEXT_PUBLIC_API_URL:', process.env.NEXT_PUBLIC_API_URL);
   console.log('NODE_ENV:', process.env.NODE_ENV);
   
-  const finalChoice = USE_NEXTJS_API ? 'Next.js API Routes' : (FORCE_SUPABASE_DIRECT || USE_SUPABASE_DIRECT) ? 'Supabase Direct' : 'Express API';
+  const finalChoice = USE_NEXTJS_API ? 'Next.js API Routes (Production)' : (FORCE_SUPABASE_DIRECT || USE_SUPABASE_DIRECT) ? 'Supabase Direct (Development)' : 'Express API (Development)';
   console.log('🚀 Using:', finalChoice);
+  
+  // 本番環境でSupabase Directが使用されようとした場合の警告
+  if (process.env.NODE_ENV === 'production' && (FORCE_SUPABASE_DIRECT || USE_SUPABASE_DIRECT)) {
+    console.error('❌ CRITICAL: Supabase Direct API attempted in production! This will cause CORS errors.');
+  }
 }
 
 let bearerToken: string | null = null

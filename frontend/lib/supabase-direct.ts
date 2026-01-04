@@ -1,10 +1,11 @@
 import { supabase } from './supabaseClient';
 
-// Supabase direct client - 開発環境のみ使用
+// Supabase direct client - 本番環境では完全に無効化
 export class SupabaseDirectClient {
   private checkEnvironment() {
+    // 本番環境では常にエラーを投げる
     if (process.env.NODE_ENV === 'production') {
-      throw new Error('Supabase Direct Client is disabled in production to avoid CORS issues. Use Next.js API Routes instead.');
+      throw new Error('Supabase Direct Client is completely disabled in production to prevent CORS issues. All data operations must use Next.js API Routes.');
     }
     if (!supabase) {
       throw new Error('Supabase not configured');
@@ -16,7 +17,6 @@ export class SupabaseDirectClient {
     
     const { data: session } = await supabase.auth.getSession();
     if (!session?.session?.user) {
-      // Return empty array for guest users
       return [];
     }
     
@@ -36,7 +36,6 @@ export class SupabaseDirectClient {
     
     const { data: session } = await supabase.auth.getSession();
     
-    // 認証が必要
     if (!session?.session?.user) {
       throw new Error('Authentication required. Please sign in to save your data.');
     }
