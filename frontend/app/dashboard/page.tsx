@@ -45,7 +45,7 @@ export default function DashboardPage() {
   const [goals, setGoals] = useState<Goal[]>([]);
 
   const [actorLabel, setActorLabel] = useState<string>('');
-  const [isAuthed, setIsAuthed] = useState<boolean>(false)
+  const [isAuthed, setIsAuthed] = useState<boolean | null>(null) // null = loading, false = not authed, true = authed
   const [authError, setAuthError] = useState<string | null>(null)
 
   const [habits, setHabits] = useState<Habit[]>([]);
@@ -68,23 +68,32 @@ export default function DashboardPage() {
 
         // If logged in with Supabase, attach Bearer and merge guest data once.
         try {
-          // 本番環境のみSupabase認証を無効化（CORS回避）
+          // 本番環境では認証をセッションCookieベースで処理
           if (process.env.NODE_ENV === 'production') {
-            console.log('[auth] Supabase authentication disabled in production to avoid CORS issues');
+            console.log('[auth] Production mode - using session-based authentication');
             
-            // URLからアクセストークンを取得（OAuth認証後）
-            if (typeof window !== 'undefined') {
-              const urlParams = new URLSearchParams(window.location.hash.substring(1));
-              const accessToken = urlParams.get('access_token');
-              if (accessToken) {
-                console.log('[auth] Found access token in URL');
-                ;(api as any).setBearerToken?.(accessToken);
+            // OAuth後のアクセストークンをURLから削除（セキュリティ対策）
+            if (typeof window !== 'undefined' && window.location.hash.includes('access_token')) {
+              console.log('[auth] Cleaning OAuth tokens from URL');
+              window.history.replaceState({}, document.title, window.location.pathname);
+            }
+            
+            // セッションCookieから認証状態を確認
+            try {
+              const response = await fetch('/api/me', {
+                credentials: 'include'
+              });
+              if (response.ok) {
+                const userData = await response.json();
+                console.log('[auth] Authenticated via session cookie:', userData);
                 setIsAuthed(true);
-                // URLからトークンを削除
-                window.history.replaceState({}, document.title, window.location.pathname);
               } else {
-                setIsAuthed(true); // 仮に認証済みとして扱う
+                console.log('[auth] No valid session found');
+                setIsAuthed(false);
               }
+            } catch (error) {
+              console.error('[auth] Session check failed:', error);
+              setIsAuthed(false);
             }
           } else if (supabase) {
             // 開発環境では通常のSupabase認証を使用
@@ -193,7 +202,10 @@ export default function DashboardPage() {
   const [pageSections, setPageSections] = useState<SectionId[]>(['next','activity','calendar','statics']) // 'diary'を削除
 
   // Hydration safety: only read localStorage after mount, otherwise server/client HTML can diverge.
+  const [isClient, setIsClient] = useState(false)
+  
   useEffect(() => {
+    setIsClient(true)
     try {
       const raw = window.localStorage.getItem('pageSections')
       if (raw) setPageSections(JSON.parse(raw) as SectionId[])
@@ -737,6 +749,13 @@ export default function DashboardPage() {
         )}
       </div>
     )
+  }
+
+  // Prevent hydration mismatch by not rendering until client-side
+  if (!isClient) {
+    return <div className="flex min-h-screen items-center justify-center bg-zinc-50 dark:bg-black text-black dark:text-zinc-50">
+      <div className="text-lg">Loading...</div>
+    </div>
   }
 
   return (

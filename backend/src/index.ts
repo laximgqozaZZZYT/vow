@@ -1298,7 +1298,8 @@ app.get('/auth/oauth/:provider/callback', authRateLimit, async (req, res) => {
     const session = await prisma.session.create({ data: { userId, expiresAt } });
     setSessionCookie(res, session.id, expiresAt);
     await prisma.oAuthState.delete({ where: { state } }).catch(() => {});
-    return res.redirect('http://localhost:3000/dashboard');
+    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
+    return res.redirect(`${frontendUrl}/dashboard`);
   }
 
   // GitHub
@@ -1338,7 +1339,8 @@ app.get('/auth/oauth/:provider/callback', authRateLimit, async (req, res) => {
   const session = await prisma.session.create({ data: { userId, expiresAt } });
   setSessionCookie(res, session.id, expiresAt);
   await prisma.oAuthState.delete({ where: { state } }).catch(() => {});
-  return res.redirect('http://localhost:3000/dashboard');
+  const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
+  return res.redirect(`${frontendUrl}/dashboard`);
 });
 
 app.post('/auth/logout', async (req, res) => {

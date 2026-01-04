@@ -1,9 +1,18 @@
 import { supabase } from './supabaseClient';
 
-// Supabase direct client for production use
+// Supabase direct client - 開発環境のみ使用
 export class SupabaseDirectClient {
+  private checkEnvironment() {
+    if (process.env.NODE_ENV === 'production') {
+      throw new Error('Supabase Direct Client is disabled in production to avoid CORS issues. Use Next.js API Routes instead.');
+    }
+    if (!supabase) {
+      throw new Error('Supabase not configured');
+    }
+  }
+
   async getGoals() {
-    if (!supabase) throw new Error('Supabase not configured');
+    this.checkEnvironment();
     
     const { data: session } = await supabase.auth.getSession();
     if (!session?.session?.user) {
@@ -23,7 +32,7 @@ export class SupabaseDirectClient {
   }
 
   async createGoal(payload: { name: string; details?: string; dueDate?: string; parentId?: string | null }) {
-    if (!supabase) throw new Error('Supabase not configured');
+    this.checkEnvironment();
     
     const { data: session } = await supabase.auth.getSession();
     
