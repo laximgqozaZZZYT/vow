@@ -9,7 +9,7 @@ const USE_SUPABASE_DIRECT = process.env.NEXT_PUBLIC_USE_SUPABASE_API === 'true' 
 const FORCE_SUPABASE_DIRECT = false;
 
 // 本番環境でCORSエラーを回避するため、Next.js API Routesを使用
-const USE_NEXTJS_API = true; // 強制的にNext.js APIを使用
+const USE_NEXTJS_API = process.env.NODE_ENV === 'production'; // 本番環境のみNext.js API使用
 
 // デバッグ用ログ（本番環境で確認）
 if (typeof window !== 'undefined') {

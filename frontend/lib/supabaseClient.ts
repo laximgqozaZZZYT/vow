@@ -8,9 +8,19 @@ const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
 export const supabase = (() => {
   if (typeof window === 'undefined') return null as any
   
-  // 完全にSupabaseクライアントを無効化（CORS回避）
-  console.log('[supabase] Completely disabled to avoid CORS issues');
-  return null as any;
+  // 本番環境のみSupabaseクライアントを無効化（CORS回避）
+  if (process.env.NODE_ENV === 'production') {
+    console.log('[supabase] Disabled in production to avoid CORS issues');
+    return null as any;
+  }
+  
+  if (!url || !anonKey) {
+    // eslint-disable-next-line no-console
+    console.warn('[supabase] Missing NEXT_PUBLIC_SUPABASE_URL or NEXT_PUBLIC_SUPABASE_ANON_KEY')
+    console.warn('[supabase] URL:', url ? 'SET' : 'NOT SET')
+    console.warn('[supabase] ANON_KEY:', anonKey ? 'SET' : 'NOT SET')
+    return null as any
+  }
   
   const client = createClient(url, anonKey, {
     auth: {
@@ -35,4 +45,3 @@ export const supabase = (() => {
   
   return client;
 })()
-
