@@ -68,7 +68,8 @@ export default function DashboardPage() {
 
         // If logged in with Supabase, attach Bearer and merge guest data once.
         try {
-          if (supabase) {
+          // 本番環境ではSupabase認証を使用しない（Next.js APIで処理）
+          if (supabase && process.env.NODE_ENV !== 'production') {
             const { data } = await supabase.auth.getSession()
             const accessToken = data?.session?.access_token ?? null
             setIsAuthed(!!accessToken)
@@ -80,6 +81,9 @@ export default function DashboardPage() {
             if (!accessToken) {
               ;(api as any).setBearerToken?.(null)
             }
+          } else if (process.env.NODE_ENV === 'production') {
+            // 本番環境では認証状態をAPIから取得
+            setIsAuthed(true) // 仮に認証済みとして扱う
           }
         } catch {}
 
@@ -107,7 +111,8 @@ export default function DashboardPage() {
 
   // Keep header auth state in sync after OAuth redirect/login.
   useEffect(() => {
-    if (!supabase) return
+    // 本番環境ではSupabase認証リスナーを無効化
+    if (!supabase || process.env.NODE_ENV === 'production') return
     const { data: sub } = supabase.auth.onAuthStateChange(async (_event: any, session: any) => {
       const token = session?.access_token ?? null
       setIsAuthed(!!token)

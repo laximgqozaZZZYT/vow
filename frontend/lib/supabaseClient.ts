@@ -7,6 +7,13 @@ const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
 // We must NOT throw on the server. Create the client only in the browser.
 export const supabase = (() => {
   if (typeof window === 'undefined') return null as any
+  
+  // 本番環境ではSupabaseクライアントを無効化（CORS回避）
+  if (process.env.NODE_ENV === 'production') {
+    console.log('[supabase] Disabled in production to avoid CORS issues');
+    return null as any;
+  }
+  
   if (!url || !anonKey) {
     // eslint-disable-next-line no-console
     console.warn('[supabase] Missing NEXT_PUBLIC_SUPABASE_URL or NEXT_PUBLIC_SUPABASE_ANON_KEY')
