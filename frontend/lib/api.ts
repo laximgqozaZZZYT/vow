@@ -1,4 +1,7 @@
+import { supabaseDirectClient } from './supabase-direct';
+
 const BASE = (process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000').replace(/\/+$/, '')
+const USE_SUPABASE_DIRECT = process.env.NEXT_PUBLIC_USE_SUPABASE_API === 'true'
 
 let bearerToken: string | null = null
 
@@ -53,30 +56,79 @@ async function request(path: string, opts: RequestInit = {}) {
   }
 }
 
-export async function getGoals() { return await request('/goals') }
+// API functions with Supabase fallback
+export async function getGoals() { 
+  if (USE_SUPABASE_DIRECT) return await supabaseDirectClient.getGoals();
+  return await request('/goals');
+}
+
+export async function createGoal(payload: any) { 
+  if (USE_SUPABASE_DIRECT) return await supabaseDirectClient.createGoal(payload);
+  return await request('/goals', { method: 'POST', body: JSON.stringify(payload) });
+}
+
+export async function updateGoal(id: string, payload: any) { 
+  if (USE_SUPABASE_DIRECT) return await supabaseDirectClient.updateGoal(id, payload);
+  return await request(`/goals/${id}`, { method: 'PATCH', body: JSON.stringify(payload) });
+}
+
+export async function deleteGoal(id: string) { 
+  if (USE_SUPABASE_DIRECT) return await supabaseDirectClient.deleteGoal(id);
+  return await request(`/goals/${id}`, { method: 'DELETE' });
+}
+
+export async function getHabits() { 
+  if (USE_SUPABASE_DIRECT) return await supabaseDirectClient.getHabits();
+  return await request('/habits');
+}
+
+export async function createHabit(payload: any) { 
+  if (USE_SUPABASE_DIRECT) return await supabaseDirectClient.createHabit(payload);
+  return await request('/habits', { method: 'POST', body: JSON.stringify(payload) });
+}
+
+export async function updateHabit(id: string, payload: any) { 
+  if (USE_SUPABASE_DIRECT) return await supabaseDirectClient.updateHabit(id, payload);
+  return await request(`/habits/${id}`, { method: 'PATCH', body: JSON.stringify(payload) });
+}
+
+export async function deleteHabit(id: string) { 
+  if (USE_SUPABASE_DIRECT) return await supabaseDirectClient.deleteHabit(id);
+  return await request(`/habits/${id}`, { method: 'DELETE' });
+}
+
+export async function getActivities() { 
+  if (USE_SUPABASE_DIRECT) return await supabaseDirectClient.getActivities();
+  return await request('/activities');
+}
+
+export async function createActivity(payload: any) { 
+  if (USE_SUPABASE_DIRECT) return await supabaseDirectClient.createActivity(payload);
+  return await request('/activities', { method: 'POST', body: JSON.stringify(payload) });
+}
+
+export async function me() { 
+  if (USE_SUPABASE_DIRECT) return await supabaseDirectClient.me();
+  return await request('/me');
+}
+
+export async function getLayout() { 
+  if (USE_SUPABASE_DIRECT) return await supabaseDirectClient.getLayout();
+  return await request('/layout');
+}
+
+export async function setLayout(sections: any[]) { 
+  if (USE_SUPABASE_DIRECT) return await supabaseDirectClient.setLayout(sections);
+  return await request('/layout', { method: 'POST', body: JSON.stringify({ sections }) });
+}
+
+// Other functions remain unchanged for Express API compatibility
 export async function getGoal(id: string) { return await request(`/goals/${id}`) }
-export async function createGoal(payload: any) { return await request('/goals', { method: 'POST', body: JSON.stringify(payload) }) }
-export async function updateGoal(id: string, payload: any) { return await request(`/goals/${id}`, { method: 'PATCH', body: JSON.stringify(payload) }) }
-export async function deleteGoal(id: string) { return await request(`/goals/${id}`, { method: 'DELETE' }) }
-
-export async function getHabits() { return await request('/habits') }
 export async function getHabit(id: string) { return await request(`/habits/${id}`) }
-export async function createHabit(payload: any) { return await request('/habits', { method: 'POST', body: JSON.stringify(payload) }) }
-export async function updateHabit(id: string, payload: any) { return await request(`/habits/${id}`, { method: 'PATCH', body: JSON.stringify(payload) }) }
-export async function deleteHabit(id: string) { return await request(`/habits/${id}`, { method: 'DELETE' }) }
-
-export async function getActivities() { return await request('/activities') }
-export async function createActivity(payload: any) { return await request('/activities', { method: 'POST', body: JSON.stringify(payload) }) }
 export async function updateActivity(id: string, payload: any) { return await request(`/activities/${id}`, { method: 'PATCH', body: JSON.stringify(payload) }) }
 export async function deleteActivity(id: string) { return await request(`/activities/${id}`, { method: 'DELETE' }) }
-
-export async function getLayout() { return await request('/layout') }
-export async function setLayout(sections: any[]) { return await request('/layout', { method: 'POST', body: JSON.stringify({ sections }) }) }
-
 export async function getPrefs() { return await request('/prefs') }
 export async function setPref(key: string, value: any) { return await request('/prefs', { method: 'POST', body: JSON.stringify({ key, value }) }) }
-
-export async function me() { return await request('/me') }
 export async function register(payload: { email: string; password: string; name?: string }) { return await request('/auth/register', { method: 'POST', body: JSON.stringify(payload) }) }
 export async function login(payload: { email: string; password: string }) { return await request('/auth/login', { method: 'POST', body: JSON.stringify(payload) }) }
 export async function logout() { return await request('/auth/logout', { method: 'POST' }) }
