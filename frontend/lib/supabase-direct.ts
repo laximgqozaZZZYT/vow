@@ -134,7 +134,7 @@ export class SupabaseDirectClient {
     if (error) throw error;
     
     // Convert snake_case to camelCase
-    return (data || []).map(h => ({
+    return (data || []).map((h: any) => ({
       id: h.id,
       goalId: h.goal_id,
       name: h.name,
@@ -305,7 +305,7 @@ export class SupabaseDirectClient {
     
     if (error) throw error;
     
-    return (data || []).map(a => ({
+    return (data || []).map((a: any) => ({
       id: a.id,
       kind: a.kind,
       habitId: a.habit_id,
