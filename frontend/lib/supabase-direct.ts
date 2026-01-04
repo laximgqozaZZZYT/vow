@@ -26,7 +26,11 @@ export class SupabaseDirectClient {
     if (!supabase) throw new Error('Supabase not configured');
     
     const { data: session } = await supabase.auth.getSession();
-    if (!session?.session?.user) throw new Error('Not authenticated');
+    
+    // 認証が必要
+    if (!session?.session?.user) {
+      throw new Error('Authentication required. Please sign in to save your data.');
+    }
     
     const now = new Date().toISOString();
     const { data, error } = await supabase
@@ -165,41 +169,59 @@ export class SupabaseDirectClient {
   async createHabit(payload: any) {
     if (!supabase) throw new Error('Supabase not configured');
     
+    console.log('[createHabit] Starting habit creation:', payload);
+    
     const { data: session } = await supabase.auth.getSession();
-    if (!session?.session?.user) throw new Error('Not authenticated');
+    console.log('[createHabit] Session check:', session?.session?.user ? 'Authenticated' : 'Not authenticated');
+    
+    // 認証が必要
+    if (!session?.session?.user) {
+      const error = 'Authentication required. Please sign in to save your habits.';
+      console.error('[createHabit] Error:', error);
+      throw new Error(error);
+    }
     
     const now = new Date().toISOString();
+    const insertData = {
+      goal_id: payload.goalId,
+      name: payload.name,
+      type: payload.type,
+      active: true,
+      count: 0,
+      must: payload.must,
+      duration: payload.duration,
+      reminders: payload.reminders,
+      due_date: payload.dueDate,
+      time: payload.time,
+      end_time: payload.endTime,
+      repeat: payload.repeat,
+      timings: payload.timings,
+      all_day: payload.allDay,
+      notes: payload.notes,
+      workload_unit: payload.workloadUnit,
+      workload_total: payload.workloadTotal,
+      workload_per_count: payload.workloadPerCount || 1,
+      completed: false,
+      owner_type: 'user',
+      owner_id: session.session.user.id,
+      created_at: now,
+      updated_at: now
+    };
+    
+    console.log('[createHabit] Insert data:', insertData);
+    
     const { data, error } = await supabase
       .from('habits')
-      .insert({
-        goal_id: payload.goalId,
-        name: payload.name,
-        type: payload.type,
-        active: true,
-        count: 0,
-        must: payload.must,
-        duration: payload.duration,
-        reminders: payload.reminders,
-        due_date: payload.dueDate,
-        time: payload.time,
-        end_time: payload.endTime,
-        repeat: payload.repeat,
-        timings: payload.timings,
-        all_day: payload.allDay,
-        notes: payload.notes,
-        workload_unit: payload.workloadUnit,
-        workload_total: payload.workloadTotal,
-        workload_per_count: payload.workloadPerCount || 1,
-        completed: false,
-        owner_type: 'user',
-        owner_id: session.session.user.id,
-        created_at: now,
-        updated_at: now
-      })
+      .insert(insertData)
       .select()
       .single();
     
-    if (error) throw error;
+    if (error) {
+      console.error('[createHabit] Supabase error:', error);
+      throw error;
+    }
+    
+    console.log('[createHabit] Success:', data);
     
     return {
       id: data.id,
@@ -322,7 +344,11 @@ export class SupabaseDirectClient {
     if (!supabase) throw new Error('Supabase not configured');
     
     const { data: session } = await supabase.auth.getSession();
-    if (!session?.session?.user) throw new Error('Not authenticated');
+    
+    // 認証が必要
+    if (!session?.session?.user) {
+      throw new Error('Authentication required. Please sign in to save your activities.');
+    }
     
     const { data, error } = await supabase
       .from('activities')

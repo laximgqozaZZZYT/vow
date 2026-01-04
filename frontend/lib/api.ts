@@ -6,7 +6,7 @@ const BASE = (process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000').replac
 const USE_SUPABASE_DIRECT = process.env.NEXT_PUBLIC_USE_SUPABASE_API === 'true' || process.env.NODE_ENV === 'production'
 
 // 強制的にSupabase Direct APIを使用（デバッグ用）
-const FORCE_SUPABASE_DIRECT = true;
+const FORCE_SUPABASE_DIRECT = false;
 
 // デバッグ用ログ（本番環境で確認）
 if (typeof window !== 'undefined') {

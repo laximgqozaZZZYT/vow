@@ -1,0 +1,197 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+model Goal {
+  id        String    @id @default(cuid())
+  name      String
+  details   String?
+  dueDate   DateTime?
+  isCompleted Boolean @default(false)
+  parentId  String?
+  // Owner fields: support both authenticated users and anonymous guests.
+  ownerType String?   // 'user' | 'guest'
+  ownerId   String?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  parent    Goal?     @relation("GoalParent", fields: [parentId], references: [id])
+  children  Goal[]    @relation("GoalParent")
+  habits    Habit[]
+  diaryCards DiaryCardGoal[]
+
+  @@index([parentId], map: "Goal_parentId_fkey")
+  @@index([ownerType, ownerId])
+}
+
+model Habit {
+  id               String    @id @default(cuid())
+  goalId           String
+  name             String
+  active           Boolean   @default(true)
+  type             String
+  count            Int       @default(0)
+  must             Int?
+  duration         Int?
+  reminders        Json?
+  dueDate          DateTime?
+  time             String?
+  endTime          String?
+  repeat           String?
+  timings          Json?
+  outdates         Json?
+  allDay           Boolean?
+  notes            String?
+  workloadUnit     String?
+  workloadTotal    Int?
+  workloadPerCount Int?
+  completed        Boolean?
+  lastCompletedAt  DateTime?
+  // Owner fields: support both authenticated users and anonymous guests.
+  ownerType        String?   // 'user' | 'guest'
+  ownerId          String?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+  goal             Goal      @relation(fields: [goalId], references: [id], onDelete: Cascade)
+  activities       Activity[]
+
+  @@index([goalId], map: "Habit_goalId_fkey")
+  @@index([ownerType, ownerId])
+}
+
+model Activity {
+  id               String    @id @default(cuid())
+  kind             String
+  habitId          String
+  habitName        String?
+  timestamp        DateTime  @default(now())
+  amount           Int?
+  prevCount        Int?
+  newCount         Int?
+  durationSeconds  Int?
+  // Owner fields: support both authenticated users and anonymous guests.
+  ownerType        String?   // 'user' | 'guest'
+  ownerId          String?
+  habit            Habit     @relation(fields: [habitId], references: [id], onDelete: Cascade)
+
+  @@index([habitId], map: "Activity_habitId_fkey")
+  @@index([ownerType, ownerId])
+}
+
+model Preference {
+  id        String   @id @default(cuid())
+  key       String
+  value     Json
+  // Owner fields: support both authenticated users and anonymous guests.
+  ownerType String?  // 'user' | 'guest'
+  ownerId   String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([key, ownerType, ownerId])
+  @@index([ownerType, ownerId])
+}
+
+model DiaryCard {
+  id        String            @id @default(cuid())
+  frontMd   String
+  backMd    String
+  // Owner fields: support both authenticated users and anonymous guests.
+  ownerType String?           // 'user' | 'guest'
+  ownerId   String?
+  createdAt DateTime          @default(now())
+  updatedAt DateTime          @updatedAt
+  tags      DiaryCardTag[]
+  goals     DiaryCardGoal[]
+  habits    DiaryCardHabit[]
+
+  @@index([ownerType, ownerId])
+  @@index([createdAt])
+}
+
+model DiaryTag {
+  id        String         @id @default(cuid())
+  name      String
+  color     String?
+  // Owner fields: support both authenticated users and anonymous guests.
+  ownerType String?        // 'user' | 'guest'
+  ownerId   String?
+  createdAt DateTime       @default(now())
+  updatedAt DateTime       @updatedAt
+  cards     DiaryCardTag[]
+
+  @@unique([ownerType, ownerId, name])
+  @@index([ownerType, ownerId])
+}
+
+model DiaryCardTag {
+  id       String    @id @default(cuid())
+  cardId   String
+  tagId    String
+  card     DiaryCard @relation(fields: [cardId], references: [id], onDelete: Cascade)
+  tag      DiaryTag  @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@unique([cardId, tagId])
+  @@index([cardId], map: "DiaryCardTag_cardId_fkey")
+  @@index([tagId], map: "DiaryCardTag_tagId_fkey")
+}
+
+model DiaryCardGoal {
+  id     String    @id @default(cuid())
+  cardId String
+  goalId String
+  card   DiaryCard @relation(fields: [cardId], references: [id], onDelete: Cascade)
+  goal   Goal      @relation(fields: [goalId], references: [id], onDelete: Cascade)
+
+  @@unique([cardId, goalId])
+  @@index([cardId], map: "DiaryCardGoal_cardId_fkey")
+  @@index([goalId], map: "DiaryCardGoal_goalId_fkey")
+}
+
+model DiaryCardHabit {
+  id      String    @id @default(cuid())
+  cardId  String
+  habitId String
+  card    DiaryCard @relation(fields: [cardId], references: [id], onDelete: Cascade)
+  habit   Habit     @relation(fields: [habitId], references: [id], onDelete: Cascade)
+
+  @@unique([cardId, habitId])
+  @@index([cardId], map: "DiaryCardHabit_cardId_fkey")
+  @@index([habitId], map: "DiaryCardHabit_habitId_fkey")
+}
+
+model User {
+  id           String    @id @default(cuid())
+  email        String    @unique
+  passwordHash String
+  name         String?
+  supabaseUserId String? @unique
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  sessions     Session[]
+}
+
+model Guest {
+  id               String    @id @default(cuid())
+  createdAt        DateTime  @default(now())
+  mergedIntoUserId String?
+  mergedAt         DateTime?
+  sessions         Session[]
+}
+
+model Session {
+  id        String   @id @default(cuid())
+  userId    String?
+  guestId   String?
+  createdAt DateTime @default(now())
+  expiresAt DateTime
+  user      User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  guest     Guest?   @relation(fields: [guestId], references: [id], onDelete: Cascade)
+
+  @@index([userId], map: "Session_userId_fkey")
+  @@index([guestId], map: "Session_guestId_fkey")
+}
