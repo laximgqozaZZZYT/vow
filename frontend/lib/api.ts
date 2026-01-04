@@ -75,10 +75,12 @@ async function request(path: string, opts: RequestInit = {}) {
   }
 }
 
-// API functions with Supabase fallback
+// 一時的に全てのAPI呼び出しを無効化
 export async function getGoals() { 
-  if (USE_SUPABASE_DIRECT) return await supabaseDirectClient.getGoals();
-  return await request('/goals');
+  console.log('getGoals called - returning empty array');
+  return [];
+  // if (USE_SUPABASE_DIRECT) return await supabaseDirectClient.getGoals();
+  // return await request('/goals');
 }
 
 export async function createGoal(payload: any) { 
@@ -97,8 +99,10 @@ export async function deleteGoal(id: string) {
 }
 
 export async function getHabits() { 
-  if (USE_SUPABASE_DIRECT) return await supabaseDirectClient.getHabits();
-  return await request('/habits');
+  console.log('getHabits called - returning empty array');
+  return [];
+  // if (USE_SUPABASE_DIRECT) return await supabaseDirectClient.getHabits();
+  // return await request('/habits');
 }
 
 export async function createHabit(payload: any) { 
@@ -117,8 +121,10 @@ export async function deleteHabit(id: string) {
 }
 
 export async function getActivities() { 
-  if (USE_SUPABASE_DIRECT) return await supabaseDirectClient.getActivities();
-  return await request('/activities');
+  console.log('getActivities called - returning empty array');
+  return [];
+  // if (USE_SUPABASE_DIRECT) return await supabaseDirectClient.getActivities();
+  // return await request('/activities');
 }
 
 export async function createActivity(payload: any) { 
@@ -127,8 +133,16 @@ export async function createActivity(payload: any) {
 }
 
 export async function me() { 
-  if (USE_SUPABASE_DIRECT) return await supabaseDirectClient.me();
-  return await request('/me');
+  console.log('me called - returning mock user');
+  return {
+    actor: {
+      type: 'user',
+      id: 'test-user-id',
+      email: 'test@example.com'
+    }
+  };
+  // if (USE_SUPABASE_DIRECT) return await supabaseDirectClient.me();
+  // return await request('/me');
 }
 
 export async function getLayout() { 
@@ -151,7 +165,11 @@ export async function setPref(key: string, value: any) { return await request('/
 export async function register(payload: { email: string; password: string; name?: string }) { return await request('/auth/register', { method: 'POST', body: JSON.stringify(payload) }) }
 export async function login(payload: { email: string; password: string }) { return await request('/auth/login', { method: 'POST', body: JSON.stringify(payload) }) }
 export async function logout() { return await request('/auth/logout', { method: 'POST' }) }
-export async function claim() { return await request('/auth/claim', { method: 'POST' }) }
+export async function claim() { 
+  console.log('claim called - returning success');
+  return { success: true };
+  // return await request('/auth/claim', { method: 'POST' }) 
+}
 
 // Diary
 export type DiaryTag = {
