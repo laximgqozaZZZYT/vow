@@ -1,7 +1,18 @@
 import { supabaseDirectClient } from './supabase-direct';
 
+// Next.js環境変数は実行時ではなくビルド時に解決される
 const BASE = (process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000').replace(/\/+$/, '')
 const USE_SUPABASE_DIRECT = process.env.NEXT_PUBLIC_USE_SUPABASE_API === 'true'
+
+// デバッグ用ログ（本番環境で確認）
+if (typeof window !== 'undefined') {
+  console.log('API Configuration:', {
+    BASE,
+    USE_SUPABASE_DIRECT,
+    NEXT_PUBLIC_USE_SUPABASE_API: process.env.NEXT_PUBLIC_USE_SUPABASE_API,
+    NEXT_PUBLIC_API_URL: process.env.NEXT_PUBLIC_API_URL
+  });
+}
 
 let bearerToken: string | null = null
 
@@ -33,7 +44,7 @@ async function request(path: string, opts: RequestInit = {}) {
   try {
     const res = await fetch(url, {
       ...opts,
-      credentials: 'include',
+      // credentials: 'include', // CORSエラーを回避するため削除
       headers: {
         'Content-Type': 'application/json',
         ...(bearerToken ? { Authorization: `Bearer ${bearerToken}` } : {}),
