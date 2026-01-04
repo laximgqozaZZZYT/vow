@@ -1,4 +1,11 @@
 const BASE = (process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000').replace(/\/+$/, '')
+const USE_SUPABASE_API = process.env.NEXT_PUBLIC_USE_SUPABASE_API === 'true'
+
+// Supabase API import
+let supabaseApi: any = null
+if (USE_SUPABASE_API) {
+  supabaseApi = require('./supabase-api').default
+}
 
 let bearerToken: string | null = null
 
@@ -53,34 +60,103 @@ async function request(path: string, opts: RequestInit = {}) {
   }
 }
 
-export async function getGoals() { return await request('/goals') }
-export async function getGoal(id: string) { return await request(`/goals/${id}`) }
-export async function createGoal(payload: any) { return await request('/goals', { method: 'POST', body: JSON.stringify(payload) }) }
-export async function updateGoal(id: string, payload: any) { return await request(`/goals/${id}`, { method: 'PATCH', body: JSON.stringify(payload) }) }
-export async function deleteGoal(id: string) { return await request(`/goals/${id}`, { method: 'DELETE' }) }
+export async function getGoals() { 
+  if (USE_SUPABASE_API && supabaseApi) return await supabaseApi.getGoals()
+  return await request('/goals') 
+}
+export async function getGoal(id: string) { 
+  if (USE_SUPABASE_API && supabaseApi) return await supabaseApi.getGoal(id)
+  return await request(`/goals/${id}`) 
+}
+export async function createGoal(payload: any) { 
+  if (USE_SUPABASE_API && supabaseApi) return await supabaseApi.createGoal(payload)
+  return await request('/goals', { method: 'POST', body: JSON.stringify(payload) }) 
+}
+export async function updateGoal(id: string, payload: any) { 
+  if (USE_SUPABASE_API && supabaseApi) return await supabaseApi.updateGoal(id, payload)
+  return await request(`/goals/${id}`, { method: 'PATCH', body: JSON.stringify(payload) }) 
+}
+export async function deleteGoal(id: string) { 
+  if (USE_SUPABASE_API && supabaseApi) return await supabaseApi.deleteGoal(id)
+  return await request(`/goals/${id}`, { method: 'DELETE' }) 
+}
 
-export async function getHabits() { return await request('/habits') }
-export async function getHabit(id: string) { return await request(`/habits/${id}`) }
-export async function createHabit(payload: any) { return await request('/habits', { method: 'POST', body: JSON.stringify(payload) }) }
-export async function updateHabit(id: string, payload: any) { return await request(`/habits/${id}`, { method: 'PATCH', body: JSON.stringify(payload) }) }
-export async function deleteHabit(id: string) { return await request(`/habits/${id}`, { method: 'DELETE' }) }
+export async function getHabits() { 
+  if (USE_SUPABASE_API && supabaseApi) return await supabaseApi.getHabits()
+  return await request('/habits') 
+}
+export async function getHabit(id: string) { 
+  if (USE_SUPABASE_API && supabaseApi) return await supabaseApi.getHabit(id)
+  return await request(`/habits/${id}`) 
+}
+export async function createHabit(payload: any) { 
+  if (USE_SUPABASE_API && supabaseApi) return await supabaseApi.createHabit(payload)
+  return await request('/habits', { method: 'POST', body: JSON.stringify(payload) }) 
+}
+export async function updateHabit(id: string, payload: any) { 
+  if (USE_SUPABASE_API && supabaseApi) return await supabaseApi.updateHabit(id, payload)
+  return await request(`/habits/${id}`, { method: 'PATCH', body: JSON.stringify(payload) }) 
+}
+export async function deleteHabit(id: string) { 
+  if (USE_SUPABASE_API && supabaseApi) return await supabaseApi.deleteHabit(id)
+  return await request(`/habits/${id}`, { method: 'DELETE' }) 
+}
 
-export async function getActivities() { return await request('/activities') }
-export async function createActivity(payload: any) { return await request('/activities', { method: 'POST', body: JSON.stringify(payload) }) }
-export async function updateActivity(id: string, payload: any) { return await request(`/activities/${id}`, { method: 'PATCH', body: JSON.stringify(payload) }) }
-export async function deleteActivity(id: string) { return await request(`/activities/${id}`, { method: 'DELETE' }) }
+export async function getActivities() { 
+  if (USE_SUPABASE_API && supabaseApi) return await supabaseApi.getActivities()
+  return await request('/activities') 
+}
+export async function createActivity(payload: any) { 
+  if (USE_SUPABASE_API && supabaseApi) return await supabaseApi.createActivity(payload)
+  return await request('/activities', { method: 'POST', body: JSON.stringify(payload) }) 
+}
+export async function updateActivity(id: string, payload: any) { 
+  if (USE_SUPABASE_API && supabaseApi) return await supabaseApi.updateActivity(id, payload)
+  return await request(`/activities/${id}`, { method: 'PATCH', body: JSON.stringify(payload) }) 
+}
+export async function deleteActivity(id: string) { 
+  if (USE_SUPABASE_API && supabaseApi) return await supabaseApi.deleteActivity(id)
+  return await request(`/activities/${id}`, { method: 'DELETE' }) 
+}
 
-export async function getLayout() { return await request('/layout') }
-export async function setLayout(sections: any[]) { return await request('/layout', { method: 'POST', body: JSON.stringify({ sections }) }) }
+export async function getLayout() { 
+  if (USE_SUPABASE_API && supabaseApi) return await supabaseApi.getLayout()
+  return await request('/layout') 
+}
+export async function setLayout(sections: any[]) { 
+  if (USE_SUPABASE_API && supabaseApi) return await supabaseApi.setLayout(sections)
+  return await request('/layout', { method: 'POST', body: JSON.stringify({ sections }) }) 
+}
 
-export async function getPrefs() { return await request('/prefs') }
-export async function setPref(key: string, value: any) { return await request('/prefs', { method: 'POST', body: JSON.stringify({ key, value }) }) }
+export async function getPrefs() { 
+  if (USE_SUPABASE_API && supabaseApi) return await supabaseApi.getPrefs()
+  return await request('/prefs') 
+}
+export async function setPref(key: string, value: any) { 
+  if (USE_SUPABASE_API && supabaseApi) return await supabaseApi.setPref(key, value)
+  return await request('/prefs', { method: 'POST', body: JSON.stringify({ key, value }) }) 
+}
 
-export async function me() { return await request('/me') }
-export async function register(payload: { email: string; password: string; name?: string }) { return await request('/auth/register', { method: 'POST', body: JSON.stringify(payload) }) }
-export async function login(payload: { email: string; password: string }) { return await request('/auth/login', { method: 'POST', body: JSON.stringify(payload) }) }
-export async function logout() { return await request('/auth/logout', { method: 'POST' }) }
-export async function claim() { return await request('/auth/claim', { method: 'POST' }) }
+export async function me() { 
+  if (USE_SUPABASE_API && supabaseApi) return await supabaseApi.me()
+  return await request('/me') 
+}
+export async function register(payload: { email: string; password: string; name?: string }) { 
+  if (USE_SUPABASE_API && supabaseApi) return await supabaseApi.register(payload)
+  return await request('/auth/register', { method: 'POST', body: JSON.stringify(payload) }) 
+}
+export async function login(payload: { email: string; password: string }) { 
+  if (USE_SUPABASE_API && supabaseApi) return await supabaseApi.login(payload)
+  return await request('/auth/login', { method: 'POST', body: JSON.stringify(payload) }) 
+}
+export async function logout() { 
+  if (USE_SUPABASE_API && supabaseApi) return await supabaseApi.logout()
+  return await request('/auth/logout', { method: 'POST' }) 
+}
+export async function claim() { 
+  if (USE_SUPABASE_API && supabaseApi) return await supabaseApi.claim()
+  return await request('/auth/claim', { method: 'POST' }) 
+}
 
 // Diary
 export type DiaryTag = {
