@@ -2,7 +2,8 @@ import { supabaseDirectClient } from './supabase-direct';
 
 // Next.js環境変数は実行時ではなくビルド時に解決される
 const BASE = (process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000').replace(/\/+$/, '')
-const USE_SUPABASE_DIRECT = process.env.NEXT_PUBLIC_USE_SUPABASE_API === 'true'
+// 本番環境では強制的にSupabase Direct APIを使用
+const USE_SUPABASE_DIRECT = process.env.NEXT_PUBLIC_USE_SUPABASE_API === 'true' || process.env.NODE_ENV === 'production'
 
 // デバッグ用ログ（本番環境で確認）
 if (typeof window !== 'undefined') {
@@ -10,8 +11,15 @@ if (typeof window !== 'undefined') {
     BASE,
     USE_SUPABASE_DIRECT,
     NEXT_PUBLIC_USE_SUPABASE_API: process.env.NEXT_PUBLIC_USE_SUPABASE_API,
-    NEXT_PUBLIC_API_URL: process.env.NEXT_PUBLIC_API_URL
+    NEXT_PUBLIC_API_URL: process.env.NEXT_PUBLIC_API_URL,
+    NODE_ENV: process.env.NODE_ENV
   });
+  
+  if (USE_SUPABASE_DIRECT) {
+    console.log('✅ Using Supabase Direct API');
+  } else {
+    console.log('❌ Using Express API');
+  }
 }
 
 let bearerToken: string | null = null

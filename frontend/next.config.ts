@@ -5,6 +5,14 @@ const nextConfig: NextConfig = {
   trailingSlash: false,
   poweredByHeader: false,
   
+  // 環境変数を明示的に設定
+  env: {
+    NEXT_PUBLIC_USE_SUPABASE_API: process.env.NEXT_PUBLIC_USE_SUPABASE_API,
+    NEXT_PUBLIC_SUPABASE_URL: process.env.NEXT_PUBLIC_SUPABASE_URL,
+    NEXT_PUBLIC_SUPABASE_ANON_KEY: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
+    NEXT_PUBLIC_API_URL: process.env.NEXT_PUBLIC_API_URL,
+  },
+  
   // Security headers (moved from vercel.json)
   async headers() {
     return [
