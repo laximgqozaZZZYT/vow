@@ -11,8 +11,9 @@ Vercelダッシュボード → Settings → Environment Variables で以下を�
 | 変数名 | 値 | 環境 | 説明 |
 |--------|-----|------|------|
 | `NEXT_PUBLIC_SUPABASE_URL` | `https://jamiyzsyclvlvstmeeir.supabase.co` | Production | SupabaseプロジェクトURL |
-| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | `sb_publishable_YJyBL2tPoqCB6hWl-8qQ4Q_b3qYzcBm` | Production | Supabase匿名キー |
-| `NEXT_PUBLIC_USE_SUPABASE_API` | `true` | Production | Supabase Direct API使用フラグ |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | `sb_publishable_YJyBL2tPoqCB6hWl-8qQ4Q_b3qYpcBm` | Production | Supabase匿名キー |
+
+**注意**: `NEXT_PUBLIC_USE_SUPABASE_API` は設定不要です。本番環境では自動的にNext.js API Routesが使用されます。
 
 ## 🔧 **設定手順**
 

@@ -6,19 +6,20 @@
 
 ### 必要なアカウント
 - **GitHub**（コード管理）- https://github.com
-- **Supabase**（認証）- https://supabase.com
-- **Railway**（バックエンド + DB）- https://railway.app
-- **Vercel**（フロントエンド）- https://vercel.com
+- **Supabase**（データベース + 認証）- https://supabase.com
+- **Vercel**（フロントエンド + API Routes）- https://vercel.com
 
 ### デプロイ構成
 ```
-┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
-│   Vercel        │    │   Railway       │    │   Supabase      │
-│   (Frontend)    │───▶│   (Backend)     │───▶│   (Auth)        │
-│   Next.js       │    │   Express API   │    │   JWT Provider  │
-│   React         │    │   PostgreSQL    │    │   OAuth         │
-└─────────────────┘    └─────────────────┘    └─────────────────┘
+┌─────────────────┐    ┌─────────────────┐
+│   Vercel        │    │   Supabase      │
+│   (Frontend)    │───▶│   (Database)    │
+│   Next.js       │    │   PostgreSQL    │
+│   API Routes    │    │   Auth/OAuth    │
+└─────────────────┘    └─────────────────┘
 ```
+
+**注意**: 開発環境では Express API + MySQL を使用しますが、本番環境では Next.js API Routes + Supabase PostgreSQL を使用します。
 
 ---
 
