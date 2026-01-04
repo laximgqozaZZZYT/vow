@@ -8,6 +8,9 @@ const USE_SUPABASE_DIRECT = process.env.NEXT_PUBLIC_USE_SUPABASE_API === 'true' 
 // 強制的にSupabase Direct APIを使用（デバッグ用）
 const FORCE_SUPABASE_DIRECT = false;
 
+// 本番環境でCORSエラーを回避するため、Next.js API Routesを使用
+const USE_NEXTJS_API = process.env.NODE_ENV === 'production';
+
 // デバッグ用ログ（本番環境で確認）
 if (typeof window !== 'undefined') {
   console.log('=== API Configuration Debug ===');
@@ -52,16 +55,31 @@ function safeJsonParse(text: string): any {
 }
 
 async function request(path: string, opts: RequestInit = {}) {
-  const url = BASE + path;
+  const url = path.startsWith('/api/') ? path : BASE + path;
+  
   try {
+    // Next.js API Routes使用時は、Supabaseトークンを取得
+    let headers = {
+      'Content-Type': 'application/json',
+      ...(bearerToken ? { Authorization: `Bearer ${bearerToken}` } : {}),
+      ...(opts.headers || {}),
+    };
+    
+    // 本番環境でNext.js API使用時は、Supabaseトークンを使用
+    if (USE_NEXTJS_API && path.startsWith('/api/') && typeof window !== 'undefined') {
+      const { supabase } = await import('./supabaseClient');
+      if (supabase) {
+        const { data: session } = await supabase.auth.getSession();
+        if (session?.session?.access_token) {
+          headers.Authorization = `Bearer ${session.session.access_token}`;
+        }
+      }
+    }
+    
     const res = await fetch(url, {
       ...opts,
       // credentials: 'include', // CORSエラーを回避するため削除
-      headers: {
-        'Content-Type': 'application/json',
-        ...(bearerToken ? { Authorization: `Bearer ${bearerToken}` } : {}),
-        ...(opts.headers || {}),
-      },
+      headers,
     });
 
     const text = await res.text();
@@ -101,11 +119,13 @@ export async function deleteGoal(id: string) {
 }
 
 export async function getHabits() { 
+  if (USE_NEXTJS_API) return await request('/api/habits');
   if (FORCE_SUPABASE_DIRECT || USE_SUPABASE_DIRECT) return await supabaseDirectClient.getHabits();
   return await request('/habits');
 }
 
 export async function createHabit(payload: any) { 
+  if (USE_NEXTJS_API) return await request('/api/habits', { method: 'POST', body: JSON.stringify(payload) });
   if (USE_SUPABASE_DIRECT) return await supabaseDirectClient.createHabit(payload);
   return await request('/habits', { method: 'POST', body: JSON.stringify(payload) });
 }

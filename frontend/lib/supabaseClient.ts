@@ -20,6 +20,14 @@ export const supabase = (() => {
       persistSession: true,
       autoRefreshToken: true,
     },
+    db: {
+      schema: 'public'
+    },
+    global: {
+      headers: {
+        'X-Client-Info': 'supabase-js-web'
+      }
+    }
   })
   
   // デバッグ用：グローバルに公開
