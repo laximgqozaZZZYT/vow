@@ -10,11 +10,18 @@
 - 適切なCORS設定
 - JWT署名検証の強化
 - セキュリティテストスクリプトの実装
+- セッションCookieベースの認証実装
+
+⚠️ **修正が必要**
+- Next.js API Routesでのセッション転送処理
+- 本番環境でのSupabaseクライアント制御
+- React Error #418の解消
 
 ### 認証フロー
 
+**開発環境**:
 ```
-1. ユーザーがSupabase Authでログイン (Google/GitHub OAuth)
+1. ユーザーがSupabase Authでログイン (Google OAuth)
    ↓
 2. Supabase JWTトークンを取得
    ↓
@@ -23,6 +30,19 @@
 4. バックエンドでJWT署名を検証
    ↓
 5. ユーザー情報をデータベースにマッピング
+```
+
+**本番環境**:
+```
+1. ユーザーがSupabase Authでログイン (Google OAuth)
+   ↓
+2. バックエンドでセッションCookieを設定
+   ↓
+3. フロントエンドがNext.js API Routesを呼び出し
+   ↓
+4. Next.js API RoutesがセッションCookieをバックエンドに転送
+   ↓
+5. バックエンドでセッション検証とデータ処理
 ```
 
 ## 🛡️ セキュリティ対策
@@ -43,9 +63,10 @@
 
 ### セッション管理
 - **HttpOnly**: JavaScriptからのアクセス防止
-- **Secure**: HTTPS環境で有効
+- **Secure**: HTTPS環境で有効（本番環境）
 - **SameSite**: CSRF攻撃防止
 - **TTL**: 30日間
+- **転送**: Next.js API Routes経由でバックエンドに転送
 
 ### パスワードセキュリティ
 - **ハッシング**: bcrypt 10ラウンド
@@ -96,6 +117,7 @@ npm run security-full
 - [ ] Supabase JWT設定の確認
 - [ ] HTTPS証明書の設定
 - [ ] セキュリティヘッダーの設定
+- [ ] Next.js API Routesのセッション転送処理実装
 
 ### 推奨設定
 - [ ] レート制限の実装
@@ -103,6 +125,7 @@ npm run security-full
 - [ ] ログ監視の設定
 - [ ] セキュリティアラートの設定
 - [ ] 定期的なセキュリティスキャン
+- [ ] React Error #418の解消
 
 ## 🔧 セキュリティ強化オプション
 

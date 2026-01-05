@@ -54,78 +54,51 @@ export default function DashboardPage() {
   useEffect(() => {
     (async () => {
       try {
-        // If OAuth failed, Supabase will redirect back with ?error=...&error_description=...
+        // Supabase統合版: 認証状態の確認
         try {
-          const url = new URL(window.location.href)
-          const err = url.searchParams.get('error')
-          const desc = url.searchParams.get('error_description')
-          if (err) {
-            setAuthError(desc ? `${err}: ${desc}` : err)
-          } else {
-            setAuthError(null)
-          }
-        } catch {}
-
-        // If logged in with Supabase, attach Bearer and merge guest data once.
-        try {
-          // 本番環境では認証をセッションCookieベースで処理
-          if (process.env.NODE_ENV === 'production') {
-            console.log('[auth] Production mode - using session-based authentication');
+          const { supabase } = await import('../../lib/supabaseClient');
+          if (supabase) {
+            const { data: { session } } = await supabase.auth.getSession();
+            const accessToken = session?.access_token ?? null;
+            setIsAuthed(!!accessToken);
             
-            // OAuth後のアクセストークンをURLから削除（セキュリティ対策）
-            if (typeof window !== 'undefined' && window.location.hash.includes('access_token')) {
-              console.log('[auth] Cleaning OAuth tokens from URL');
-              window.history.replaceState({}, document.title, window.location.pathname);
-            }
-            
-            // セッションCookieから認証状態を確認
-            try {
-              const response = await fetch('/api/me', {
-                credentials: 'include'
-              });
-              if (response.ok) {
-                const userData = await response.json();
-                console.log('[auth] Authenticated via session cookie:', userData);
-                setIsAuthed(true);
-              } else {
-                console.log('[auth] No valid session found');
-                setIsAuthed(false);
-              }
-            } catch (error) {
-              console.error('[auth] Session check failed:', error);
-              setIsAuthed(false);
-            }
-          } else if (supabase) {
-            // 開発環境では通常のSupabase認証を使用
-            const { data } = await supabase.auth.getSession()
-            const accessToken = data?.session?.access_token ?? null
-            setIsAuthed(!!accessToken)
-            ;(api as any).setBearerToken?.(accessToken)
-            if (accessToken) {
-              // Best-effort claim; it will no-op if no guest session.
-              try { await (api as any).claim?.() } catch {}
-            }
-            if (!accessToken) {
-              ;(api as any).setBearerToken?.(null)
-            }
+            // APIライブラリにトークンを設定（互換性のため）
+            ;(api as any).setBearerToken?.(accessToken);
           }
-        } catch {}
+        } catch (error) {
+          console.error('[auth] Session check failed:', error);
+          setIsAuthed(false);
+        }
 
         try {
           const me = await api.me();
+          console.log('[dashboard] me() result:', me);
           const a = (me as any)?.actor;
           if (a?.type === 'user') setActorLabel(`user:${a.id}`)
           else if (a?.type === 'guest') setActorLabel(`guest:${a.id}`)
           else setActorLabel('')
-        } catch {}
+        } catch (error) {
+          console.error('[dashboard] me() failed:', error);
+        }
 
+        console.log('[dashboard] Loading goals...');
         const gs = await api.getGoals();
+        console.log('[dashboard] Goals loaded:', gs);
         setGoals(gs || []);
+        
+        console.log('[dashboard] Loading habits...');
         const hs = await api.getHabits();
+        console.log('[dashboard] Habits loaded:', hs);
         setHabits(hs || []);
+        
+        console.log('[dashboard] Loading activities...');
         const acts = await api.getActivities();
+        console.log('[dashboard] Activities loaded:', acts);
         setActivities(acts || []);
+        
+        console.log('[dashboard] Loading layout...');
         const layout = await api.getLayout();
+        console.log('[dashboard] Layout loaded:', layout);
         if (layout && Array.isArray(layout.sections)) setPageSections(layout.sections as any);
       } catch (e) {
         console.error('Failed to load initial data', e);
@@ -133,30 +106,31 @@ export default function DashboardPage() {
     })()
   }, [])
 
-  // Keep header auth state in sync after OAuth redirect/login.
+  // Supabase統合版: 認証状態の監視
   useEffect(() => {
-    // 本番環境のみSupabase認証リスナーを無効化（CORS回避）
-    if (!supabase || process.env.NODE_ENV === 'production') {
-      console.log('[auth] Supabase auth listener disabled in production to avoid CORS issues');
-      return () => {}; // 何もしない
-    }
-    
-    // 開発環境では通常のSupabase認証リスナーを使用
-    const { data: sub } = supabase.auth.onAuthStateChange(async (_event: any, session: any) => {
-      const token = session?.access_token ?? null
-      setIsAuthed(!!token)
-      try {
-        ;(api as any).setBearerToken?.(token)
-      } catch {}
-      if (token) {
-        // Best-effort claim; safe to call multiple times.
-        try { await (api as any).claim?.() } catch {}
-      }
-    })
+    const initAuth = async () => {
+      const { supabase } = await import('../../lib/supabaseClient');
+      if (!supabase) return;
+      
+      console.log('[auth] Setting up Supabase auth listener');
+      
+      const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event: any, session: any) => {
+        const token = session?.access_token ?? null;
+        setIsAuthed(!!token);
+        
+        try {
+          ;(api as any).setBearerToken?.(token);
+        } catch (error) {
+          console.error('[auth] Failed to set bearer token:', error);
+        }
+      });
 
-    return () => {
-      try { sub?.subscription?.unsubscribe() } catch {}
-    }
+      return () => {
+        subscription?.unsubscribe();
+      };
+    };
+
+    initAuth();
   }, [])
 
   async function handleLogout() {
@@ -198,8 +172,8 @@ export default function DashboardPage() {
   const [openHabitModal, setOpenHabitModal] = useState(false);
   
   const [editLayoutOpen, setEditLayoutOpen] = useState(false);
-  type SectionId = 'next' | 'activity' | 'calendar' | 'statics' // | 'diary' - 一時的に無効化
-  const [pageSections, setPageSections] = useState<SectionId[]>(['next','activity','calendar','statics']) // 'diary'を削除
+  type SectionId = 'next' | 'activity' | 'calendar' | 'statics' | 'diary'
+  const [pageSections, setPageSections] = useState<SectionId[]>(['next','activity','calendar','statics','diary'])
 
   // Hydration safety: only read localStorage after mount, otherwise server/client HTML can diverge.
   const [isClient, setIsClient] = useState(false)
@@ -1001,8 +975,8 @@ export default function DashboardPage() {
               />
             ) : sec === 'statics' ? (
               <StaticsSection key="statics" habits={habits as any} activities={activities as any} goals={goals as any} />
-            // ) : sec === 'diary' ? (
-            //   <DiarySection key="diary" goals={goals as any} habits={habits as any} />
+            ) : sec === 'diary' ? (
+              <DiarySection key="diary" goals={goals as any} habits={habits as any} />
             ) : null
           ))}
         </div>

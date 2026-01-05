@@ -48,16 +48,16 @@ visit https://react.dev/errors/418?args[]=text&args[]= for the full message
 
 ### **本番環境（意図した設計）**
 ```
-フロントエンド → Next.js API Routes → Supabase PostgreSQL
-                ↓
-            OAuth認証（Google）
+フロントエンド → Next.js API Routes → Express API (Railway) → Supabase PostgreSQL
+                ↓                      ↓
+            OAuth認証（Google）    セッションCookie認証
 ```
 
 ### **実際の本番環境（問題発生中）**
 ```
-フロントエンド → Supabase Direct API ❌ CORS Error
-                ↓
-            OAuth認証（Google）
+フロントエンド → Next.js API Routes → Express API (Railway)
+                ↓                      ↓
+            OAuth認証（Google）    ❌ セッションCookie転送未実装
 ```
 
 ---
@@ -66,9 +66,9 @@ visit https://react.dev/errors/418?args[]=text&args[]= for the full message
 
 ### **フロントエンド**
 - `frontend/lib/api.ts` - API呼び出しロジック
-- `frontend/lib/supabaseClient.ts` - Supabaseクライアント設定
+- `frontend/lib/supabaseClient.ts` - Supabaseクライアント設定（本番環境でDB操作無効化）
 - `frontend/app/dashboard/page.tsx` - メインダッシュボード
-- `frontend/pages/api/*.ts` - Next.js API Routes
+- `frontend/app/api/*.ts` - Next.js API Routes（セッションCookie処理要実装）
 
 ### **設定ファイル**
 - `frontend/.env.local` - 開発環境変数
@@ -83,11 +83,14 @@ visit https://react.dev/errors/418?args[]=text&args[]= for the full message
 ## 🔧 **実施済み修正**
 
 ### **1. Next.js API Routes作成**
-- `frontend/pages/api/goals.ts`
-- `frontend/pages/api/habits.ts`
-- `frontend/pages/api/activities.ts`
-- `frontend/pages/api/me.ts`
-- `frontend/pages/api/layout.ts`
+- `frontend/app/api/goals.ts`
+- `frontend/app/api/habits.ts`
+- `frontend/app/api/activities.ts`
+- `frontend/app/api/me.ts`
+- `frontend/app/api/layout.ts`
+- `frontend/app/api/diary.ts`
+- `frontend/app/api/tags.ts`
+- `frontend/app/api/claim.ts`
 
 ### **2. 環境別設定**
 ```typescript
@@ -108,24 +111,24 @@ if (process.env.NODE_ENV === 'production') {
 
 ## 🚨 **未解決の問題**
 
-### **1. 本番環境でSupabase Direct APIが呼び出される**
-**原因**: 環境変数またはビルド時の設定が正しく反映されていない
+### **1. Next.js API Routesのセッション処理が未実装**
+**原因**: 現在のNext.js API Routesは単純にバックエンドAPIにプロキシしているだけで、セッションCookieを適切に転送していない
 
 **確認事項**:
-- Vercel環境変数が正しく設定されているか
-- ビルド時に環境変数が適用されているか
-- キャッシュが古い設定を保持していないか
+- `frontend/app/api/*/route.ts`でセッションCookie（`vow_session`）の転送処理
+- バックエンドAPIへのリクエスト時の`Cookie`ヘッダー設定
+- 認証状態の適切な転送
 
 ### **2. React Error #418**
-**原因**: 不明（Minifiedエラーのため詳細不明）
+**原因**: `frontend/lib/supabaseClient.ts`で本番環境でデータベース操作をブロックしているが、エラーメッセージが長すぎてMinify時に#418に変換される
 
 **調査方法**:
 - 開発ビルドで詳細エラーを確認
-- SSR/CSRの不一致を調査
-- テキストノードの使用箇所を確認
+- Supabaseクライアントのエラーハンドリングを改善
+- 本番環境でのSupabaseクライアント使用箇所を特定
 
-### **3. OAuth認証後のデータ取得失敗**
-**原因**: CORSエラーによりAPI呼び出しが失敗
+### **3. OAuth認証後のセッション処理**
+**原因**: OAuth後にセッションCookieは設定されるが、Next.js API Routes経由でのデータ取得時にセッションが適切に転送されていない
 
 **影響**: ログイン後にHabitやGoalが表示されない
 
@@ -133,32 +136,31 @@ if (process.env.NODE_ENV === 'production') {
 
 ## 🎯 **推奨解決策**
 
-### **優先度1: CORS問題の根本解決**
+### **優先度1: Next.js API Routesのセッション処理実装**
 
-#### **Option A: Next.js API Routes強制使用**
+#### **Option A: セッションCookie転送機能の実装**
 ```typescript
-// frontend/lib/api.ts
-const USE_NEXTJS_API = true; // 強制的に有効化
+// frontend/app/api/*/route.ts
+const sessionCookie = request.cookies.get('vow_session')
+if (sessionCookie) {
+  headers['Cookie'] = `vow_session=${sessionCookie.value}`
+}
 ```
 
-#### **Option B: Supabase CORS設定修正**
-1. Supabaseダッシュボード → Settings → API
-2. CORS Origins に具体的なドメインを設定:
-   ```
-   https://vow-bas68dkhj-laximgqozazzzyts-projects.vercel.app
-   ```
+#### **Option B: 認証ヘッダーとセッションの統合処理**
+セッションCookieとAuthorizationヘッダーの両方を適切に転送
 
-#### **Option C: Supabase Edge Functions使用**
-CORSを完全に回避するためのサーバーサイド処理
+#### **Option C: エラーハンドリングの改善**
+バックエンドAPIからのエラーレスポンスを適切にフロントエンドに転送
 
 ### **優先度2: React Error #418調査**
-1. 開発ビルドでエラー詳細を確認
-2. SSR/CSR不一致の調査
-3. テキストレンダリング箇所の修正
+1. Supabaseクライアントのエラーメッセージを短縮
+2. 本番環境でのSupabaseクライアント使用箇所を特定・修正
+3. エラーハンドリングの改善
 
 ### **優先度3: 認証フロー改善**
-1. OAuth後のトークン処理改善
-2. セッション管理の統一
+1. OAuth後のセッションCookie処理改善
+2. Next.js API Routes経由でのデータ取得機能完成
 3. エラーハンドリングの強化
 
 ---
@@ -174,7 +176,10 @@ console.log('USE_NEXTJS_API:', /* 実際の値を確認 */);
 
 ### **2. Next.js API Routes動作確認**
 ```javascript
-fetch('/api/goals')
+// セッションCookieが適切に転送されているか確認
+fetch('/api/goals', {
+  credentials: 'include'
+})
   .then(r => r.json())
   .then(console.log)
   .catch(console.error);
@@ -207,7 +212,7 @@ fetch('/api/goals')
 
 ## 🤝 **引き継ぎ先への依頼**
 
-1. **CORS問題の根本解決**
+1. **Next.js API Routesのセッション処理実装**
 2. **React Error #418の調査・修正**
 3. **認証フローの安定化**
 4. **本番環境でのHabit登録機能の復旧**

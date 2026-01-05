@@ -1,260 +1,177 @@
-# Vow - Personal Goal & Habit Tracking Application
+# Supabase CLI
 
-A secure, modern web application for tracking personal goals, habits, and activities with integrated diary functionality.
+[![Coverage Status](https://coveralls.io/repos/github/supabase/cli/badge.svg?branch=main)](https://coveralls.io/github/supabase/cli?branch=main) [![Bitbucket Pipelines](https://img.shields.io/bitbucket/pipelines/supabase-cli/setup-cli/master?style=flat-square&label=Bitbucket%20Canary)](https://bitbucket.org/supabase-cli/setup-cli/pipelines) [![Gitlab Pipeline Status](https://img.shields.io/gitlab/pipeline-status/sweatybridge%2Fsetup-cli?label=Gitlab%20Canary)
+](https://gitlab.com/sweatybridge/setup-cli/-/pipelines)
 
-## 🔒 Security Features
+[Supabase](https://supabase.io) is an open source Firebase alternative. We're building the features of Firebase using enterprise-grade open source tools.
 
-### Authentication
-- **Supabase JWT Authentication** - Industry-standard JWT with signature verification
-- **OAuth Integration** - Google and GitHub login support
-- **Session Management** - Secure HTTP-only cookies with CSRF protection
-- **Input Sanitization** - XSS protection with DOMPurify
+This repository contains all the functionality for Supabase CLI.
 
-### Security Measures
-- **Rate Limiting** - Protection against brute force attacks
-- **CORS Protection** - Strict origin validation
-- **Security Headers** - Helmet.js with CSP, HSTS, and more
-- **No X-User-Id Authentication** - Removed insecure development authentication
+- [x] Running Supabase locally
+- [x] Managing database migrations
+- [x] Creating and deploying Supabase Functions
+- [x] Generating types directly from your database schema
+- [x] Making authenticated HTTP requests to [Management API](https://supabase.com/docs/reference/api/introduction)
 
-### Security Testing
-```bash
-# Run all security tests
-npm run security-full
+## Getting started
 
-# Individual tests
-npm run security-test      # Basic security validation
-npm run penetration-test   # Advanced security testing
-```
+### Install the CLI
 
-## 🚀 Quick Start
-
-### 🌐 WEBサービスとして公開（推奨）
-
-最短5分でWEBサービスとして公開できます：
+Available via [NPM](https://www.npmjs.com) as dev dependency. To install:
 
 ```bash
-# 1. セットアップスクリプト実行
-./scripts/quick-deploy.sh
-
-# 2. デプロイガイドに従って外部サービス設定
-cat docs/deployment-guide.md
+npm i supabase --save-dev
 ```
 
-**推奨構成**:
-- **フロントエンド**: Vercel（無料）
-- **バックエンド**: Railway（$5/月）
-- **データベース**: Railway PostgreSQL（無料枠）
-- **認証**: Supabase（無料枠）
+When installing with yarn 4, you need to disable experimental fetch with the following nodejs config.
 
-### 💻 ローカル開発
+```
+NODE_OPTIONS=--no-experimental-fetch yarn add supabase
+```
 
-### Prerequisites
-- Node.js 18+
-- PostgreSQL 14+ (または MySQL 8.0+)
-- Supabase account
+> **Note**
+For Bun versions below v1.0.17, you must add `supabase` as a [trusted dependency](https://bun.sh/guides/install/trusted) before running `bun add -D supabase`.
 
-### Backend Setup
+<details>
+  <summary><b>macOS</b></summary>
+
+  Available via [Homebrew](https://brew.sh). To install:
+
+  ```sh
+  brew install supabase/tap/supabase
+  ```
+
+  To install the beta release channel:
+  
+  ```sh
+  brew install supabase/tap/supabase-beta
+  brew link --overwrite supabase-beta
+  ```
+  
+  To upgrade:
+
+  ```sh
+  brew upgrade supabase
+  ```
+</details>
+
+<details>
+  <summary><b>Windows</b></summary>
+
+  Available via [Scoop](https://scoop.sh). To install:
+
+  ```powershell
+  scoop bucket add supabase https://github.com/supabase/scoop-bucket.git
+  scoop install supabase
+  ```
+
+  To upgrade:
+
+  ```powershell
+  scoop update supabase
+  ```
+</details>
+
+<details>
+  <summary><b>Linux</b></summary>
+
+  Available via [Homebrew](https://brew.sh) and Linux packages.
+
+  #### via Homebrew
+
+  To install:
+
+  ```sh
+  brew install supabase/tap/supabase
+  ```
+
+  To upgrade:
+
+  ```sh
+  brew upgrade supabase
+  ```
+
+  #### via Linux packages
+
+  Linux packages are provided in [Releases](https://github.com/supabase/cli/releases). To install, download the `.apk`/`.deb`/`.rpm`/`.pkg.tar.zst` file depending on your package manager and run the respective commands.
+
+  ```sh
+  sudo apk add --allow-untrusted <...>.apk
+  ```
+
+  ```sh
+  sudo dpkg -i <...>.deb
+  ```
+
+  ```sh
+  sudo rpm -i <...>.rpm
+  ```
+
+  ```sh
+  sudo pacman -U <...>.pkg.tar.zst
+  ```
+</details>
+
+<details>
+  <summary><b>Other Platforms</b></summary>
+
+  You can also install the CLI via [go modules](https://go.dev/ref/mod#go-install) without the help of package managers.
+
+  ```sh
+  go install github.com/supabase/cli@latest
+  ```
+
+  Add a symlink to the binary in `$PATH` for easier access:
+
+  ```sh
+  ln -s "$(go env GOPATH)/bin/cli" /usr/bin/supabase
+  ```
+
+  This works on other non-standard Linux distros.
+</details>
+
+<details>
+  <summary><b>Community Maintained Packages</b></summary>
+
+  Available via [pkgx](https://pkgx.sh/). Package script [here](https://github.com/pkgxdev/pantry/blob/main/projects/supabase.com/cli/package.yml).
+  To install in your working directory:
+
+  ```bash
+  pkgx install supabase
+  ```
+
+  Available via [Nixpkgs](https://nixos.org/). Package script [here](https://github.com/NixOS/nixpkgs/blob/master/pkgs/development/tools/supabase-cli/default.nix).
+</details>
+
+### Run the CLI
+
 ```bash
-cd backend
-npm install
-cp .env.example .env
-# Configure your environment variables
-npm run build
-npm start
+supabase bootstrap
 ```
 
-### Frontend Setup
+Or using npx:
+
 ```bash
-cd frontend
-npm install
-cp .env.local.example .env.local
-# Configure your Supabase credentials
-npm run dev
+npx supabase bootstrap
 ```
 
-### Environment Variables
+The bootstrap command will guide you through the process of setting up a Supabase project using one of the [starter](https://github.com/supabase-community/supabase-samples/blob/main/samples.json) templates.
 
-#### Backend (.env)
-```bash
-# Database
-DATABASE_URL="mysql://user:pass@localhost:3306/vowdb"
+## Docs
 
-# Supabase JWT (REQUIRED)
-SUPABASE_JWKS_URL="https://your-project.supabase.co/.well-known/jwks.json"
-SUPABASE_JWT_AUD="authenticated"
-SUPABASE_JWT_ISS="https://your-project.supabase.co/auth/v1"
+Command & config reference can be found [here](https://supabase.com/docs/reference/cli/about).
 
-# Security
-NODE_ENV=development
-VOW_COOKIE_SECURE=false  # Set to true in production
-CORS_ORIGINS="http://localhost:3000"
+## Breaking changes
+
+We follow semantic versioning for changes that directly impact CLI commands, flags, and configurations.
+
+However, due to dependencies on other service images, we cannot guarantee that schema migrations, seed.sql, and generated types will always work for the same CLI major version. If you need such guarantees, we encourage you to pin a specific version of CLI in package.json.
+
+## Developing
+
+To run from source:
+
+```sh
+# Go >= 1.22
+go run . help
 ```
-
-#### Frontend (.env.local)
-```bash
-NEXT_PUBLIC_API_URL=http://localhost:4000
-NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
-NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
-```
-
-## 📁 Project Structure
-
-```
-vow/
-├── backend/          # Express.js API server
-│   ├── src/         # TypeScript source code
-│   ├── prisma/      # Database schema and migrations
-│   └── dist/        # Compiled JavaScript
-├── frontend/         # Next.js React application
-│   ├── app/         # App Router pages
-│   ├── lib/         # Utilities and API client
-│   └── public/      # Static assets
-├── docs/            # Documentation
-├── scripts/         # Security testing scripts
-└── infra/           # AWS CloudFormation templates
-```
-
-## 🛡️ Security Documentation
-
-- [Security Guide](docs/security.md) - Comprehensive security overview
-- [Deployment Security Checklist](docs/deployment-security-checklist.md) - Pre-deployment validation
-
-## 🧪 Testing
-
-### Security Tests
-- **Basic Security**: Authentication, CORS, XSS, SQL injection protection
-- **Penetration Testing**: Advanced attack simulation and vulnerability assessment
-- **Rate Limiting**: Brute force protection validation
-
-### Running Tests
-```bash
-# Security validation
-npm run security-test
-
-# Advanced penetration testing
-npm run penetration-test
-
-# Complete security suite
-npm run security-full
-```
-
-## 🚀 Deployment
-
-### 🌐 Production Deployment (Recommended)
-
-**Quick Deploy (5 minutes)**:
-```bash
-./scripts/quick-deploy.sh
-```
-
-**Manual Setup**:
-1. **Supabase**: Create project → Configure OAuth
-2. **Railway**: Deploy backend → Add PostgreSQL → Set environment variables
-3. **Vercel**: Deploy frontend → Set environment variables
-4. **Update URLs**: Configure CORS and redirect URLs
-
-📖 **Full Guide**: [docs/deployment-guide.md](docs/deployment-guide.md)
-
-### 📚 デプロイメント関連ドキュメント
-- **[デプロイガイド](docs/deployment-guide.md)** - 詳細な設定手順
-- **[トラブルシューティング](docs/troubleshooting.md)** - よくある問題と解決方法  
-- **[デプロイチェックリスト](docs/deployment-checklist.md)** - 設定確認用チェックリスト
-- **[セキュリティガイド](docs/security.md)** - セキュリティ対策の詳細
-
-### 💰 Cost Estimate
-- **Free Tier**: $5/month (Railway only)
-- **Production**: $65/month (all services paid plans)
-
-### 🔧 Local Development
-
-### Production Checklist
-- [ ] Set `NODE_ENV=production`
-- [ ] Enable `VOW_COOKIE_SECURE=true`
-- [ ] Configure production CORS origins
-- [ ] Set up HTTPS certificates
-- [ ] Run security tests
-- [ ] Configure monitoring and alerts
-
-### AWS Deployment (Alternative)
-```bash
-cd infra
-# Configure your parameters
-sam deploy --guided
-```
-
-## 📊 Features
-
-### Core Functionality
-- **Goal Management** - Hierarchical goal organization
-- **Habit Tracking** - Daily habit monitoring with streaks
-- **Activity Logging** - Time-based activity tracking
-- **Diary Integration** - Personal journaling with tagging
-- **Dashboard** - Comprehensive overview and analytics
-
-### Technical Features
-- **Responsive Design** - Mobile-first UI with Tailwind CSS
-- **Real-time Updates** - Live data synchronization
-- **Offline Support** - Progressive Web App capabilities
-- **Data Export** - JSON/CSV export functionality
-
-## 🔧 Development
-
-### Database Migrations
-```bash
-cd backend
-npx prisma migrate dev
-npx prisma generate
-```
-
-### Code Quality
-```bash
-# TypeScript compilation
-npm run build
-
-# Security validation
-npm run security-full
-```
-
-## 📈 Monitoring
-
-### Security Monitoring
-- Authentication failure rates
-- Rate limit violations
-- CORS policy violations
-- Unusual access patterns
-
-### Performance Monitoring
-- API response times
-- Database query performance
-- Frontend load times
-- Error rates
-
-## 🤝 Contributing
-
-1. Fork the repository
-2. Create a feature branch
-3. Run security tests: `npm run security-full`
-4. Submit a pull request
-
-### Security Guidelines
-- Never commit secrets or API keys
-- Run security tests before submitting PRs
-- Follow secure coding practices
-- Report security issues privately
-
-## 📄 License
-
-This project is licensed under the MIT License - see the LICENSE file for details.
-
-## 🆘 Support
-
-- **Documentation**: Check the `docs/` directory
-- **Security Issues**: Report privately to security@yourcompany.com
-- **General Issues**: Use GitHub Issues
-- **Questions**: Use GitHub Discussions
-
----
-
-**Security Status**: ✅ Production Ready  
-**Last Security Review**: January 3, 2026  
-**Test Coverage**: 100% security tests passing

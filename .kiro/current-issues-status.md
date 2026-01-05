@@ -10,36 +10,36 @@
 
 ## 🚨 **未解決（本番環境）**
 
-### **1. CORSエラー**
-- ❌ Supabase Direct APIへのアクセスがブロック
-- ❌ Next.js API Routesが使用されていない
-- ❌ 環境変数設定が反映されていない可能性
+### **1. Next.js API Routes実装不完全**
+- ❌ セッションCookie処理が未実装
+- ❌ バックエンドAPIへのプロキシ機能が不完全
+- ❌ 認証状態の転送処理が不適切
 
 ### **2. React Error #418**
 - ❌ Minifiedエラーで詳細不明
-- ❌ テキストレンダリング関連の問題
+- ❌ Supabaseクライアントのエラーハンドリング関連
 
 ### **3. 認証フロー**
-- ❌ OAuth後のデータ取得失敗
-- ❌ Habit・Goal表示されない
+- ❌ OAuth後のセッションCookie処理
+- ❌ Next.js API Routes経由でのデータ取得失敗
 
 ## 🔧 **実施済み対策**
 
-1. **Next.js API Routes作成** - 5つのエンドポイント
+1. **Next.js API Routes作成** - 8つのエンドポイント（プロキシ機能のみ）
 2. **環境別設定分離** - 開発/本番で異なるAPI使用
-3. **Supabaseクライアント制御** - 本番環境で無効化
+3. **Supabaseクライアント制御** - 本番環境でデータベース操作を無効化
 4. **デバッグスクリプト作成** - 問題特定用
 
-## 📋 **次のエージェントへの引き継ぎ事項**
+## 📋 **修正が必要な項目**
 
-1. **CORS問題の根本解決**
-2. **React Error #418の調査**
-3. **本番環境設定の確認・修正**
-4. **認証フローの安定化**
+1. **Next.js API Routesのセッション処理実装**
+2. **React Error #418の調査・修正**
+3. **本番環境でのセッションCookie転送機能**
+4. **認証フローの完全な実装**
 
 ## 📁 **重要ファイル**
 
 - `.kiro/handover-production-auth-issues.md` - 詳細引き継ぎ
 - `scripts/debug-production.js` - デバッグスクリプト
 - `docs/vercel-environment-variables.md` - 環境変数設定
-- `frontend/pages/api/*.ts` - Next.js API Routes
+- `frontend/app/api/*.ts` - Next.js API Routes（要修正）
