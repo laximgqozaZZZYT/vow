@@ -1,8 +1,9 @@
 {
   "scripts": {
     "security-test": "node scripts/security-test.js",
+    "security-test-supabase": "node scripts/security-test-supabase.js",
     "penetration-test": "node scripts/penetration-test.js",
-    "security-full": "npm run security-test && npm run penetration-test"
+    "security-full": "npm run security-test-supabase && npm run penetration-test"
   },
   "dependencies": {
     "@fullcalendar/core": "^6.1.8",

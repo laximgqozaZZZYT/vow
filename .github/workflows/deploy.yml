@@ -7,7 +7,7 @@ on:
     branches: [main]
 
 jobs:
-  security-test:
+  frontend-test:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -17,41 +17,28 @@ jobs:
         with:
           node-version: '18'
           cache: 'npm'
+          cache-dependency-path: 'frontend/package-lock.json'
       
-      - name: Install dependencies
-        run: npm install
+      - name: Install frontend dependencies
+        run: cd frontend && npm install
       
-      - name: Install backend dependencies
-        run: cd backend && npm install
-      
-      - name: Build backend
-        run: cd backend && npm run build
-      
-      - name: Start backend for testing
-        run: |
-          cd backend
-          npm start &
-          sleep 10
+      - name: Build frontend
+        run: cd frontend && npm run build
         env:
-          DATABASE_URL: postgresql://test:test@localhost:5432/test
-          NODE_ENV: test
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
       
-      - name: Run security tests
-        run: npm run security-test
+      - name: Run frontend tests
+        run: cd frontend && npm test --if-present
+      
+      - name: Run security tests (Supabase integrated)
+        run: node scripts/security-test-supabase.js
         env:
-          API_URL: http://localhost:4000
-          NEXT_PUBLIC_SUPABASE_URL: https://example.supabase.co
-
-  deploy-backend:
-    needs: security-test
-    runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main'
-    steps:
-      - name: Deploy to Railway
-        run: echo "Backend auto-deploys via Railway GitHub integration"
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
 
   deploy-frontend:
-    needs: security-test
+    needs: frontend-test
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/main'
     steps:
@@ -59,7 +46,7 @@ jobs:
         run: echo "Frontend auto-deploys via Vercel GitHub integration"
 
   notify:
-    needs: [deploy-backend, deploy-frontend]
+    needs: [deploy-frontend]
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/main'
     steps:
@@ -67,4 +54,4 @@ jobs:
         run: |
           echo "🚀 Deployment completed successfully!"
           echo "Frontend: https://your-app.vercel.app"
-          echo "Backend: https://your-backend.railway.app"
+          echo "Backend: Supabase integrated"
