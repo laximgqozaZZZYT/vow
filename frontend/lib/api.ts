@@ -793,8 +793,8 @@ export async function createDiaryCard(payload: {
     if (!user) throw new Error('Not authenticated');
     
     const cardData = {
-      front_md: payload.frontMd || payload.front_md || '',
-      back_md: payload.backMd || payload.back_md || '',
+      front_md: payload.frontMd || '',
+      back_md: payload.backMd || '',
       owner_type: 'user',
       owner_id: user.id,
     };
@@ -843,8 +843,6 @@ export async function updateDiaryCard(id: string, payload: {
     const updateData: any = {};
     if (payload.frontMd !== undefined) updateData.front_md = payload.frontMd;
     if (payload.backMd !== undefined) updateData.back_md = payload.backMd;
-    if (payload.front_md !== undefined) updateData.front_md = payload.front_md;
-    if (payload.back_md !== undefined) updateData.back_md = payload.back_md;
     
     console.log('[updateDiaryCard] Updating diary card', id, 'with data:', updateData);
     
