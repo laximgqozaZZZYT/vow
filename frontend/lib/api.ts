@@ -1,4 +1,23 @@
 // Supabase統合版API - 実際のデータベーススキーマに基づく実装
+
+// 型定義をエクスポート
+export type DiaryCard = {
+  id: string;
+  frontMd: string;
+  backMd: string;
+  createdAt: string;
+  updatedAt: string;
+  tags?: DiaryTag[];
+  goals?: any[];
+  habits?: any[];
+};
+
+export type DiaryTag = {
+  id: string;
+  name: string;
+  color?: string | null;
+};
+
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL?.replace(/\/+$/, '') || ''
 const USE_EDGE_FUNCTIONS = process.env.NEXT_PUBLIC_USE_EDGE_FUNCTIONS === 'true'
 
@@ -719,9 +738,10 @@ export async function saveLayout(sections: any[]) {
 }
 
 // Diary API functions
-export async function getDiaryCards() {
+export async function getDiaryCards(options?: { query?: string }) {
   if (USE_EDGE_FUNCTIONS) {
-    return await request('/diary/cards');
+    const queryParam = options?.query ? `?search=${encodeURIComponent(options.query)}` : '';
+    return await request(`/diary/cards${queryParam}`);
   } else {
     const { supabase } = await import('./supabaseClient');
     if (!supabase) throw new Error('Supabase client not available');
@@ -756,7 +776,13 @@ export async function getDiaryCards() {
   }
 }
 
-export async function createDiaryCard(payload: any) {
+export async function createDiaryCard(payload: {
+  frontMd: string;
+  backMd: string;
+  tagIds?: string[];
+  goalIds?: string[];
+  habitIds?: string[];
+}) {
   if (USE_EDGE_FUNCTIONS) {
     return await request('/diary/cards', { method: 'POST', body: JSON.stringify(payload) });
   } else {
@@ -801,7 +827,13 @@ export async function createDiaryCard(payload: any) {
   }
 }
 
-export async function updateDiaryCard(id: string, payload: any) {
+export async function updateDiaryCard(id: string, payload: {
+  frontMd?: string;
+  backMd?: string;
+  tagIds?: string[];
+  goalIds?: string[];
+  habitIds?: string[];
+}) {
   if (USE_EDGE_FUNCTIONS) {
     return await request(`/diary/cards/${id}`, { method: 'PATCH', body: JSON.stringify(payload) });
   } else {
