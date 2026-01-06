@@ -62,11 +62,13 @@ jobs:
           NEXT_PUBLIC_USE_EDGE_FUNCTIONS: false
       
       - name: Install Supabase CLI
-        run: npm install -g supabase
+        run: |
+          curl -fsSL https://supabase.com/install.sh | sh
+          echo "$HOME/.local/bin" >> $GITHUB_PATH
       
       - name: Deploy to Supabase Storage
         run: |
-          echo "${{ secrets.SUPABASE_ACCESS_TOKEN }}" | supabase auth login --token
+          supabase auth login --token "${{ secrets.SUPABASE_ACCESS_TOKEN }}"
           supabase link --project-ref jamiyzsyclvlvstmeeir
           cd frontend
           supabase storage cp -r out/* supabase://website/
