@@ -24,7 +24,7 @@ export default function RecurringHabitConfirmModal({
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30">
       <div className="bg-white dark:bg-gray-800 rounded-lg p-6 max-w-md w-full mx-4">
         <h3 className="text-lg font-semibold mb-4 text-gray-900 dark:text-gray-100">
           繰り返しタスクの時間変更
