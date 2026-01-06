@@ -7,7 +7,7 @@
 - バックエンド: Express + TypeScript + Prisma
 - DB: MySQL
 - 認証: 暫定で `X-User-Id` ヘッダ（将来は Cognito 等で JWT）
-- CI/CD: GitHub Actions（未整備。AWS 移行に合わせて整備する）
+- CI/CD: GitHub Actions（Supabase統合）
 
 ---
 
@@ -66,32 +66,8 @@
    - [ ] Next.js の基本的なレンダリングテスト（Jest）
 - [ ] 2. CI/CD
    - [ ] GitHub Actions で Lint, Tests を実行
-   - [ ] 本番デプロイ（例：Vercel for frontend、Cloud Run / ECS for backend）
-- [ ] 3. インフラ（AWS移行）
-    - [ ] VPC 作成（public/private subnet）
-    - [ ] RDS MySQL 作成（private subnet）
-    - [ ] ECR 作成（backend image）
-    - [ ] ECS Fargate + ALB 構築（backend）
-    - [ ] Amplify Hosting 構築（frontend）
-    - [ ] Secrets Manager に `DATABASE_URL` を格納
-    - [ ] 環境変数 `NEXT_PUBLIC_API_URL` を Amplify に設定
-    - [ ] Migration 実行導線（ECS RunTask で `prisma migrate deploy`）
-    - [ ] ログ（CloudWatch Logs）、アラーム、バックアップ（RDS）
+   - [ ] 本番デプロイ（Supabase統合プラットフォーム）
 
-## AWS 移行チェックリスト（最小）
-
-- [ ] ドメイン/証明書
-   - [ ] Route53（任意）
-   - [ ] ACM 証明書（ALB/CloudFront/Amplify 用）
-- [ ] API
-   - [ ] ALB 側で HTTPS
-   - [ ] CORS origin を本番ドメインに合わせる
-- [ ] DB
-   - [ ] セキュリティグループが ECS -> RDS のみ許可
-   - [ ] RDS パラメータ/照合順序の確認
-- [ ] データ移行（必要なら）
-   - [ ] 既存 MySQL から dump/restore
-   - [ ] マイグレーション適用順序の確定
 
 ## フェーズ5 — 追加機能（オプション）
 - [ ] リマインダーのスケジューラ（crontab / Celery / Cloud Tasks）

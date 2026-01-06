@@ -26,6 +26,7 @@ export interface Habit {
   workloadUnit?: string;
   workloadTotal?: number;
   workloadPerCount?: number;
+  must?: number;
   reminders?: ({ kind: 'absolute'; time: string; weekdays: string[] } | { kind: 'relative'; minutesBefore: number })[];
   timings?: any[];
   allDay?: boolean;
@@ -47,9 +48,13 @@ export interface Activity {
   notes?: string;
   createdAt?: string;
   updatedAt?: string;
+  amount?: number;
+  durationSeconds?: number;
+  newCount?: number;
+  prevCount?: number;
 }
 
-export type ActivityKind = 'habit' | 'goal' | 'custom';
+export type ActivityKind = 'start' | 'complete' | 'skip' | 'pause' | 'habit' | 'goal' | 'custom';
 
 export type SectionId = 'next' | 'activity' | 'calendar' | 'statics' | 'diary';
 
@@ -102,4 +107,40 @@ export interface DashboardSidebarProps {
   onClose: () => void;
   onNewGoal: () => void;
   onNewHabit: (initial?: any) => void;
+}
+
+export interface DashboardHeaderProps {
+  onToggleSidebar: () => void;
+  showSidebar: boolean;
+  onEditLayout: () => void;
+}
+
+export interface NextSectionProps {
+  habits: Habit[];
+  onHabitAction: (habitId: string, action: 'start' | 'complete' | 'pause') => void;
+}
+
+export interface ActivitySectionProps {
+  activities: Activity[];
+  onEditActivity: (activityId: string) => void;
+  onDeleteActivity: (activityId: string) => void;
+}
+
+export interface GoalTreeProps {
+  goals: Goal[];
+  habits: Habit[];
+  selectedGoal: string | null;
+  onGoalSelect: (goalId: string | null) => void;
+  onGoalEdit: (goalId: string) => void;
+  onHabitEdit: (habitId: string) => void;
+  onHabitAction: (habitId: string, action: 'start' | 'complete' | 'pause') => void;
+}
+
+export interface AuthContext {
+  user: any;
+  signOut: () => Promise<void>;
+  isAuthed: boolean | null;
+  actorLabel: string;
+  authError: string | null;
+  handleLogout: () => Promise<void>;
 }

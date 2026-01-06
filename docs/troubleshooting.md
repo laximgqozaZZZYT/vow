@@ -4,41 +4,28 @@
 
 ## 🚨 よくある問題と解決方法
 
-### 1. CORS エラー
+### よくある問題と解決方法
 
-#### 症状
-```
-Access to fetch at 'https://vow-backend-production.up.railway.app' 
-from origin 'https://vow-app.vercel.app' has been blocked by CORS policy
-```
-
-#### 原因
-- Railway環境変数の `CORS_ORIGINS` が正しく設定されていない
-- フロントエンドとバックエンドのドメインが一致していない
-
-#### 解決方法
-1. **Railway環境変数確認**:
-   ```bash
-   # Railway Dashboard → Settings → Variables
-   CORS_ORIGINS=https://vow-app.vercel.app
-   ```
-
-2. **複数ドメイン設定**:
-   ```bash
-   CORS_ORIGINS=https://vow-app.vercel.app,https://custom-domain.com
-   ```
-
-3. **再デプロイ**:
-   - Railway環境変数更新後、自動的に再デプロイされる
-   - 数分待ってから再テスト
-
-#### 確認方法
+**1. ビルドエラー**
 ```bash
-# ブラウザ開発者ツールのNetworkタブで確認
-# Response Headersに以下が含まれているか確認
-Access-Control-Allow-Origin: https://vow-app.vercel.app
-Access-Control-Allow-Credentials: true
+# 依存関係の再インストール
+cd frontend
+rm -rf node_modules package-lock.json
+npm install
+
+# Next.js Static Export用ビルド
+npm run build
 ```
+
+**2. 認証エラー**
+- Supabase OAuth設定を再確認
+- Google Cloud Console のRedirect URIを確認
+- ブラウザキャッシュをクリア
+
+**3. データが表示されない**
+- RLSポリシーが正しく設定されているか確認
+- ユーザーがログインしているか確認
+- ブラウザの開発者ツールでエラーを確認
 
 ---
 
@@ -74,7 +61,7 @@ AuthError: Invalid JWT signature
 
 3. **フロントエンド環境変数確認**:
    ```bash
-   # Vercel Dashboard → Settings → Environment Variables
+   # Supabase統合版設定
    NEXT_PUBLIC_SUPABASE_URL=https://abcdefghijklmnop.supabase.co
    NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
    ```
@@ -85,37 +72,30 @@ AuthError: Invalid JWT signature
 
 #### 症状
 ```
-Can't reach database server at `localhost:5432`
+Can't reach database server
 Error: P1001: Can't reach database server
 ```
 
 #### 原因
-- RailwayのPostgreSQLサービスが起動していない
+- Supabaseデータベースサービスが起動していない
 - `DATABASE_URL` が正しく設定されていない
 
 #### 解決方法
-1. **PostgreSQLサービス確認**:
-   - Railway Dashboard → PostgreSQL サービスをクリック
-   - Status が "Running" になっているか確認
+1. **Supabaseサービス確認**:
+   - Supabase Dashboard → Settings → Database
+   - Status が "Healthy" になっているか確認
 
 2. **DATABASE_URL確認**:
    ```bash
-   # Railway Dashboard → PostgreSQL → Variables
-   # DATABASE_URL が自動設定されているか確認
-   DATABASE_URL=postgresql://postgres:password@host:port/database
+   # Supabase Dashboard → Settings → Database
+   # Connection string が正しく設定されているか確認
    ```
 
 3. **接続テスト**:
    ```bash
-   # Railway Dashboard → PostgreSQL → Query
+   # Supabase Dashboard → SQL Editor
    # SQLクエリを実行してデータベースが応答するか確認
    SELECT 1;
-   ```
-
-4. **マイグレーション実行**:
-   ```bash
-   # Railway Dashboard → Deployments → View Logs
-   # マイグレーションが正常に実行されているか確認
    ```
 
 ---
@@ -134,31 +114,14 @@ Build failed with exit code 1
 
 #### 解決方法
 
-**Railway（バックエンド）**:
-1. **依存関係確認**:
-   ```bash
-   # backend/package.json の dependencies を確認
-   # 必要なパッケージがすべて含まれているか確認
-   ```
-
-2. **キャッシュクリア**:
-   - Railway Dashboard → Settings → Service
-   - "Clear Build Cache" をクリック
-   - 再デプロイ
-
-3. **ビルドログ確認**:
-   - Railway Dashboard → Deployments → View Logs
-   - エラーの詳細を確認
-
-**Vercel（フロントエンド）**:
+**Supabase統合版**:
 1. **依存関係確認**:
    ```bash
    # frontend/package.json の dependencies を確認
    ```
 
 2. **キャッシュクリア**:
-   - Vercel Dashboard → Settings → Functions
-   - "Clear Cache" をクリック
+   - GitHub Actions でキャッシュクリア
    - 再デプロイ
 
 3. **ローカルビルドテスト**:
@@ -192,10 +155,10 @@ Invalid redirect URI
 2. **Supabase設定確認**:
    ```bash
    # Authentication → Settings
-   Site URL: https://vow-app.vercel.app
+   Site URL: https://jamiyzsyclvlvstmeeir.supabase.co
    Additional Redirect URLs:
-     https://vow-app.vercel.app/dashboard
-     https://vow-app.vercel.app/login
+     https://jamiyzsyclvlvstmeeir.supabase.co/dashboard
+     https://jamiyzsyclvlvstmeeir.supabase.co/login
    ```
 
 3. **OAuth フロー確認**:
@@ -217,21 +180,10 @@ Missing required environment variables
 - 環境変数名にタイポがある
 
 #### 解決方法
-1. **Railway環境変数確認**:
-   ```bash
-   # Settings → Variables で以下を確認
-   NODE_ENV=production
-   VOW_COOKIE_SECURE=true
-   SUPABASE_JWKS_URL=https://...
-   SUPABASE_JWT_AUD=authenticated
-   SUPABASE_JWT_ISS=https://...
-   CORS_ORIGINS=https://...
-   ```
-
-2. **Vercel環境変数確認**:
+1. **Supabase環境変数確認**:
    ```bash
    # Settings → Environment Variables で以下を確認
-   NEXT_PUBLIC_API_URL=https://...
+   NODE_ENV=production
    NEXT_PUBLIC_SUPABASE_URL=https://...
    NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJ...
    ```
@@ -244,52 +196,27 @@ Missing required environment variables
 
 ## 🔍 デバッグ方法
 
-### Railway ログ確認
+### GitHub Actions ログ確認
 
 1. **デプロイログ**:
-   - Railway Dashboard → Deployments
-   - 最新デプロイをクリック → View Logs
-   - ビルドエラーやランタイムエラーを確認
+   - GitHub → Actions タブ
+   - 最新ワークフローをクリック → ログ確認
+   - ビルドエラーやデプロイエラーを確認
 
-2. **アプリケーションログ**:
-   - Railway Dashboard → Service → Logs
+2. **Supabase ログ確認**:
+   - Supabase Dashboard → Logs
    - リアルタイムログを確認
-
-3. **メトリクス確認**:
-   - Railway Dashboard → Service → Metrics
-   - CPU、メモリ使用量を確認
-
-### Vercel ログ確認
-
-1. **ビルドログ**:
-   - Vercel Dashboard → Deployments
-   - 失敗したデプロイをクリック → View Function Logs
-
-2. **ランタイムログ**:
-   - Vercel Dashboard → Functions
-   - エラーログとパフォーマンスを確認
-
-3. **プレビューデプロイ**:
-   - Pull Requestごとにプレビューデプロイが作成される
-   - 本番前にテスト可能
 
 ### ローカルデバッグ
 
-1. **バックエンドテスト**:
-   ```bash
-   cd backend
-   npm run dev
-   # http://localhost:4000/health でヘルスチェック
-   ```
-
-2. **フロントエンドテスト**:
+1. **フロントエンドテスト**:
    ```bash
    cd frontend
    npm run dev
    # http://localhost:3000 でアクセス
    ```
 
-3. **セキュリティテスト**:
+2. **セキュリティテスト**:
    ```bash
    npm run security-full
    ```
@@ -309,7 +236,7 @@ Schema drift detected
 #### 解決方法
 1. **マイグレーション状態確認**:
    ```bash
-   # Railway Dashboard → PostgreSQL → Query
+   # Supabase Dashboard → SQL Editor
    SELECT * FROM _prisma_migrations;
    ```
 
@@ -322,7 +249,7 @@ Schema drift detected
 
 3. **スキーマリセット**（注意：データが削除される）:
    ```bash
-   # Railway Dashboard → PostgreSQL → Query
+   # Supabase Dashboard → SQL Editor
    DROP SCHEMA public CASCADE;
    CREATE SCHEMA public;
    ```
@@ -334,11 +261,11 @@ Schema drift detected
 - APIレスポンスが遅い
 
 #### 解決方法
-1. **Railway メトリクス確認**:
-   - CPU使用率が高い場合：プランアップグレード検討
-   - メモリ使用率が高い場合：メモリリーク調査
+1. **Supabase メトリクス確認**:
+   - リソース使用率が高い場合：プランアップグレード検討
+   - データベース負荷が高い場合：クエリ最適化
 
-2. **Vercel Analytics確認**:
+2. **パフォーマンス分析**:
    - Core Web Vitals を確認
    - 遅いページを特定
 
@@ -376,19 +303,14 @@ Schema drift detected
 ## 📞 サポートリソース
 
 ### 公式サポート
-- **Railway**: https://railway.app/help
-- **Vercel**: https://vercel.com/support
+- **GitHub**: https://support.github.com
 - **Supabase**: https://supabase.com/support
-- **Google Cloud**: https://cloud.google.com/support
 
 ### コミュニティ
-- **Railway Discord**: https://discord.gg/railway
-- **Vercel Discord**: https://discord.gg/vercel
 - **Supabase Discord**: https://discord.supabase.com
 
 ### ドキュメント
-- **Railway Docs**: https://docs.railway.app
-- **Vercel Docs**: https://vercel.com/docs
+- **GitHub Docs**: https://docs.github.com
 - **Supabase Docs**: https://supabase.com/docs
 - **Next.js Docs**: https://nextjs.org/docs
 
@@ -398,8 +320,7 @@ Schema drift detected
 
 ### サービス停止時
 1. **ステータス確認**:
-   - Railway Status: https://status.railway.app
-   - Vercel Status: https://vercel-status.com
+   - GitHub Status: https://www.githubstatus.com
    - Supabase Status: https://status.supabase.com
 
 2. **一時的な回避策**:
@@ -412,7 +333,7 @@ Schema drift detected
 
 ### データ損失時
 1. **バックアップ確認**:
-   - Railway PostgreSQL自動バックアップ
+   - Supabase自動バックアップ
    - 手動エクスポートデータ
 
 2. **復旧手順**:
@@ -421,5 +342,5 @@ Schema drift detected
 
 ---
 
-**最終更新**: 2026年1月3日  
-**対象バージョン**: v1.0.0
+**最終更新**: 2026年1月6日  
+**対象バージョン**: v2.0.0 - Supabase統合版

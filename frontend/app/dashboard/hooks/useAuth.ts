@@ -103,6 +103,8 @@ export function useAuth(): AuthContext {
   };
 
   return {
+    user: null, // TODO: implement user object
+    signOut: handleLogout,
     isAuthed,
     actorLabel,
     authError,

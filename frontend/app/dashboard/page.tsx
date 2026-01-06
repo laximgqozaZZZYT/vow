@@ -6,6 +6,7 @@ import api from '../../lib/api';
 import { HabitModal } from "./components/Modal.Habit";
 import { GoalModal } from "./components/Modal.Goal";
 import EditLayoutModal from './components/Modal.LayoutEditor';
+import RecurringHabitConfirmModal from './components/Modal.RecurringHabitConfirm';
 import StaticsSection from './components/Section.Statistics';
 import DiarySection from './components/Section.Diary';
 
@@ -43,7 +44,11 @@ export default function DashboardPage() {
     setNewHabitInitialType, 
     selectedHabit, 
     handleEventChange, 
-    createHabit 
+    createHabit,
+    recurringConfirmation,
+    handleRecurringConfirmation,
+    cancelRecurringConfirmation,
+    handleRecurringHabitRequest
   } = useEventHandlers({ habits, setHabits, goals, activities, setActivities });
   
   const {
@@ -188,6 +193,7 @@ export default function DashboardPage() {
                 }}
                 onEventChange={(id: string, updated) => handleEventChange(id, updated)}
                 onRecurringAttempt={(habitId: string, updated) => { setRecurringRequest({ habitId, start: updated.start, end: updated.end }); }}
+                onRecurringHabitRequest={handleRecurringHabitRequest}
               />
             ) : sec === 'statics' ? (
               <StaticsSection key="statics" habits={habits as any} activities={activities as any} goals={goals as any} />
@@ -273,6 +279,16 @@ export default function DashboardPage() {
           setOpenActivityModal(false);
           setEditingActivityId(null);
         }}
+      />
+
+      <RecurringHabitConfirmModal
+        open={!!recurringConfirmation}
+        habitName={recurringConfirmation?.habitName || ''}
+        originalTime={recurringConfirmation?.originalTime || ''}
+        newTime={recurringConfirmation?.newTime || ''}
+        date={recurringConfirmation?.date || ''}
+        onConfirm={handleRecurringConfirmation}
+        onCancel={cancelRecurringConfirmation}
       />
     </div>
   );

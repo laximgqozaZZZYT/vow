@@ -69,7 +69,6 @@ npm run penetration-test   # ペネトレーションテスト
 
 ### 外部サービス活用
 - [ ] **Cloudflare** - DDoS防御、WAF、Bot管理
-- [ ] **AWS WAF** - SQLインジェクション、XSS防御
 - [ ] **Supabase Auth** - 多要素認証の有効化
 
 ### 監視・アラート

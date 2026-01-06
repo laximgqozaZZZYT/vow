@@ -89,14 +89,6 @@ jobs:
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
 
-  # deploy-frontend:
-  #   needs: frontend-test
-  #   runs-on: ubuntu-latest
-  #   if: github.ref == 'refs/heads/main'
-  #   steps:
-  #     - name: Deploy to Vercel
-  #       run: echo "Frontend auto-deploys via Vercel GitHub integration"
-
   notify:
     needs: [deploy-supabase]
     runs-on: ubuntu-latest

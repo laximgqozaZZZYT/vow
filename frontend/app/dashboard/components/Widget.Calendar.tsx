@@ -15,6 +15,7 @@ interface CalendarWidgetProps {
   onSlotSelect?: (isoDate: string, time?: string, endTime?: string) => void;
   onEventChange?: (id: string, updated: { start?: string; end?: string; timingIndex?: number }) => void;
   onRecurringAttempt?: (habitId: string, updated: { start?: string; end?: string; timingIndex?: number }) => void;
+  onRecurringHabitRequest?: (habitId: string, updated: { start?: string; end?: string; timingIndex?: number }) => void;
 }
 
 export default function CalendarWidget({ 
@@ -23,7 +24,8 @@ export default function CalendarWidget({
   onEventClick, 
   onSlotSelect, 
   onEventChange, 
-  onRecurringAttempt 
+  onRecurringAttempt,
+  onRecurringHabitRequest
 }: CalendarWidgetProps) {
   const INDEFINITE_HORIZON_DAYS = 365 * 5;
   
@@ -132,6 +134,9 @@ export default function CalendarWidget({
               const goalDue = getGoalDueDate(h.goalId);
               const expandDays = computeExpandDays(base, goalDue);
               
+              // Get outdates for this habit to exclude specific dates/times
+              const outdates = (h as any).outdates ?? [];
+              
               for (let d = 0; d < expandDays; d++) {
                 const day = addDays(base, d);
                 const dateS = ymd(day);
@@ -149,6 +154,29 @@ export default function CalendarWidget({
                   if (ref && ref.getDate() !== day.getDate()) continue;
                 }
                 
+                // Check if this specific date/time is excluded by outdates
+                const isExcluded = outdates.some((outdate: any) => {
+                  if (outdate.date !== dateS) return false;
+                  
+                  // If outdate has specific time, check if it matches this timing
+                  if (outdate.start && outdate.end) {
+                    return outdate.start === t.start && outdate.end === t.end;
+                  }
+                  
+                  // If outdate has only start time, check if it matches
+                  if (outdate.start) {
+                    return outdate.start === t.start;
+                  }
+                  
+                  // If outdate has no time specified, exclude the entire date
+                  return true;
+                });
+                
+                if (isExcluded) {
+                  console.log(`[Calendar] Excluding event for ${dateS} due to outdate:`, { habitName: h.name, timing: t, dateS });
+                  continue;
+                }
+                
                 ev.push({ 
                   title: h.name, 
                   start: `${dateS}T${t.start}:00`, 
@@ -161,15 +189,51 @@ export default function CalendarWidget({
                 });
               }
             } else {
-              ev.push({ 
-                title: h.name, 
-                start: baseDate, 
-                allDay: true, 
-                id: evIdBase, 
-                editable: true, 
-                className: 'vow-habit', 
-                extendedProps: { habitId: h.id, timingIndex: ti } 
-              });
+              // All-day recurring events - also need to check outdates
+              const base = parseYmd(t.date ?? h.dueDate ?? ymd(new Date())) ?? new Date();
+              const goalDue = getGoalDueDate(h.goalId);
+              const expandDays = computeExpandDays(base, goalDue);
+              
+              // Get outdates for this habit to exclude specific dates
+              const outdates = (h as any).outdates ?? [];
+              
+              for (let d = 0; d < expandDays; d++) {
+                const day = addDays(base, d);
+                const dateS = ymd(day);
+                
+                if (t.type === 'Weekly') {
+                  let weekdays: number[] | null = null;
+                  if (t.cron && String(t.cron).startsWith('WEEKDAYS:')) {
+                    weekdays = (t.cron.split(':')[1] || '').split(',').map((x: string) => Number(x)).filter((n: number) => !Number.isNaN(n));
+                  }
+                  if (weekdays && !weekdays.includes(day.getDay())) continue;
+                }
+                
+                if (t.type === 'Monthly') {
+                  const ref = parseYmd(t.date);
+                  if (ref && ref.getDate() !== day.getDate()) continue;
+                }
+                
+                // Check if this specific date is excluded by outdates
+                const isExcluded = outdates.some((outdate: any) => {
+                  return outdate.date === dateS && !outdate.start; // All-day exclusion
+                });
+                
+                if (isExcluded) {
+                  console.log(`[Calendar] Excluding all-day event for ${dateS} due to outdate:`, { habitName: h.name, timing: t, dateS });
+                  continue;
+                }
+                
+                ev.push({ 
+                  title: h.name, 
+                  start: dateS, 
+                  allDay: true, 
+                  id: `${evIdBase}-${dateS}`, 
+                  editable: true, 
+                  className: 'vow-habit', 
+                  extendedProps: { habitId: h.id, timingIndex: ti } 
+                });
+              }
             }
           }
         }
@@ -177,6 +241,35 @@ export default function CalendarWidget({
       }
 
       const dateStr = h.dueDate ?? new Date().toISOString().slice(0,10);
+      
+      // Check if this habit's date/time is excluded by outdates
+      const outdates = (h as any).outdates ?? [];
+      const isExcluded = outdates.some((outdate: any) => {
+        if (outdate.date !== dateStr) return false;
+        
+        // If habit has time and outdate has specific time, check if they match
+        if ((h as any).time && outdate.start && outdate.end) {
+          return outdate.start === (h as any).time && outdate.end === (h as any).endTime;
+        }
+        
+        // If habit has time and outdate has only start time, check if it matches
+        if ((h as any).time && outdate.start) {
+          return outdate.start === (h as any).time;
+        }
+        
+        // If outdate has no time specified, exclude the entire date
+        if (!outdate.start) {
+          return true;
+        }
+        
+        return false;
+      });
+      
+      if (isExcluded) {
+        console.log(`[Calendar] Excluding habit due to outdate:`, { habitName: h.name, dateStr, time: (h as any).time });
+        continue;
+      }
+      
       if ((h as any).time) {
         const startIso = `${dateStr}T${(h as any).time}:00`;
         const endIso = (h as any).endTime ? `${dateStr}T${(h as any).endTime}:00` : undefined;
@@ -316,6 +409,7 @@ export default function CalendarWidget({
           
           // Check if this specific event is editable
           let isEditable = true;
+          let isRecurring = false;
           
           if (typeof timingIndex === 'number' && timings[timingIndex]) {
             // If timingIndex is specified, check the specific timing entry
@@ -325,10 +419,12 @@ export default function CalendarWidget({
             // Date type timings are always editable (specific dates, not recurring)
             if (timing.type === 'Date') {
               isEditable = true;
+              isRecurring = false;
               console.log('[Calendar] Timing is Date type - editable');
             } else if (timing.type === 'Daily' || timing.type === 'Weekly' || timing.type === 'Monthly') {
-              isEditable = false;
-              console.log('[Calendar] Timing is recurring type - not editable');
+              isEditable = true; // Allow editing but show confirmation
+              isRecurring = true;
+              console.log('[Calendar] Timing is recurring type - show confirmation');
             }
           } else {
             // No timingIndex - check if habit has recurring patterns
@@ -336,14 +432,23 @@ export default function CalendarWidget({
               t.type === 'Daily' || t.type === 'Weekly' || t.type === 'Monthly'
             );
             const hasRepeat = habit && habit.repeat && habit.repeat !== 'Does not repeat';
-            isEditable = !(hasRecurringTimings || hasRepeat);
-            console.log('[Calendar] No timingIndex - checking habit level recurring:', { hasRecurringTimings, hasRepeat, isEditable });
+            isRecurring = hasRecurringTimings || hasRepeat;
+            isEditable = true; // Allow editing but show confirmation for recurring
+            console.log('[Calendar] No timingIndex - checking habit level recurring:', { hasRecurringTimings, hasRepeat, isRecurring });
           }
           
           if (!isEditable) {
             console.log('[Calendar] Reverting non-editable habit move');
             try { dropInfo.revert(); } catch (e) { /* ignore */ }
             if (onRecurringAttempt) onRecurringAttempt(habitId, { start: startStr, end: endStr });
+            return;
+          }
+          
+          if (isRecurring) {
+            console.log('[Calendar] Showing confirmation for recurring habit');
+            if (onRecurringHabitRequest) {
+              onRecurringHabitRequest(habitId, { start: startStr, end: endStr, timingIndex });
+            }
             return;
           }
           
@@ -379,6 +484,7 @@ export default function CalendarWidget({
           
           // Check if this specific event is editable
           let isEditable = true;
+          let isRecurring = false;
           
           if (typeof timingIndex === 'number' && timings[timingIndex]) {
             // If timingIndex is specified, check the specific timing entry
@@ -388,10 +494,12 @@ export default function CalendarWidget({
             // Date type timings are always editable (specific dates, not recurring)
             if (timing.type === 'Date') {
               isEditable = true;
+              isRecurring = false;
               console.log('[Calendar] Timing is Date type - editable');
             } else if (timing.type === 'Daily' || timing.type === 'Weekly' || timing.type === 'Monthly') {
-              isEditable = false;
-              console.log('[Calendar] Timing is recurring type - not editable');
+              isEditable = true; // Allow editing but show confirmation
+              isRecurring = true;
+              console.log('[Calendar] Timing is recurring type - show confirmation');
             }
           } else {
             // No timingIndex - check if habit has recurring patterns
@@ -399,14 +507,23 @@ export default function CalendarWidget({
               t.type === 'Daily' || t.type === 'Weekly' || t.type === 'Monthly'
             );
             const hasRepeat = habit && habit.repeat && habit.repeat !== 'Does not repeat';
-            isEditable = !(hasRecurringTimings || hasRepeat);
-            console.log('[Calendar] No timingIndex - checking habit level recurring:', { hasRecurringTimings, hasRepeat, isEditable });
+            isRecurring = hasRecurringTimings || hasRepeat;
+            isEditable = true; // Allow editing but show confirmation for recurring
+            console.log('[Calendar] No timingIndex - checking habit level recurring:', { hasRecurringTimings, hasRepeat, isRecurring });
           }
           
           if (!isEditable) {
             console.log('[Calendar] Reverting non-editable habit resize');
             try { resizeInfo.revert(); } catch (e) { /* ignore */ }
             if (onRecurringAttempt) onRecurringAttempt(habitId, { start: startStr, end: endStr });
+            return;
+          }
+          
+          if (isRecurring) {
+            console.log('[Calendar] Showing confirmation for recurring habit resize');
+            if (onRecurringHabitRequest) {
+              onRecurringHabitRequest(habitId, { start: startStr, end: endStr, timingIndex });
+            }
             return;
           }
           

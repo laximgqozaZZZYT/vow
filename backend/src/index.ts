@@ -7,23 +7,10 @@ import bcrypt from 'bcryptjs';
 import { createHash, randomBytes } from 'crypto';
 import { jwtVerify, createRemoteJWKSet } from 'jose';
 import jwksRsa from 'jwks-rsa';
-import { ensureDatabaseUrlFromSecrets } from './runtime/dbUrl';
 import DOMPurify from 'dompurify';
 import { JSDOM } from 'jsdom';
 import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
-
-let dbUrlEnsured = false;
-async function ensureDbUrlOnce() {
-  if (dbUrlEnsured) return;
-  dbUrlEnsured = true;
-  try {
-    await ensureDatabaseUrlFromSecrets();
-  } catch (e: any) {
-    // In local dev we expect DATABASE_URL to be present; in AWS it should be reconstructed.
-    console.warn('[db] ensureDatabaseUrlFromSecrets failed', e?.message || e)
-  }
-}
 
 // Initialize DOMPurify for server-side XSS protection
 const window = new JSDOM('').window;
@@ -83,16 +70,6 @@ const generalRateLimit = rateLimit({
 });
 
 app.use(generalRateLimit);
-
-// Ensure DB URL is available in serverless environments before hit any route.
-app.use(async (_req, _res, next) => {
-  try {
-    await ensureDbUrlOnce();
-    next();
-  } catch (e) {
-    next(e);
-  }
-});
 app.use(cors({
   origin: function (origin, callback) {
     // Allow requests with no origin (mobile apps, Postman, etc.)
@@ -128,7 +105,7 @@ app.use(cors({
 }));
 app.use(express.json());
 
-// Support running behind a reverse proxy that routes the API under /api/* (e.g. CloudFront behavior).
+// Support running behind a reverse proxy that routes the API under /api/*.
 // IMPORTANT: also keep serving routes at '/' for local dev (frontend default is http://localhost:4000).
 // This way both /health and /api/health (and the same for /goals etc.) work.
 const api = express();
@@ -1385,9 +1362,8 @@ app.post('/auth/claim', async (req, res) => {
   return res.json({ ok: true, merged: true });
 });
 
-// If running on Lambda, we don't call listen(); the handler will proxy requests to the app.
 const port = process.env.PORT ? Number(process.env.PORT) : 4000;
-if (!process.env.AWS_LAMBDA_FUNCTION_NAME && !process.env.VOW_NO_LISTEN) {
+if (!process.env.VOW_NO_LISTEN) {
   api.listen(port, () => console.log(`Server running on http://localhost:${port}`));
 }
 

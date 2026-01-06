@@ -6,7 +6,7 @@ interface DashboardSidebarExtendedProps extends DashboardSidebarProps {
   goals: Goal[];
   habits: Habit[];
   selectedGoal: string | null;
-  onGoalSelect: (goalId: string) => void;
+  onGoalSelect: (goalId: string | null) => void;
   onGoalEdit: (goalId: string) => void;
   onHabitEdit: (habitId: string) => void;
   onHabitAction: (habitId: string, action: 'start' | 'complete' | 'pause') => void;

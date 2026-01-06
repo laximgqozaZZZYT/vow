@@ -9,10 +9,10 @@ export default function ActivitySection({ activities, onEditActivity, onDeleteAc
         {/* Fixed-height scrollable container */}
         <div className="h-56 overflow-y-auto space-y-2 pr-2">
           {activities.length === 0 && <div className="text-xs text-zinc-500">No activity yet.</div>}
-          {[...activities].sort((a,b) => b.timestamp.localeCompare(a.timestamp)).map(act => (
+          {[...activities].sort((a,b) => (b.timestamp || '').localeCompare(a.timestamp || '')).map(act => (
             <div key={act.id} className="flex items-center justify-between rounded px-2 py-2 hover:bg-zinc-100 dark:hover:bg-white/5">
               <div className="text-sm">
-                <div className="text-xs text-zinc-500">{formatDateTime24(new Date(act.timestamp))}</div>
+                <div className="text-xs text-zinc-500">{act.timestamp ? formatDateTime24(new Date(act.timestamp)) : 'No timestamp'}</div>
                 {act.kind === 'start' && (
                   <div>{act.habitName} — started</div>
                 )}

@@ -146,13 +146,7 @@ npm run security-full
 - レート制限
 - Bot管理
 
-**AWS WAF**
-- SQLインジェクション防御
-- XSS攻撃防御
-- IP制限
-- 地理的制限
-
-**Auth0**（将来的な選択肢）
+**Supabase Auth**（将来的な選択肢）
 - エンタープライズSSO
 - 多要素認証
 - 異常検知

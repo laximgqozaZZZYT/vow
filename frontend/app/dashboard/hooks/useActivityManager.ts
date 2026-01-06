@@ -222,8 +222,8 @@ export function useActivityManager({
       }
 
       // if the updated activity was a pause, update pausedLoads for that habit
-      if (updated.kind === 'pause') {
-        setPausedLoads(s => ({ ...s, [updated.habitId]: updated.amount ?? 0 }));
+      if (updated.kind === 'pause' && updated.habitId) {
+        setPausedLoads(s => ({ ...s, [updated.habitId!]: updated.amount ?? 0 }));
       }
 
       return copy;

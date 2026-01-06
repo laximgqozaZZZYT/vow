@@ -12,11 +12,24 @@ interface UseEventHandlersProps {
   setActivities: React.Dispatch<React.SetStateAction<Activity[]>>;
 }
 
+interface RecurringConfirmation {
+  habitId: string;
+  habitName: string;
+  originalTime: string;
+  newTime: string;
+  originalEndTime?: string;
+  newEndTime?: string;
+  date: string;
+  timingIndex?: number;
+  updated: { start?: string; end?: string; timingIndex?: number };
+}
+
 export function useEventHandlers({ habits, setHabits, goals, activities, setActivities }: UseEventHandlersProps) {
   const [recurringRequest, setRecurringRequest] = useState<RecurringRequest | null>(null);
   const [selectedHabitId, setSelectedHabitId] = useState<string | null>(null);
   const [newHabitInitial, setNewHabitInitial] = useState<HabitInitial | null>(null);
   const [newHabitInitialType, setNewHabitInitialType] = useState<"do" | "avoid" | undefined>(undefined);
+  const [recurringConfirmation, setRecurringConfirmation] = useState<RecurringConfirmation | null>(null);
 
   const selectedHabit = habits.find((h) => h.id === selectedHabitId) ?? null;
 
@@ -164,6 +177,67 @@ export function useEventHandlers({ habits, setHabits, goals, activities, setActi
     }
   }
 
+  // Handle recurring habit confirmation
+  async function handleRecurringConfirmation(action: 'updateTiming' | 'createException') {
+    if (!recurringConfirmation) return;
+
+    const { habitId, updated, timingIndex, date, newTime, newEndTime } = recurringConfirmation;
+    
+    try {
+      if (action === 'updateTiming') {
+        // Update the timing pattern itself
+        console.log('[EventHandlers] Updating timing pattern for recurring habit');
+        await handleEventChange(habitId, updated);
+      } else {
+        // Create exception for this specific date
+        console.log('[EventHandlers] Creating exception for specific date');
+        
+        const habit = habits.find(h => h.id === habitId);
+        if (!habit) return;
+
+        // Add new Date timing for this specific date
+        const currentTimings = Array.isArray((habit as any).timings) ? (habit as any).timings : [];
+        const newTiming = {
+          type: 'Date',
+          date: date,
+          start: newTime,
+          end: newEndTime
+        };
+
+        // Add outdate entry to exclude the original timing for this date
+        const currentOutdates = Array.isArray((habit as any).outdates) ? (habit as any).outdates : [];
+        const originalTiming = typeof timingIndex === 'number' ? currentTimings[timingIndex] : null;
+        
+        let newOutdate = null;
+        if (originalTiming) {
+          newOutdate = {
+            type: 'A Day',
+            date: date,
+            start: originalTiming.start,
+            end: originalTiming.end
+          };
+        }
+
+        const payload: any = {
+          timings: [...currentTimings, newTiming],
+          outdates: newOutdate ? [...currentOutdates, newOutdate] : currentOutdates
+        };
+
+        console.log('[EventHandlers] Creating exception with payload:', payload);
+        const saved = await api.updateHabit(habitId, payload);
+        setHabits((s) => s.map(h => h.id === habitId ? saved : h));
+      }
+    } catch (e) {
+      console.error('[EventHandlers] Failed to handle recurring confirmation:', e);
+    } finally {
+      setRecurringConfirmation(null);
+    }
+  }
+
+  function cancelRecurringConfirmation() {
+    setRecurringConfirmation(null);
+  }
+
   async function createHabit(payload: CreateHabitPayload) {
     try {
       const h = await api.createHabit(payload);
@@ -171,6 +245,59 @@ export function useEventHandlers({ habits, setHabits, goals, activities, setActi
     } catch (e) { 
       console.error(e);
     }
+  }
+
+  // Handle recurring habit time change request
+  function handleRecurringHabitRequest(
+    habitId: string,
+    updated: { start?: string; end?: string; timingIndex?: number }
+  ) {
+    const habit = habits.find(h => h.id === habitId);
+    if (!habit) return;
+
+    const startIso = updated.start;
+    const endIso = updated.end;
+    
+    // Convert UTC datetime to local date and time
+    let date: string = '';
+    let newTime: string = '';
+    let newEndTime: string | undefined;
+    let originalTime: string = '';
+    let originalEndTime: string | undefined;
+    
+    if (startIso) {
+      const startDate = new Date(startIso);
+      date = `${startDate.getFullYear()}-${String(startDate.getMonth() + 1).padStart(2, '0')}-${String(startDate.getDate()).padStart(2, '0')}`;
+      newTime = `${String(startDate.getHours()).padStart(2, '0')}:${String(startDate.getMinutes()).padStart(2, '0')}`;
+    }
+    
+    if (endIso) {
+      const endDate = new Date(endIso);
+      newEndTime = `${String(endDate.getHours()).padStart(2, '0')}:${String(endDate.getMinutes()).padStart(2, '0')}`;
+    }
+
+    // Get original time from timing or habit
+    const timings = (habit as any).timings ?? [];
+    if (typeof updated.timingIndex === 'number' && timings[updated.timingIndex]) {
+      const timing = timings[updated.timingIndex];
+      originalTime = timing.start || '';
+      originalEndTime = timing.end;
+    } else {
+      originalTime = (habit as any).time || '';
+      originalEndTime = (habit as any).endTime;
+    }
+
+    setRecurringConfirmation({
+      habitId,
+      habitName: habit.name,
+      originalTime,
+      newTime,
+      originalEndTime,
+      newEndTime,
+      date,
+      timingIndex: updated.timingIndex,
+      updated
+    });
   }
 
   return {
@@ -184,6 +311,10 @@ export function useEventHandlers({ habits, setHabits, goals, activities, setActi
     setNewHabitInitialType,
     selectedHabit,
     handleEventChange,
-    createHabit
+    createHabit,
+    recurringConfirmation,
+    handleRecurringConfirmation,
+    cancelRecurringConfirmation,
+    handleRecurringHabitRequest
   };
 }
