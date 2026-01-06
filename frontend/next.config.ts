@@ -1,9 +1,15 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  // Standard Next.js deployment configuration
-  trailingSlash: false,
+  // Supabase静的ホスティング用設定
+  output: 'export',
+  trailingSlash: true,
   poweredByHeader: false,
+  
+  // 静的サイト用画像最適化無効化
+  images: {
+    unoptimized: true
+  },
   
   // 環境変数を明示的に設定
   env: {
@@ -14,7 +20,7 @@ const nextConfig: NextConfig = {
     NEXT_PUBLIC_USE_EDGE_FUNCTIONS: process.env.NEXT_PUBLIC_USE_EDGE_FUNCTIONS,
   },
   
-  // Security headers
+  // Security headers (Static Export では無効だが設定保持)
   async headers() {
     return [
       {
