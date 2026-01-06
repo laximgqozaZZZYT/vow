@@ -65,9 +65,14 @@ jobs:
         run: |
           # GitHub Releases から直接ダウンロード
           curl -L -o supabase.tar.gz https://github.com/supabase/cli/releases/latest/download/supabase_linux_amd64.tar.gz
-          tar -xzf supabase.tar.gz
-          sudo mv supabase /usr/local/bin/supabase
+          # 一時ディレクトリで展開
+          mkdir -p /tmp/supabase-cli
+          tar -xzf supabase.tar.gz -C /tmp/supabase-cli
+          # バイナリを移動
+          sudo mv /tmp/supabase-cli/supabase /usr/local/bin/supabase
           chmod +x /usr/local/bin/supabase
+          # クリーンアップ
+          rm -rf supabase.tar.gz /tmp/supabase-cli
       
       - name: Verify Supabase CLI installation
         run: supabase --version
