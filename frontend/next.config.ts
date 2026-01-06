@@ -1,9 +1,15 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  // Standard Vercel deployment configuration
-  trailingSlash: false,
+  // Supabase静的ホスティング用設定
+  output: 'export',
+  trailingSlash: true,
   poweredByHeader: false,
+  
+  // 静的サイト用画像最適化無効化
+  images: {
+    unoptimized: true
+  },
   
   // 環境変数を明示的に設定
   env: {
@@ -11,9 +17,10 @@ const nextConfig: NextConfig = {
     NEXT_PUBLIC_SUPABASE_URL: process.env.NEXT_PUBLIC_SUPABASE_URL,
     NEXT_PUBLIC_SUPABASE_ANON_KEY: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
     NEXT_PUBLIC_API_URL: process.env.NEXT_PUBLIC_API_URL,
+    NEXT_PUBLIC_USE_EDGE_FUNCTIONS: process.env.NEXT_PUBLIC_USE_EDGE_FUNCTIONS,
   },
   
-  // Security headers (moved from vercel.json)
+  // Security headers (Supabase Storage用に調整)
   async headers() {
     return [
       {
