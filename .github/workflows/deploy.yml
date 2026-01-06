@@ -82,7 +82,10 @@ jobs:
           supabase login --token "${{ secrets.SUPABASE_ACCESS_TOKEN }}"
           supabase link --project-ref jamiyzsyclvlvstmeeir
           cd frontend
-          supabase storage cp -r out/* supabase://website/
+          # outディレクトリの内容を確認
+          ls -la out/
+          # 個別にファイルをアップロード
+          find out -type f -exec supabase storage cp {} supabase://website/{} \;
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
 
