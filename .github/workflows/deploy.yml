@@ -84,10 +84,8 @@ jobs:
           cd frontend
           # outディレクトリの内容を確認
           ls -la out/
-          # outディレクトリに移動してファイルをアップロード
-          cd out
-          # 各ファイルを個別にアップロード（相対パスで）
-          find . -type f -exec supabase storage cp {} supabase://website/{} \;
+          # ディレクトリ全体を再帰的にコピー
+          supabase storage cp -r out ss:///website
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
 
