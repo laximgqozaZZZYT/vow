@@ -8,7 +8,7 @@ import remarkBreaks from 'remark-breaks'
 import rehypeRaw from 'rehype-raw'
 import rehypeSanitize, { defaultSchema } from 'rehype-sanitize'
 import api, { DiaryCard, DiaryTag } from '@/lib/api'
-import DiaryTagManagerModal from './diaryTagManager'
+import DiaryTagManagerModal from './Modal.TagManager'
 
 type Goal = { id: string; name: string }
 type Habit = { id: string; name: string }

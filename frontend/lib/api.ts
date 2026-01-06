@@ -127,7 +127,11 @@ export async function getGoals() {
         ...goal,
         parentId: goal.parent_id,
         isCompleted: goal.is_completed,
-        dueDate: goal.due_date,
+        dueDate: goal.due_date ? (
+          typeof goal.due_date === 'string' && goal.due_date.includes('T') 
+            ? goal.due_date.slice(0, 10)  // Extract YYYY-MM-DD from ISO string
+            : goal.due_date
+        ) : goal.due_date,
         createdAt: goal.created_at,
         updatedAt: goal.updated_at,
       }));
@@ -157,7 +161,14 @@ export async function createGoal(payload: any) {
       parent_id: payload.parentId,
       owner_type: 'user',
       owner_id: user.id,
-      due_date: payload.dueDate ? new Date(payload.dueDate).toISOString() : null,
+      due_date: payload.dueDate ? (
+        typeof payload.dueDate === 'string' && payload.dueDate.match(/^\d{4}-\d{2}-\d{2}$/) 
+          ? payload.dueDate 
+          : (() => {
+              const date = new Date(payload.dueDate);
+              return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+            })()
+      ) : null,
     };
     
     console.log('[createGoal] Creating goal with data:', goalData);
@@ -180,7 +191,11 @@ export async function createGoal(payload: any) {
       ...data,
       parentId: data.parent_id,
       isCompleted: data.is_completed,
-      dueDate: data.due_date,
+      dueDate: data.due_date ? (
+        typeof data.due_date === 'string' && data.due_date.includes('T') 
+          ? data.due_date.slice(0, 10)  // Extract YYYY-MM-DD from ISO string
+          : data.due_date
+      ) : data.due_date,
       createdAt: data.created_at,
       updatedAt: data.updated_at,
     };
@@ -202,7 +217,16 @@ export async function updateGoal(id: string, payload: any) {
     if (payload.details !== undefined) updateData.details = payload.details;
     if (payload.isCompleted !== undefined) updateData.is_completed = payload.isCompleted;
     if (payload.dueDate !== undefined) {
-      updateData.due_date = payload.dueDate ? new Date(payload.dueDate).toISOString() : null;
+      if (payload.dueDate) {
+        if (typeof payload.dueDate === 'string' && payload.dueDate.match(/^\d{4}-\d{2}-\d{2}$/)) {
+          updateData.due_date = payload.dueDate;
+        } else {
+          const date = new Date(payload.dueDate);
+          updateData.due_date = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+        }
+      } else {
+        updateData.due_date = null;
+      }
     }
     if (payload.parentId !== undefined) updateData.parent_id = payload.parentId;
     
@@ -227,7 +251,11 @@ export async function updateGoal(id: string, payload: any) {
       ...data,
       parentId: data.parent_id,
       isCompleted: data.is_completed,
-      dueDate: data.due_date,
+      dueDate: data.due_date ? (
+        typeof data.due_date === 'string' && data.due_date.includes('T') 
+          ? data.due_date.slice(0, 10)  // Extract YYYY-MM-DD from ISO string
+          : data.due_date
+      ) : data.due_date,
       createdAt: data.created_at,
       updatedAt: data.updated_at,
     };
@@ -282,7 +310,11 @@ export async function getHabits() {
         goalId: habit.goal_id,
         createdAt: habit.created_at,
         updatedAt: habit.updated_at,
-        dueDate: habit.due_date,
+        dueDate: habit.due_date ? (
+          typeof habit.due_date === 'string' && habit.due_date.includes('T') 
+            ? habit.due_date.slice(0, 10)  // Extract YYYY-MM-DD from ISO string
+            : habit.due_date
+        ) : habit.due_date,
         endTime: habit.end_time,
         allDay: habit.all_day,
         lastCompletedAt: habit.last_completed_at,
@@ -325,7 +357,14 @@ export async function createHabit(payload: any) {
     if (payload.must !== undefined) habitData.must = payload.must;
     if (payload.duration !== undefined) habitData.duration = payload.duration;
     if (payload.notes !== undefined) habitData.notes = payload.notes;
-    if (payload.dueDate) habitData.due_date = new Date(payload.dueDate).toISOString();
+    if (payload.dueDate) {
+      if (typeof payload.dueDate === 'string' && payload.dueDate.match(/^\d{4}-\d{2}-\d{2}$/)) {
+        habitData.due_date = payload.dueDate;
+      } else {
+        const date = new Date(payload.dueDate);
+        habitData.due_date = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+      }
+    }
     if (payload.time) habitData.time = payload.time;
     if (payload.endTime) habitData.end_time = payload.endTime;
     if (payload.repeat) habitData.repeat = payload.repeat;
@@ -351,7 +390,11 @@ export async function createHabit(payload: any) {
       goalId: data.goal_id,
       createdAt: data.created_at,
       updatedAt: data.updated_at,
-      dueDate: data.due_date,
+      dueDate: data.due_date ? (
+        typeof data.due_date === 'string' && data.due_date.includes('T') 
+          ? data.due_date.slice(0, 10)  // Extract YYYY-MM-DD from ISO string
+          : data.due_date
+      ) : data.due_date,
       endTime: data.end_time,
       allDay: data.all_day,
       lastCompletedAt: data.last_completed_at,
@@ -373,6 +416,14 @@ export async function updateHabit(id: string, payload: any) {
     if (!supabase) throw new Error('Supabase client not available');
     
     const updateData: any = {};
+    
+    // Support calendar drag/resize updates for a specific timing row.
+    // Frontend may send: { dueDate, time, endTime, timingIndex }
+    const timingIndexRaw = payload.timingIndex;
+    
+    console.log('[updateHabit] Processing payload:', payload);
+    console.log('[updateHabit] timingIndexRaw:', timingIndexRaw);
+    
     if (payload.name !== undefined) updateData.name = payload.name;
     if (payload.active !== undefined) updateData.active = payload.active;
     if (payload.count !== undefined) updateData.count = payload.count;
@@ -385,9 +436,26 @@ export async function updateHabit(id: string, payload: any) {
     // 追加のフィールドをサポート
     if (payload.type !== undefined) updateData.type = payload.type;
     if (payload.goalId !== undefined) updateData.goal_id = payload.goalId;
-    if (payload.dueDate !== undefined) updateData.due_date = payload.dueDate ? new Date(payload.dueDate).toISOString() : null;
+    if (payload.dueDate !== undefined) {
+      // Handle date strings properly - don't convert to ISO if it's already a date string
+      if (payload.dueDate) {
+        if (typeof payload.dueDate === 'string' && payload.dueDate.match(/^\d{4}-\d{2}-\d{2}$/)) {
+          // Already in YYYY-MM-DD format, use as-is
+          updateData.due_date = payload.dueDate;
+        } else {
+          // Convert to YYYY-MM-DD format without timezone conversion
+          const date = new Date(payload.dueDate);
+          updateData.due_date = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+        }
+      } else {
+        updateData.due_date = null;
+      }
+    }
+    
+    // Handle time fields - these should be updated regardless of timingIndex
     if (payload.time !== undefined) updateData.time = payload.time;
     if (payload.endTime !== undefined) updateData.end_time = payload.endTime;
+    
     if (payload.repeat !== undefined) updateData.repeat = payload.repeat;
     if (payload.reminders !== undefined) updateData.reminders = payload.reminders;
     if (payload.timings !== undefined) updateData.timings = payload.timings;
@@ -396,6 +464,69 @@ export async function updateHabit(id: string, payload: any) {
     if (payload.workloadUnit !== undefined) updateData.workload_unit = payload.workloadUnit;
     if (payload.workloadTotal !== undefined) updateData.workload_total = payload.workloadTotal;
     if (payload.workloadPerCount !== undefined) updateData.workload_per_count = payload.workloadPerCount;
+    
+    // Handle timingIndex - similar to backend logic
+    if (timingIndexRaw !== undefined) {
+      const timingIndex = Number(timingIndexRaw);
+      if (!Number.isNaN(timingIndex)) {
+        console.log('[updateHabit] Processing timingIndex:', timingIndex);
+        
+        // First, get the current habit to access its timings
+        const { data: existing, error: fetchError } = await supabase
+          .from('habits')
+          .select('timings')
+          .eq('id', id)
+          .single();
+        
+        if (fetchError) {
+          console.error('[updateHabit] Failed to fetch existing habit:', fetchError.message);
+          throw new Error(fetchError.message);
+        }
+        
+        if (existing) {
+          const timings = Array.isArray(existing.timings) ? [...existing.timings] : [];
+          console.log('[updateHabit] Current timings:', timings);
+          
+          if (timings[timingIndex]) {
+            const t = { ...timings[timingIndex] };
+            
+            // The UI uses dueDate/time/endTime; timing rows use date/start/end.
+            if (payload.dueDate !== undefined) {
+              // Ensure date is in YYYY-MM-DD format without timezone conversion
+              let dateStr = payload.dueDate;
+              if (typeof dateStr === 'string' && dateStr.match(/^\d{4}-\d{2}-\d{2}$/)) {
+                // Already in YYYY-MM-DD format
+                t.date = dateStr;
+              } else {
+                // Convert to YYYY-MM-DD format without timezone issues
+                const date = new Date(dateStr);
+                t.date = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+              }
+              console.log('[updateHabit] Updated timing date:', t.date);
+            }
+            if (payload.time !== undefined) {
+              t.start = payload.time;
+              console.log('[updateHabit] Updated timing start:', t.start);
+            }
+            if (payload.endTime !== undefined) {
+              t.end = payload.endTime;
+              console.log('[updateHabit] Updated timing end:', t.end);
+            }
+            
+            timings[timingIndex] = t;
+            updateData.timings = timings;
+            
+            console.log('[updateHabit] Updated timings array:', timings);
+          } else {
+            console.warn('[updateHabit] Timing index out of bounds:', timingIndex, 'in', timings);
+          }
+        }
+      }
+    } else {
+      console.log('[updateHabit] No timingIndex - updating basic fields only');
+    }
+    
+    console.log('[updateHabit] Final updateData:', updateData);
     
     console.log('[updateHabit] Updating habit', id, 'with data:', updateData);
     
@@ -419,7 +550,11 @@ export async function updateHabit(id: string, payload: any) {
       goalId: data.goal_id,
       createdAt: data.created_at,
       updatedAt: data.updated_at,
-      dueDate: data.due_date,
+      dueDate: data.due_date ? (
+        typeof data.due_date === 'string' && data.due_date.includes('T') 
+          ? data.due_date.slice(0, 10)  // Extract YYYY-MM-DD from ISO string
+          : data.due_date
+      ) : data.due_date,
       endTime: data.end_time,
       allDay: data.all_day,
       lastCompletedAt: data.last_completed_at,
