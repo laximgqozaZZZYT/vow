@@ -79,7 +79,7 @@ jobs:
       
       - name: Deploy to Supabase Storage
         run: |
-          supabase auth login --token "${{ secrets.SUPABASE_ACCESS_TOKEN }}"
+          supabase login --token "${{ secrets.SUPABASE_ACCESS_TOKEN }}"
           supabase link --project-ref jamiyzsyclvlvstmeeir
           cd frontend
           supabase storage cp -r out/* supabase://website/
