@@ -63,17 +63,17 @@ jobs:
       
       - name: Install Supabase CLI
         run: |
-          curl -fsSL https://supabase.com/install.sh | sh
-          echo "$HOME/.local/bin" >> $GITHUB_PATH
+          # GitHub Releases から直接ダウンロード
+          curl -L -o supabase.tar.gz https://github.com/supabase/cli/releases/latest/download/supabase_linux_amd64.tar.gz
+          tar -xzf supabase.tar.gz
+          sudo mv supabase /usr/local/bin/supabase
+          chmod +x /usr/local/bin/supabase
       
       - name: Verify Supabase CLI installation
-        run: |
-          export PATH="$HOME/.local/bin:$PATH"
-          supabase --version
+        run: supabase --version
       
       - name: Deploy to Supabase Storage
         run: |
-          export PATH="$HOME/.local/bin:$PATH"
           supabase auth login --token "${{ secrets.SUPABASE_ACCESS_TOKEN }}"
           supabase link --project-ref jamiyzsyclvlvstmeeir
           cd frontend
