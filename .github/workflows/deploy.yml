@@ -63,7 +63,8 @@ jobs:
         run: |
           # Vercelプロジェクトは Root Directory: frontend で設定されているため
           # リポジトリルートからデプロイし、Vercelが自動的にfrontendディレクトリを使用
-          vercel --prod --token=${{ secrets.VERCEL_TOKEN }} --yes
+          # --force フラグを使用してプロジェクトを強制的に作成/更新
+          vercel --prod --token=${{ secrets.VERCEL_TOKEN }} --yes --force
         env:
           VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
           VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}

@@ -6,9 +6,34 @@
 
 ### 必要なアカウント
 - **GitHub**（コード管理）- https://github.com
-- **Supabase**（フルスタック統合プラットフォーム）- https://supabase.com
+- **Supabase**（データベース・認証）- https://supabase.com
+- **Vercel**（フロントエンドホスティング）- https://vercel.com ※推奨
 
 ### デプロイ構成
+
+#### 推奨構成: Vercel + Supabase
+```
+┌─────────────────────────────────────────────────────────┐
+│                    Vercel                               │
+│  ┌─────────────────────────────────────────────────┐   │
+│  │              Frontend                           │   │
+│  │           Next.js Hosting                       │   │
+│  │        (Automatic Deployments)                  │   │
+│  └─────────────────────────────────────────────────┘   │
+└─────────────────────────────────────────────────────────┘
+                            │
+                            ▼
+┌─────────────────────────────────────────────────────────┐
+│                    Supabase                             │
+│  ┌─────────────┐ ┌─────────────┐ ┌─────────────────┐   │
+│  │ Database    │ │   Auth      │ │      API        │   │
+│  │ PostgreSQL  │ │ OAuth/JWT   │ │   Edge Funcs    │   │
+│  │ + RLS       │ │ Multi-Prov  │ │   Real-time     │   │
+│  └─────────────┘ └─────────────┘ └─────────────────┘   │
+└─────────────────────────────────────────────────────────┘
+```
+
+#### 代替構成: Supabase統合
 ```
 ┌─────────────────────────────────────────────────────────┐
 │                    Supabase                             │
@@ -20,7 +45,7 @@
 └─────────────────────────────────────────────────────────┘
 ```
 
-**アーキテクチャ**: 開発・本番環境ともにSupabase統合プラットフォームを使用します。フロントエンドは静的ホスティング、データベースはSupabase PostgreSQL、認証はSupabase Authを使用します。
+**推奨アーキテクチャ**: Vercel（フロントエンド）+ Supabase（バックエンド）の組み合わせを使用します。Vercelは自動デプロイメント、プレビュー環境、高速CDNを提供し、SupabaseはPostgreSQL、認証、リアルタイム機能を提供します。
 
 ---
 
@@ -230,53 +255,158 @@ Client Secret: [Google Cloud Consoleからコピー]
 
 ---
 
-## 3️⃣ フロントエンド設定とビルド
+## 3️⃣ フロントエンドデプロイ設定
 
-### 3.1 環境変数設定
+### 選択肢A: Vercel デプロイ（推奨）
 
-プロジェクトルートの `frontend/.env.local` ファイルを作成・更新：
+#### 3A.1 Vercel CLI設定とプロジェクトリンク
 
 ```bash
-# Supabase設定（Step 2.2で取得した情報を使用）
+# Vercel CLIインストール
+npm install -g vercel@latest
+
+# Vercelにログイン
+vercel login
+
+# フロントエンドディレクトリでプロジェクトをリンク
+cd frontend
+vercel link
+```
+
+**vercel link の対話式設定**:
+```
+? Set up "~/your-project/frontend"? yes
+? Which scope should contain your project? [your-username]'s projects
+? Link to existing project? yes (既存プロジェクトがある場合)
+? Which existing project do you want to link? vow-app
+? Would you like to pull environment variables now? yes
+? Found existing file ".env.local". Do you want to overwrite? yes
+```
+
+#### 3A.2 プロジェクトIDとオーガニゼーションIDの取得
+
+```bash
+# 生成された設定ファイルを確認
+cat frontend/.vercel/project.json
+```
+
+出力例:
+```json
+{
+  "projectId": "prj_NiIeslhoMvnJxcOhjyperZBK0sL7",
+  "orgId": "team_QmPnguvsyqEOme9EvPAhijpF",
+  "projectName": "vow-app"
+}
+```
+
+#### 3A.3 Vercelトークンの生成
+
+1. [Vercel Dashboard](https://vercel.com/account/tokens) → Account Settings → Tokens
+2. **Create Token** をクリック
+3. 適切な名前を付けて作成（例：`GitHub Actions Deploy`）
+4. 生成されたトークンをコピー・保存
+
+#### 3A.4 GitHub Secrets設定
+
+GitHubリポジトリ → Settings → Secrets and variables → Actions で以下を設定：
+
+```bash
+# 必須のSecrets
+VERCEL_TOKEN=vercel_xxxxxxxxxxxxxxxxxxxxxxxxxxxx
+VERCEL_PROJECT_ID=prj_NiIeslhoMvnJxcOhjyperZBK0sL7
+VERCEL_ORG_ID=team_QmPnguvsyqEOme9EvPAhijpF
+
+# Supabase設定（Step 2.2で取得）
 NEXT_PUBLIC_SUPABASE_URL=https://abcdefghijklmnop.supabase.co
 NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
-
-# Supabase統合版設定
-NEXT_PUBLIC_USE_EDGE_FUNCTIONS=false
 ```
 
-### 3.2 ローカルテスト
+#### 3A.5 GitHub Actions設定確認
+
+`.github/workflows/deploy.yml` ファイルが正しく設定されていることを確認：
+
+```yaml
+name: Deploy to Production
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  frontend-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: 'frontend/package-lock.json'
+      
+      - name: Install frontend dependencies
+        run: cd frontend && npm install
+      
+      - name: Build frontend (Vercel)
+        run: cd frontend && npm run build
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
+          NEXT_PUBLIC_USE_EDGE_FUNCTIONS: false
+          NEXT_STATIC_EXPORT: false
+
+  deploy-vercel:
+    needs: frontend-test
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: 'frontend/package-lock.json'
+      
+      - name: Install dependencies
+        run: cd frontend && npm install
+      
+      - name: Install Vercel CLI
+        run: npm install -g vercel@latest
+      
+      - name: Deploy to Vercel
+        run: |
+          vercel --prod --token=${{ secrets.VERCEL_TOKEN }} --yes
+        env:
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
+          NEXT_PUBLIC_USE_EDGE_FUNCTIONS: false
+          NEXT_STATIC_EXPORT: false
+```
+
+#### 3A.6 自動デプロイメントテスト
 
 ```bash
-# フロントエンドディレクトリに移動
-cd frontend
-
-# 依存関係インストール
-npm install
-
-# 開発サーバー起動
-npm run dev
+# 変更をコミット・プッシュしてデプロイメントをテスト
+git add .
+git commit -m "Setup Vercel deployment configuration"
+git push origin main
 ```
 
-1. http://localhost:3000 にアクセス
-2. Googleログインをテスト
-3. ダッシュボードでデータ作成・表示をテスト
-
-### 3.3 本番ビルド
-
-```bash
-# 本番用ビルド
-npm run build
-
-# ビルド成功を確認
-# ✓ Compiled successfully が表示されることを確認
-```
+1. GitHub → Actions タブでワークフローの実行を確認
+2. 成功すると Vercel URL が生成される（例：`https://vow-app.vercel.app`）
 
 ---
 
-## 4️⃣ Supabase静的ホスティングデプロイ
+### 選択肢B: Supabase 静的ホスティング
 
-### 4.1 Supabase CLI インストール
+#### 3B.1 Supabase CLI インストール
 
 ```bash
 # macOS
@@ -293,7 +423,7 @@ curl -fsSL https://supabase.com/install.sh | sh
 npm install -g supabase
 ```
 
-### 4.2 プロジェクトとの接続
+#### 3B.2 プロジェクトとの接続
 
 ```bash
 # プロジェクトルートで実行
@@ -303,15 +433,9 @@ supabase login
 supabase link --project-ref abcdefghijklmnop
 ```
 
-### 4.3 Next.js Static Export設定
+#### 3B.3 Next.js Static Export設定
 
-フロントエンドをSupabase Storageで静的ホスティングするため、Next.jsの設定を更新：
-
-```bash
-# frontend/next.config.ts を確認・更新
-```
-
-`next.config.ts`に以下を追加：
+`frontend/next.config.ts`に以下を追加：
 ```typescript
 const nextConfig: NextConfig = {
   output: 'export',
@@ -323,7 +447,7 @@ const nextConfig: NextConfig = {
 };
 ```
 
-### 4.4 静的サイトビルドとデプロイ
+#### 3B.4 静的サイトビルドとデプロイ
 
 ```bash
 # フロントエンドディレクトリに移動
@@ -342,24 +466,58 @@ supabase storage cp -r out/* supabase://website/
 supabase storage ls website
 ```
 
-### 4.5 Supabase Storage公開設定
+---
 
-1. Supabase Dashboard → **Storage** → **website** bucket
-2. **Settings** → **Public** をONにする
-3. **Public URL**を確認（例：`https://abcdefghijklmnop.supabase.co/storage/v1/object/public/website/`）
+## 4️⃣ フロントエンド設定とテスト
 
-### 4.6 カスタムドメイン設定（オプション）
+### 4.1 環境変数設定
 
-1. Supabase Dashboard → **Settings** → **Custom Domains**
-2. 独自ドメインを追加（例：`vow-app.com`）
-3. DNS設定でCNAMEレコードを追加
-4. SSL証明書の自動発行を待機
+プロジェクトルートの `frontend/.env.local` ファイルを作成・更新：
+
+```bash
+# Supabase設定（Step 2.2で取得した情報を使用）
+NEXT_PUBLIC_SUPABASE_URL=https://abcdefghijklmnop.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+
+# Supabase統合版設定
+NEXT_PUBLIC_USE_EDGE_FUNCTIONS=false
+```
+
+### 4.2 ローカルテスト
+
+```bash
+# フロントエンドディレクトリに移動
+cd frontend
+
+# 依存関係インストール
+npm install
+
+# 開発サーバー起動
+npm run dev
+```
+
+1. http://localhost:3000 にアクセス
+2. Googleログインをテスト
+3. ダッシュボードでデータ作成・表示をテスト
+
+### 4.3 本番ビルド
+
+```bash
+# 本番用ビルド
+npm run build
+
+# ビルド成功を確認
+# ✓ Compiled successfully が表示されることを確認
+```
 
 ---
 
 ## 5️⃣ 動作確認とテスト
 
 ### 5.1 基本機能テスト
+
+**Vercelデプロイの場合**:
+1. `https://vow-app.vercel.app` にアクセス（または生成されたVercel URL）
 
 **Supabase静的ホスティングの場合**:
 1. `https://abcdefghijklmnop.supabase.co/storage/v1/object/public/website/index.html` にアクセス
@@ -407,6 +565,20 @@ npm run security-full
 - [ ] RLSポリシー設定完了
 - [ ] Google OAuth設定完了
 - [ ] セキュリティ設定完了
+
+### ✅ Vercel（推奨）
+- [ ] Vercel CLI インストール・ログイン完了
+- [ ] プロジェクトリンク完了（vercel link）
+- [ ] プロジェクトID・オーガニゼーションID取得完了
+- [ ] Vercelトークン生成完了
+- [ ] GitHub Secrets設定完了
+- [ ] GitHub Actions デプロイメント成功
+- [ ] Vercel URL動作確認完了
+
+### ✅ Supabase（代替）
+- [ ] Supabase CLI インストール完了
+- [ ] プロジェクトリンク完了
+- [ ] Next.js Static Export設定完了
 - [ ] Storage bucket作成完了
 - [ ] 静的サイトアップロード完了
 - [ ] カスタムドメイン設定完了（オプション）
@@ -423,11 +595,12 @@ npm run security-full
 
 | サービス | 無料枠 | 有料プラン |
 |---------|--------|-----------|
+| **Vercel** | 無料（100GB帯域、無制限サイト） | $20/月〜（1TB帯域、高度な機能） |
 | **Supabase** | 無料（500MB DB、1GB Storage、50MB転送） | $25/月〜（8GB DB、100GB Storage、250GB転送） |
 | **Google Cloud** | 無料（OAuth使用のみ） | 無料 |
-| **合計** | **無料** | **$25/月〜** |
+| **合計** | **無料** | **$20-45/月〜** |
 
-**推奨**: 初期は無料枠で開始し、トラフィック増加に応じて有料プランに移行
+**推奨**: 初期は無料枠で開始し、トラフィック増加に応じて有料プランに移行。Vercel + Supabaseの組み合わせが最も柔軟で高性能。
 
 ---
 
@@ -443,7 +616,11 @@ npm run security-full
 
 すべての設定が完了すると、以下のURLでアクセス可能になります：
 
-**Supabase静的ホスティング**:
+**Vercel + Supabase（推奨）**:
+- **WEBアプリ**: `https://vow-app.vercel.app`
+- **API**: Supabaseクライアント経由でアクセス
+
+**Supabase統合**:
 - **WEBアプリ**: `https://abcdefghijklmnop.supabase.co/storage/v1/object/public/website/index.html`
 - **API**: Supabaseクライアント経由でアクセス
 
@@ -495,11 +672,28 @@ supabase storage ls
 - `images.unoptimized: true`が設定されているか確認
 - 動的ルーティングを使用していないか確認
 
-**6. Supabase Storage公開設定**
-- Storage bucketが公開設定になっているか確認
-- 正しいPublic URLでアクセスしているか確認
+**6. Vercel デプロイメントエラー**
+```bash
+# プロジェクトIDとオーガニゼーションIDを再確認
+cat frontend/.vercel/project.json
+
+# GitHub Secretsが正しく設定されているか確認
+# VERCEL_TOKEN, VERCEL_PROJECT_ID, VERCEL_ORG_ID
+
+# Vercel CLI で手動デプロイテスト
+cd frontend
+vercel --prod
+
+# GitHub Actions ログを確認
+# リポジトリ → Actions → 失敗したワークフローを確認
+```
+
+**7. "Project not found" エラー**
+- GitHub SecretsのVERCEL_PROJECT_IDとVERCEL_ORG_IDが正しいか確認
+- Vercelトークンが有効で適切な権限があるか確認
+- `vercel link`を再実行してプロジェクトを再リンク
 
 ---
 
-**最終更新**: 2026年1月5日  
-**対象バージョン**: v2.0.0 - Supabase統合版
+**最終更新**: 2026年1月7日  
+**対象バージョン**: v2.1.0 - Vercel + Supabase統合版

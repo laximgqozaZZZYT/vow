@@ -42,14 +42,14 @@
   - 自動デプロイメントを一時的に無効化する（GitHub Actions制御のため）
   - _Requirements: 4.1, 4.6_
 
-- [ ] 3. GitHub Secrets設定
+- [x] 3. GitHub Secrets設定
   - VercelのAccess TokenをGitHub Secretsに追加する
   - Vercel Project IDをGitHub Secretsに追加する
   - Vercel Org IDをGitHub Secretsに追加する
   - 既存のSupabase環境変数を確認・更新する
   - _Requirements: 4.2, 6.2, 6.3, 6.4_
 
-- [ ] 4. GitHub ActionsワークフローのVercel対応
+- [x] 4. GitHub ActionsワークフローのVercel対応
   - 既存のワークフローをVercel対応に更新する
   - Vercel CLIを使用したデプロイメント設定を追加する
   - 環境変数の設定を更新する
