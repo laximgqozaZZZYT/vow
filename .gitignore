@@ -34,3 +34,5 @@ backend/.lambda-artifact/
 backend/.lambda-artifact-api/
 backend/.lambda-artifact-migrate/
 backend/lambda-*.zip
+.vercel
+.env*.local
