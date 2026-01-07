@@ -5,6 +5,8 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
+    "build:vercel": "next build",
+    "build:static": "cp .env.static .env.local && next build && rm .env.local",
     "start": "next start",
     "lint": "eslint"
   },

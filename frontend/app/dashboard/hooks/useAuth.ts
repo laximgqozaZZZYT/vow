@@ -15,33 +15,56 @@ export function useAuth(): AuthContext {
     (async () => {
       try {
         // Supabase統合版: 認証状態の確認
+        let hasSupabaseSession = false;
         try {
           const { supabase } = await import('../../../lib/supabaseClient');
           if (supabase) {
             const { data: { session } } = await supabase.auth.getSession();
             const accessToken = session?.access_token ?? null;
-            setIsAuthed(!!accessToken);
+            hasSupabaseSession = !!accessToken;
+            
+            console.log('[auth] Supabase session check:', { hasSession: hasSupabaseSession, userId: session?.user?.id });
             
             // APIライブラリにトークンを設定（互換性のため）
             ;(api as any).setBearerToken?.(accessToken);
           }
         } catch (error) {
           console.error('[auth] Session check failed:', error);
-          setIsAuthed(false);
         }
 
+        // バックエンドの認証状態も確認
         try {
           const me = await api.me();
           console.log('[dashboard] me() result:', me);
           const a = (me as any)?.actor;
-          if (a?.type === 'user') setActorLabel(`user:${a.id}`)
-          else if (a?.type === 'guest') setActorLabel(`guest:${a.id}`)
-          else setActorLabel('')
+          if (a?.type === 'user') {
+            setActorLabel(`user:${a.id}`);
+            setIsAuthed(true);
+          } else if (a?.type === 'guest') {
+            setActorLabel(`guest:${a.id}`);
+            // Supabaseセッションがあるがバックエンドがguestの場合、認証状態を同期
+            if (hasSupabaseSession) {
+              console.log('[auth] Supabase session exists but backend shows guest, setting authenticated');
+              setIsAuthed(true);
+            } else {
+              setIsAuthed(false);
+            }
+          } else {
+            setActorLabel('');
+            setIsAuthed(false);
+          }
         } catch (error) {
           console.error('[dashboard] me() failed:', error);
+          // Supabaseセッションがある場合は認証済みとして扱う
+          if (hasSupabaseSession) {
+            setIsAuthed(true);
+          } else {
+            setIsAuthed(false);
+          }
         }
       } catch (e) {
         console.error('Failed to initialize auth', e);
+        setIsAuthed(false);
       }
     })();
   }, []);

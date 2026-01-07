@@ -22,22 +22,24 @@ jobs:
       - name: Install frontend dependencies
         run: cd frontend && npm install
       
-      - name: Build frontend
+      - name: Build frontend (Vercel)
         run: cd frontend && npm run build
         env:
           NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
           NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
+          NEXT_PUBLIC_USE_EDGE_FUNCTIONS: false
+          NEXT_STATIC_EXPORT: false
       
       - name: Run frontend tests
         run: cd frontend && npm test --if-present
       
-      - name: Run security tests (Supabase integrated)
+      - name: Run security tests (Supabase backend)
         run: node scripts/security-test-supabase.js
         env:
           NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL || 'https://example.supabase.co' }}
           NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'example-key' }}
 
-  deploy-supabase:
+  deploy-vercel:
     needs: frontend-test
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/main'
@@ -54,48 +56,38 @@ jobs:
       - name: Install dependencies
         run: cd frontend && npm install
       
-      - name: Build static site
-        run: cd frontend && npm run build
+      - name: Install Vercel CLI
+        run: npm install -g vercel@latest
+      
+      - name: Pull Vercel Environment Information
+        run: vercel pull --yes --environment=production --token=${{ secrets.VERCEL_TOKEN }}
+        working-directory: frontend
         env:
-          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
-          NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
-          NEXT_PUBLIC_USE_EDGE_FUNCTIONS: false
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
       
-      - name: Install Supabase CLI
-        run: |
-          # GitHub Releases から直接ダウンロード
-          curl -L -o supabase.tar.gz https://github.com/supabase/cli/releases/latest/download/supabase_linux_amd64.tar.gz
-          # 一時ディレクトリで展開
-          mkdir -p /tmp/supabase-cli
-          tar -xzf supabase.tar.gz -C /tmp/supabase-cli
-          # バイナリを移動
-          sudo mv /tmp/supabase-cli/supabase /usr/local/bin/supabase
-          chmod +x /usr/local/bin/supabase
-          # クリーンアップ
-          rm -rf supabase.tar.gz /tmp/supabase-cli
-      
-      - name: Verify Supabase CLI installation
-        run: supabase --version
-      
-      - name: Deploy to Supabase Storage
-        run: |
-          supabase login --token "${{ secrets.SUPABASE_ACCESS_TOKEN }}"
-          supabase link --project-ref jamiyzsyclvlvstmeeir
-          cd frontend
-          # outディレクトリの内容を確認
-          ls -la out/
-          # ディレクトリ全体を再帰的にコピー
-          supabase storage cp -r out ss:///website
+      - name: Build Project Artifacts
+        run: vercel build --prod --token=${{ secrets.VERCEL_TOKEN }}
+        working-directory: frontend
         env:
-          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+      
+      - name: Deploy Project Artifacts to Vercel
+        run: vercel deploy --prebuilt --prod --token=${{ secrets.VERCEL_TOKEN }}
+        working-directory: frontend
+        env:
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
 
   notify:
-    needs: [deploy-supabase]
+    needs: [deploy-vercel]
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/main'
     steps:
       - name: Deployment Success
         run: |
           echo "🚀 Deployment completed successfully!"
-          echo "Frontend: https://jamiyzsyclvlvstmeeir.supabase.co/storage/v1/object/public/website/index.html"
-          echo "Backend: Supabase integrated"
+          echo "Frontend: Vercel (https://vow-app.vercel.app)"
+          echo "Backend: Supabase (Database + Auth + API)"
+          echo "Architecture: Vercel (Frontend) + Supabase (Backend)"

@@ -27,9 +27,14 @@ import { useModalManager } from './hooks/useModalManager';
 // Types
 import type { CreateGoalPayload } from './types';
 
+import { useAuth } from './hooks/useAuth';
+
 export default function DashboardPage() {
   const [showLeftPane, setShowLeftPane] = useState(false);
   const [selectedGoal, setSelectedGoal] = useState<string | null>(null);
+  
+  // 認証状態を取得
+  const { isAuthed } = useAuth();
 
   // Custom hooks for data and state management
   const { goals, setGoals, habits, setHabits, activities, setActivities, pageSections, setPageSections, isClient } = useDataManager();

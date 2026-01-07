@@ -1065,12 +1065,6 @@ app.get('/me', async (req, res) => {
   res.json({ actor });
 });
 
-const RegisterSchema = z.object({
-  email: z.string().email().transform((s) => s.toLowerCase().trim()),
-  password: z.string().min(8),
-  name: z.string().min(1).max(100).optional(),
-});
-
 async function mergeGuestIntoUser(guestId: string, userId: string) {
   // Move all guest-owned records to user.
   await prisma.$transaction([
@@ -1107,59 +1101,6 @@ async function githubGetUser(accessToken: string) {
   if (!res.ok) throw new Error(`github user fetch failed: ${res.status}`);
   return await res.json();
 }
-
-app.post('/auth/register', authRateLimit, async (req, res) => {
-  const parsed = RegisterSchema.safeParse(req.body);
-  if (!parsed.success) return res.status(400).json({ error: 'invalid payload', issues: parsed.error.issues });
-
-  const { email, password, name } = parsed.data;
-  const actor = await getActor(req);
-
-  // Sanitize user input to prevent XSS
-  const sanitizedName = name ? sanitizeInput(name) : null;
-
-  const existing = await prisma.user.findUnique({ where: { email } });
-  if (existing) return res.status(409).json({ error: 'email already in use' });
-
-  const passwordHash = await bcrypt.hash(password, 10);
-  const user = await prisma.user.create({ data: { email, passwordHash, name: sanitizedName } as any });
-
-  if (actor.type === 'guest') {
-    await mergeGuestIntoUser(actor.id, user.id);
-  }
-
-  const expiresAt = new Date(Date.now() + SESSION_TTL_DAYS * 24 * 60 * 60 * 1000);
-  const session = await prisma.session.create({ data: { userId: user.id, expiresAt } });
-  setSessionCookie(res, session.id, expiresAt);
-  res.status(201).json({ user: { id: user.id, email: user.email, name: sanitizedName } });
-});
-
-const LoginSchema = z.object({
-  email: z.string().email().transform((s) => s.toLowerCase().trim()),
-  password: z.string().min(1),
-});
-
-app.post('/auth/login', authRateLimit, async (req, res) => {
-  const parsed = LoginSchema.safeParse(req.body);
-  if (!parsed.success) return res.status(400).json({ error: 'invalid payload', issues: parsed.error.issues });
-
-  const { email, password } = parsed.data;
-  const actor = await getActor(req);
-  const user = await prisma.user.findUnique({ where: { email } });
-  if (!user) return res.status(401).json({ error: 'invalid credentials' });
-
-  const ok = await bcrypt.compare(password, (user as any).passwordHash);
-  if (!ok) return res.status(401).json({ error: 'invalid credentials' });
-
-  if (actor.type === 'guest') {
-    await mergeGuestIntoUser(actor.id, user.id);
-  }
-
-  const expiresAt = new Date(Date.now() + SESSION_TTL_DAYS * 24 * 60 * 60 * 1000);
-  const session = await prisma.session.create({ data: { userId: user.id, expiresAt } });
-  setSessionCookie(res, session.id, expiresAt);
-  res.json({ user: { id: user.id, email: user.email, name: user.name } });
-});
 
 // OAuth (Google / GitHub)
 app.get('/auth/oauth/:provider/start', authRateLimit, async (req, res) => {
