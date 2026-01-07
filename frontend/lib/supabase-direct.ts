@@ -3,10 +3,7 @@ import { supabase } from './supabaseClient';
 // Supabase direct client - 本番環境では完全に無効化
 export class SupabaseDirectClient {
   private checkEnvironment() {
-    // 本番環境では常にエラーを投げる
-    if (process.env.NODE_ENV === 'production') {
-      throw new Error('Supabase Direct Client is completely disabled in production to prevent CORS issues. All data operations must use Next.js API Routes.');
-    }
+    // 本番環境でも動作するように変更（ゲストユーザー対応）
     if (!supabase) {
       throw new Error('Supabase not configured');
     }
@@ -17,7 +14,9 @@ export class SupabaseDirectClient {
     
     const { data: session } = await supabase.auth.getSession();
     if (!session?.session?.user) {
-      return [];
+      // ゲストユーザーの場合はローカルストレージから取得
+      const guestGoals = JSON.parse(localStorage.getItem('guest-goals') || '[]');
+      return guestGoals;
     }
     
     const { data, error } = await supabase
@@ -36,8 +35,27 @@ export class SupabaseDirectClient {
     
     const { data: session } = await supabase.auth.getSession();
     
+    // ゲストユーザーの場合はローカルストレージに保存
     if (!session?.session?.user) {
-      throw new Error('Authentication required. Please sign in to save your data.');
+      const guestId = 'guest-' + Math.random().toString(36).substr(2, 9);
+      const now = new Date().toISOString();
+      const goal = {
+        id: 'goal-' + Date.now(),
+        name: payload.name,
+        details: payload.details,
+        dueDate: payload.dueDate,
+        parentId: payload.parentId,
+        isCompleted: false,
+        createdAt: now,
+        updatedAt: now
+      };
+      
+      // ローカルストレージに保存
+      const existingGoals = JSON.parse(localStorage.getItem('guest-goals') || '[]');
+      existingGoals.push(goal);
+      localStorage.setItem('guest-goals', JSON.stringify(existingGoals));
+      
+      return goal;
     }
     
     const now = new Date().toISOString();
@@ -133,7 +151,9 @@ export class SupabaseDirectClient {
     
     const { data: session } = await supabase.auth.getSession();
     if (!session?.session?.user) {
-      return [];
+      // ゲストユーザーの場合はローカルストレージから取得
+      const guestHabits = JSON.parse(localStorage.getItem('guest-habits') || '[]');
+      return guestHabits;
     }
     
     const { data, error } = await supabase
@@ -182,11 +202,41 @@ export class SupabaseDirectClient {
     const { data: session } = await supabase.auth.getSession();
     console.log('[createHabit] Session check:', session?.session?.user ? 'Authenticated' : 'Not authenticated');
     
-    // 認証が必要
+    // ゲストユーザーの場合はローカルストレージに保存
     if (!session?.session?.user) {
-      const error = 'Authentication required. Please sign in to save your habits.';
-      console.error('[createHabit] Error:', error);
-      throw new Error(error);
+      console.log('[createHabit] Guest user - saving to localStorage');
+      const now = new Date().toISOString();
+      const habit = {
+        id: 'habit-' + Date.now(),
+        goalId: payload.goalId || 'default-goal',
+        name: payload.name,
+        active: true,
+        type: payload.type,
+        count: 0,
+        must: payload.must,
+        duration: payload.duration,
+        reminders: payload.reminders,
+        dueDate: payload.dueDate,
+        time: payload.time,
+        endTime: payload.endTime,
+        repeat: payload.repeat,
+        timings: payload.timings,
+        allDay: payload.allDay,
+        notes: payload.notes,
+        workloadUnit: payload.workloadUnit,
+        workloadTotal: payload.workloadTotal,
+        workloadPerCount: payload.workloadPerCount || 1,
+        completed: false,
+        createdAt: now,
+        updatedAt: now
+      };
+      
+      const existingHabits = JSON.parse(localStorage.getItem('guest-habits') || '[]');
+      existingHabits.push(habit);
+      localStorage.setItem('guest-habits', JSON.stringify(existingHabits));
+      
+      console.log('[createHabit] Guest habit saved:', habit);
+      return habit;
     }
     
     // goalIdが指定されていない場合、デフォルトゴールを作成または取得
@@ -330,7 +380,9 @@ export class SupabaseDirectClient {
     
     const { data: session } = await supabase.auth.getSession();
     if (!session?.session?.user) {
-      return [];
+      // ゲストユーザーの場合はローカルストレージから取得
+      const guestActivities = JSON.parse(localStorage.getItem('guest-activities') || '[]');
+      return guestActivities;
     }
     
     const { data, error } = await supabase
@@ -360,9 +412,25 @@ export class SupabaseDirectClient {
     
     const { data: session } = await supabase.auth.getSession();
     
-    // 認証が必要
+    // ゲストユーザーの場合はローカルストレージに保存
     if (!session?.session?.user) {
-      throw new Error('Authentication required. Please sign in to save your activities.');
+      const activity = {
+        id: 'activity-' + Date.now(),
+        kind: payload.kind,
+        habitId: payload.habitId,
+        habitName: payload.habitName,
+        timestamp: payload.timestamp || new Date().toISOString(),
+        amount: payload.amount,
+        prevCount: payload.prevCount,
+        newCount: payload.newCount,
+        durationSeconds: payload.durationSeconds
+      };
+      
+      const existingActivities = JSON.parse(localStorage.getItem('guest-activities') || '[]');
+      existingActivities.unshift(activity); // 最新を先頭に
+      localStorage.setItem('guest-activities', JSON.stringify(existingActivities));
+      
+      return activity;
     }
     
     const { data, error } = await supabase
