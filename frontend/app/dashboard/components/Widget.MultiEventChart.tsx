@@ -497,6 +497,17 @@ export default function MultiEventChart({
         const stroke = p.kind === 'pause' ? '#f59e0b' : undefined
         return (
           <g key={p.habitId + ':' + p.ts}>
+            {/* Larger invisible hover area */}
+            <circle
+              cx={x}
+              cy={y}
+              r={8}
+              fill="transparent"
+              onMouseEnter={() => onHover(p)}
+              onMouseLeave={() => onHover(null)}
+              style={{ cursor: 'pointer' }}
+            />
+            {/* Visible point */}
             <circle
               cx={x}
               cy={y}
@@ -504,8 +515,7 @@ export default function MultiEventChart({
               fill={color}
               stroke={stroke}
               strokeWidth={stroke ? 1.5 : 0}
-              onMouseEnter={() => onHover(p)}
-              onMouseLeave={() => onHover(null)}
+              pointerEvents="none"
             />
           </g>
         )
