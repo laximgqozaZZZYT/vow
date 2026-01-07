@@ -5,6 +5,7 @@ import { Popover } from '@headlessui/react'
 import { DayPicker } from 'react-day-picker'
 import 'react-day-picker/dist/style.css'
 import GoalMermaid from './Widget.GoalDiagram'
+import MultiEventChart from './Widget.MultiEventChart'
 import type { Goal as SharedGoal } from '../types'
 
 type TimingType = 'Date' | 'Daily' | 'Weekly' | 'Monthly'
@@ -186,6 +187,38 @@ function safeTs(iso: string): number {
   return Number.isFinite(t) ? t : 0
 }
 
+function getRangeStartTs(range: RangeKey): number {
+  const now = Date.now()
+  const hour = 60 * 60 * 1000
+  const day = 24 * hour
+  if (range === 'auto') return 0
+  if (range === '24h') return now - day
+  if (range === '7d') return now - 7 * day
+  if (range === '1mo') return now - 30 * day
+  if (range === '1y') return now - 365 * day
+  return 0
+}
+
+function computeRangeWindow(range: RangeKey, nowTs: number): { fromTs: number; untilTs: number } {
+  // Returns a concrete window for preset buttons so we can fill [from]/[until].
+  const d = new Date(nowTs)
+
+  if (range === 'auto') {
+    d.setHours(0, 0, 0, 0)
+    const fromTs = d.getTime()
+    const untilTs = fromTs + (24 * 60 - 1) * 60_000 // 23:59
+    return { fromTs, untilTs }
+  }
+
+  if (range === '24h') return { fromTs: nowTs - 24 * 60 * 60_000, untilTs: nowTs }
+  if (range === '7d') return { fromTs: nowTs - 7 * 24 * 60 * 60_000, untilTs: nowTs }
+  if (range === '1mo') return { fromTs: nowTs - 30 * 24 * 60 * 60_000, untilTs: nowTs }
+  if (range === '1y') return { fromTs: nowTs - 365 * 24 * 60 * 60_000, untilTs: nowTs }
+
+  // all
+  return { fromTs: 0, untilTs: nowTs }
+}
+
 function safeMinutes(s?: string): number | null {
   if (!s) return null
   const m = String(s).trim().match(/^(\d{1,2}):(\d{2})$/)
@@ -194,10 +227,6 @@ function safeMinutes(s?: string): number | null {
   const mm = Number(m[2])
   if (Number.isNaN(hh) || Number.isNaN(mm)) return null
   return hh * 60 + mm
-}
-
-function ymd(d: Date) {
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 }
 
 function parseYmdToDate(s?: string | null): Date | null {
@@ -210,17 +239,6 @@ function parseYmdToDate(s?: string | null): Date | null {
   return Number.isFinite(d.getTime()) ? d : null
 }
 
-function clipToDayWindow(s: Date, e: Date, startMin: number, endMin: number) {
-  const day = new Date(s)
-  day.setHours(0, 0, 0, 0)
-  const winS = new Date(day.getTime() + startMin * 60_000)
-  const winE = new Date(day.getTime() + endMin * 60_000)
-  const ss = new Date(Math.max(s.getTime(), winS.getTime()))
-  const ee = new Date(Math.min(e.getTime(), winE.getTime()))
-  if (ee.getTime() <= ss.getTime()) return null
-  return { start: ss, end: ee }
-}
-
 function getWeeklyAllowedWeekdays(t: Timing): number[] | null {
   const cron = (t.cron ?? '').trim()
   if (cron && cron.startsWith('WEEKDAYS:')) {
@@ -229,26 +247,6 @@ function getWeeklyAllowedWeekdays(t: Timing): number[] | null {
     return days.length ? days : []
   }
   return null
-}
-
-function outdateAppliesOnDay(od: Timing, day: Date): boolean {
-  if (od.type === 'Daily') return true
-  if (od.type === 'Date') {
-    const d = parseYmdToDate(od.date)
-    if (!d) return false
-    return d.getFullYear() === day.getFullYear() && d.getMonth() === day.getMonth() && d.getDate() === day.getDate()
-  }
-  if (od.type === 'Weekly') {
-    const days = getWeeklyAllowedWeekdays(od)
-    if (days === null) return true
-    return days.includes(day.getDay())
-  }
-  if (od.type === 'Monthly') {
-    const d = parseYmdToDate(od.date)
-    if (!d) return true
-    return d.getDate() === day.getDate()
-  }
-  return false
 }
 
 function timingAppliesOnDay(t: Timing, day: Date): boolean {
@@ -293,9 +291,6 @@ function buildPlannedSeriesForHabit(h: Habit, minTs: number, maxTs: number): Arr
   const endTs = Number.isFinite(maxTs) ? maxTs : Date.now()
   if (endTs <= startTs) return []
 
-  // Planned load is based on Workload Total(Day) and Timing rows.
-  // We allocate workloadTotal across timing rows by (timing duration / total duration),
-  // which matches the Habit modal's "Auto Load / Set".
   const workloadTotalDay = (typeof h.workloadTotal === 'number' && Number.isFinite(h.workloadTotal))
     ? h.workloadTotal
     : ((typeof h.must === 'number' && Number.isFinite(h.must)) ? h.must : null)
@@ -303,26 +298,19 @@ function buildPlannedSeriesForHabit(h: Habit, minTs: number, maxTs: number): Arr
   const perDayTarget = workloadTotalDay
 
   let timings = (Array.isArray((h as any).timings) ? ((h as any).timings as Timing[]) : [])
-  // Fallback: if timings are missing, synthesize one from repeat + time/endTime.
   if (!timings.length) {
     const start = (h.time ?? undefined) as any
     const end = (h.endTime ?? undefined) as any
     const sm = safeMinutes(start)
     const em = safeMinutes(end)
-    // only synthesize if we have a usable time (otherwise later we'll default to all-day)
     if (sm !== null) {
       timings = [{ type: 'Daily', start: start, end: (em !== null ? end : undefined) }]
     } else {
-      // last resort: assume a daily occurrence sometime in the day
       timings = [{ type: 'Daily', start: '00:00', end: '00:00' }]
     }
   }
   const autoLoads = computeAutoLoadPerTimingSet(workloadTotalDay, timings)
 
-  // Requirement update:
-  // 100% should mean "if you completed this habit as scheduled for the whole window".
-  // So we simulate each day in the selected window, apply timing rules, and accumulate
-  // Auto Load/Set across all occurrences.
   const startDay = new Date(startTs)
   startDay.setHours(0, 0, 0, 0)
   const endDay = new Date(endTs)
@@ -334,13 +322,11 @@ function buildPlannedSeriesForHabit(h: Habit, minTs: number, maxTs: number): Arr
   for (let dayTs = startDay.getTime(); dayTs <= endDay.getTime(); dayTs += 24 * 60 * 60_000) {
     const day = new Date(dayTs)
 
-    // Gather this day's applicable timings (in table order).
     const idxs: number[] = []
     for (let i = 0; i < timings.length; i++) {
       const t = timings[i]
       if (!t) continue
       if (t.type === 'Date') {
-        // Date timings are independent of window-day iteration.
         const d = t.date ? parseYmdToDate(t.date) : null
         if (!d) continue
         const d0 = new Date(d)
@@ -354,7 +340,6 @@ function buildPlannedSeriesForHabit(h: Habit, minTs: number, maxTs: number): Arr
 
     if (!idxs.length) continue
 
-    // Scale daily total if not all timing rows apply (e.g., Weekly selections).
     const loadsRaw = idxs.map(i => autoLoads[i] ?? 0)
     const sumRaw = loadsRaw.reduce((a, b) => a + b, 0)
     const scale = sumRaw > 0 ? (perDayTarget / sumRaw) : 1
@@ -375,12 +360,8 @@ function buildPlannedSeriesForHabit(h: Habit, minTs: number, maxTs: number): Arr
     }
   }
 
-  // If we never produced any planned points, no line should be drawn.
   if (!series.length) return []
 
-  // Do NOT extend to chart end.
-  // Requirement: planned plots are only at each timing row's End time.
-  // sort & de-dupe by ts
   series.sort((a, b) => a.ts - b.ts)
   const dedup: typeof series = []
   for (const p of series) {
@@ -391,50 +372,26 @@ function buildPlannedSeriesForHabit(h: Habit, minTs: number, maxTs: number): Arr
   return dedup
 }
 
-function getRangeStartTs(range: RangeKey): number {
-  const now = Date.now()
-  const hour = 60 * 60 * 1000
-  const day = 24 * hour
-  if (range === 'auto') return 0
-  if (range === '24h') return now - day
-  if (range === '7d') return now - 7 * day
-  if (range === '1mo') return now - 30 * day
-  if (range === '1y') return now - 365 * day
-  return 0
+function isRecurring(repeat: string | null | undefined) {
+  if (!repeat) return false
+  const r = repeat.trim().toLowerCase()
+  if (!r) return false
+  return r !== 'none' && r !== 'no' && r !== 'false' && r !== '0' && r !== 'does not repeat'
 }
 
-function computeRangeWindow(range: RangeKey, nowTs: number): { fromTs: number; untilTs: number } {
-  // Returns a concrete window for preset buttons so we can fill [from]/[until].
-  const d = new Date(nowTs)
-
-  if (range === 'auto') {
-    d.setHours(0, 0, 0, 0)
-    const fromTs = d.getTime()
-    const untilTs = fromTs + (24 * 60 - 1) * 60_000 // 23:59
-    return { fromTs, untilTs }
+function plannedCumulativeAtTs(
+  h: Habit,
+  startTs: number,
+  ts: number,
+) {
+  const series = buildPlannedSeriesForHabit(h as any, startTs, ts)
+  if (!series.length) return 0
+  let v = 0
+  for (const p of series) {
+    if (p.ts <= ts) v = p.v
+    else break
   }
-
-  if (range === '24h') return { fromTs: nowTs - 24 * 60 * 60_000, untilTs: nowTs }
-  if (range === '7d') return { fromTs: nowTs - 7 * 24 * 60 * 60_000, untilTs: nowTs }
-  if (range === '1mo') return { fromTs: nowTs - 30 * 24 * 60 * 60_000, untilTs: nowTs }
-  if (range === '1y') return { fromTs: nowTs - 365 * 24 * 60 * 60_000, untilTs: nowTs }
-
-  // all
-  return { fromTs: 0, untilTs: nowTs }
-}
-
-function computeDomainTs(range: RangeKey, points: EventPoint[]): { minTs: number; maxTs: number } {
-  const now = Date.now()
-  if (range === 'auto') {
-    // Auto: today window
-    const d = new Date(now)
-    d.setHours(0, 0, 0, 0)
-    const start = d.getTime()
-    // Domain uses [00:00 .. 24:00) so the chart reaches the end of day.
-    const end = start + 24 * 60 * 60_000
-    return { minTs: start, maxTs: end }
-  }
-  return { minTs: getRangeStartTs(range), maxTs: now }
+  return v
 }
 
 function computeCustomTodayWindow() {
@@ -444,60 +401,6 @@ function computeCustomTodayWindow() {
   // default until: today 23:59 (not tomorrow 00:00)
   const until = from + (24 * 60 - 1) * 60_000
   return { from, until }
-}
-
-function sliceLatestNPoints(points: EventPoint[], n: number): EventPoint[] {
-  if (points.length <= n) return points
-  // Points are already sorted ascending by ts; keep the last N.
-  return points.slice(points.length - n)
-}
-
-function palette(i: number) {
-  // Tailwind-ish colors (no dependency)
-  const colors = ['#2563eb', '#16a34a', '#dc2626', '#7c3aed', '#ea580c', '#0891b2', '#db2777', '#4b5563']
-  return colors[i % colors.length]
-}
-
-function isRecurring(repeat: string | null | undefined) {
-  if (!repeat) return false
-  const r = repeat.trim().toLowerCase()
-  if (!r) return false
-  // Treat explicit "none" values as non-recurring.
-  return r !== 'none' && r !== 'no' && r !== 'false' && r !== '0' && r !== 'does not repeat'
-}
-
-function clamp01(x: number) {
-  if (x <= 0) return 0
-  if (x >= 1) return 1
-  return x
-}
-
-function plannedValueAt(
-  startTs: number,
-  endTs: number,
-  target: number,
-  ts: number,
-) {
-  if (!Number.isFinite(startTs) || !Number.isFinite(endTs) || endTs <= startTs) return 0
-  const t = clamp01((ts - startTs) / (endTs - startTs))
-  return target * t
-}
-
-function plannedCumulativeAtTs(
-  h: Habit,
-  startTs: number,
-  ts: number,
-) {
-  // Compute planned cumulative workload "as if the schedule was completed" up to `ts`.
-  // We reuse the planned series builder and take the last point <= ts.
-  const series = buildPlannedSeriesForHabit(h as any, startTs, ts)
-  if (!series.length) return 0
-  let v = 0
-  for (const p of series) {
-    if (p.ts <= ts) v = p.v
-    else break
-  }
-  return v
 }
 
 function buildEventPoints(
@@ -578,243 +481,6 @@ function buildEventPoints(
   return out
 }
 
-function MultiEventChart({
-  habits,
-  points,
-  visibleHabitIds,
-  onHover,
-  range,
-  window,
-}: {
-  habits: Habit[]
-  points: EventPoint[]
-  visibleHabitIds: string[]
-  onHover: (p: EventPoint | null) => void
-  range: RangeKey
-  window?: { fromTs: number; untilTs: number }
-}) {
-  const width = 860
-  const height = 220
-  const padding = 30
-  const innerW = width - padding * 2
-  const innerH = height - padding * 2
-
-  const habitIds = React.useMemo(() => {
-    // Use the user's selection, not only "habits that have points".
-    const existing = new Set(habits.map(h => h.id))
-    return visibleHabitIds.filter(id => existing.has(id))
-  }, [habits, visibleHabitIds])
-
-  const yDomainMax = React.useMemo(() => {
-    // Both actual and planned are drawn in progress ratio (0..1).
-    return 1
-  }, [points, habits, visibleHabitIds])
-
-  // Planned overlays are also plotted as progress ratio (0..1), so they share y-scale with actual.
-
-  const domain = React.useMemo(() => {
-    if (window && Number.isFinite(window.fromTs) && Number.isFinite(window.untilTs) && window.untilTs > window.fromTs) {
-      return { minTs: window.fromTs, maxTs: window.untilTs }
-    }
-    return computeDomainTs(range, points)
-  }, [range, points, window?.fromTs, window?.untilTs])
-  const minTs = domain.minTs
-  const maxTs = domain.maxTs
-
-  const xOf = (ts: number) => {
-    if (!Number.isFinite(minTs) || !Number.isFinite(maxTs) || minTs === maxTs) return padding
-    return padding + innerW * ((ts - minTs) / (maxTs - minTs))
-  }
-  const yOf = (v: number) => padding + innerH * (1 - v / yDomainMax)
-
-  const pointsByHabit = React.useMemo(() => {
-    const m = new Map<string, EventPoint[]>()
-    for (const p of points) {
-      const arr = m.get(p.habitId) ?? []
-      arr.push(p)
-      m.set(p.habitId, arr)
-    }
-    // already sorted overall; ensure each is sorted
-    for (const [k, arr] of m.entries()) arr.sort((a, b) => a.ts - b.ts)
-    return m
-  }, [points])
-
-  const plannedSeriesByHabit = React.useMemo(() => {
-    const m = new Map<string, Array<{ ts: number; ratio: number; cum: number; total: number }>>()
-    for (const hid of habitIds) {
-      const h = habits.find(x => x.id === hid)
-      if (!h) continue
-      if (!isRecurring(h.repeat)) continue
-      const series = buildPlannedSeriesForHabit(h, minTs, maxTs)
-      if (!series.length) continue
-      const total = Math.max(0, ...series.map(p => p.v))
-      if (total <= 0) continue
-      m.set(hid, series.map(p => ({ ts: p.ts, cum: p.v, total, ratio: Math.max(0, Math.min(1, p.v / total)) })))
-    }
-    return m
-  }, [habitIds, habits, minTs, maxTs])
-
-  const actualSeriesByHabit = React.useMemo(() => {
-    const m = new Map<string, Array<{ ts: number; ratio: number; cum: number; total: number; kind: EventPoint['kind'] }>>()
-    for (const hid of habitIds) {
-      const planned = plannedSeriesByHabit.get(hid)
-      const total = planned?.[planned.length - 1]?.total ?? 0
-      if (total <= 0) continue
-      const arr = (pointsByHabit.get(hid) ?? []).map((p) => ({
-        ts: p.ts,
-        cum: p.workloadCumulative,
-        total,
-        ratio: Math.max(0, Math.min(1, p.workloadCumulative / total)),
-        kind: p.kind,
-      }))
-      if (arr.length) m.set(hid, arr)
-    }
-    return m
-  }, [habitIds, plannedSeriesByHabit, pointsByHabit])
-
-  return (
-    <svg viewBox={`0 0 ${width} ${height}`} className="w-full overflow-visible">
-      <line x1={padding} y1={height - padding} x2={width - padding} y2={height - padding} stroke="currentColor" opacity={0.25} />
-      <line x1={padding} y1={padding} x2={padding} y2={height - padding} stroke="currentColor" opacity={0.25} />
-
-      {/* y-axis numeric labels removed by request */}
-
-      {/* lines per habit (workloadAt proxy / count) */}
-      {habitIds.map((hid, i) => {
-        const arr = actualSeriesByHabit.get(hid) ?? []
-        const color = palette(i)
-        const d = arr
-          .map((p, idx) => {
-            const x = xOf(p.ts)
-            const y = yOf(p.ratio)
-            return `${idx === 0 ? 'M' : 'L'} ${x.toFixed(2)} ${y.toFixed(2)}`
-          })
-          .join(' ')
-        return d ? <path key={hid} d={d} fill="none" stroke={color} strokeWidth={2} opacity={0.75} /> : null
-      })}
-
-      {/* planned series (Timing End points only): connect planned-to-planned for each Habit */}
-      {habitIds.map((hid, i) => {
-        const planned = plannedSeriesByHabit.get(hid) ?? []
-        if (!planned.length) return null
-        const color = palette(i)
-
-        // If planned points are sparse, add a baseline segment from 0% at the window start.
-        const first = planned[0]
-        const last = planned[planned.length - 1]
-        const baselineD = (() => {
-          if (!first) return ''
-          const x0 = xOf(minTs)
-          const y0 = yOf(0)
-          const x1 = xOf(first.ts)
-          const y1 = yOf(first.ratio)
-          // Only draw if it has visible width.
-          if (Math.abs(x1 - x0) < 0.5) return ''
-          return `M ${x0.toFixed(2)} ${y0.toFixed(2)} L ${x1.toFixed(2)} ${y1.toFixed(2)}`
-        })()
-
-        // Extend after the last planned point with slope 0 until the window end.
-        const extensionD = (() => {
-          if (!last) return ''
-          const x0 = xOf(last.ts)
-          const y0 = yOf(last.ratio)
-          const x1 = xOf(maxTs)
-          if (Math.abs(x1 - x0) < 0.5) return ''
-          return `M ${x0.toFixed(2)} ${y0.toFixed(2)} L ${x1.toFixed(2)} ${y0.toFixed(2)}`
-        })()
-
-        // Connect planned points for this habit.
-        const d = planned
-          .map((p, idx) => {
-            const x = xOf(p.ts)
-            const y = yOf(p.ratio)
-            return `${idx === 0 ? 'M' : 'L'} ${x.toFixed(2)} ${y.toFixed(2)}`
-          })
-          .join(' ')
-
-        return (
-          <g key={hid + ':plannedSeries'}>
-            {baselineD ? (
-              <path
-                d={baselineD}
-                fill="none"
-                stroke={color}
-                opacity={0.35}
-                strokeWidth={1.6}
-                strokeDasharray="6 5"
-              />
-            ) : null}
-            {d ? (
-              <path
-                d={d}
-                fill="none"
-                stroke={color}
-                opacity={0.55}
-                strokeWidth={1.8}
-                strokeDasharray="6 5"
-              />
-            ) : null}
-
-            {extensionD ? (
-              <path
-                d={extensionD}
-                fill="none"
-                stroke={color}
-                opacity={0.35}
-                strokeWidth={1.6}
-                strokeDasharray="6 5"
-              />
-            ) : null}
-
-            {planned.map((p) => {
-              const cx = xOf(p.ts)
-              const py = yOf(p.ratio)
-              return (
-                <circle
-                  key={hid + ':planpt:' + p.ts}
-                  cx={cx}
-                  cy={py}
-                  r={3}
-                  fill="none"
-                  stroke={color}
-                  strokeWidth={1.8}
-                  opacity={0.8}
-                  strokeDasharray="3 3"
-                />
-              )
-            })}
-          </g>
-        )
-      })}
-
-      {/* points */}
-      {points.map((p) => {
-        const i = habitIds.indexOf(p.habitId)
-        const color = palette(Math.max(0, i))
-        const series = actualSeriesByHabit.get(p.habitId) ?? []
-        const ratio = series.find(s => s.ts === p.ts)?.ratio ?? 0
-        const x = xOf(p.ts)
-        const y = yOf(ratio)
-        const stroke = p.kind === 'pause' ? '#f59e0b' : undefined
-        return (
-          <g key={p.habitId + ':' + p.ts}>
-            <circle
-              cx={x}
-              cy={y}
-              r={3.5}
-              fill={color}
-              stroke={stroke}
-              strokeWidth={stroke ? 1.5 : 0}
-              onMouseEnter={() => onHover(p)}
-              onMouseLeave={() => onHover(null)}
-            />
-          </g>
-        )
-      })}
-    </svg>
-  )
-}
-
 function LineChart({ points, height = 180 }: { points: Point[]; height?: number }) {
   const width = 640
   const padding = 28
@@ -883,6 +549,7 @@ export default function StaticsSection({ habits, activities, goals }: { habits: 
   // Graph controls
   const [range, setRange] = React.useState<RangeKey>('auto')
   const [editGraphOpen, setEditGraphOpen] = React.useState(false)
+  const [editGoalGraphOpen, setEditGoalGraphOpen] = React.useState(false)
 
   const [{ fromTs, untilTs }, setCustomWindow] = React.useState(() => {
     const w = computeCustomTodayWindow()
@@ -901,6 +568,17 @@ export default function StaticsSection({ habits, activities, goals }: { habits: 
       return filtered.length ? filtered : habits.map(h => h.id)
     })
   }, [habits])
+
+  // Goal visibility management
+  const [visibleGoalIds, setVisibleGoalIds] = React.useState<string[]>(() => (goals ?? []).map(g => g.id))
+  React.useEffect(() => {
+    // Keep goal visibility list in sync when goals change.
+    setVisibleGoalIds((prev) => {
+      const existing = new Set((goals ?? []).map(g => g.id))
+      const filtered = prev.filter(id => existing.has(id))
+      return filtered.length ? filtered : (goals ?? []).map(g => g.id)
+    })
+  }, [goals])
 
   const baseEventPoints = React.useMemo(() => {
     // If user picked custom window, always filter by it.
@@ -1035,10 +713,6 @@ export default function StaticsSection({ habits, activities, goals }: { habits: 
           <h2 className="text-lg font-medium">Statics</h2>
           <div className="text-xs text-zinc-500">Stats & charts</div>
         </div>
-
-        <div className="flex items-center gap-2">
-          <div className="text-sm font-medium">{pages[pageIndex]?.title ?? 'Stats'}</div>
-        </div>
       </div>
 
       {/* Controls (apply to current page) */}
@@ -1167,12 +841,6 @@ export default function StaticsSection({ habits, activities, goals }: { habits: 
             </Popover>
           </div>
         </div>
-
-        <div className="flex items-center gap-2">
-          <button className="rounded border px-2 py-1 text-sm" onClick={() => setEditGraphOpen(true)}>
-            Edit Graph
-          </button>
-        </div>
       </div>
 
       {/* Fixed-height page viewport so arrow positions don't shift across pages */}
@@ -1242,7 +910,13 @@ export default function StaticsSection({ habits, activities, goals }: { habits: 
             </div>
           ) : activePage === 'goals' ? (
             <div className="min-w-0">
-              <GoalMermaid goals={(goals ?? []) as SharedGoal[]} compact={true} showErrorDetails={true} />
+              <GoalMermaid 
+                goals={(goals ?? []) as SharedGoal[]} 
+                compact={true} 
+                showErrorDetails={true} 
+                onEditGraph={() => setEditGoalGraphOpen(true)}
+                visibleGoalIds={visibleGoalIds}
+              />
             </div>
           ) : (
             <>
@@ -1250,7 +924,7 @@ export default function StaticsSection({ habits, activities, goals }: { habits: 
               <div className="text-sm text-zinc-500">No Pause/Done activity points in this range yet.</div>
             ) : (
               <div className="rounded border border-zinc-100 p-3 dark:border-slate-800">
-                <MultiEventChart habits={habits} points={eventPoints} visibleHabitIds={visibleHabitIds} onHover={setHoverPoint} range={range} />
+                <MultiEventChart habits={habits} points={eventPoints} visibleHabitIds={visibleHabitIds} onHover={setHoverPoint} range={range} onEditGraph={() => setEditGraphOpen(true)} />
 
                 {hoverPoint ? (
                   <div className="mt-2 rounded border border-zinc-100 p-2 text-xs text-zinc-700 dark:border-slate-800 dark:text-zinc-200">
@@ -1321,6 +995,51 @@ export default function StaticsSection({ habits, activities, goals }: { habits: 
 
             <div className="mt-4 flex justify-end gap-2">
               <button className="rounded border px-3 py-2" onClick={() => setEditGraphOpen(false)}>Done</button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {editGoalGraphOpen ? (
+        <div className="fixed inset-0 z-50 flex items-start justify-center pt-12 bg-black/30">
+          <div className="w-full max-w-lg rounded bg-white px-4 pt-4 pb-4 shadow-lg text-black dark:bg-[#0f1724] dark:text-slate-100">
+            <div className="flex items-center justify-between">
+              <h3 className="text-xl font-semibold">Edit Goal Graph</h3>
+              <button onClick={() => setEditGoalGraphOpen(false)} className="text-slate-500">✕</button>
+            </div>
+
+            <div className="mt-3 text-xs text-slate-500">Select which goals are shown in this diagram.</div>
+
+            <div className="mt-3 max-h-[50vh] overflow-auto space-y-2 pr-2">
+              {(goals ?? []).map((g) => {
+                const checked = visibleGoalIds.includes(g.id)
+                return (
+                  <label key={g.id} className="flex items-center gap-2 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      onChange={(e) => {
+                        const on = e.target.checked
+                        setVisibleGoalIds((prev) => {
+                          if (on) return prev.includes(g.id) ? prev : [...prev, g.id]
+                          const next = prev.filter(id => id !== g.id)
+                          return next.length ? next : prev
+                        })
+                      }}
+                    />
+                    <span className="flex-1">{g.name}</span>
+                    {g.parentId && (
+                      <span className="text-xs text-zinc-400">
+                        → {(goals ?? []).find(p => p.id === g.parentId)?.name || 'Unknown Parent'}
+                      </span>
+                    )}
+                  </label>
+                )
+              })}
+            </div>
+
+            <div className="mt-4 flex justify-end gap-2">
+              <button className="rounded border px-3 py-2" onClick={() => setEditGoalGraphOpen(false)}>Done</button>
             </div>
           </div>
         </div>

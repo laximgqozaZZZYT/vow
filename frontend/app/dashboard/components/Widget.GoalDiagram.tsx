@@ -26,26 +26,33 @@ interface GoalMermaidProps {
   mergeGoals?: (sourceId: string, targetId: string) => void;
   showErrorDetails?: boolean; // New prop for showing detailed error info
   compact?: boolean; // New prop for compact styling
+  onEditGraph?: () => void; // New prop for edit graph callback
+  visibleGoalIds?: string[]; // New prop for goal visibility
 }
 
 // Unified GoalMermaid: generate a mermaid flowchart text and render with error handling
-export default function GoalMermaid({ goals, showErrorDetails = false, compact = false }: GoalMermaidProps) {
+export default function GoalMermaid({ goals, showErrorDetails = false, compact = false, onEditGraph, visibleGoalIds }: GoalMermaidProps) {
   const id = useId();
   const containerRef = useRef<HTMLDivElement | null>(null);
   const [renderError, setRenderError] = useState<string | null>(null);
   
   const graph = useMemo(() => {
+    // Filter goals by visibility
+    const visibleGoals = visibleGoalIds 
+      ? goals.filter(g => visibleGoalIds.includes(g.id))
+      : goals;
+      
     let s = 'flowchart TD\n';
-    for (const g of goals) {
+    for (const g of visibleGoals) {
       const gid = `G_${String(g.id).replace(/[^a-zA-Z0-9_]/g, '_')}`;
       s += `  ${gid}["${String(g.name).replace(/"/g, '\\"')}"]\n`;
-      if (g.parentId) {
+      if (g.parentId && visibleGoalIds?.includes(g.parentId)) {
         const pgid = `G_${String(g.parentId).replace(/[^a-zA-Z0-9_]/g, '_')}`;
         s += `  ${pgid} --> ${gid}\n`;
       }
     }
     return s;
-  }, [goals]);
+  }, [goals, visibleGoalIds]);
 
   useEffect(() => {
     const el = containerRef.current;
@@ -113,7 +120,15 @@ export default function GoalMermaid({ goals, showErrorDetails = false, compact =
   return (
     <div className={compact ? "min-w-0" : "relative"}>
       <div className="mb-2 flex items-center justify-between">
-        <div className="text-xs text-zinc-500">Parent relationships (Mermaid{compact ? '' : ' preview'})</div>
+        <h3 className="text-sm font-medium text-zinc-600 dark:text-zinc-300">Goal Hierarchy</h3>
+        {onEditGraph && (
+          <button 
+            className="rounded border px-2 py-1 text-xs hover:bg-zinc-50 dark:hover:bg-zinc-800" 
+            onClick={onEditGraph}
+          >
+            Edit Graph
+          </button>
+        )}
       </div>
       <div 
         ref={containerRef} 
