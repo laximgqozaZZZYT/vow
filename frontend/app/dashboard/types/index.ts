@@ -95,6 +95,8 @@ export interface CreateHabitPayload {
 
 // Context interfaces
 export interface AuthContext {
+  user: any; // TODO: implement proper user type
+  signOut: () => Promise<void>;
   isAuthed: boolean | null;
   actorLabel: string;
   authError: string | null;
