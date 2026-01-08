@@ -1,107 +1,250 @@
-# Vow - ドキュメント
+# Vow - Personal Goal & Habit Tracker
 
 ## 概要
 
 Vowは個人の目標・習慣管理アプリケーションです。Next.js + Supabaseで構築され、ゲストユーザーとOAuth認証ユーザーの両方をサポートしています。
 
-## 📚 ドキュメント一覧
-
-### 🏗️ システム構成
-- **[current-architecture.md](./current-architecture.md)** - システム全体のアーキテクチャと構成
-- **[api-documentation.md](./api-documentation.md)** - API仕様とエンドポイント詳細
-- **[schema.md](./schema.md)** - データベーススキーマ定義
-
-### 🚀 デプロイメント・セットアップ
-- **[deployment-status.md](./deployment-status.md)** - 現在のデプロイメント状況
-- **[deployment-guide.md](./deployment-guide.md)** - デプロイメント手順
-- **[vercel-setup-guide.md](./vercel-setup-guide.md)** - Vercel設定ガイド
-- **[supabase-setup-instructions.md](./supabase-setup-instructions.md)** - Supabase初期設定
-- **[local-oauth-setup.md](./local-oauth-setup.md)** - ローカル開発でのOAuth設定
-- **[github-secrets-setup.md](./github-secrets-setup.md)** - GitHub Secrets設定
-
-### 🔒 セキュリティ
-- **[security.md](./security.md)** - セキュリティ対策
-- **[supabase-security-checklist.md](./supabase-security-checklist.md)** - Supabaseセキュリティチェックリスト
-- **[deployment-security-checklist.md](./deployment-security-checklist.md)** - デプロイメントセキュリティ
-
-### 🛠️ 開発・保守
-- **[requirements.md](./requirements.md)** - システム要件
-- **[design.md](./design.md)** - 設計思想
-- **[troubleshooting.md](./troubleshooting.md)** - トラブルシューティング
+- **本番URL**: https://vow-sigma.vercel.app/
+- **技術スタック**: Next.js 16.1.1, TypeScript, Tailwind CSS, Supabase
+- **認証**: Google OAuth, GitHub OAuth, ゲストモード
 
 ## 🚀 クイックスタート
 
-### 1. 開発環境セットアップ
+### 開発環境セットアップ
 ```bash
 # リポジトリクローン
 git clone <repository-url>
 cd vow
 
-# フロントエンド依存関係インストール
+# 依存関係インストール
 cd frontend
 npm install
 
 # 環境変数設定
 cp .env.example .env.local
-# .env.localを編集
+# .env.localを編集（下記参照）
 
 # 開発サーバー起動
 npm run dev
 ```
 
-### 2. 本番デプロイ
-1. [deployment-guide.md](./deployment-guide.md) を参照
-2. Vercel設定: [vercel-setup-guide.md](./vercel-setup-guide.md)
-3. Supabase設定: [supabase-setup-instructions.md](./supabase-setup-instructions.md)
+### 環境変数設定
+```bash
+# .env.local
+NEXT_PUBLIC_SUPABASE_URL=https://jamiyzsyclvlvstmeeir.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=your_anon_key
+NEXT_PUBLIC_USE_EDGE_FUNCTIONS=false
+NEXT_PUBLIC_USE_SUPABASE_API=true
+NEXT_PUBLIC_SITE_URL=http://localhost:3000
+```
 
-### 3. OAuth設定
-1. Google OAuth: [local-oauth-setup.md](./local-oauth-setup.md)
-2. GitHub OAuth: 同上
-3. Supabase Auth設定: [supabase-setup-instructions.md](./supabase-setup-instructions.md)
+## 🏗️ アーキテクチャ
 
-## 📊 現在の状況（2026年1月8日）
+### システム構成
+```
+┌─────────────────┐    ┌──────────────────┐    ┌─────────────────┐
+│   Frontend      │    │    Supabase      │    │   OAuth         │
+│   (Next.js)     │◄──►│   PostgreSQL     │    │   Providers     │
+│   Vercel        │    │   + Auth         │◄──►│   Google/GitHub │
+└─────────────────┘    └──────────────────┘    └─────────────────┘
+         │
+         ▼
+┌─────────────────┐
+│  Local Storage  │
+│  (Guest Data)   │
+└─────────────────┘
+```
 
-### ✅ 完了済み
-- フロントエンド・バックエンド実装
-- Vercelデプロイメント設定
-- OAuth認証（Google, GitHub）
-- ゲストユーザー対応
-- データ永続化（Supabase + LocalStorage）
-- セキュリティ対策（RLS, CORS等）
-- プロジェクト構造整理
+### プロジェクト構造
+```
+vow/
+├── frontend/             # メインアプリケーション
+│   ├── app/             # Next.js App Router
+│   │   ├── dashboard/   # ダッシュボード
+│   │   └── login/       # 認証ページ
+│   ├── lib/             # API・ユーティリティ
+│   └── package.json     # 依存関係
+├── docs/                # ドキュメント
+├── scripts/             # ユーティリティスクリプト
+├── supabase/            # データベース設定
+└── .github/workflows/   # CI/CD
+```
 
-### 🔄 進行中
-- パフォーマンス最適化
-- 監視・ログ設定
+### データフロー
+- **ゲストユーザー**: LocalStorageに保存、認証不要
+- **認証ユーザー**: Supabaseデータベースに保存、デバイス間同期
 
-### 📋 今後の予定
-- モバイル対応
-- チーム機能
-- AI機能統合
-- 国際化対応
+## 📡 API仕様
 
-## 🏗️ 技術スタック
+### 統一API (`frontend/lib/api.ts`)
+```typescript
+import api from '../lib/api';
 
-- **フロントエンド**: Next.js 16.1.1, TypeScript, Tailwind CSS
-- **バックエンド**: Supabase (PostgreSQL + Auth + REST API)
-- **デプロイ**: Vercel
-- **認証**: OAuth 2.0 (Google, GitHub)
-- **データ管理**: Supabase + LocalStorage (ゲスト)
+// Goals
+const goals = await api.getGoals();
+const newGoal = await api.createGoal({ name: "新しい目標" });
 
-## 📞 サポート・問い合わせ
+// Habits  
+const habits = await api.getHabits();
+const newHabit = await api.createHabit({ name: "新しい習慣", type: "count" });
 
-### トラブルシューティング
-1. [troubleshooting.md](./troubleshooting.md) を確認
-2. 該当する専門ドキュメントを参照
-3. GitHub Issuesで報告
+// Activities
+const activities = await api.getActivities();
+```
 
-### 開発者向け
-- API仕様: [api-documentation.md](./api-documentation.md)
-- アーキテクチャ: [current-architecture.md](./current-architecture.md)
-- セキュリティ: [security.md](./security.md)
+### データ構造
+```typescript
+interface Goal {
+  id: string;
+  name: string;
+  details?: string;
+  dueDate?: string;
+  isCompleted: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
 
-## 📝 更新履歴
+interface Habit {
+  id: string;
+  name: string;
+  type: string;
+  count: number;
+  must?: number;
+  completed: boolean;
+  // ... その他のフィールド
+}
 
-- **2026-01-08**: プロジェクト構造整理、不要ファイル削除
-- **2026-01-07**: OAuth認証問題解決、デプロイメント安定化
-- **2026-01-07**: ゲストユーザー機能実装完了、ドキュメント整備
+interface Activity {
+  id: string;
+  kind: 'start' | 'complete' | 'pause' | 'skip';
+  habitId: string;
+  timestamp: string;
+  amount?: number;
+  durationSeconds?: number;
+}
+```
+
+## 🗄️ データベーススキーマ
+
+### 主要テーブル
+```sql
+-- Goals（目標）
+CREATE TABLE goals (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  name TEXT NOT NULL,
+  details TEXT,
+  due_date TIMESTAMPTZ,
+  is_completed BOOLEAN DEFAULT false,
+  owner_type TEXT NOT NULL DEFAULT 'user',
+  owner_id TEXT NOT NULL,
+  created_at TIMESTAMPTZ DEFAULT now(),
+  updated_at TIMESTAMPTZ DEFAULT now()
+);
+
+-- Habits（習慣）
+CREATE TABLE habits (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  goal_id UUID REFERENCES goals(id),
+  name TEXT NOT NULL,
+  type TEXT NOT NULL,
+  count INTEGER DEFAULT 0,
+  must INTEGER,
+  completed BOOLEAN DEFAULT false,
+  owner_type TEXT NOT NULL DEFAULT 'user',
+  owner_id TEXT NOT NULL,
+  created_at TIMESTAMPTZ DEFAULT now(),
+  updated_at TIMESTAMPTZ DEFAULT now()
+);
+
+-- Activities（活動記録）
+CREATE TABLE activities (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  kind TEXT NOT NULL,
+  habit_id UUID REFERENCES habits(id),
+  habit_name TEXT NOT NULL,
+  timestamp TIMESTAMPTZ NOT NULL,
+  amount INTEGER,
+  duration_seconds INTEGER,
+  owner_type TEXT NOT NULL DEFAULT 'user',
+  owner_id TEXT NOT NULL
+);
+```
+
+### Row Level Security (RLS)
+全テーブルでRLSが有効化され、ユーザー毎のデータ分離を実現：
+```sql
+-- 例: Goals テーブルのポリシー
+CREATE POLICY "Users can only access their own goals" ON goals
+  FOR ALL USING (owner_id = auth.uid()::text);
+```
+
+## 🔐 セキュリティ
+
+### 認証
+- **OAuth 2.0**: Google, GitHub
+- **JWT**: トークンベース認証
+- **セッション管理**: Supabase Auth
+
+### データ保護
+- **RLS**: データベースレベルでのアクセス制御
+- **HTTPS**: 全通信暗号化
+- **CORS**: 適切なオリジン設定
+- **XSS対策**: サニタイゼーション実装
+
+### 環境変数管理
+- 機密情報は環境変数で管理
+- 本番環境ではVercel環境変数使用
+- 開発環境では`.env.local`使用
+
+## 🚀 デプロイメント
+
+### 自動デプロイ（推奨）
+1. GitHubにpush
+2. GitHub Actionsが自動実行
+3. Vercelに自動デプロイ
+
+### 手動デプロイ
+```bash
+cd frontend
+vercel --prod
+```
+
+### 環境設定
+- **Vercel**: 環境変数設定必須
+- **Supabase**: OAuth設定必須
+- **Google/GitHub**: OAuth App設定必須
+
+## 🛠️ 開発
+
+### ローカル開発
+```bash
+cd frontend
+npm run dev          # 開発サーバー
+npm run build        # ビルド
+npm run lint         # リント
+```
+
+### テスト
+```bash
+npm run security-test  # セキュリティテスト
+```
+
+## 📚 詳細ドキュメント
+
+- **[SETUP.md](./docs/SETUP.md)** - 詳細セットアップガイド
+- **[SECURITY.md](./docs/SECURITY.md)** - セキュリティガイド
+- **[troubleshooting.md](./docs/troubleshooting.md)** - トラブルシューティング
+
+## 🔄 今後の予定
+
+1. **モバイル対応**: React Native
+2. **チーム機能**: 複数ユーザー協調
+3. **AI機能**: 習慣分析・推奨
+4. **国際化**: 多言語対応
+
+## 📞 サポート
+
+問題が発生した場合：
+1. [troubleshooting.md](./docs/troubleshooting.md) を確認
+2. GitHub Issuesで報告
+3. ドキュメントを参照
