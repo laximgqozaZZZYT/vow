@@ -1,7 +1,8 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import api from '../../../lib/api';
 import { supabase } from '../../../lib/supabaseClient';
+import { GuestDataMigration } from '../../../lib/guest-data-migration';
 import type { AuthContext } from '../types';
 
 export function useAuth(): AuthContext {
@@ -10,6 +11,8 @@ export function useAuth(): AuthContext {
   const [actorLabel, setActorLabel] = useState<string>('');
   const [authError, setAuthError] = useState<string | null>(null);
   const [isGuest, setIsGuest] = useState<boolean>(false);
+  const previousIsGuestRef = useRef<boolean>(false);
+  const migrationInProgressRef = useRef<boolean>(false);
 
   // Initial authentication check
   useEffect(() => {
@@ -83,6 +86,61 @@ export function useAuth(): AuthContext {
     })();
   }, []);
 
+  // ゲストから認証ユーザーへの変化を監視してデータ移行を実行
+  useEffect(() => {
+    const handleGuestToUserTransition = async () => {
+      // ゲストから認証ユーザーに変わった場合
+      if (previousIsGuestRef.current && !isGuest && isAuthed && !migrationInProgressRef.current) {
+        console.log('[auth] Guest to user transition detected, checking for migration');
+        
+        // 移行中フラグを設定
+        migrationInProgressRef.current = true;
+        
+        try {
+          // ゲストデータが存在するかチェック
+          if (GuestDataMigration.hasGuestData()) {
+            console.log('[auth] Guest data found, starting migration');
+            
+            // 現在のユーザーIDを取得
+            const me = await api.me();
+            const userId = (me as any)?.actor?.id;
+            
+            if (userId) {
+              const migrationResult = await GuestDataMigration.migrateGuestDataToSupabase(userId);
+              
+              if (migrationResult.success) {
+                console.log('[auth] Migration completed successfully:', migrationResult);
+                setAuthError(`Data migrated: ${migrationResult.migratedGoals} goals, ${migrationResult.migratedHabits} habits, ${migrationResult.migratedActivities} activities`);
+                
+                // 成功メッセージを3秒後にクリア
+                setTimeout(() => setAuthError(null), 3000);
+              } else {
+                console.error('[auth] Migration failed:', migrationResult);
+                setAuthError(`Migration failed: ${migrationResult.errors.join(', ')}`);
+              }
+            } else {
+              console.error('[auth] Could not get user ID for migration');
+              setAuthError('Migration failed: Could not get user ID');
+            }
+          } else {
+            console.log('[auth] No guest data to migrate');
+          }
+        } catch (error) {
+          console.error('[auth] Migration error:', error);
+          setAuthError(`Migration error: ${(error as any)?.message || error}`);
+        } finally {
+          // 移行中フラグをクリア
+          migrationInProgressRef.current = false;
+        }
+      }
+      
+      // 現在の状態を記録
+      previousIsGuestRef.current = isGuest;
+    };
+
+    handleGuestToUserTransition();
+  }, [isGuest, isAuthed]);
+
   // Supabase統合版: 認証状態の監視
   useEffect(() => {
     const initAuth = async () => {
@@ -91,9 +149,18 @@ export function useAuth(): AuthContext {
       
       console.log('[auth] Setting up Supabase auth listener');
       
-      const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event: any, session: any) => {
+      const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event: any, session: any) => {
         const token = session?.access_token ?? null;
+        const wasGuest = isGuest;
+        
+        console.log('[auth] Auth state change:', { event, hasToken: !!token, wasGuest });
+        
         setIsAuthed(!!token);
+        
+        // 認証状態が変わった場合、ゲスト状態もリセット
+        if (token) {
+          setIsGuest(false);
+        }
         
         try {
           ;(api as any).setBearerToken?.(token);

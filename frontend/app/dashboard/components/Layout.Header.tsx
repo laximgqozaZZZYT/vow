@@ -28,7 +28,14 @@ export default function DashboardHeader({
             <div className="hidden text-xs text-zinc-500 sm:block">{actorLabel}</div>
           )}
           {authError && (
-            <div className="hidden max-w-[420px] truncate text-xs text-amber-700 sm:block dark:text-amber-300" title={authError}>
+            <div 
+              className={`hidden max-w-[420px] truncate text-xs sm:block ${
+                authError.startsWith('Data migrated:') 
+                  ? 'text-green-700 dark:text-green-300' 
+                  : 'text-amber-700 dark:text-amber-300'
+              }`} 
+              title={authError}
+            >
               {authError}
             </div>
           )}

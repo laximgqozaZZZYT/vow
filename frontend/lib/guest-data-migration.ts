@@ -29,22 +29,23 @@ export class GuestDataMigration {
     console.log('[Migration] Starting guest data migration for user:', userId);
 
     try {
-      // 1. Goals移行
-      await this.migrateGoals(userId, result);
+      // 1. Goals移行（IDマッピングを取得）
+      const goalIdMapping = await this.migrateGoals(userId, result);
       
-      // 2. Habits移行
-      await this.migrateHabits(userId, result);
+      // 2. Habits移行（goalId参照を更新）
+      await this.migrateHabits(userId, goalIdMapping, result);
       
       // 3. Activities移行
       await this.migrateActivities(userId, result);
 
-      // 4. 移行成功時のクリーンアップ
+      // 4. 移行成功時のクリーンアップ（エラーがない場合のみ）
       if (result.errors.length === 0) {
         this.clearGuestData();
         result.success = true;
         console.log('[Migration] Migration completed successfully:', result);
       } else {
-        console.warn('[Migration] Migration completed with errors:', result);
+        console.warn('[Migration] Migration completed with errors, guest data preserved:', result);
+        // 部分的な失敗の場合、ゲストデータは保持する
       }
 
     } catch (error) {
@@ -56,20 +57,43 @@ export class GuestDataMigration {
   }
 
   /**
-   * ゲストGoalsをSupabaseに移行
+   * ゲストGoalsをSupabaseに移行し、IDマッピングを返す
    */
-  private static async migrateGoals(userId: string, result: GuestDataMigrationResult) {
+  private static async migrateGoals(userId: string, result: GuestDataMigrationResult): Promise<Map<string, string>> {
     const guestGoals = JSON.parse(localStorage.getItem('guest-goals') || '[]');
+    const goalIdMapping = new Map<string, string>(); // ゲストID → Supabase ID
     
     if (guestGoals.length === 0) {
       console.log('[Migration] No guest goals to migrate');
-      return;
+      return goalIdMapping;
     }
 
     console.log('[Migration] Migrating', guestGoals.length, 'goals');
 
     for (const goal of guestGoals) {
       try {
+        // 重複チェック: 同じ名前のゴールが既に存在するかチェック
+        const { data: existingGoals, error: checkError } = await supabase!
+          .from('goals')
+          .select('id, name')
+          .eq('owner_type', 'user')
+          .eq('owner_id', userId)
+          .eq('name', goal.name)
+          .limit(1);
+
+        if (checkError) {
+          console.error('[Migration] Goal duplicate check error:', checkError);
+          result.errors.push(`Goal "${goal.name}" duplicate check failed: ${checkError.message}`);
+          continue;
+        }
+
+        if (existingGoals && existingGoals.length > 0) {
+          console.log('[Migration] Goal already exists, skipping:', goal.name);
+          // 既存のゴールIDをマッピングに追加
+          goalIdMapping.set(goal.id, existingGoals[0].id);
+          continue;
+        }
+
         const now = new Date().toISOString();
         const { data, error } = await supabase!
           .from('goals')
@@ -92,19 +116,22 @@ export class GuestDataMigration {
           result.errors.push(`Goal "${goal.name}": ${error.message}`);
         } else {
           result.migratedGoals++;
-          console.log('[Migration] Goal migrated:', goal.name, '→', data.id);
+          goalIdMapping.set(goal.id, data.id); // ゲストID → Supabase IDのマッピング
+          console.log('[Migration] Goal migrated:', goal.name, goal.id, '→', data.id);
         }
       } catch (error) {
         console.error('[Migration] Goal migration exception:', error);
         result.errors.push(`Goal "${goal.name}": ${(error as any)?.message || error}`);
       }
     }
+
+    return goalIdMapping;
   }
 
   /**
-   * ゲストHabitsをSupabaseに移行
+   * ゲストHabitsをSupabaseに移行（goalId参照を更新）
    */
-  private static async migrateHabits(userId: string, result: GuestDataMigrationResult) {
+  private static async migrateHabits(userId: string, goalIdMapping: Map<string, string>, result: GuestDataMigrationResult) {
     const guestHabits = JSON.parse(localStorage.getItem('guest-habits') || '[]');
     
     if (guestHabits.length === 0) {
@@ -119,11 +146,40 @@ export class GuestDataMigration {
 
     for (const habit of guestHabits) {
       try {
+        // 重複チェック: 同じ名前のハビットが既に存在するかチェック
+        const { data: existingHabits, error: checkError } = await supabase!
+          .from('habits')
+          .select('id, name')
+          .eq('owner_type', 'user')
+          .eq('owner_id', userId)
+          .eq('name', habit.name)
+          .limit(1);
+
+        if (checkError) {
+          console.error('[Migration] Habit duplicate check error:', checkError);
+          result.errors.push(`Habit "${habit.name}" duplicate check failed: ${checkError.message}`);
+          continue;
+        }
+
+        if (existingHabits && existingHabits.length > 0) {
+          console.log('[Migration] Habit already exists, skipping:', habit.name);
+          continue;
+        }
+
+        // goalId参照を更新: ゲストgoalIdがマッピングにある場合は使用、なければデフォルト
+        let targetGoalId = defaultGoalId;
+        if (habit.goalId && goalIdMapping.has(habit.goalId)) {
+          targetGoalId = goalIdMapping.get(habit.goalId)!;
+          console.log('[Migration] Updated habit goalId:', habit.goalId, '→', targetGoalId);
+        } else if (habit.goalId) {
+          console.log('[Migration] Guest goalId not found in mapping, using default:', habit.goalId);
+        }
+
         const now = new Date().toISOString();
         const { data, error } = await supabase!
           .from('habits')
           .insert({
-            goal_id: defaultGoalId, // ゲストHabitsはデフォルトゴールに関連付け
+            goal_id: targetGoalId, // 更新されたgoalIdを使用
             name: habit.name,
             type: habit.type,
             active: habit.active !== false,
@@ -155,7 +211,7 @@ export class GuestDataMigration {
           result.errors.push(`Habit "${habit.name}": ${error.message}`);
         } else {
           result.migratedHabits++;
-          console.log('[Migration] Habit migrated:', habit.name, '→', data.id);
+          console.log('[Migration] Habit migrated:', habit.name, '→', data.id, 'goalId:', targetGoalId);
         }
       } catch (error) {
         console.error('[Migration] Habit migration exception:', error);
@@ -179,6 +235,27 @@ export class GuestDataMigration {
 
     for (const activity of guestActivities) {
       try {
+        // 重複チェック: 同じタイムスタンプとhabitNameのアクティビティが既に存在するかチェック
+        const { data: existingActivities, error: checkError } = await supabase!
+          .from('activities')
+          .select('id')
+          .eq('owner_type', 'user')
+          .eq('owner_id', userId)
+          .eq('habit_name', activity.habitName)
+          .eq('timestamp', activity.timestamp)
+          .limit(1);
+
+        if (checkError) {
+          console.error('[Migration] Activity duplicate check error:', checkError);
+          result.errors.push(`Activity "${activity.habitName}" duplicate check failed: ${checkError.message}`);
+          continue;
+        }
+
+        if (existingActivities && existingActivities.length > 0) {
+          console.log('[Migration] Activity already exists, skipping:', activity.habitName, activity.timestamp);
+          continue;
+        }
+
         const { data, error } = await supabase!
           .from('activities')
           .insert({
@@ -201,7 +278,7 @@ export class GuestDataMigration {
           result.errors.push(`Activity "${activity.habitName}": ${error.message}`);
         } else {
           result.migratedActivities++;
-          console.log('[Migration] Activity migrated:', activity.habitName, '→', data.id);
+          console.log('[Migration] Activity migrated:', activity.habitName, activity.timestamp, '→', data.id);
         }
       } catch (error) {
         console.error('[Migration] Activity migration exception:', error);

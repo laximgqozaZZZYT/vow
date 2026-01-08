@@ -86,13 +86,29 @@
 4. THE Dashboard SHALL not display authentication-specific features to guest users
 5. THE Dashboard SHALL provide clear indication of guest mode without disrupting the user experience
 
-### Requirement 7: 将来のアカウント作成への配慮
+### Requirement 7: ゲストデータの自動統合
 
-**User Story:** As a guest user who later creates an account, I want to understand how my local data relates to cloud storage, so that I can make informed decisions about data migration.
+**User Story:** As a guest user who later logs in, I want my locally stored goals and habits to be automatically transferred to my account, so that I don't lose any work I've done.
 
 #### Acceptance Criteria
 
-1. WHEN a guest user creates an account, THE System SHALL preserve their local data during the authentication process
-2. THE System SHALL provide clear messaging about local vs cloud data storage
-3. THE System SHALL maintain data integrity during any future migration processes
-4. THE System SHALL not automatically delete local guest data upon authentication
+1. WHEN a guest user with local data logs in, THE Data_Migration_Service SHALL detect existing guest data in Local_Storage
+2. WHEN guest data is detected during login, THE Data_Migration_Service SHALL automatically transfer goals from Local_Storage to Supabase with new UUIDs
+3. WHEN goals are migrated, THE Data_Migration_Service SHALL create an ID mapping between guest IDs and Supabase IDs
+4. WHEN habits are migrated, THE Data_Migration_Service SHALL update habit goalId references to use the new Supabase goal IDs
+5. WHEN activities are migrated, THE Data_Migration_Service SHALL preserve activity records with habit name references
+6. WHEN data migration is complete, THE Data_Migration_Service SHALL clear the guest data from Local_Storage
+7. WHEN data migration fails partially, THE System SHALL preserve guest data in Local_Storage and provide detailed error information
+8. THE Data_Migration_Service SHALL handle duplicate data gracefully by checking existing user data before insertion
+
+### Requirement 8: データ統合のユーザーエクスペリエンス
+
+**User Story:** As a user, I want to be informed about the data migration process, so that I understand what's happening to my data.
+
+#### Acceptance Criteria
+
+1. WHEN data migration begins, THE System SHALL display a progress indicator to the user
+2. WHEN data migration is successful, THE System SHALL show a confirmation message with migration summary
+3. WHEN data migration encounters errors, THE System SHALL display clear error messages and recovery options
+4. THE System SHALL not block the user interface during migration process
+5. THE System SHALL provide the user with the option to review migrated data after completion
