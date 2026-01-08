@@ -5,24 +5,20 @@
 ### 本番環境
 - **URL**: https://vow-sigma.vercel.app/
 - **ステータス**: ✅ 稼働中
-- **最終デプロイ**: 2026年1月7日
+- **最終デプロイ**: 2026年1月8日
 - **デプロイ方法**: GitHub Actions + Vercel
 
 ### 開発環境
-- **URL**: https://vow-meqcl6kxg-laximgqozazzzyts-projects.vercel.app/
-- **ステータス**: ❌ 404エラー（設定問題）
+- **URL**: プレビューURL（PR毎に自動生成）
+- **ステータス**: ✅ 正常
 - **用途**: プレビューデプロイメント
 
 ## デプロイメント設定
 
 ### Vercel設定
-```json
-// vercel.json は削除済み（自動検出使用）
-{
-  "version": 2,
-  "framework": "nextjs"
-}
-```
+- 自動検出によるNext.jsビルド
+- `vercel.json`は削除済み（不要）
+- フロントエンドのみのシンプル構成
 
 ### 環境変数（Vercel）
 ```bash
@@ -75,8 +71,7 @@ NEXT_PUBLIC_SITE_URL=https://vow-sigma.vercel.app
 - [x] LocalStorage保存（ゲストユーザー）
 
 ### ⚠️ 既知の問題
-- [ ] プレビューURL（`vow-meqcl6kxg-*`）で404エラー
-- [ ] フォント読み込み警告（本番影響なし）
+- なし（全機能正常動作中）
 
 ## パフォーマンス
 
@@ -136,7 +131,7 @@ NEXT_PUBLIC_SITE_URL=https://vow-sigma.vercel.app
 
 ### よくある問題
 1. **OAuth失敗**: URL設定確認
-2. **404エラー**: Vercel設定確認  
+2. **ビルドエラー**: 依存関係確認
 3. **データ同期失敗**: ネットワーク・認証確認
 
 ### 緊急時対応

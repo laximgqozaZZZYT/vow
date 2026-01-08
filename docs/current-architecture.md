@@ -38,6 +38,25 @@ Vowは個人の目標・習慣管理アプリケーションで、Next.js + Supa
 └─────────────────┘
 ```
 
+## プロジェクト構造
+
+```
+vow/
+├── .github/workflows/     # CI/CD設定
+├── .vercel/              # Vercelデプロイ設定
+├── docs/                 # ドキュメント
+├── frontend/             # メインアプリケーション
+│   ├── app/             # Next.js App Router
+│   ├── lib/             # ユーティリティ・API
+│   ├── public/          # 静的ファイル
+│   └── package.json     # 依存関係
+├── scripts/              # ユーティリティスクリプト
+├── supabase/             # データベース設定
+├── .env.local            # 環境変数
+├── .gitignore            # Git設定
+└── README.md             # プロジェクト説明
+```
+
 ## データフロー
 
 ### 1. ゲストユーザー
@@ -94,6 +113,7 @@ NEXT_PUBLIC_SITE_URL=https://vow-sigma.vercel.app
 ### 手動デプロイ
 ```bash
 # Vercel CLI使用
+cd frontend
 vercel --prod
 ```
 
@@ -140,4 +160,3 @@ npm run security-test
 一般的な問題と解決方法については以下を参照：
 - [deployment-guide.md](./deployment-guide.md)
 - [troubleshooting.md](./troubleshooting.md)
-- [vercel-troubleshooting.md](./vercel-troubleshooting.md)
