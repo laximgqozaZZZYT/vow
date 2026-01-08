@@ -249,9 +249,9 @@ export function useEventHandlers({ habits, setHabits, goals, activities, setActi
     } catch (e) { 
       console.error('[useEventHandlers] createHabit error:', e);
       console.error('[useEventHandlers] Error details:', {
-        name: e.name,
-        message: e.message,
-        stack: e.stack
+        name: (e as any)?.name,
+        message: (e as any)?.message,
+        stack: (e as any)?.stack
       });
     }
   }

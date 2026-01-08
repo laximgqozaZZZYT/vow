@@ -316,7 +316,7 @@ export default function DiarySection({ goals, habits }: { goals: Goal[]; habits:
   const refreshCards = React.useCallback(async () => {
     setLoading(true)
     try {
-      const c = await api.getDiaryCards({ query })
+      const c = await api.getDiaryCards()
       setCards(c)
       setError(null)
     } catch (e: any) {

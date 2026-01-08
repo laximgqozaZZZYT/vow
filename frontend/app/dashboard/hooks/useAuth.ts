@@ -63,9 +63,9 @@ export function useAuth(): AuthContext {
         } catch (error) {
           console.error('[dashboard] me() failed:', error);
           console.error('[dashboard] Error details:', {
-            name: error.name,
-            message: error.message,
-            stack: error.stack
+            name: (error as any)?.name,
+            message: (error as any)?.message,
+            stack: (error as any)?.stack
           });
           // Supabaseセッションがある場合は認証済みとして扱う
           if (hasSupabaseSession) {

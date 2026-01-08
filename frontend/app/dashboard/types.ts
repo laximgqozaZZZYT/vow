@@ -143,4 +143,5 @@ export interface AuthContext {
   actorLabel: string;
   authError: string | null;
   handleLogout: () => Promise<void>;
+  isGuest: boolean;
 }
