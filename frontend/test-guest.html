@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Test Guest User Functionality</title>
+    <script type="module">
+        // Test the guest user functionality
+        console.log('=== Testing Guest User Functionality ===');
+        
+        // Check environment
+        console.log('Environment variables:');
+        console.log('USE_EDGE_FUNCTIONS should be false');
+        
+        // Test localStorage
+        console.log('Testing localStorage...');
+        localStorage.setItem('test-guest', 'working');
+        console.log('localStorage test:', localStorage.getItem('test-guest'));
+        
+        // Test creating a habit via API
+        console.log('Testing habit creation...');
+        
+        const testHabit = {
+            name: 'Test Guest Habit',
+            type: 'do',
+            goalId: 'test-goal'
+        };
+        
+        // This simulates what the frontend would do
+        console.log('Test habit payload:', testHabit);
+        
+        // Check if we can access the dashboard
+        console.log('Current location:', window.location.href);
+        
+        // Add a button to test habit creation
+        document.body.innerHTML = `
+            <h1>Guest User Test</h1>
+            <button onclick="testHabitCreation()">Test Habit Creation</button>
+            <div id="result"></div>
+        `;
+        
+        window.testHabitCreation = async function() {
+            const result = document.getElementById('result');
+            result.innerHTML = 'Testing...';
+            
+            try {
+                // This would normally go through the API
+                const response = await fetch('/api/habits', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(testHabit)
+                });
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    result.innerHTML = 'Success: ' + JSON.stringify(data);
+                } else {
+                    result.innerHTML = 'Error: ' + response.status + ' ' + response.statusText;
+                }
+            } catch (error) {
+                result.innerHTML = 'Error: ' + error.message;
+            }
+        };
+    </script>
+</head>
+<body>
+    <p>Loading test...</p>
+</body>
+</html>

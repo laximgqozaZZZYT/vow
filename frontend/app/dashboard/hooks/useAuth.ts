@@ -9,6 +9,7 @@ export function useAuth(): AuthContext {
   const [isAuthed, setIsAuthed] = useState<boolean | null>(null);
   const [actorLabel, setActorLabel] = useState<string>('');
   const [authError, setAuthError] = useState<string | null>(null);
+  const [isGuest, setIsGuest] = useState<boolean>(false);
 
   // Initial authentication check
   useEffect(() => {
@@ -34,31 +35,44 @@ export function useAuth(): AuthContext {
 
         // バックエンドの認証状態も確認
         try {
+          console.log('[auth] Calling api.me()...');
           const me = await api.me();
           console.log('[dashboard] me() result:', me);
           const a = (me as any)?.actor;
+          console.log('[auth] Actor extracted:', a);
+          
           if (a?.type === 'user') {
+            console.log('[auth] User actor detected');
             setActorLabel(`user:${a.id}`);
             setIsAuthed(true);
+            setIsGuest(false);
           } else if (a?.type === 'guest') {
+            console.log('[auth] Guest actor detected');
             setActorLabel(`guest:${a.id}`);
-            // Supabaseセッションがあるがバックエンドがguestの場合、認証状態を同期
-            if (hasSupabaseSession) {
-              console.log('[auth] Supabase session exists but backend shows guest, setting authenticated');
-              setIsAuthed(true);
-            } else {
-              setIsAuthed(false);
-            }
+            // ゲストユーザーも認証済みとして扱い、ローカル機能を有効化
+            console.log('[auth] Guest user detected, enabling local features');
+            console.log('[auth] Setting isAuthed to true for guest user');
+            setIsAuthed(true);
+            setIsGuest(true);
           } else {
+            console.log('[auth] No valid actor found');
             setActorLabel('');
             setIsAuthed(false);
+            setIsGuest(false);
           }
         } catch (error) {
           console.error('[dashboard] me() failed:', error);
+          console.error('[dashboard] Error details:', {
+            name: error.name,
+            message: error.message,
+            stack: error.stack
+          });
           // Supabaseセッションがある場合は認証済みとして扱う
           if (hasSupabaseSession) {
+            console.log('[auth] Fallback: Using Supabase session for auth');
             setIsAuthed(true);
           } else {
+            console.log('[auth] No fallback available, setting isAuthed to false');
             setIsAuthed(false);
           }
         }
@@ -131,6 +145,7 @@ export function useAuth(): AuthContext {
     isAuthed,
     actorLabel,
     authError,
-    handleLogout
+    handleLogout,
+    isGuest
   };
 }

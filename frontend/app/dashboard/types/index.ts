@@ -99,6 +99,7 @@ export interface AuthContext {
   actorLabel: string;
   authError: string | null;
   handleLogout: () => Promise<void>;
+  isGuest: boolean; // ゲストユーザーかどうかを示すフラグ
 }
 
 // Component prop interfaces

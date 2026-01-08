@@ -7,7 +7,7 @@ export default function DashboardHeader({
   showSidebar, 
   onEditLayout 
 }: DashboardHeaderProps) {
-  const { isAuthed, actorLabel, authError, handleLogout } = useAuth();
+  const { isAuthed, actorLabel, authError, handleLogout, isGuest } = useAuth();
 
   return (
     <header className="fixed inset-x-0 top-0 z-50 border-b border-zinc-200 bg-white/90 backdrop-blur dark:border-slate-700 dark:bg-[#071013]/90">
@@ -32,7 +32,7 @@ export default function DashboardHeader({
               {authError}
             </div>
           )}
-          {isAuthed ? (
+          {isAuthed && !isGuest ? (
             <button
               onClick={handleLogout}
               className="rounded border border-red-200 bg-red-50 px-3 py-1.5 text-sm text-red-700 hover:bg-red-100 dark:border-red-900/40 dark:bg-red-950/20 dark:text-red-200 dark:hover:bg-red-950/35"

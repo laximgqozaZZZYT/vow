@@ -239,11 +239,20 @@ export function useEventHandlers({ habits, setHabits, goals, activities, setActi
   }
 
   async function createHabit(payload: CreateHabitPayload) {
+    console.log('[useEventHandlers] createHabit called with payload:', payload);
     try {
+      console.log('[useEventHandlers] Calling api.createHabit...');
       const h = await api.createHabit(payload);
+      console.log('[useEventHandlers] api.createHabit success:', h);
       setHabits((s) => [...s, h]);
+      console.log('[useEventHandlers] Habit added to state');
     } catch (e) { 
-      console.error(e);
+      console.error('[useEventHandlers] createHabit error:', e);
+      console.error('[useEventHandlers] Error details:', {
+        name: e.name,
+        message: e.message,
+        stack: e.stack
+      });
     }
   }
 

@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Debug Guest Authentication</title>
+</head>
+<body>
+    <h1>Debug Guest Authentication</h1>
+    <div id="output"></div>
+    
+    <script>
+        const output = document.getElementById('output');
+        
+        function log(message) {
+            console.log(message);
+            output.innerHTML += '<p>' + JSON.stringify(message) + '</p>';
+        }
+        
+        log('Starting authentication debug...');
+        
+        // Check environment variables
+        log('Environment check:');
+        log('NEXT_PUBLIC_USE_EDGE_FUNCTIONS: ' + (typeof window !== 'undefined' ? 'false' : 'N/A'));
+        
+        // Check localStorage
+        log('LocalStorage check:');
+        log('guest-goals: ' + localStorage.getItem('guest-goals'));
+        log('guest-habits: ' + localStorage.getItem('guest-habits'));
+        
+        // Test API call
+        log('Testing API call...');
+        
+        // Simulate the me() function call
+        fetch('/api/me')
+            .then(response => {
+                log('API response status: ' + response.status);
+                return response.json();
+            })
+            .then(data => {
+                log('API response data: ' + JSON.stringify(data));
+            })
+            .catch(error => {
+                log('API error: ' + error.message);
+            });
+    </script>
+</body>
+</html>
