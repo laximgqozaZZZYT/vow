@@ -713,6 +713,7 @@ export class SupabaseDirectClient {
     this.checkEnvironment();
     
     const { data: session } = await supabase.auth.getSession();
+    console.log('[getDiaryCards] Session check:', { hasSession: !!session?.session, userId: session?.session?.user?.id });
     
     if (!session?.session?.user) {
       // ゲストユーザーの場合はローカルストレージから取得
@@ -721,10 +722,12 @@ export class SupabaseDirectClient {
       return guestDiaryCards;
     }
     
+    console.log('[getDiaryCards] Authenticated mode - querying Supabase for user:', session.session.user.id);
+    
     // ログインユーザーの場合はSupabaseから取得（シンプル版）
     const { data, error } = await supabase
       .from('diary_cards')
-      .select('*')
+      .select('id, front_md, back_md, created_at, updated_at')
       .eq('owner_type', 'user')
       .eq('owner_id', session.session.user.id)
       .order('created_at', { ascending: false });
@@ -735,6 +738,7 @@ export class SupabaseDirectClient {
     }
     
     console.log('[getDiaryCards] Successfully loaded', data?.length || 0, 'cards from Supabase');
+    console.log('[getDiaryCards] Raw data:', data);
     
     return (data || []).map((card: any) => ({
       id: card.id,

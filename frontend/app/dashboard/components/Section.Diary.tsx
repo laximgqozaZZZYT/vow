@@ -309,25 +309,40 @@ export default function DiarySection({ goals, habits }: { goals: Goal[]; habits:
   }>(null)
 
   const refreshTags = React.useCallback(async () => {
-    const t = await api.getDiaryTags()
-    setTags(t)
+    try {
+      console.log('[Section.Diary] Starting to fetch diary tags...')
+      const t = await api.getDiaryTags()
+      console.log('[Section.Diary] Successfully fetched', t?.length || 0, 'tags')
+      setTags(t)
+    } catch (e: any) {
+      console.error('[Section.Diary] Error fetching diary tags:', e)
+      throw e
+    }
   }, [])
 
   const refreshCards = React.useCallback(async () => {
     setLoading(true)
     try {
+      console.log('[Section.Diary] Starting to fetch diary cards...')
       const c = await api.getDiaryCards()
+      console.log('[Section.Diary] Successfully fetched', c?.length || 0, 'cards')
       setCards(c)
       setError(null)
     } catch (e: any) {
-      setError(String(e?.body ?? e?.message ?? e))
+      console.error('[Section.Diary] Error fetching diary cards:', e)
+      const errorMessage = String(e?.body ?? e?.message ?? e)
+      console.error('[Section.Diary] Error message:', errorMessage)
+      setError(errorMessage)
     } finally {
       setLoading(false)
     }
-  }, [query])
+  }, [])
 
   React.useEffect(() => {
-    refreshTags().catch((e: any) => setError(String(e?.body ?? e?.message ?? e)))
+    refreshTags().catch((e: any) => {
+      console.error('[Section.Diary] Error refreshing tags:', e)
+      setError(String(e?.body ?? e?.message ?? e))
+    })
   }, [refreshTags])
 
   React.useEffect(() => {
