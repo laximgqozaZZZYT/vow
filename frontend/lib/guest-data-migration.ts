@@ -27,19 +27,34 @@ export class GuestDataMigration {
     }
 
     console.log('[Migration] Starting guest data migration for user:', userId);
+    
+    // Supabaseセッション確認
+    const { data: { session } } = await supabase.auth.getSession();
+    console.log('[Migration] Supabase session check:', { 
+      hasSession: !!session?.session, 
+      userId: session?.session?.user?.id,
+      targetUserId: userId 
+    });
 
     try {
       // 1. Goals移行（IDマッピングを取得）
+      console.log('[Migration] Step 1: Migrating goals...');
       const goalIdMapping = await this.migrateGoals(userId, result);
+      console.log('[Migration] Goals migration completed. Mapping:', goalIdMapping);
       
       // 2. Habits移行（goalId参照を更新）
+      console.log('[Migration] Step 2: Migrating habits...');
       await this.migrateHabits(userId, goalIdMapping, result);
+      console.log('[Migration] Habits migration completed');
       
       // 3. Activities移行
+      console.log('[Migration] Step 3: Migrating activities...');
       await this.migrateActivities(userId, result);
+      console.log('[Migration] Activities migration completed');
 
       // 4. 移行成功時のクリーンアップ（エラーがない場合のみ）
       if (result.errors.length === 0) {
+        console.log('[Migration] All migrations successful, clearing guest data');
         this.clearGuestData();
         result.success = true;
         console.log('[Migration] Migration completed successfully:', result);
@@ -118,6 +133,9 @@ export class GuestDataMigration {
           result.migratedGoals++;
           goalIdMapping.set(goal.id, data.id); // ゲストID → Supabase IDのマッピング
           console.log('[Migration] Goal migrated:', goal.name, goal.id, '→', data.id);
+          
+          // 挿入されたデータを確認
+          console.log('[Migration] Inserted goal data:', data);
         }
       } catch (error) {
         console.error('[Migration] Goal migration exception:', error);

@@ -13,11 +13,16 @@ export class SupabaseDirectClient {
     this.checkEnvironment();
     
     const { data: session } = await supabase.auth.getSession();
+    console.log('[getGoals] Session check:', { hasSession: !!session?.session, userId: session?.session?.user?.id });
+    
     if (!session?.session?.user) {
       // ゲストユーザーの場合はローカルストレージから取得
       const guestGoals = JSON.parse(localStorage.getItem('guest-goals') || '[]');
+      console.log('[getGoals] Guest mode - loaded from localStorage:', guestGoals.length, 'goals');
       return guestGoals;
     }
+    
+    console.log('[getGoals] Authenticated mode - querying Supabase for user:', session.session.user.id);
     
     const { data, error } = await supabase
       .from('goals')
@@ -26,7 +31,14 @@ export class SupabaseDirectClient {
       .eq('owner_id', session.session.user.id)
       .order('created_at', { ascending: false });
     
-    if (error) throw error;
+    if (error) {
+      console.error('[getGoals] Supabase query error:', error);
+      throw error;
+    }
+    
+    console.log('[getGoals] Successfully loaded', data?.length || 0, 'goals from Supabase');
+    console.log('[getGoals] Goals data:', data);
+    
     return data || [];
   }
 
@@ -150,11 +162,16 @@ export class SupabaseDirectClient {
     if (!supabase) throw new Error('Supabase not configured');
     
     const { data: session } = await supabase.auth.getSession();
+    console.log('[getHabits] Session check:', { hasSession: !!session?.session, userId: session?.session?.user?.id });
+    
     if (!session?.session?.user) {
       // ゲストユーザーの場合はローカルストレージから取得
       const guestHabits = JSON.parse(localStorage.getItem('guest-habits') || '[]');
+      console.log('[getHabits] Guest mode - loaded from localStorage:', guestHabits.length, 'habits');
       return guestHabits;
     }
+    
+    console.log('[getHabits] Authenticated mode - querying Supabase for user:', session.session.user.id);
     
     const { data, error } = await supabase
       .from('habits')
@@ -163,10 +180,15 @@ export class SupabaseDirectClient {
       .eq('owner_id', session.session.user.id)
       .order('created_at', { ascending: false });
     
-    if (error) throw error;
+    if (error) {
+      console.error('[getHabits] Supabase query error:', error);
+      throw error;
+    }
+    
+    console.log('[getHabits] Successfully loaded', data?.length || 0, 'habits from Supabase');
     
     // Convert snake_case to camelCase
-    return (data || []).map((h: any) => ({
+    const habits = (data || []).map((h: any) => ({
       id: h.id,
       goalId: h.goal_id,
       name: h.name,
@@ -192,6 +214,9 @@ export class SupabaseDirectClient {
       createdAt: h.created_at,
       updatedAt: h.updated_at
     }));
+    
+    console.log('[getHabits] Converted habits data:', habits);
+    return habits;
   }
 
   async createHabit(payload: any) {

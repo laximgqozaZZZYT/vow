@@ -89,31 +89,62 @@ export function useAuth(): AuthContext {
   // ゲストから認証ユーザーへの変化を監視してデータ移行を実行
   useEffect(() => {
     const handleGuestToUserTransition = async () => {
-      // ゲストから認証ユーザーに変わった場合
-      if (previousIsGuestRef.current && !isGuest && isAuthed && !migrationInProgressRef.current) {
-        console.log('[auth] Guest to user transition detected, checking for migration');
+      console.log('[auth] Transition check:', { 
+        previousIsGuest: previousIsGuestRef.current, 
+        currentIsGuest: isGuest, 
+        isAuthed, 
+        migrationInProgress: migrationInProgressRef.current 
+      });
+      
+      // 認証ユーザーになった場合（ゲストからの変化でなくても移行をチェック）
+      if (!isGuest && isAuthed && !migrationInProgressRef.current) {
+        console.log('[auth] Authenticated user detected, checking for guest data migration');
         
         // 移行中フラグを設定
         migrationInProgressRef.current = true;
         
         try {
           // ゲストデータが存在するかチェック
-          if (GuestDataMigration.hasGuestData()) {
+          const hasGuestData = GuestDataMigration.hasGuestData();
+          console.log('[auth] Guest data check result:', hasGuestData);
+          
+          if (hasGuestData) {
             console.log('[auth] Guest data found, starting migration');
+            
+            // LocalStorageの内容をログ出力
+            const guestGoals = JSON.parse(localStorage.getItem('guest-goals') || '[]');
+            const guestHabits = JSON.parse(localStorage.getItem('guest-habits') || '[]');
+            const guestActivities = JSON.parse(localStorage.getItem('guest-activities') || '[]');
+            console.log('[auth] Guest data to migrate:', { 
+              goals: guestGoals.length, 
+              habits: guestHabits.length, 
+              activities: guestActivities.length 
+            });
+            console.log('[auth] Guest goals:', guestGoals);
+            console.log('[auth] Guest habits:', guestHabits);
             
             // 現在のユーザーIDを取得
             const me = await api.me();
             const userId = (me as any)?.actor?.id;
+            console.log('[auth] Current user ID for migration:', userId);
             
             if (userId) {
+              console.log('[auth] Starting migration process...');
               const migrationResult = await GuestDataMigration.migrateGuestDataToSupabase(userId);
+              console.log('[auth] Migration result:', migrationResult);
               
               if (migrationResult.success) {
                 console.log('[auth] Migration completed successfully:', migrationResult);
                 setAuthError(`Data migrated: ${migrationResult.migratedGoals} goals, ${migrationResult.migratedHabits} habits, ${migrationResult.migratedActivities} activities`);
                 
-                // 成功メッセージを3秒後にクリア
-                setTimeout(() => setAuthError(null), 3000);
+                // 成功メッセージを5秒後にクリア（デバッグのため延長）
+                setTimeout(() => setAuthError(null), 5000);
+                
+                // 移行後にページをリロードしてデータを再取得
+                setTimeout(() => {
+                  console.log('[auth] Reloading page to refresh data after migration');
+                  window.location.reload();
+                }, 1000);
               } else {
                 console.error('[auth] Migration failed:', migrationResult);
                 setAuthError(`Migration failed: ${migrationResult.errors.join(', ')}`);
@@ -138,7 +169,9 @@ export function useAuth(): AuthContext {
       previousIsGuestRef.current = isGuest;
     };
 
-    handleGuestToUserTransition();
+    // 少し遅延させて実行（認証状態が安定してから）
+    const timeoutId = setTimeout(handleGuestToUserTransition, 500);
+    return () => clearTimeout(timeoutId);
   }, [isGuest, isAuthed]);
 
   // Supabase統合版: 認証状態の監視
