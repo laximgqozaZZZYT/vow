@@ -501,7 +501,7 @@ function LineChart({ points, height = 180 }: { points: Point[]; height?: number 
     .join(' ')
 
   return (
-    <svg viewBox={`0 0 ${width} ${height}`} className="w-full overflow-visible">
+    <svg viewBox={`0 0 ${width} ${height}`} className="w-full h-auto" preserveAspectRatio="xMidYMid meet">
       {/* axes */}
       <line x1={padding} y1={height - padding} x2={width - padding} y2={height - padding} stroke="currentColor" opacity={0.25} />
       <line x1={padding} y1={padding} x2={padding} y2={height - padding} stroke="currentColor" opacity={0.25} />
@@ -759,10 +759,10 @@ export default function StaticsSection({ habits, activities, goals }: { habits: 
             </button>
           ))}
 
-          <div className="ml-2 flex items-center gap-2">
+          <div className="ml-2 flex flex-col sm:flex-row items-start sm:items-center gap-2">
             <div className="text-xs text-zinc-500">from</div>
             <Popover className="relative">
-              <Popover.Button className="w-[140px] rounded border px-3 py-2 bg-white text-black dark:bg-slate-800 dark:text-slate-100 text-xs text-left">
+              <Popover.Button className="w-full sm:w-[140px] rounded border px-3 py-2 bg-white text-black dark:bg-slate-800 dark:text-slate-100 text-xs text-left">
                 {toLocalDateValue(fromTs)}
               </Popover.Button>
               <Popover.Panel className="absolute z-50 mt-2 left-0">
@@ -784,7 +784,7 @@ export default function StaticsSection({ habits, activities, goals }: { habits: 
             <Popover className="relative">
               {({ close }) => (
                 <>
-                  <Popover.Button className="w-[86px] rounded border px-3 py-2 bg-white text-black dark:bg-slate-800 dark:text-slate-100 text-xs font-mono text-left">
+                  <Popover.Button className="w-full sm:w-[86px] rounded border px-3 py-2 bg-white text-black dark:bg-slate-800 dark:text-slate-100 text-xs font-mono text-left">
                     {toLocalTimeValue(fromTs)}
                   </Popover.Button>
                   <Popover.Panel className="absolute z-50 mt-2 left-0 w-40">
@@ -816,10 +816,10 @@ export default function StaticsSection({ habits, activities, goals }: { habits: 
         </div>
         
         {/* Until controls on a separate line */}
-        <div className="flex items-center gap-2">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2">
           <div className="text-xs text-zinc-500">until</div>
           <Popover className="relative">
-            <Popover.Button className="w-[140px] rounded border px-3 py-2 bg-white text-black dark:bg-slate-800 dark:text-slate-100 text-xs text-left">
+            <Popover.Button className="w-full sm:w-[140px] rounded border px-3 py-2 bg-white text-black dark:bg-slate-800 dark:text-slate-100 text-xs text-left">
               {toLocalDateValue(untilTs)}
             </Popover.Button>
             <Popover.Panel className="absolute z-50 mt-2 left-0">
@@ -841,7 +841,7 @@ export default function StaticsSection({ habits, activities, goals }: { habits: 
           <Popover className="relative">
             {({ close }) => (
               <>
-                <Popover.Button className="w-[86px] rounded border px-3 py-2 bg-white text-black dark:bg-slate-800 dark:text-slate-100 text-xs font-mono text-left">
+                <Popover.Button className="w-full sm:w-[86px] rounded border px-3 py-2 bg-white text-black dark:bg-slate-800 dark:text-slate-100 text-xs font-mono text-left">
                   {toLocalTimeValue(untilTs)}
                 </Popover.Button>
                 <Popover.Panel className="absolute z-50 mt-2 left-0 w-40">
@@ -872,8 +872,8 @@ export default function StaticsSection({ habits, activities, goals }: { habits: 
         </div>
       </div>
 
-      {/* Fixed-height page viewport so arrow positions don't shift across pages */}
-      <div className="mt-4 rounded border border-zinc-100 dark:border-slate-800 h-[520px] overflow-hidden">
+      {/* Responsive height page viewport */}
+      <div className="mt-4 rounded border border-zinc-100 dark:border-slate-800 h-[520px] sm:h-[400px] md:h-[520px] overflow-hidden">
         <div className="h-full overflow-auto p-3">
           {activePage === 'summary' ? (
             <div className="min-w-0">

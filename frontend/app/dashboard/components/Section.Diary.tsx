@@ -208,7 +208,7 @@ function MermaidBlock({ code }: { code: string }) {
         </div>
         <div
           ref={containerRef}
-          className="overflow-x-auto relative min-h-[100px] [&_svg]:max-w-none [&_svg]:h-auto [&_svg]:min-w-[320px] [&_svg]:text-zinc-800 dark:[&_svg]:text-zinc-100"
+          className="overflow-x-auto relative min-h-[100px] [&_svg]:max-w-none [&_svg]:h-auto [&_svg]:w-full [&_svg]:text-zinc-800 dark:[&_svg]:text-zinc-100"
           style={{ 
             isolation: 'isolate',
             zIndex: 1,

@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>モバイルカレンダーテスト</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            max-width: 400px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 12px;
+            padding: 20px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        .instructions {
+            background: #e3f2fd;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+        .instructions h3 {
+            margin: 0 0 10px 0;
+            color: #1976d2;
+        }
+        .instructions ul {
+            margin: 0;
+            padding-left: 20px;
+        }
+        .instructions li {
+            margin-bottom: 5px;
+        }
+        .test-link {
+            display: block;
+            background: #2196f3;
+            color: white;
+            text-decoration: none;
+            padding: 15px;
+            border-radius: 8px;
+            text-align: center;
+            font-weight: bold;
+            margin-top: 20px;
+        }
+        .test-link:hover {
+            background: #1976d2;
+        }
+        .feature-list {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 8px;
+            margin-top: 20px;
+        }
+        .feature-list h4 {
+            margin: 0 0 10px 0;
+            color: #333;
+        }
+        .feature {
+            display: flex;
+            align-items: center;
+            margin-bottom: 8px;
+        }
+        .feature-icon {
+            width: 20px;
+            height: 20px;
+            margin-right: 10px;
+            background: #4caf50;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-size: 12px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>📱 モバイルカレンダー機能テスト</h1>
+        
+        <div class="instructions">
+            <h3>🎯 新しいタッチ操作機能</h3>
+            <ul>
+                <li><strong>タップ選択:</strong> イベントを1回タップして選択</li>
+                <li><strong>コンテキストメニュー:</strong> 選択されたイベントをもう一度タップ</li>
+                <li><strong>長押し:</strong> イベントを長押し（0.5秒）でメニュー表示</li>
+                <li><strong>移動モード:</strong> メニューから「移動」を選択後、移動先をタップ</li>
+                <li><strong>ハプティック:</strong> 長押し時に振動フィードバック</li>
+            </ul>
+        </div>
+
+        <div class="feature-list">
+            <h4>✨ 実装された機能</h4>
+            <div class="feature">
+                <div class="feature-icon">✓</div>
+                <span>モバイル端末の自動検出</span>
+            </div>
+            <div class="feature">
+                <div class="feature-icon">✓</div>
+                <span>ドラッグ&ドロップの無効化</span>
+            </div>
+            <div class="feature">
+                <div class="feature-icon">✓</div>
+                <span>タップベースの選択システム</span>
+            </div>
+            <div class="feature">
+                <div class="feature-icon">✓</div>
+                <span>コンテキストメニュー表示</span>
+            </div>
+            <div class="feature">
+                <div class="feature-icon">✓</div>
+                <span>移動モードインジケーター</span>
+            </div>
+            <div class="feature">
+                <div class="feature-icon">✓</div>
+                <span>視覚的フィードバック</span>
+            </div>
+            <div class="feature">
+                <div class="feature-icon">✓</div>
+                <span>長押しジェスチャー対応</span>
+            </div>
+        </div>
+
+        <a href="http://localhost:3000/dashboard" class="test-link">
+            🚀 ダッシュボードでテスト開始
+        </a>
+
+        <div style="margin-top: 20px; padding: 15px; background: #fff3cd; border-radius: 8px; font-size: 14px;">
+            <strong>💡 テストのコツ:</strong><br>
+            • スマートフォンまたはブラウザの開発者ツールでモバイル表示に切り替え<br>
+            • カレンダーセクションに移動<br>
+            • 既存の習慣イベントで操作をテスト
+        </div>
+    </div>
+</body>
+</html>

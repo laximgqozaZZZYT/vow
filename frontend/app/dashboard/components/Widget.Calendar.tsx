@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useRef } from "react";
+import { useState, useMemo, useRef, useEffect } from "react";
 import FullCalendar from '@fullcalendar/react';
 import timeGridPlugin from '@fullcalendar/timegrid';
 import interactionPlugin from '@fullcalendar/interaction';
@@ -64,6 +64,44 @@ export default function CalendarWidget({
 
   const calendarRef = useRef<any>(null);
   const [navSelection, setNavSelection] = useState<'today' | 'tomorrow' | 'week' | 'month'>('today');
+  
+  // Mobile touch interaction states
+  const [selectedEventId, setSelectedEventId] = useState<string | null>(null);
+  const [isMobile, setIsMobile] = useState(false);
+  const [touchMoveMode, setTouchMoveMode] = useState(false);
+  const [contextMenu, setContextMenu] = useState<{
+    show: boolean;
+    x: number;
+    y: number;
+    eventId: string;
+    habitId: string;
+    eventTitle: string;
+  } | null>(null);
+
+  // Detect mobile device
+  useEffect(() => {
+    const checkMobile = () => {
+      setIsMobile(window.innerWidth < 768 || 'ontouchstart' in window);
+    };
+    
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
+
+  // Close context menu when clicking outside
+  useEffect(() => {
+    const handleClickOutside = () => {
+      setContextMenu(null);
+      setSelectedEventId(null);
+      setTouchMoveMode(false);
+    };
+    
+    if (contextMenu) {
+      document.addEventListener('click', handleClickOutside);
+      return () => document.removeEventListener('click', handleClickOutside);
+    }
+  }, [contextMenu]);
 
   function scrollToNowCenter() {
     const cal = calendarRef.current?.getApi?.();
@@ -76,6 +114,122 @@ export default function CalendarWidget({
       // ignore
     }
   }
+
+  // Handle mobile event selection and context menu
+  const handleMobileEventClick = (clickInfo: any, event: any) => {
+    if (!isMobile) return false;
+    
+    event.preventDefault();
+    event.stopPropagation();
+    
+    const id = clickInfo.event.id;
+    const ext = (clickInfo.event as any).extendedProps ?? {};
+    const habitId = ext.habitId ?? id;
+    const eventTitle = clickInfo.event.title;
+    
+    // If already selected, show context menu
+    if (selectedEventId === id) {
+      const rect = (event.target as HTMLElement).getBoundingClientRect();
+      setContextMenu({
+        show: true,
+        x: rect.left + rect.width / 2,
+        y: rect.top,
+        eventId: id,
+        habitId,
+        eventTitle
+      });
+      return true;
+    }
+    
+    // Select the event
+    setSelectedEventId(id);
+    setContextMenu(null);
+    return true;
+  };
+
+  // Handle long press for context menu
+  const handleLongPress = (clickInfo: any, event: any) => {
+    if (!isMobile) return;
+    
+    const id = clickInfo.event.id;
+    const ext = (clickInfo.event as any).extendedProps ?? {};
+    const habitId = ext.habitId ?? id;
+    const eventTitle = clickInfo.event.title;
+    
+    const touch = event.touches?.[0] || event;
+    const rect = (event.target as HTMLElement).getBoundingClientRect();
+    setSelectedEventId(id);
+    setContextMenu({
+      show: true,
+      x: rect.left + rect.width / 2,
+      y: rect.top,
+      eventId: id,
+      habitId,
+      eventTitle
+    });
+    
+    // Haptic feedback if available
+    if ('vibrate' in navigator) {
+      navigator.vibrate(50);
+    }
+  };
+
+  // Handle mobile slot selection for moving events
+  const handleMobileSlotSelect = (selectionInfo: any) => {
+    if (!isMobile || !selectedEventId || !touchMoveMode) return;
+    
+    const cal = calendarRef.current?.getApi?.();
+    if (!cal) return;
+    
+    const selectedEvent = cal.getEventById(selectedEventId);
+    if (!selectedEvent) return;
+    
+    const ext = (selectedEvent as any).extendedProps ?? {};
+    const habitId = ext.habitId ?? selectedEventId;
+    const timingIndex = ext.timingIndex;
+    
+    // Calculate new start and end times
+    const newStart = selectionInfo.start;
+    const originalDuration = selectedEvent.end 
+      ? selectedEvent.end.getTime() - selectedEvent.start.getTime()
+      : 60 * 60 * 1000; // Default 1 hour
+    
+    const newEnd = new Date(newStart.getTime() + originalDuration);
+    
+    const startStr = newStart.toISOString();
+    const endStr = newEnd.toISOString();
+    
+    console.log('[Calendar] Mobile move event:', { habitId, startStr, endStr, timingIndex });
+    
+    // Check if recurring and handle accordingly
+    const habit = habits.find(h => h.id === habitId);
+    if (habit) {
+      const timings = (habit as any).timings ?? [];
+      let isRecurring = false;
+      
+      if (typeof timingIndex === 'number' && timings[timingIndex]) {
+        const timing = timings[timingIndex];
+        isRecurring = timing.type === 'Daily' || timing.type === 'Weekly' || timing.type === 'Monthly';
+      } else {
+        const hasRecurringTimings = timings.some((t: any) => 
+          t.type === 'Daily' || t.type === 'Weekly' || t.type === 'Monthly'
+        );
+        const hasRepeat = habit.repeat && habit.repeat !== 'Does not repeat';
+        isRecurring = hasRecurringTimings || hasRepeat;
+      }
+      
+      if (isRecurring && onRecurringHabitRequest) {
+        onRecurringHabitRequest(habitId, { start: startStr, end: endStr, timingIndex });
+      } else if (onEventChange) {
+        onEventChange(habitId, { start: startStr, end: endStr, timingIndex });
+      }
+    }
+    
+    // Reset mobile interaction state
+    setSelectedEventId(null);
+    setTouchMoveMode(false);
+    setContextMenu(null);
+  };
 
   const events = useMemo(() => {
     const ev: any[] = [];
@@ -337,6 +491,20 @@ export default function CalendarWidget({
       
       <div className="w-full overflow-x-auto">
         <div className="min-w-[300px]">
+          <style jsx>{`
+            .fc-event.selected-event {
+              box-shadow: 0 0 0 2px #3b82f6 !important;
+              z-index: 999 !important;
+            }
+            .fc-event.move-mode {
+              opacity: 0.7 !important;
+              animation: pulse 1.5s infinite;
+            }
+            @keyframes pulse {
+              0%, 100% { opacity: 0.7; }
+              50% { opacity: 0.4; }
+            }
+          `}</style>
       
       <FullCalendar
         ref={calendarRef}
@@ -352,10 +520,20 @@ export default function CalendarWidget({
           if (navSelection === 'today') window.setTimeout(() => scrollToNowCenter(), 0);
         }}
         editable={true}
-        eventStartEditable={true}
-        eventDurationEditable={true}
-        eventResizableFromStart={true}
+        eventStartEditable={!isMobile}
+        eventDurationEditable={!isMobile}
+        eventResizableFromStart={!isMobile}
         eventOverlap={true}
+        eventClassNames={(arg) => {
+          const classes = [];
+          if (selectedEventId === arg.event.id) {
+            classes.push('selected-event');
+          }
+          if (touchMoveMode && selectedEventId === arg.event.id) {
+            classes.push('move-mode');
+          }
+          return classes;
+        }}
         eventConstraint={{
           start: '00:00',
           end: '24:00'
@@ -374,6 +552,13 @@ export default function CalendarWidget({
         dayHeaderFormat={window.innerWidth < 768 ? { weekday: 'short' } : { weekday: 'long' }}
         slotLabelInterval={window.innerWidth < 768 ? '02:00:00' : '01:00:00'}
         select={(selectionInfo) => {
+          // Handle mobile event moving
+          if (isMobile && touchMoveMode) {
+            handleMobileSlotSelect(selectionInfo);
+            return;
+          }
+          
+          // Default slot selection behavior
           const iso = selectionInfo.startStr?.slice(0,10) ?? selectionInfo.start?.toISOString().slice(0,10);
           const startTime = selectionInfo.startStr && selectionInfo.startStr.length > 10 ? selectionInfo.startStr.slice(11,16) : undefined;
           const endSrc = (selectionInfo.endStr && selectionInfo.endStr.length > 10)
@@ -383,17 +568,68 @@ export default function CalendarWidget({
           if (onSlotSelect && iso) onSlotSelect(iso, startTime, endTime);
         }}
         eventClick={(clickInfo) => {
+          // Handle mobile touch interactions
+          if (isMobile) {
+            const handled = handleMobileEventClick(clickInfo, clickInfo.jsEvent);
+            if (handled) return;
+          }
+          
+          // Default desktop behavior
           const id = clickInfo.event.id;
           const ext = (clickInfo.event as any).extendedProps ?? {};
           const habitId = ext.habitId ?? id;
           if (onEventClick) onEventClick(habitId);
         }}
+        eventDidMount={(info) => {
+          if (!isMobile) return;
+          
+          let longPressTimer: NodeJS.Timeout;
+          
+          const handleTouchStart = (e: TouchEvent) => {
+            longPressTimer = setTimeout(() => {
+              handleLongPress(info, e as any);
+            }, 500); // 500ms for long press
+          };
+          
+          const handleTouchEnd = () => {
+            clearTimeout(longPressTimer);
+          };
+          
+          const handleTouchMove = () => {
+            clearTimeout(longPressTimer);
+          };
+          
+          info.el.addEventListener('touchstart', handleTouchStart, { passive: true });
+          info.el.addEventListener('touchend', handleTouchEnd, { passive: true });
+          info.el.addEventListener('touchmove', handleTouchMove, { passive: true });
+          
+          // Cleanup
+          return () => {
+            info.el.removeEventListener('touchstart', handleTouchStart);
+            info.el.removeEventListener('touchend', handleTouchEnd);
+            info.el.removeEventListener('touchmove', handleTouchMove);
+            clearTimeout(longPressTimer);
+          };
+        }}
         dateClick={(dateClickInfo) => {
+          // Reset mobile selection when clicking empty space
+          if (isMobile) {
+            setSelectedEventId(null);
+            setContextMenu(null);
+            setTouchMoveMode(false);
+          }
+          
           const iso = dateClickInfo.dateStr?.slice(0,10) ?? dateClickInfo.date?.toISOString().slice(0,10);
           const time = dateClickInfo.dateStr && dateClickInfo.dateStr.length > 10 ? dateClickInfo.dateStr.slice(11,16) : undefined;
           if (onSlotSelect && iso) onSlotSelect(iso, time, undefined);
         }}
         eventDrop={(dropInfo) => {
+          // Disable drag and drop on mobile - use touch interactions instead
+          if (isMobile) {
+            dropInfo.revert();
+            return;
+          }
+          
           const id = dropInfo.event.id;
           const startStr = dropInfo.event.start ? dropInfo.event.start.toISOString() : undefined;
           const endStr = dropInfo.event.end ? dropInfo.event.end.toISOString() : undefined;
@@ -469,6 +705,12 @@ export default function CalendarWidget({
           }
         }}
         eventResize={(resizeInfo) => {
+          // Disable resize on mobile - use touch interactions instead
+          if (isMobile) {
+            resizeInfo.revert();
+            return;
+          }
+          
           const id = resizeInfo.event.id;
           const startStr = resizeInfo.event.start ? resizeInfo.event.start.toISOString() : undefined;
           const endStr = resizeInfo.event.end ? resizeInfo.event.end.toISOString() : undefined;
@@ -547,6 +789,93 @@ export default function CalendarWidget({
       />
         </div>
       </div>
+
+      {/* Mobile Context Menu */}
+      {contextMenu && contextMenu.show && (
+        <div 
+          className="fixed z-50 bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-600 py-2 min-w-[200px]"
+          style={{
+            left: Math.min(contextMenu.x - 100, window.innerWidth - 220),
+            top: contextMenu.y - 10,
+            transform: 'translateY(-100%)'
+          }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div className="px-4 py-2 border-b border-gray-200 dark:border-gray-600">
+            <p className="font-medium text-sm text-gray-900 dark:text-gray-100 truncate">
+              {contextMenu.eventTitle}
+            </p>
+          </div>
+          
+          <button
+            className="w-full px-4 py-2 text-left text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center gap-2"
+            onClick={() => {
+              if (onEventClick) onEventClick(contextMenu.habitId);
+              setContextMenu(null);
+              setSelectedEventId(null);
+            }}
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+            </svg>
+            編集
+          </button>
+          
+          <button
+            className="w-full px-4 py-2 text-left text-sm text-blue-600 dark:text-blue-400 hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center gap-2"
+            onClick={() => {
+              setTouchMoveMode(true);
+              setContextMenu(null);
+            }}
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16l-4-4m0 0l4-4m-4 4h18" />
+            </svg>
+            移動
+          </button>
+          
+          <button
+            className="w-full px-4 py-2 text-left text-sm text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center gap-2"
+            onClick={() => {
+              setContextMenu(null);
+              setSelectedEventId(null);
+            }}
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+            キャンセル
+          </button>
+        </div>
+      )}
+
+      {/* Mobile Move Mode Indicator */}
+      {touchMoveMode && selectedEventId && (
+        <div className="fixed top-4 left-1/2 transform -translate-x-1/2 z-50 bg-blue-600 text-white px-4 py-2 rounded-lg shadow-lg flex items-center gap-2">
+          <svg className="w-4 h-4 animate-pulse" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16l-4-4m0 0l4-4m-4 4h18" />
+          </svg>
+          <span className="text-sm font-medium">移動先をタップしてください</span>
+          <button
+            onClick={() => {
+              setTouchMoveMode(false);
+              setSelectedEventId(null);
+            }}
+            className="ml-2 text-white hover:text-gray-200"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+      )}
+
+      {/* Mobile Instructions */}
+      {isMobile && !contextMenu && !touchMoveMode && (
+        <div className="mt-2 text-xs text-gray-500 dark:text-gray-400 text-center">
+          イベントをタップして選択 → もう一度タップでメニュー表示
+        </div>
+      )}
     </section>
   );
 }
