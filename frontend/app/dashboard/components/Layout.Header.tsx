@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useAuth } from '../hooks/useAuth';
 import api from '../../../lib/api';
 import type { DashboardHeaderProps } from '../types';
@@ -9,32 +9,61 @@ export default function DashboardHeader({
   showSidebar, 
   onEditLayout 
 }: DashboardHeaderProps) {
-  const { isAuthed, actorLabel, authError, handleLogout, isGuest } = useAuth();
-  const [clearingData, setClearingData] = useState(false);
+  const { 
+    isAuthed, 
+    actorLabel, 
+    authError, 
+    handleLogout, 
+    isGuest,
+    migrationStatus,
+    migrationResult,
+    migrationError,
+    retryMigration
+  } = useAuth();
+  const [hasGuestData, setHasGuestData] = useState(false);
+
+  // Check for guest data on component mount and migration status changes
+  useEffect(() => {
+    const checkGuestData = async () => {
+      try {
+        const { GuestDataMigration } = await import('../../../lib/guest-data-migration');
+        setHasGuestData(GuestDataMigration.hasGuestData());
+      } catch (error) {
+        console.error('[Header] Error checking guest data:', error);
+      }
+    };
+    
+    checkGuestData();
+    
+    // Listen for migration completion to update guest data status
+    const handleMigrationComplete = () => {
+      setHasGuestData(false);
+    };
+    
+    window.addEventListener('guestDataMigrated', handleMigrationComplete);
+    return () => {
+      window.removeEventListener('guestDataMigrated', handleMigrationComplete);
+    };
+  }, [migrationStatus]);
 
   const handleClearGuestData = async () => {
-    if (!confirm('Are you sure you want to clear all guest data from localStorage? This cannot be undone.')) {
+    const { GuestDataMigration } = await import('../../../lib/guest-data-migration');
+    
+    if (!GuestDataMigration.hasGuestData()) {
+      alert('No guest data found to migrate.');
       return;
     }
 
-    setClearingData(true);
+    if (!confirm('Do you want to migrate your guest data to your account? This will move your goals, habits, and activities from local storage to your authenticated account.')) {
+      return;
+    }
+
+    // Use the retry migration function from useAuth hook
     try {
-      // ゲストデータをクリア
-      const guestKeys = ['guest-goals', 'guest-habits', 'guest-activities', 'guest-diary-cards', 'guest-diary-tags'];
-      guestKeys.forEach(key => {
-        localStorage.removeItem(key);
-      });
-      
-      console.log('[Header] Guest data cleared successfully');
-      alert('Guest data cleared successfully. Page will reload.');
-      
-      // ページをリロードしてデータを再取得
-      window.location.reload();
+      await retryMigration();
     } catch (error) {
-      console.error('[Header] Error clearing guest data:', error);
-      alert(`Error clearing guest data: ${(error as any)?.message || error}`);
-    } finally {
-      setClearingData(false);
+      console.error('[Header] Error triggering migration:', error);
+      alert(`Error triggering migration: ${(error as any)?.message || error}`);
     }
   };
 
@@ -56,10 +85,40 @@ export default function DashboardHeader({
           {actorLabel && (
             <div className="hidden text-xs text-zinc-500 sm:block">{actorLabel}</div>
           )}
-          {authError && (
+          
+          {/* Migration status display */}
+          {migrationStatus === 'migrating' && (
+            <div className="flex items-center text-sm text-blue-600 bg-blue-50 px-3 py-1 rounded dark:bg-blue-950/20 dark:text-blue-300">
+              <div className="animate-spin w-4 h-4 border-2 border-blue-600 border-t-transparent rounded-full mr-2"></div>
+              Migrating your data...
+            </div>
+          )}
+
+          {migrationStatus === 'success' && migrationResult && (
+            <div className="flex items-center text-sm text-green-600 bg-green-50 px-3 py-1 rounded dark:bg-green-950/20 dark:text-green-300">
+              <svg className="w-4 h-4 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+              </svg>
+              Successfully migrated {migrationResult.migratedGoals} goals, {migrationResult.migratedHabits} habits, and {migrationResult.migratedActivities} activities
+            </div>
+          )}
+
+          {migrationStatus === 'error' && migrationError && (
+            <div className="flex items-center text-sm text-red-600 bg-red-50 px-3 py-1 rounded dark:bg-red-950/20 dark:text-red-300">
+              <span className="mr-2">Migration failed.</span>
+              <button 
+                onClick={retryMigration}
+                className="underline hover:no-underline"
+              >
+                Retry
+              </button>
+            </div>
+          )}
+          
+          {authError && migrationStatus === 'idle' && (
             <div 
               className={`hidden max-w-[420px] truncate text-xs sm:block ${
-                authError.startsWith('Data migrated:') || authError.includes('cleared')
+                authError.startsWith('Successfully migrated') || authError.includes('cleared')
                   ? 'text-green-700 dark:text-green-300' 
                   : 'text-amber-700 dark:text-amber-300'
               }`} 
@@ -68,14 +127,13 @@ export default function DashboardHeader({
               {authError}
             </div>
           )}
-          {/* ゲストデータクリアボタン（認証ユーザーのみ表示） */}
-          {isAuthed && !isGuest && (
+          {/* ゲストデータ移行ボタン（認証ユーザーかつゲストデータが存在する場合のみ表示） */}
+          {isAuthed && !isGuest && hasGuestData && migrationStatus === 'idle' && (
             <button
               onClick={handleClearGuestData}
-              disabled={clearingData}
-              className="rounded border border-orange-200 bg-orange-50 px-3 py-1.5 text-sm text-orange-700 hover:bg-orange-100 disabled:opacity-50 dark:border-orange-900/40 dark:bg-orange-950/20 dark:text-orange-200 dark:hover:bg-orange-950/35"
+              className="rounded border border-blue-200 bg-blue-50 px-3 py-1.5 text-sm text-blue-700 hover:bg-blue-100 disabled:opacity-50 dark:border-blue-900/40 dark:bg-blue-950/20 dark:text-blue-200 dark:hover:bg-blue-950/35"
             >
-              {clearingData ? 'Clearing...' : 'Clear Guest Data'}
+              Migrate Guest Data
             </button>
           )}
           {isAuthed && !isGuest ? (

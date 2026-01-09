@@ -136,6 +136,14 @@ export interface GoalTreeProps {
   onHabitAction: (habitId: string, action: 'start' | 'complete' | 'pause') => void;
 }
 
+export interface GuestDataMigrationResult {
+  success: boolean;
+  migratedGoals: number;
+  migratedHabits: number;
+  migratedActivities: number;
+  errors: string[];
+}
+
 export interface AuthContext {
   user: any;
   signOut: () => Promise<void>;
@@ -144,4 +152,9 @@ export interface AuthContext {
   authError: string | null;
   handleLogout: () => Promise<void>;
   isGuest: boolean;
+  // Migration properties
+  migrationStatus: 'idle' | 'checking' | 'migrating' | 'success' | 'error';
+  migrationResult: GuestDataMigrationResult | null;
+  migrationError: string | null;
+  retryMigration: () => Promise<void>;
 }

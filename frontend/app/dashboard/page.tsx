@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import ActivityModal from './components/Modal.Activity';
 import api from '../../lib/api';
 import { HabitModal } from "./components/Modal.Habit";
@@ -34,10 +34,37 @@ export default function DashboardPage() {
   const [selectedGoal, setSelectedGoal] = useState<string | null>(null);
   
   // 認証状態を取得
-  const { isAuthed } = useAuth();
+  const { isAuthed, isGuest, migrationStatus } = useAuth();
+
+  // Check for guest data migration on page load
+  useEffect(() => {
+    const checkMigration = async () => {
+      // Only check if user is authenticated and not a guest
+      if (isAuthed && !isGuest && migrationStatus === 'idle') {
+        const { supabase } = await import('../../lib/supabaseClient');
+        if (supabase) {
+          const { data: { session } } = await supabase.auth.getSession();
+          const userId = session?.user?.id;
+          
+          if (userId) {
+            const { GuestDataMigration } = await import('../../lib/guest-data-migration');
+            if (GuestDataMigration.hasGuestData()) {
+              console.log('[dashboard] Page load: Guest data detected, triggering migration');
+              // Force a page reload to trigger migration
+              window.location.reload();
+            }
+          }
+        }
+      }
+    };
+    
+    // Delay the check to ensure auth state is stable
+    const timeoutId = setTimeout(checkMigration, 2000);
+    return () => clearTimeout(timeoutId);
+  }, [isAuthed, isGuest, migrationStatus]);
 
   // Custom hooks for data and state management
-  const { goals, setGoals, habits, setHabits, activities, setActivities, pageSections, setPageSections, isClient } = useDataManager();
+  const { goals, setGoals, habits, setHabits, activities, setActivities, pageSections, setPageSections, isClient, isLoading } = useDataManager();
   const { 
     recurringRequest, 
     setRecurringRequest, 
@@ -133,6 +160,13 @@ export default function DashboardPage() {
   if (!isClient) {
     return <div className="flex min-h-screen items-center justify-center bg-zinc-50 dark:bg-black text-black dark:text-zinc-50">
       <div className="text-lg">Loading...</div>
+    </div>
+  }
+
+  // Show loading state during data migration
+  if (isLoading) {
+    return <div className="flex min-h-screen items-center justify-center bg-zinc-50 dark:bg-black text-black dark:text-zinc-50">
+      <div className="text-lg">Loading your data...</div>
     </div>
   }
 
