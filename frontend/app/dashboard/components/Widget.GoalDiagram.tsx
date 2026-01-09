@@ -118,7 +118,7 @@ export default function GoalMermaid({ goals, showErrorDetails = false, compact =
   }, [graph, id, showErrorDetails]);
 
   return (
-    <div className={compact ? "min-w-0" : "relative"}>
+    <div className={compact ? "min-w-0" : "relative w-full overflow-hidden"}>
       <div className="mb-2 flex items-center justify-between">
         <h3 className="text-sm font-medium text-zinc-600 dark:text-zinc-300">Goal Hierarchy</h3>
         {onEditGraph && (
@@ -130,14 +130,16 @@ export default function GoalMermaid({ goals, showErrorDetails = false, compact =
           </button>
         )}
       </div>
-      <div 
-        ref={containerRef} 
-        className={compact 
-          ? "min-w-0 rounded border border-zinc-100 bg-black/10 p-2 dark:border-slate-800 dark:bg-white/5" 
-          : "overflow-auto border rounded p-2"
-        } 
-        style={{ minHeight: 120 }} 
-      />
+      <div className="w-full overflow-x-auto">
+        <div 
+          ref={containerRef} 
+          className={compact 
+            ? "min-w-0 rounded border border-zinc-100 bg-black/10 p-2 dark:border-slate-800 dark:bg-white/5" 
+            : "overflow-auto border rounded p-2 min-w-[400px]"
+          } 
+          style={{ minHeight: 120 }} 
+        />
+      </div>
       {renderError && showErrorDetails ? (
         <div className="mt-2 rounded border border-red-500/40 bg-red-500/10 p-2 text-xs text-red-200">
           {renderError}

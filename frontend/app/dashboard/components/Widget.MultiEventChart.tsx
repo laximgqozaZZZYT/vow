@@ -355,7 +355,7 @@ export default function MultiEventChart({
   }, [habitIds, plannedSeriesByHabit, pointsByHabit])
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-3 w-full overflow-hidden">
       {/* Header with Edit Graph button */}
       <div className="flex items-center justify-between">
         <h3 className="text-sm font-medium text-zinc-600 dark:text-zinc-300">
@@ -372,9 +372,10 @@ export default function MultiEventChart({
       </div>
       
       {/* Chart */}
-      <svg viewBox={`0 0 ${width} ${height}`} className="w-full overflow-visible">
-        <line x1={padding} y1={height - padding} x2={width - padding} y2={height - padding} stroke="currentColor" opacity={0.25} />
-        <line x1={padding} y1={padding} x2={padding} y2={height - padding} stroke="currentColor" opacity={0.25} />
+      <div className="w-full overflow-x-auto">
+        <svg viewBox={`0 0 ${width} ${height}`} className="w-full min-w-[600px] overflow-visible">
+          <line x1={padding} y1={height - padding} x2={width - padding} y2={height - padding} stroke="currentColor" opacity={0.25} />
+          <line x1={padding} y1={padding} x2={padding} y2={height - padding} stroke="currentColor" opacity={0.25} />
 
       {/* y-axis numeric labels removed by request */}
 
@@ -521,6 +522,7 @@ export default function MultiEventChart({
         )
       })}
       </svg>
+      </div>
     </div>
   )
 }

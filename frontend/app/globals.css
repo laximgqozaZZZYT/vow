@@ -25,6 +25,46 @@ body {
   font-family: Arial, Helvetica, sans-serif;
 }
 
+/* Mobile responsive improvements */
+@media (max-width: 768px) {
+  /* Ensure full calendar is responsive */
+  .fc-toolbar {
+    flex-direction: column !important;
+    gap: 0.5rem !important;
+  }
+  
+  .fc-toolbar-chunk {
+    display: flex !important;
+    justify-content: center !important;
+  }
+  
+  .fc-button-group {
+    flex-wrap: wrap !important;
+  }
+  
+  .fc-button {
+    font-size: 0.75rem !important;
+    padding: 0.25rem 0.5rem !important;
+  }
+  
+  .fc-col-header-cell {
+    font-size: 0.75rem !important;
+  }
+  
+  .fc-timegrid-slot-label {
+    font-size: 0.7rem !important;
+  }
+  
+  .fc-event {
+    font-size: 0.7rem !important;
+  }
+  
+  /* Improve touch targets */
+  .fc-event, .fc-daygrid-event {
+    min-height: 24px !important;
+  }
+}
+
 /* Frame event styles (calendar) */
 .vow-frame {
   border: 2px dashed rgba(148,163,184,0.95) !important; /* stronger slate */

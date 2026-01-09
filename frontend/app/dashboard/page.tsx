@@ -158,15 +158,15 @@ export default function DashboardPage() {
 
   // Prevent hydration mismatch by not rendering until client-side
   if (!isClient) {
-    return <div className="flex min-h-screen items-center justify-center bg-zinc-50 dark:bg-black text-black dark:text-zinc-50">
-      <div className="text-lg">Loading...</div>
+    return <div className="flex min-h-screen items-center justify-center bg-zinc-50 dark:bg-black text-black dark:text-zinc-50 p-4">
+      <div className="text-base sm:text-lg">Loading...</div>
     </div>
   }
 
   // Show loading state during data migration
   if (isLoading) {
-    return <div className="flex min-h-screen items-center justify-center bg-zinc-50 dark:bg-black text-black dark:text-zinc-50">
-      <div className="text-lg">Loading your data...</div>
+    return <div className="flex min-h-screen items-center justify-center bg-zinc-50 dark:bg-black text-black dark:text-zinc-50 p-4">
+      <div className="text-base sm:text-lg">Loading your data...</div>
     </div>
   }
 
@@ -202,9 +202,9 @@ export default function DashboardPage() {
       />
 
   {/* Right pane */}
-  <main className={`flex-1 pt-20 p-8 ${showLeftPane ? 'ml-80' : ''}`}>
+  <main className={`flex-1 pt-20 p-4 sm:p-6 lg:p-8 ${showLeftPane ? 'lg:ml-80' : ''}`}>
 
-        <div className="mt-6 grid grid-cols-1 gap-4">
+        <div className="mt-6 grid grid-cols-1 gap-4 max-w-full overflow-hidden">
           {pageSections.map(sec => (
             sec === 'next' ? (
               <NextSection 

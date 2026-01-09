@@ -299,9 +299,9 @@ export default function CalendarWidget({
   }, [habits, goals]);
 
   return (
-    <section className="mt-6 rounded bg-white p-4 shadow dark:bg-[#0b0b0b]">
+    <section className="mt-6 rounded bg-white p-4 shadow dark:bg-[#0b0b0b] w-full overflow-hidden">
       <h2 className="mb-3 text-lg font-medium">Calendar</h2>
-      <div className="mb-3 flex items-center gap-2">
+      <div className="mb-3 flex flex-wrap items-center gap-2">
         {(['today','tomorrow','week','month'] as const).map((b) => (
           <button
             key={b}
@@ -328,18 +328,23 @@ export default function CalendarWidget({
                 setNavSelection('month');
               }
             }}
-            className={`rounded px-3 py-1 text-sm ${navSelection === b ? 'bg-sky-600 text-white' : 'bg-white dark:bg-slate-800 border text-slate-700 dark:text-slate-200'}`}
+            className={`rounded px-2 sm:px-3 py-1 text-xs sm:text-sm ${navSelection === b ? 'bg-sky-600 text-white' : 'bg-white dark:bg-slate-800 border text-slate-700 dark:text-slate-200'}`}
           >
             {b === 'today' ? 'today' : b === 'tomorrow' ? 'tomorrow' : b === 'week' ? 'week' : 'month'}
           </button>
         ))}
       </div>
       
+      <div className="w-full overflow-x-auto">
+        <div className="min-w-[300px]">
+      
       <FullCalendar
         ref={calendarRef}
         plugins={[ timeGridPlugin, dayGridPlugin, interactionPlugin, rrulePlugin ]}
         initialView={navSelection === 'today' || navSelection === 'tomorrow' ? 'timeGridDay' : navSelection === 'week' ? 'timeGridWeek' : 'dayGridMonth'}
         nowIndicator={true}
+        height="auto"
+        aspectRatio={window.innerWidth < 768 ? 1.0 : 1.35}
         viewDidMount={() => {
           if (navSelection === 'today') window.setTimeout(() => scrollToNowCenter(), 0);
         }}
@@ -355,13 +360,19 @@ export default function CalendarWidget({
           start: '00:00',
           end: '24:00'
         }}
-        headerToolbar={{ left: 'prev,next', center: 'title', right: '' }}
+        headerToolbar={{ 
+          left: 'prev,next', 
+          center: 'title', 
+          right: '' 
+        }}
         slotMinTime="00:00:00"
         slotMaxTime="24:00:00"
         selectable={true}
         selectMirror={true}
         slotLabelFormat={{ hour: '2-digit', minute: '2-digit', hour12: false }}
         eventTimeFormat={{ hour: '2-digit', minute: '2-digit', hour12: false }}
+        dayHeaderFormat={window.innerWidth < 768 ? { weekday: 'short' } : { weekday: 'long' }}
+        slotLabelInterval={window.innerWidth < 768 ? '02:00:00' : '01:00:00'}
         select={(selectionInfo) => {
           const iso = selectionInfo.startStr?.slice(0,10) ?? selectionInfo.start?.toISOString().slice(0,10);
           const startTime = selectionInfo.startStr && selectionInfo.startStr.length > 10 ? selectionInfo.startStr.slice(11,16) : undefined;
@@ -535,6 +546,8 @@ export default function CalendarWidget({
         events={events}
         height={600}
       />
+        </div>
+      </div>
     </section>
   );
 }
