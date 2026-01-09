@@ -68,7 +68,8 @@ export function useActivityManager({
           const prevCountVal = (typeof old.prevCount === 'number') ? old.prevCount : (typeof old.newCount === 'number' ? old.newCount : (habit.count ?? 0));
           const updatedAct: Activity = { ...old, kind: 'complete', amount: increment, prevCount: prevCountVal, newCount, durationSeconds };
           try {
-            if (old.id && !String(old.id).startsWith('a')) {
+            const isTemporaryActivity = old.id.startsWith('a') && /^a\d+$/.test(old.id); // matches pattern like 'a1234567890'
+            if (old.id && !isTemporaryActivity) {
               const u = await api.updateActivity(old.id, updatedAct);
               setActivities(acts => { const copy = [...acts]; const i = copy.findIndex(x => x.id === old.id); if (i !== -1) { copy[i] = u } return copy });
             } else {
@@ -176,6 +177,46 @@ export function useActivityManager({
   }
 
   function propagateActivityChanges(updated: Activity) {
+    console.log('[propagateActivityChanges] Starting with activity:', updated);
+    
+    // Persist the activity update to backend if it's not a temporary local activity
+    const isTemporaryActivity = updated.id.startsWith('a') && /^a\d+$/.test(updated.id); // matches pattern like 'a1234567890'
+    if (!isTemporaryActivity) {
+      (async () => {
+        try {
+          // Ensure we have the correct counts before saving
+          const activityToSave = { ...updated };
+          
+          // If this is a complete activity, recalculate newCount based on amount
+          if (updated.kind === 'complete' && updated.habitId) {
+            const habit = habits.find(h => h.id === updated.habitId);
+            if (habit) {
+              const basePerCount = (habit as any).workloadPerCount ?? 1;
+              const prevCount = updated.prevCount ?? habit.count ?? 0;
+              
+              // If amount is provided, use it; otherwise use basePerCount
+              const amount = typeof updated.amount === 'number' ? updated.amount : basePerCount;
+              activityToSave.newCount = prevCount + amount;
+              
+              console.log('[propagateActivityChanges] Recalculated counts:', {
+                habitId: updated.habitId,
+                prevCount,
+                amount,
+                newCount: activityToSave.newCount
+              });
+            }
+          }
+          
+          await api.updateActivity(updated.id, activityToSave);
+          console.log('[propagateActivityChanges] Activity updated in backend:', updated.id);
+        } catch (e) {
+          console.error('[propagateActivityChanges] Failed to update activity in backend:', e);
+        }
+      })();
+    } else {
+      console.log('[propagateActivityChanges] Skipping backend update for temporary activity:', updated.id);
+    }
+
     // update the specific activity
     setActivities(prev => {
       const idx = prev.findIndex(a => a.id === updated.id);
@@ -231,21 +272,56 @@ export function useActivityManager({
   }
 
   function handleDeleteActivity(activityId: string) {
+    console.log('[handleDeleteActivity] Starting deletion for activity:', activityId);
+    
     const act = activities.find(a => a.id === activityId);
-    if (!act) return;
+    if (!act) {
+      console.error('[handleDeleteActivity] Activity not found:', activityId);
+      return;
+    }
+    
+    console.log('[handleDeleteActivity] Found activity to delete:', act);
+    
     const prevCount = act.prevCount ?? 0;
+    
     // rollback habit count to prevCount and adjust completed flag
     setHabits(s => s.map(h => {
       if (h.id !== act.habitId) return h;
       const total = (h as any).workloadTotal ?? h.must ?? 0;
       const completed = (total > 0) ? (prevCount >= total) : false;
+      console.log('[handleDeleteActivity] Rolling back habit count:', {
+        habitId: h.id,
+        oldCount: h.count,
+        newCount: prevCount,
+        completed
+      });
       return { ...h, count: prevCount, completed, updatedAt: new Date().toISOString() };
     }));
-    // remove activity (and delete on backend if persisted)
-    if (!String(activityId).startsWith('a')) {
-      (async () => { try { await api.deleteActivity(activityId); } catch(e) { console.error(e) } })();
+    
+    // remove activity from local state first
+    setActivities(s => {
+      const filtered = s.filter(a => a.id !== activityId);
+      console.log('[handleDeleteActivity] Removed from local state. Before:', s.length, 'After:', filtered.length);
+      return filtered;
+    });
+    
+    // delete on backend - check for temporary activity patterns
+    const isTemporaryActivity = activityId.startsWith('a') && /^a\d+$/.test(activityId); // matches pattern like 'a1234567890'
+    if (!isTemporaryActivity) {
+      console.log('[handleDeleteActivity] Deleting from backend (persistent activity):', activityId);
+      (async () => { 
+        try { 
+          await api.deleteActivity(activityId);
+          console.log('[handleDeleteActivity] Successfully deleted from backend:', activityId);
+        } catch(e) { 
+          console.error('[handleDeleteActivity] Failed to delete from backend:', e);
+          // If backend deletion fails, we should probably restore the local state
+          // But for now, just log the error
+        } 
+      })();
+    } else {
+      console.log('[handleDeleteActivity] Skipping backend deletion for temporary activity:', activityId);
     }
-    setActivities(s => s.filter(a => a.id !== activityId));
   }
 
   return {

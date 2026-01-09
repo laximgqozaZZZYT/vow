@@ -787,14 +787,21 @@ export class SupabaseDirectClient {
   }
 
   async getActivities() {
+    console.log('[getActivities] Starting to load activities');
     if (!supabase) throw new Error('Supabase not configured');
     
     const { data: session } = await supabase.auth.getSession();
+    console.log('[getActivities] Session check:', { hasSession: !!session?.session, userId: session?.session?.user?.id });
+    
     if (!session?.session?.user) {
       // ゲストユーザーの場合はローカルストレージから取得
       const guestActivities = JSON.parse(localStorage.getItem('guest-activities') || '[]');
+      console.log('[getActivities] Guest mode - loaded from localStorage:', guestActivities.length, 'activities');
+      console.log('[getActivities] Guest activities:', guestActivities);
       return guestActivities;
     }
+    
+    console.log('[getActivities] Authenticated mode - querying Supabase for user:', session.session.user.id);
     
     const { data, error } = await supabase
       .from('activities')
@@ -803,9 +810,15 @@ export class SupabaseDirectClient {
       .eq('owner_id', session.session.user.id)
       .order('timestamp', { ascending: false });
     
-    if (error) throw error;
+    if (error) {
+      console.error('[getActivities] Supabase query error:', error);
+      throw error;
+    }
     
-    return (data || []).map((a: any) => ({
+    console.log('[getActivities] Successfully loaded', data?.length || 0, 'activities from Supabase');
+    console.log('[getActivities] Supabase activities:', data);
+    
+    const activities = (data || []).map((a: any) => ({
       id: a.id,
       kind: a.kind,
       habitId: a.habit_id,
@@ -814,8 +827,12 @@ export class SupabaseDirectClient {
       amount: a.amount,
       prevCount: a.prev_count,
       newCount: a.new_count,
-      durationSeconds: a.duration_seconds
+      durationSeconds: a.duration_seconds,
+      memo: a.memo
     }));
+    
+    console.log('[getActivities] Converted activities:', activities);
+    return activities;
   }
 
   async createActivity(payload: any) {
@@ -953,27 +970,36 @@ export class SupabaseDirectClient {
   }
 
   async deleteActivity(id: string) {
+    console.log('[deleteActivity] Starting deletion for activity:', id);
     this.checkEnvironment();
     
     const { data: session } = await supabase.auth.getSession();
+    console.log('[deleteActivity] Session check:', { hasSession: !!session?.session, userId: session?.session?.user?.id });
     
     if (!session?.session?.user) {
+      console.log('[deleteActivity] Guest user - deleting from localStorage');
       // ゲストユーザーの場合はローカルストレージから削除
       const guestActivities = JSON.parse(localStorage.getItem('guest-activities') || '[]');
+      console.log('[deleteActivity] Current guest activities:', guestActivities.length);
+      
       const activityIndex = guestActivities.findIndex((a: any) => a.id === id);
       
       if (activityIndex === -1) {
+        console.error('[deleteActivity] Guest activity not found:', id);
         throw new Error(`Activity with id ${id} not found`);
       }
+      
+      console.log('[deleteActivity] Found guest activity at index:', activityIndex);
       
       // Remove the activity from the array
       guestActivities.splice(activityIndex, 1);
       localStorage.setItem('guest-activities', JSON.stringify(guestActivities));
       
-      console.log('[deleteActivity] Guest activity deleted:', id);
+      console.log('[deleteActivity] Guest activity deleted. Remaining activities:', guestActivities.length);
       return { success: true };
     }
     
+    console.log('[deleteActivity] Authenticated user - deleting from Supabase');
     // ログインユーザーの場合はSupabaseから削除
     const { error } = await supabase
       .from('activities')
@@ -982,7 +1008,12 @@ export class SupabaseDirectClient {
       .eq('owner_type', 'user')
       .eq('owner_id', session.session.user.id);
     
-    if (error) throw error;
+    if (error) {
+      console.error('[deleteActivity] Supabase deletion error:', error);
+      throw error;
+    }
+    
+    console.log('[deleteActivity] Successfully deleted from Supabase:', id);
     return { success: true };
   }
 

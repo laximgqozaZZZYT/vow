@@ -56,6 +56,7 @@ CREATE TABLE IF NOT EXISTS activities (
     prev_count INTEGER,
     new_count INTEGER,
     duration_seconds INTEGER,
+    memo TEXT,
     owner_type TEXT,
     owner_id TEXT
 );
