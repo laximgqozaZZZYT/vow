@@ -812,59 +812,63 @@ export default function StaticsSection({ habits, activities, goals }: { habits: 
                 </>
               )}
             </Popover>
-            <div className="text-xs text-zinc-500">until</div>
-            <Popover className="relative">
-              <Popover.Button className="w-[140px] rounded border px-3 py-2 bg-white text-black dark:bg-slate-800 dark:text-slate-100 text-xs text-left">
-                {toLocalDateValue(untilTs)}
-              </Popover.Button>
-              <Popover.Panel className="absolute z-50 mt-2 left-0">
-                <div className="rounded bg-white p-4 shadow text-black dark:bg-slate-800 dark:text-slate-100 max-w-full">
-                  <DayPicker
-                    mode="single"
-                    selected={parseYmd(toLocalDateValue(untilTs))}
-                    onSelect={(d) => {
-                      if (!d) return
-                      const nextDate = formatLocalDate(d)
-                      const nextTs = combineLocalDateTimeToTs(nextDate, toLocalTimeValue(untilTs))
-                      setCustomWindow({ fromTs, untilTs: nextTs })
-                    }}
-                  />
-                </div>
-              </Popover.Panel>
-            </Popover>
-
-            <Popover className="relative">
-              {({ close }) => (
-                <>
-                  <Popover.Button className="w-[86px] rounded border px-3 py-2 bg-white text-black dark:bg-slate-800 dark:text-slate-100 text-xs font-mono text-left">
-                    {toLocalTimeValue(untilTs)}
-                  </Popover.Button>
-                  <Popover.Panel className="absolute z-50 mt-2 left-0 w-40">
-                    <div className="rounded bg-white p-2 shadow text-black dark:bg-slate-800 dark:text-slate-100">
-                      <div className="max-h-56 overflow-auto">
-                        {buildTimeOptions().map((t) => {
-                          const selected = t.value === toLocalTimeValue(untilTs)
-                          return (
-                            <button
-                              key={t.value}
-                              className={`w-full text-left px-2 py-1 rounded text-xs font-mono ${selected ? 'bg-sky-600 text-white' : 'hover:bg-gray-100 dark:hover:bg-slate-700'}`}
-                              onClick={() => {
-                                const nextTs = combineLocalDateTimeToTs(toLocalDateValue(untilTs), t.value)
-                                setCustomWindow({ fromTs, untilTs: nextTs })
-                                close()
-                              }}
-                            >
-                              {t.label}
-                            </button>
-                          )
-                        })}
-                      </div>
-                    </div>
-                  </Popover.Panel>
-                </>
-              )}
-            </Popover>
           </div>
+        </div>
+        
+        {/* Until controls on a separate line */}
+        <div className="flex items-center gap-2">
+          <div className="text-xs text-zinc-500">until</div>
+          <Popover className="relative">
+            <Popover.Button className="w-[140px] rounded border px-3 py-2 bg-white text-black dark:bg-slate-800 dark:text-slate-100 text-xs text-left">
+              {toLocalDateValue(untilTs)}
+            </Popover.Button>
+            <Popover.Panel className="absolute z-50 mt-2 left-0">
+              <div className="rounded bg-white p-4 shadow text-black dark:bg-slate-800 dark:text-slate-100 max-w-full">
+                <DayPicker
+                  mode="single"
+                  selected={parseYmd(toLocalDateValue(untilTs))}
+                  onSelect={(d) => {
+                    if (!d) return
+                    const nextDate = formatLocalDate(d)
+                    const nextTs = combineLocalDateTimeToTs(nextDate, toLocalTimeValue(untilTs))
+                    setCustomWindow({ fromTs, untilTs: nextTs })
+                  }}
+                />
+              </div>
+            </Popover.Panel>
+          </Popover>
+
+          <Popover className="relative">
+            {({ close }) => (
+              <>
+                <Popover.Button className="w-[86px] rounded border px-3 py-2 bg-white text-black dark:bg-slate-800 dark:text-slate-100 text-xs font-mono text-left">
+                  {toLocalTimeValue(untilTs)}
+                </Popover.Button>
+                <Popover.Panel className="absolute z-50 mt-2 left-0 w-40">
+                  <div className="rounded bg-white p-2 shadow text-black dark:bg-slate-800 dark:text-slate-100">
+                    <div className="max-h-56 overflow-auto">
+                      {buildTimeOptions().map((t) => {
+                        const selected = t.value === toLocalTimeValue(untilTs)
+                        return (
+                          <button
+                            key={t.value}
+                            className={`w-full text-left px-2 py-1 rounded text-xs font-mono ${selected ? 'bg-sky-600 text-white' : 'hover:bg-gray-100 dark:hover:bg-slate-700'}`}
+                            onClick={() => {
+                              const nextTs = combineLocalDateTimeToTs(toLocalDateValue(untilTs), t.value)
+                              setCustomWindow({ fromTs, untilTs: nextTs })
+                              close()
+                            }}
+                          >
+                            {t.label}
+                          </button>
+                        )
+                      })}
+                    </div>
+                  </div>
+                </Popover.Panel>
+              </>
+            )}
+          </Popover>
         </div>
       </div>
 
