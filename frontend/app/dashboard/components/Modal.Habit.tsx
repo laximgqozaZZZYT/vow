@@ -255,11 +255,11 @@ export function HabitModal({ open, onClose, habit, onUpdate, onDelete, onCreate,
     }
 
     return (
-        <div className="fixed inset-0 z-50 flex items-start justify-center pt-12 bg-black/30">
-            <div className="w-[720px] rounded bg-white px-4 pt-4 pb-0 shadow-lg text-black dark:bg-[#0f1724] dark:text-slate-100 flex flex-col">
+        <div className="fixed inset-0 z-50 flex items-start justify-center pt-4 sm:pt-12 bg-black/30 p-4">
+            <div className="w-full max-w-[720px] rounded bg-white px-4 pt-4 pb-0 shadow-lg text-black dark:bg-[#0f1724] dark:text-slate-100 flex flex-col max-h-[95vh] sm:max-h-[90vh]">
                 <div className="flex items-center justify-between">
-                    <h2 className="text-2xl font-semibold">Habit</h2>
-                    <button onClick={onClose} className="text-slate-500">✕</button>
+                    <h2 className="text-xl sm:text-2xl font-semibold">Habit</h2>
+                    <button onClick={onClose} className="text-slate-500 text-lg sm:text-xl">✕</button>
                 </div>
 
                 {/* Scrollable content area with modern scrollbar */}
@@ -271,9 +271,9 @@ export function HabitModal({ open, onClose, habit, onUpdate, onDelete, onCreate,
                     .habit-scroll-area::-webkit-scrollbar-thumb:hover { background: rgba(148,163,184,.85); }
                 `}</style>
 
-                <div className="mt-4 flex gap-4 habit-scroll-area overflow-auto max-h-[80vh] pr-2 modal-scroll-gap">
+                <div className="mt-4 flex flex-col lg:flex-row gap-4 habit-scroll-area overflow-auto flex-1 pr-2 modal-scroll-gap">
                     <div className="flex-1">
-                        <h3 className="text-lg font-medium mb-2 text-slate-100">Name</h3>
+                        <h3 className="text-base sm:text-lg font-medium mb-2 text-slate-100">Name</h3>
                         <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Add title" className="w-full rounded border px-3 py-2 bg-white text-black dark:bg-slate-800 dark:text-slate-100 text-sm" />
 
                         <div className="mt-6">
@@ -283,7 +283,7 @@ export function HabitModal({ open, onClose, habit, onUpdate, onDelete, onCreate,
                                 {estimatedDaysToTotalEnd !== null ? (
                                     <div className="mt-1 text-xs text-slate-400">Estimated days to reach Load Total(End): <span className="font-semibold text-slate-200">{estimatedDaysToTotalEnd}</span> days</div>
                                 ) : null}
-                                <div className="mt-2 grid grid-cols-3 gap-3 items-center">
+                                <div className="mt-2 grid grid-cols-1 sm:grid-cols-3 gap-3 items-center">
                                     <div>
                                         <div className="text-xs text-slate-400 mb-1">Unit</div>
                                         <input value={workloadUnit} onChange={(e) => setWorkloadUnit(e.target.value)} placeholder="e.g. hrs, pages" className="w-full rounded border px-3 py-2 bg-white text-black dark:bg-slate-800 dark:text-slate-100" />
@@ -298,7 +298,7 @@ export function HabitModal({ open, onClose, habit, onUpdate, onDelete, onCreate,
                                     </div>
                                 </div>
 
-                                <div className="mt-3 grid grid-cols-3 gap-3 items-center">
+                                <div className="mt-3 grid grid-cols-1 sm:grid-cols-3 gap-3 items-center">
                                     <div className="col-span-1">
                                         <div className="text-xs text-slate-400 mb-1">Load Total(End) (optional)</div>
                                         <input type="number" min={0} value={workloadTotalEnd ?? ''} onChange={(e) => setWorkloadTotalEnd(Number(e.target.value) || undefined)} className="w-full rounded border px-3 py-2 bg-white text-black dark:bg-slate-800 dark:text-slate-100 text-sm" />
@@ -312,8 +312,8 @@ export function HabitModal({ open, onClose, habit, onUpdate, onDelete, onCreate,
                                     <h3 className="text-lg font-medium">Timings</h3>
                                     <div className="mt-2 space-y-2">
                                         {timings.map((t, idx) => (
-                                            <div key={idx} className="flex items-end gap-2 rounded px-2 py-2">
-                                                <div className="w-28">
+                                            <div key={idx} className="flex flex-col sm:flex-row items-start sm:items-end gap-2 rounded px-2 py-2 border-b border-slate-200 dark:border-slate-700">
+                                                <div className="w-full sm:w-28">
                                                     <div className="text-xs text-slate-500 mb-1">Timing</div>
                                                     <div className="rounded border bg-white text-black dark:bg-slate-800 dark:text-slate-100">
                                                         <Popover className="relative">
@@ -330,7 +330,7 @@ export function HabitModal({ open, onClose, habit, onUpdate, onDelete, onCreate,
                                                     </div>
                                                 </div>
 
-                                                <div className="w-28">
+                                                <div className="w-full sm:w-28">
                                                     <div className="text-xs text-slate-500 mb-1">Date</div>
                                                     <div className="rounded border bg-white text-black dark:bg-slate-800 dark:text-slate-100">
                                                         <Popover className="relative">
@@ -345,7 +345,7 @@ export function HabitModal({ open, onClose, habit, onUpdate, onDelete, onCreate,
 
                                                 </div>
 
-                                                <div className="w-28">
+                                                <div className="w-full sm:w-28">
                                                     <div className="text-xs text-slate-500 mb-1">Start</div>
                                                     <div className="rounded border bg-white text-black dark:bg-slate-800 dark:text-slate-100">
                                                         <Popover className="relative">
@@ -363,7 +363,7 @@ export function HabitModal({ open, onClose, habit, onUpdate, onDelete, onCreate,
                                                     </div>
                                                 </div>
 
-                                                <div className="w-28">
+                                                <div className="w-full sm:w-28">
                                                     <div className="text-xs text-slate-500 mb-1">End</div>
                                                     <div className="rounded border bg-white text-black dark:bg-slate-800 dark:text-slate-100">
                                                         <Popover className="relative">
@@ -613,10 +613,10 @@ export function HabitModal({ open, onClose, habit, onUpdate, onDelete, onCreate,
 
                 </div>
 
-                <div className="flex gap-2 p-3">
-                    <button onClick={handleSave} className="rounded bg-blue-600 px-4 py-2 text-white mr-2">Save</button>
-                    <button onClick={onClose} className="px-4 py-2 dark:bg-slate-800 dark:text-slate-100 text-black">Cancel</button>
-                    {habit && <button onClick={handleDelete} className="ml-auto text-sm text-red-600">Delete</button>}
+                <div className="flex flex-col sm:flex-row gap-2 p-3 border-t border-slate-200 dark:border-slate-700">
+                    <button onClick={handleSave} className="rounded bg-blue-600 px-4 py-2 text-white text-sm sm:text-base">Save</button>
+                    <button onClick={onClose} className="px-4 py-2 dark:bg-slate-800 dark:text-slate-100 text-black border rounded text-sm sm:text-base">Cancel</button>
+                    {habit && <button onClick={handleDelete} className="sm:ml-auto text-sm text-red-600 px-4 py-2">Delete</button>}
                 </div>
             </div>
         </div>
