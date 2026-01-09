@@ -721,26 +721,20 @@ export class SupabaseDirectClient {
       return guestDiaryCards;
     }
     
-    // ログインユーザーの場合はSupabaseから取得
+    // ログインユーザーの場合はSupabaseから取得（シンプル版）
     const { data, error } = await supabase
       .from('diary_cards')
-      .select(`
-        *,
-        diary_card_tags!inner(
-          diary_tags(*)
-        ),
-        diary_card_goals!inner(
-          goals(*)
-        ),
-        diary_card_habits!inner(
-          habits(*)
-        )
-      `)
+      .select('*')
       .eq('owner_type', 'user')
       .eq('owner_id', session.session.user.id)
       .order('created_at', { ascending: false });
     
-    if (error) throw error;
+    if (error) {
+      console.error('[getDiaryCards] Supabase query error:', error);
+      throw error;
+    }
+    
+    console.log('[getDiaryCards] Successfully loaded', data?.length || 0, 'cards from Supabase');
     
     return (data || []).map((card: any) => ({
       id: card.id,
@@ -748,19 +742,9 @@ export class SupabaseDirectClient {
       backMd: card.back_md,
       createdAt: card.created_at,
       updatedAt: card.updated_at,
-      tags: card.diary_card_tags?.map((ct: any) => ({
-        id: ct.diary_tags.id,
-        name: ct.diary_tags.name,
-        color: ct.diary_tags.color
-      })) || [],
-      goals: card.diary_card_goals?.map((cg: any) => ({
-        goalId: cg.goals.id,
-        name: cg.goals.name
-      })) || [],
-      habits: card.diary_card_habits?.map((ch: any) => ({
-        habitId: ch.habits.id,
-        name: ch.habits.name
-      })) || []
+      tags: [], // 簡略化: 空配列
+      goals: [], // 簡略化: 空配列
+      habits: [] // 簡略化: 空配列
     }));
   }
 
@@ -934,7 +918,12 @@ export class SupabaseDirectClient {
       .eq('owner_id', session.session.user.id)
       .order('name', { ascending: true });
     
-    if (error) throw error;
+    if (error) {
+      console.error('[getDiaryTags] Supabase query error:', error);
+      throw error;
+    }
+    
+    console.log('[getDiaryTags] Successfully loaded', data?.length || 0, 'tags from Supabase');
     
     return (data || []).map((tag: any) => ({
       id: tag.id,
