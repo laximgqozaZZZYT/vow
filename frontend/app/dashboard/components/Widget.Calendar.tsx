@@ -343,7 +343,7 @@ export default function CalendarWidget({
         plugins={[ timeGridPlugin, dayGridPlugin, interactionPlugin, rrulePlugin ]}
         initialView={navSelection === 'today' || navSelection === 'tomorrow' ? 'timeGridDay' : navSelection === 'week' ? 'timeGridWeek' : 'dayGridMonth'}
         nowIndicator={true}
-        height="auto"
+        height={600}
         aspectRatio={window.innerWidth < 768 ? 1.0 : 1.35}
         viewDidMount={() => {
           if (navSelection === 'today') window.setTimeout(() => scrollToNowCenter(), 0);
@@ -544,7 +544,6 @@ export default function CalendarWidget({
           }
         }}
         events={events}
-        height={600}
       />
         </div>
       </div>
