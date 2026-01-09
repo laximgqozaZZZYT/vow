@@ -144,6 +144,14 @@ async function request(path: string, opts: RequestInit = {}) {
         return await supabaseDirectClient.createActivity(payload);
       }
       return await supabaseDirectClient.getActivities();
+    } else if (path.startsWith('/activities/')) {
+      const id = path.split('/')[2];
+      if (opts.method === 'PATCH') {
+        const payload = JSON.parse(opts.body as string);
+        return await supabaseDirectClient.updateActivity(id, payload);
+      } else if (opts.method === 'DELETE') {
+        return await supabaseDirectClient.deleteActivity(id);
+      }
     } else if (path === '/me') {
       return await supabaseDirectClient.me();
     } else if (path === '/layout') {
@@ -152,6 +160,34 @@ async function request(path: string, opts: RequestInit = {}) {
         return await supabaseDirectClient.setLayout(payload.sections);
       }
       return await supabaseDirectClient.getLayout();
+    } else if (path === '/diary') {
+      if (opts.method === 'POST') {
+        const payload = JSON.parse(opts.body as string);
+        return await supabaseDirectClient.createDiaryCard(payload);
+      }
+      return await supabaseDirectClient.getDiaryCards();
+    } else if (path.startsWith('/diary/') && !path.includes('/tags')) {
+      const id = path.split('/')[2];
+      if (opts.method === 'PATCH') {
+        const payload = JSON.parse(opts.body as string);
+        return await supabaseDirectClient.updateDiaryCard(id, payload);
+      } else if (opts.method === 'DELETE') {
+        return await supabaseDirectClient.deleteDiaryCard(id);
+      }
+    } else if (path === '/diary/tags') {
+      if (opts.method === 'POST') {
+        const payload = JSON.parse(opts.body as string);
+        return await supabaseDirectClient.createDiaryTag(payload);
+      }
+      return await supabaseDirectClient.getDiaryTags();
+    } else if (path.startsWith('/diary/tags/')) {
+      const id = path.split('/')[3];
+      if (opts.method === 'PATCH') {
+        const payload = JSON.parse(opts.body as string);
+        return await supabaseDirectClient.updateDiaryTag(id, payload);
+      } else if (opts.method === 'DELETE') {
+        return await supabaseDirectClient.deleteDiaryTag(id);
+      }
     }
     
     throw new ApiError('Endpoint not implemented for direct Supabase client', path);

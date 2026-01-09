@@ -103,11 +103,41 @@ export class SupabaseDirectClient {
   }
 
   async updateGoal(id: string, payload: any) {
-    if (!supabase) throw new Error('Supabase not configured');
+    this.checkEnvironment();
     
     const { data: session } = await supabase.auth.getSession();
-    if (!session?.session?.user) throw new Error('Not authenticated');
     
+    if (!session?.session?.user) {
+      // ゲストユーザーの場合はローカルストレージを更新
+      const guestGoals = JSON.parse(localStorage.getItem('guest-goals') || '[]');
+      const goalIndex = guestGoals.findIndex((g: any) => g.id === id);
+      
+      if (goalIndex === -1) {
+        throw new Error(`Goal with id ${id} not found`);
+      }
+      
+      const now = new Date().toISOString();
+      const updatedGoal = {
+        ...guestGoals[goalIndex],
+        updatedAt: now
+      };
+      
+      // Update fields if provided
+      if (payload.name !== undefined) updatedGoal.name = payload.name;
+      if (payload.details !== undefined) updatedGoal.details = payload.details;
+      if (payload.dueDate !== undefined) updatedGoal.dueDate = payload.dueDate;
+      if (payload.parentId !== undefined) updatedGoal.parentId = payload.parentId;
+      if (payload.isCompleted !== undefined) updatedGoal.isCompleted = payload.isCompleted;
+      
+      // Update the goal in the array
+      guestGoals[goalIndex] = updatedGoal;
+      localStorage.setItem('guest-goals', JSON.stringify(guestGoals));
+      
+      console.log('[updateGoal] Guest goal updated:', updatedGoal);
+      return updatedGoal;
+    }
+    
+    // ログインユーザーの場合はSupabaseを更新
     const updateData: any = {
       updated_at: new Date().toISOString()
     };
@@ -142,11 +172,28 @@ export class SupabaseDirectClient {
   }
 
   async deleteGoal(id: string) {
-    if (!supabase) throw new Error('Supabase not configured');
+    this.checkEnvironment();
     
     const { data: session } = await supabase.auth.getSession();
-    if (!session?.session?.user) throw new Error('Not authenticated');
     
+    if (!session?.session?.user) {
+      // ゲストユーザーの場合はローカルストレージから削除
+      const guestGoals = JSON.parse(localStorage.getItem('guest-goals') || '[]');
+      const goalIndex = guestGoals.findIndex((g: any) => g.id === id);
+      
+      if (goalIndex === -1) {
+        throw new Error(`Goal with id ${id} not found`);
+      }
+      
+      // Remove the goal from the array
+      guestGoals.splice(goalIndex, 1);
+      localStorage.setItem('guest-goals', JSON.stringify(guestGoals));
+      
+      console.log('[deleteGoal] Guest goal deleted:', id);
+      return { success: true };
+    }
+    
+    // ログインユーザーの場合はSupabaseから削除
     const { error } = await supabase
       .from('goals')
       .delete()
@@ -341,11 +388,55 @@ export class SupabaseDirectClient {
   }
 
   async updateHabit(id: string, payload: any) {
-    if (!supabase) throw new Error('Supabase not configured');
+    this.checkEnvironment();
     
     const { data: session } = await supabase.auth.getSession();
-    if (!session?.session?.user) throw new Error('Not authenticated');
     
+    if (!session?.session?.user) {
+      // ゲストユーザーの場合はローカルストレージを更新
+      const guestHabits = JSON.parse(localStorage.getItem('guest-habits') || '[]');
+      const habitIndex = guestHabits.findIndex((h: any) => h.id === id);
+      
+      if (habitIndex === -1) {
+        throw new Error(`Habit with id ${id} not found`);
+      }
+      
+      const now = new Date().toISOString();
+      const updatedHabit = {
+        ...guestHabits[habitIndex],
+        updatedAt: now
+      };
+      
+      // Update fields if provided (map camelCase to match guest format)
+      if (payload.name !== undefined) updatedHabit.name = payload.name;
+      if (payload.active !== undefined) updatedHabit.active = payload.active;
+      if (payload.count !== undefined) updatedHabit.count = payload.count;
+      if (payload.completed !== undefined) updatedHabit.completed = payload.completed;
+      if (payload.lastCompletedAt !== undefined) updatedHabit.lastCompletedAt = payload.lastCompletedAt;
+      if (payload.type !== undefined) updatedHabit.type = payload.type;
+      if (payload.must !== undefined) updatedHabit.must = payload.must;
+      if (payload.duration !== undefined) updatedHabit.duration = payload.duration;
+      if (payload.reminders !== undefined) updatedHabit.reminders = payload.reminders;
+      if (payload.dueDate !== undefined) updatedHabit.dueDate = payload.dueDate;
+      if (payload.time !== undefined) updatedHabit.time = payload.time;
+      if (payload.endTime !== undefined) updatedHabit.endTime = payload.endTime;
+      if (payload.repeat !== undefined) updatedHabit.repeat = payload.repeat;
+      if (payload.timings !== undefined) updatedHabit.timings = payload.timings;
+      if (payload.allDay !== undefined) updatedHabit.allDay = payload.allDay;
+      if (payload.notes !== undefined) updatedHabit.notes = payload.notes;
+      if (payload.workloadUnit !== undefined) updatedHabit.workloadUnit = payload.workloadUnit;
+      if (payload.workloadTotal !== undefined) updatedHabit.workloadTotal = payload.workloadTotal;
+      if (payload.workloadPerCount !== undefined) updatedHabit.workloadPerCount = payload.workloadPerCount;
+      
+      // Update the habit in the array
+      guestHabits[habitIndex] = updatedHabit;
+      localStorage.setItem('guest-habits', JSON.stringify(guestHabits));
+      
+      console.log('[updateHabit] Guest habit updated:', updatedHabit);
+      return updatedHabit;
+    }
+    
+    // ログインユーザーの場合はSupabaseを更新
     const updateData: any = {
       updated_at: new Date().toISOString()
     };
@@ -384,11 +475,28 @@ export class SupabaseDirectClient {
   }
 
   async deleteHabit(id: string) {
-    if (!supabase) throw new Error('Supabase not configured');
+    this.checkEnvironment();
     
     const { data: session } = await supabase.auth.getSession();
-    if (!session?.session?.user) throw new Error('Not authenticated');
     
+    if (!session?.session?.user) {
+      // ゲストユーザーの場合はローカルストレージから削除
+      const guestHabits = JSON.parse(localStorage.getItem('guest-habits') || '[]');
+      const habitIndex = guestHabits.findIndex((h: any) => h.id === id);
+      
+      if (habitIndex === -1) {
+        throw new Error(`Habit with id ${id} not found`);
+      }
+      
+      // Remove the habit from the array
+      guestHabits.splice(habitIndex, 1);
+      localStorage.setItem('guest-habits', JSON.stringify(guestHabits));
+      
+      console.log('[deleteHabit] Guest habit deleted:', id);
+      return { success: true };
+    }
+    
+    // ログインユーザーの場合はSupabaseから削除
     const { error } = await supabase
       .from('habits')
       .delete()
@@ -488,6 +596,476 @@ export class SupabaseDirectClient {
       newCount: data.new_count,
       durationSeconds: data.duration_seconds
     };
+  }
+
+  async updateActivity(id: string, payload: any) {
+    this.checkEnvironment();
+    
+    const { data: session } = await supabase.auth.getSession();
+    
+    if (!session?.session?.user) {
+      // ゲストユーザーの場合はローカルストレージを更新
+      const guestActivities = JSON.parse(localStorage.getItem('guest-activities') || '[]');
+      const activityIndex = guestActivities.findIndex((a: any) => a.id === id);
+      
+      if (activityIndex === -1) {
+        throw new Error(`Activity with id ${id} not found`);
+      }
+      
+      const updatedActivity = {
+        ...guestActivities[activityIndex]
+      };
+      
+      // Update fields if provided
+      if (payload.kind !== undefined) updatedActivity.kind = payload.kind;
+      if (payload.habitId !== undefined) updatedActivity.habitId = payload.habitId;
+      if (payload.habitName !== undefined) updatedActivity.habitName = payload.habitName;
+      if (payload.timestamp !== undefined) updatedActivity.timestamp = payload.timestamp;
+      if (payload.amount !== undefined) updatedActivity.amount = payload.amount;
+      if (payload.prevCount !== undefined) updatedActivity.prevCount = payload.prevCount;
+      if (payload.newCount !== undefined) updatedActivity.newCount = payload.newCount;
+      if (payload.durationSeconds !== undefined) updatedActivity.durationSeconds = payload.durationSeconds;
+      if (payload.memo !== undefined) updatedActivity.memo = payload.memo;
+      
+      // Update the activity in the array
+      guestActivities[activityIndex] = updatedActivity;
+      localStorage.setItem('guest-activities', JSON.stringify(guestActivities));
+      
+      console.log('[updateActivity] Guest activity updated:', updatedActivity);
+      return updatedActivity;
+    }
+    
+    // ログインユーザーの場合はSupabaseを更新
+    const updateData: any = {};
+    
+    // Map camelCase to snake_case
+    if (payload.kind !== undefined) updateData.kind = payload.kind;
+    if (payload.habitId !== undefined) updateData.habit_id = payload.habitId;
+    if (payload.habitName !== undefined) updateData.habit_name = payload.habitName;
+    if (payload.timestamp !== undefined) updateData.timestamp = payload.timestamp;
+    if (payload.amount !== undefined) updateData.amount = payload.amount;
+    if (payload.prevCount !== undefined) updateData.prev_count = payload.prevCount;
+    if (payload.newCount !== undefined) updateData.new_count = payload.newCount;
+    if (payload.durationSeconds !== undefined) updateData.duration_seconds = payload.durationSeconds;
+    if (payload.memo !== undefined) updateData.memo = payload.memo;
+    
+    const { data, error } = await supabase
+      .from('activities')
+      .update(updateData)
+      .eq('id', id)
+      .eq('owner_type', 'user')
+      .eq('owner_id', session.session.user.id)
+      .select()
+      .single();
+    
+    if (error) throw error;
+    
+    return {
+      id: data.id,
+      kind: data.kind,
+      habitId: data.habit_id,
+      habitName: data.habit_name,
+      timestamp: data.timestamp,
+      amount: data.amount,
+      prevCount: data.prev_count,
+      newCount: data.new_count,
+      durationSeconds: data.duration_seconds,
+      memo: data.memo
+    };
+  }
+
+  async deleteActivity(id: string) {
+    this.checkEnvironment();
+    
+    const { data: session } = await supabase.auth.getSession();
+    
+    if (!session?.session?.user) {
+      // ゲストユーザーの場合はローカルストレージから削除
+      const guestActivities = JSON.parse(localStorage.getItem('guest-activities') || '[]');
+      const activityIndex = guestActivities.findIndex((a: any) => a.id === id);
+      
+      if (activityIndex === -1) {
+        throw new Error(`Activity with id ${id} not found`);
+      }
+      
+      // Remove the activity from the array
+      guestActivities.splice(activityIndex, 1);
+      localStorage.setItem('guest-activities', JSON.stringify(guestActivities));
+      
+      console.log('[deleteActivity] Guest activity deleted:', id);
+      return { success: true };
+    }
+    
+    // ログインユーザーの場合はSupabaseから削除
+    const { error } = await supabase
+      .from('activities')
+      .delete()
+      .eq('id', id)
+      .eq('owner_type', 'user')
+      .eq('owner_id', session.session.user.id);
+    
+    if (error) throw error;
+    return { success: true };
+  }
+
+  // Diary関連のメソッド
+  async getDiaryCards() {
+    this.checkEnvironment();
+    
+    const { data: session } = await supabase.auth.getSession();
+    
+    if (!session?.session?.user) {
+      // ゲストユーザーの場合はローカルストレージから取得
+      const guestDiaryCards = JSON.parse(localStorage.getItem('guest-diary-cards') || '[]');
+      console.log('[getDiaryCards] Guest mode - loaded from localStorage:', guestDiaryCards.length, 'cards');
+      return guestDiaryCards;
+    }
+    
+    // ログインユーザーの場合はSupabaseから取得
+    const { data, error } = await supabase
+      .from('diary_cards')
+      .select(`
+        *,
+        diary_card_tags!inner(
+          diary_tags(*)
+        ),
+        diary_card_goals!inner(
+          goals(*)
+        ),
+        diary_card_habits!inner(
+          habits(*)
+        )
+      `)
+      .eq('owner_type', 'user')
+      .eq('owner_id', session.session.user.id)
+      .order('created_at', { ascending: false });
+    
+    if (error) throw error;
+    
+    return (data || []).map((card: any) => ({
+      id: card.id,
+      frontMd: card.front_md,
+      backMd: card.back_md,
+      createdAt: card.created_at,
+      updatedAt: card.updated_at,
+      tags: card.diary_card_tags?.map((ct: any) => ({
+        id: ct.diary_tags.id,
+        name: ct.diary_tags.name,
+        color: ct.diary_tags.color
+      })) || [],
+      goals: card.diary_card_goals?.map((cg: any) => ({
+        goalId: cg.goals.id,
+        name: cg.goals.name
+      })) || [],
+      habits: card.diary_card_habits?.map((ch: any) => ({
+        habitId: ch.habits.id,
+        name: ch.habits.name
+      })) || []
+    }));
+  }
+
+  async createDiaryCard(payload: any) {
+    this.checkEnvironment();
+    
+    const { data: session } = await supabase.auth.getSession();
+    
+    if (!session?.session?.user) {
+      // ゲストユーザーの場合はローカルストレージに保存
+      const now = new Date().toISOString();
+      const card = {
+        id: 'diary-card-' + Date.now(),
+        frontMd: payload.frontMd || '',
+        backMd: payload.backMd || '',
+        createdAt: now,
+        updatedAt: now,
+        tags: [], // ゲストモードでは簡略化
+        goals: [],
+        habits: []
+      };
+      
+      const existingCards = JSON.parse(localStorage.getItem('guest-diary-cards') || '[]');
+      existingCards.unshift(card); // 最新を先頭に
+      localStorage.setItem('guest-diary-cards', JSON.stringify(existingCards));
+      
+      console.log('[createDiaryCard] Guest card created:', card);
+      return card;
+    }
+    
+    // ログインユーザーの場合はSupabaseに保存
+    const now = new Date().toISOString();
+    const { data, error } = await supabase
+      .from('diary_cards')
+      .insert({
+        front_md: payload.frontMd || '',
+        back_md: payload.backMd || '',
+        owner_type: 'user',
+        owner_id: session.session.user.id,
+        created_at: now,
+        updated_at: now
+      })
+      .select()
+      .single();
+    
+    if (error) throw error;
+    
+    return {
+      id: data.id,
+      frontMd: data.front_md,
+      backMd: data.back_md,
+      createdAt: data.created_at,
+      updatedAt: data.updated_at,
+      tags: [],
+      goals: [],
+      habits: []
+    };
+  }
+
+  async updateDiaryCard(id: string, payload: any) {
+    this.checkEnvironment();
+    
+    const { data: session } = await supabase.auth.getSession();
+    
+    if (!session?.session?.user) {
+      // ゲストユーザーの場合はローカルストレージを更新
+      const guestCards = JSON.parse(localStorage.getItem('guest-diary-cards') || '[]');
+      const cardIndex = guestCards.findIndex((c: any) => c.id === id);
+      
+      if (cardIndex === -1) {
+        throw new Error(`Diary card with id ${id} not found`);
+      }
+      
+      const now = new Date().toISOString();
+      const updatedCard = {
+        ...guestCards[cardIndex],
+        updatedAt: now
+      };
+      
+      if (payload.frontMd !== undefined) updatedCard.frontMd = payload.frontMd;
+      if (payload.backMd !== undefined) updatedCard.backMd = payload.backMd;
+      
+      guestCards[cardIndex] = updatedCard;
+      localStorage.setItem('guest-diary-cards', JSON.stringify(guestCards));
+      
+      console.log('[updateDiaryCard] Guest card updated:', updatedCard);
+      return updatedCard;
+    }
+    
+    // ログインユーザーの場合はSupabaseを更新
+    const updateData: any = {
+      updated_at: new Date().toISOString()
+    };
+    
+    if (payload.frontMd !== undefined) updateData.front_md = payload.frontMd;
+    if (payload.backMd !== undefined) updateData.back_md = payload.backMd;
+    
+    const { data, error } = await supabase
+      .from('diary_cards')
+      .update(updateData)
+      .eq('id', id)
+      .eq('owner_type', 'user')
+      .eq('owner_id', session.session.user.id)
+      .select()
+      .single();
+    
+    if (error) throw error;
+    
+    return {
+      id: data.id,
+      frontMd: data.front_md,
+      backMd: data.back_md,
+      createdAt: data.created_at,
+      updatedAt: data.updated_at,
+      tags: [],
+      goals: [],
+      habits: []
+    };
+  }
+
+  async deleteDiaryCard(id: string) {
+    this.checkEnvironment();
+    
+    const { data: session } = await supabase.auth.getSession();
+    
+    if (!session?.session?.user) {
+      // ゲストユーザーの場合はローカルストレージから削除
+      const guestCards = JSON.parse(localStorage.getItem('guest-diary-cards') || '[]');
+      const cardIndex = guestCards.findIndex((c: any) => c.id === id);
+      
+      if (cardIndex === -1) {
+        throw new Error(`Diary card with id ${id} not found`);
+      }
+      
+      guestCards.splice(cardIndex, 1);
+      localStorage.setItem('guest-diary-cards', JSON.stringify(guestCards));
+      
+      console.log('[deleteDiaryCard] Guest card deleted:', id);
+      return { success: true };
+    }
+    
+    // ログインユーザーの場合はSupabaseから削除
+    const { error } = await supabase
+      .from('diary_cards')
+      .delete()
+      .eq('id', id)
+      .eq('owner_type', 'user')
+      .eq('owner_id', session.session.user.id);
+    
+    if (error) throw error;
+    return { success: true };
+  }
+
+  async getDiaryTags() {
+    this.checkEnvironment();
+    
+    const { data: session } = await supabase.auth.getSession();
+    
+    if (!session?.session?.user) {
+      // ゲストユーザーの場合はローカルストレージから取得
+      const guestTags = JSON.parse(localStorage.getItem('guest-diary-tags') || '[]');
+      console.log('[getDiaryTags] Guest mode - loaded from localStorage:', guestTags.length, 'tags');
+      return guestTags;
+    }
+    
+    // ログインユーザーの場合はSupabaseから取得
+    const { data, error } = await supabase
+      .from('diary_tags')
+      .select('*')
+      .eq('owner_type', 'user')
+      .eq('owner_id', session.session.user.id)
+      .order('name', { ascending: true });
+    
+    if (error) throw error;
+    
+    return (data || []).map((tag: any) => ({
+      id: tag.id,
+      name: tag.name,
+      color: tag.color
+    }));
+  }
+
+  async createDiaryTag(payload: any) {
+    this.checkEnvironment();
+    
+    const { data: session } = await supabase.auth.getSession();
+    
+    if (!session?.session?.user) {
+      // ゲストユーザーの場合はローカルストレージに保存
+      const tag = {
+        id: 'diary-tag-' + Date.now(),
+        name: payload.name || 'Untitled Tag',
+        color: payload.color || null
+      };
+      
+      const existingTags = JSON.parse(localStorage.getItem('guest-diary-tags') || '[]');
+      existingTags.push(tag);
+      localStorage.setItem('guest-diary-tags', JSON.stringify(existingTags));
+      
+      console.log('[createDiaryTag] Guest tag created:', tag);
+      return tag;
+    }
+    
+    // ログインユーザーの場合はSupabaseに保存
+    const { data, error } = await supabase
+      .from('diary_tags')
+      .insert({
+        name: payload.name || 'Untitled Tag',
+        color: payload.color || null,
+        owner_type: 'user',
+        owner_id: session.session.user.id
+      })
+      .select()
+      .single();
+    
+    if (error) throw error;
+    
+    return {
+      id: data.id,
+      name: data.name,
+      color: data.color
+    };
+  }
+
+  async updateDiaryTag(id: string, payload: any) {
+    this.checkEnvironment();
+    
+    const { data: session } = await supabase.auth.getSession();
+    
+    if (!session?.session?.user) {
+      // ゲストユーザーの場合はローカルストレージを更新
+      const guestTags = JSON.parse(localStorage.getItem('guest-diary-tags') || '[]');
+      const tagIndex = guestTags.findIndex((t: any) => t.id === id);
+      
+      if (tagIndex === -1) {
+        throw new Error(`Diary tag with id ${id} not found`);
+      }
+      
+      const updatedTag = { ...guestTags[tagIndex] };
+      
+      if (payload.name !== undefined) updatedTag.name = payload.name;
+      if (payload.color !== undefined) updatedTag.color = payload.color;
+      
+      guestTags[tagIndex] = updatedTag;
+      localStorage.setItem('guest-diary-tags', JSON.stringify(guestTags));
+      
+      console.log('[updateDiaryTag] Guest tag updated:', updatedTag);
+      return updatedTag;
+    }
+    
+    // ログインユーザーの場合はSupabaseを更新
+    const updateData: any = {};
+    
+    if (payload.name !== undefined) updateData.name = payload.name;
+    if (payload.color !== undefined) updateData.color = payload.color;
+    
+    const { data, error } = await supabase
+      .from('diary_tags')
+      .update(updateData)
+      .eq('id', id)
+      .eq('owner_type', 'user')
+      .eq('owner_id', session.session.user.id)
+      .select()
+      .single();
+    
+    if (error) throw error;
+    
+    return {
+      id: data.id,
+      name: data.name,
+      color: data.color
+    };
+  }
+
+  async deleteDiaryTag(id: string) {
+    this.checkEnvironment();
+    
+    const { data: session } = await supabase.auth.getSession();
+    
+    if (!session?.session?.user) {
+      // ゲストユーザーの場合はローカルストレージから削除
+      const guestTags = JSON.parse(localStorage.getItem('guest-diary-tags') || '[]');
+      const tagIndex = guestTags.findIndex((t: any) => t.id === id);
+      
+      if (tagIndex === -1) {
+        throw new Error(`Diary tag with id ${id} not found`);
+      }
+      
+      guestTags.splice(tagIndex, 1);
+      localStorage.setItem('guest-diary-tags', JSON.stringify(guestTags));
+      
+      console.log('[deleteDiaryTag] Guest tag deleted:', id);
+      return { success: true };
+    }
+    
+    // ログインユーザーの場合はSupabaseから削除
+    const { error } = await supabase
+      .from('diary_tags')
+      .delete()
+      .eq('id', id)
+      .eq('owner_type', 'user')
+      .eq('owner_id', session.session.user.id);
+    
+    if (error) throw error;
+    return { success: true };
   }
 
   async me() {
