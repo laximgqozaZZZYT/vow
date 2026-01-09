@@ -9,6 +9,75 @@ export class SupabaseDirectClient {
     }
   }
 
+  // Timing data validation helpers
+  private validateDateFormat(dateStr: string): string {
+    // Ensure consistent YYYY-MM-DD format
+    const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
+    if (!dateRegex.test(dateStr)) {
+      // Try to parse and reformat
+      const date = new Date(dateStr);
+      if (isNaN(date.getTime())) {
+        throw new Error(`Invalid date format: ${dateStr}. Expected YYYY-MM-DD format.`);
+      }
+      return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+    }
+    return dateStr;
+  }
+
+  private validateTimeFormat(timeStr: string): string {
+    // Ensure HH:MM format
+    const timeRegex = /^([01]?\d|2[0-3]):([0-5]\d)$/;
+    if (!timeRegex.test(timeStr)) {
+      throw new Error(`Invalid time format: ${timeStr}. Expected HH:MM format.`);
+    }
+    return timeStr;
+  }
+
+  private validateTimeOrder(startTime?: string, endTime?: string): void {
+    if (startTime && endTime) {
+      const [startHour, startMin] = startTime.split(':').map(Number);
+      const [endHour, endMin] = endTime.split(':').map(Number);
+      
+      const startMinutes = startHour * 60 + startMin;
+      const endMinutes = endHour * 60 + endMin;
+      
+      if (startMinutes >= endMinutes) {
+        throw new Error(`Start time (${startTime}) must be before end time (${endTime}).`);
+      }
+    }
+  }
+
+  private validateTimingEntry(timing: any): void {
+    if (timing.date) {
+      timing.date = this.validateDateFormat(timing.date);
+    }
+    if (timing.start) {
+      timing.start = this.validateTimeFormat(timing.start);
+    }
+    if (timing.end) {
+      timing.end = this.validateTimeFormat(timing.end);
+    }
+    
+    this.validateTimeOrder(timing.start, timing.end);
+  }
+
+  private preserveTimingStructure(originalTiming: any, updates: any): any {
+    // Preserve all original fields and merge with updates
+    const preserved = { ...originalTiming };
+    
+    // Only update fields that are explicitly provided
+    if (updates.date !== undefined) preserved.date = updates.date;
+    if (updates.start !== undefined) preserved.start = updates.start;
+    if (updates.end !== undefined) preserved.end = updates.end;
+    if (updates.type !== undefined) preserved.type = updates.type;
+    if (updates.cron !== undefined) preserved.cron = updates.cron;
+    
+    // Preserve ID and other metadata if they exist
+    if (originalTiming.id) preserved.id = originalTiming.id;
+    
+    return preserved;
+  }
+
   // ゲストデータをクリアする機能
   clearGuestData() {
     const guestKeys = [
@@ -408,6 +477,9 @@ export class SupabaseDirectClient {
   async updateHabit(id: string, payload: any) {
     this.checkEnvironment();
     
+    console.log('[updateHabit] Starting update for habit:', id);
+    console.log('[updateHabit] Payload:', payload);
+    
     const { data: session } = await supabase.auth.getSession();
     
     if (!session?.session?.user) {
@@ -425,7 +497,77 @@ export class SupabaseDirectClient {
         updatedAt: now
       };
       
-      // Update fields if provided (map camelCase to match guest format)
+      // Handle timingIndex for selective timing entry updates
+      if (typeof payload.timingIndex === 'number') {
+        console.log('[updateHabit] Guest: Processing timingIndex update:', payload.timingIndex);
+        
+        const currentTimings = Array.isArray(updatedHabit.timings) ? updatedHabit.timings : [];
+        
+        // Validate timingIndex bounds
+        if (payload.timingIndex < 0 || payload.timingIndex >= currentTimings.length) {
+          throw new Error(`Invalid timingIndex: ${payload.timingIndex}. Must be between 0 and ${currentTimings.length - 1}`);
+        }
+        
+        // Update only the specific timing entry
+        const updatedTimings = [...currentTimings];
+        const currentTiming = updatedTimings[payload.timingIndex];
+        
+        // Preserve timing structure and merge updates
+        const timingUpdates = {
+          date: payload.dueDate,
+          start: payload.time,
+          end: payload.endTime
+        };
+        
+        const preservedTiming = this.preserveTimingStructure(currentTiming, timingUpdates);
+        
+        // Validate the updated timing entry
+        try {
+          this.validateTimingEntry(preservedTiming);
+        } catch (error) {
+          throw new Error(`Timing validation failed for entry ${payload.timingIndex}: ${(error as Error).message}`);
+        }
+        
+        updatedTimings[payload.timingIndex] = preservedTiming;
+        updatedHabit.timings = updatedTimings;
+        
+        console.log('[updateHabit] Guest: Updated specific timing entry:', preservedTiming);
+      } else {
+        // Standard field updates (backward compatibility)
+        if (payload.dueDate !== undefined) {
+          try {
+            updatedHabit.dueDate = this.validateDateFormat(payload.dueDate);
+          } catch (error) {
+            throw new Error(`Date validation failed: ${(error as Error).message}`);
+          }
+        }
+        if (payload.time !== undefined) {
+          try {
+            updatedHabit.time = this.validateTimeFormat(payload.time);
+          } catch (error) {
+            throw new Error(`Time validation failed: ${(error as Error).message}`);
+          }
+        }
+        if (payload.endTime !== undefined) {
+          try {
+            updatedHabit.endTime = this.validateTimeFormat(payload.endTime);
+          } catch (error) {
+            throw new Error(`End time validation failed: ${(error as Error).message}`);
+          }
+        }
+        
+        // Validate time order
+        try {
+          this.validateTimeOrder(updatedHabit.time, updatedHabit.endTime);
+        } catch (error) {
+          throw new Error(`Time order validation failed: ${(error as Error).message}`);
+        }
+        
+        if (payload.timings !== undefined) updatedHabit.timings = payload.timings;
+        if (payload.outdates !== undefined) updatedHabit.outdates = payload.outdates;
+      }
+      
+      // Update other fields if provided (map camelCase to match guest format)
       if (payload.name !== undefined) updatedHabit.name = payload.name;
       if (payload.active !== undefined) updatedHabit.active = payload.active;
       if (payload.count !== undefined) updatedHabit.count = payload.count;
@@ -435,11 +577,7 @@ export class SupabaseDirectClient {
       if (payload.must !== undefined) updatedHabit.must = payload.must;
       if (payload.duration !== undefined) updatedHabit.duration = payload.duration;
       if (payload.reminders !== undefined) updatedHabit.reminders = payload.reminders;
-      if (payload.dueDate !== undefined) updatedHabit.dueDate = payload.dueDate;
-      if (payload.time !== undefined) updatedHabit.time = payload.time;
-      if (payload.endTime !== undefined) updatedHabit.endTime = payload.endTime;
       if (payload.repeat !== undefined) updatedHabit.repeat = payload.repeat;
-      if (payload.timings !== undefined) updatedHabit.timings = payload.timings;
       if (payload.allDay !== undefined) updatedHabit.allDay = payload.allDay;
       if (payload.notes !== undefined) updatedHabit.notes = payload.notes;
       if (payload.workloadUnit !== undefined) updatedHabit.workloadUnit = payload.workloadUnit;
@@ -455,16 +593,117 @@ export class SupabaseDirectClient {
     }
     
     // ログインユーザーの場合はSupabaseを更新
+    // First, get the current habit data to handle timingIndex updates
+    const { data: currentHabit, error: fetchError } = await supabase
+      .from('habits')
+      .select('*')
+      .eq('id', id)
+      .eq('owner_type', 'user')
+      .eq('owner_id', session.session.user.id)
+      .single();
+    
+    if (fetchError) {
+      console.error('[updateHabit] Failed to fetch current habit:', fetchError);
+      throw fetchError;
+    }
+    
+    if (!currentHabit) {
+      throw new Error(`Habit with id ${id} not found`);
+    }
+    
     const updateData: any = {
       updated_at: new Date().toISOString()
     };
     
-    // Map camelCase to snake_case
+    // Handle timingIndex for selective timing entry updates
+    if (typeof payload.timingIndex === 'number') {
+      console.log('[updateHabit] Supabase: Processing timingIndex update:', payload.timingIndex);
+      
+      const currentTimings = Array.isArray(currentHabit.timings) ? currentHabit.timings : [];
+      
+      // Validate timingIndex bounds
+      if (payload.timingIndex < 0 || payload.timingIndex >= currentTimings.length) {
+        throw new Error(`Invalid timingIndex: ${payload.timingIndex}. Must be between 0 and ${currentTimings.length - 1}`);
+      }
+      
+      // Update only the specific timing entry
+      const updatedTimings = [...currentTimings];
+      const currentTiming = updatedTimings[payload.timingIndex];
+      
+      // Preserve timing structure and merge updates
+      const timingUpdates = {
+        date: payload.dueDate,
+        start: payload.time,
+        end: payload.endTime
+      };
+      
+      const preservedTiming = this.preserveTimingStructure(currentTiming, timingUpdates);
+      
+      // Validate the updated timing entry
+      try {
+        this.validateTimingEntry(preservedTiming);
+      } catch (error) {
+        throw new Error(`Timing validation failed for entry ${payload.timingIndex}: ${(error as Error).message}`);
+      }
+      
+      updatedTimings[payload.timingIndex] = preservedTiming;
+      updateData.timings = updatedTimings;
+      
+      console.log('[updateHabit] Supabase: Updated specific timing entry:', preservedTiming);
+      console.log('[updateHabit] Supabase: Full updated timings array:', updatedTimings);
+    } else {
+      // Standard field updates (backward compatibility)
+      if (payload.dueDate !== undefined) {
+        try {
+          updateData.due_date = this.validateDateFormat(payload.dueDate);
+        } catch (error) {
+          throw new Error(`Date validation failed: ${(error as Error).message}`);
+        }
+      }
+      if (payload.time !== undefined) {
+        try {
+          updateData.time = this.validateTimeFormat(payload.time);
+        } catch (error) {
+          throw new Error(`Time validation failed: ${(error as Error).message}`);
+        }
+      }
+      if (payload.endTime !== undefined) {
+        try {
+          updateData.end_time = this.validateTimeFormat(payload.endTime);
+        } catch (error) {
+          throw new Error(`End time validation failed: ${(error as Error).message}`);
+        }
+      }
+      
+      // Validate time order
+      try {
+        this.validateTimeOrder(updateData.time, updateData.end_time);
+      } catch (error) {
+        throw new Error(`Time order validation failed: ${(error as Error).message}`);
+      }
+      
+      if (payload.timings !== undefined) updateData.timings = payload.timings;
+      if (payload.outdates !== undefined) updateData.outdates = payload.outdates;
+    }
+    
+    // Map camelCase to snake_case - 全フィールドを対応
     if (payload.name !== undefined) updateData.name = payload.name;
     if (payload.active !== undefined) updateData.active = payload.active;
     if (payload.count !== undefined) updateData.count = payload.count;
     if (payload.completed !== undefined) updateData.completed = payload.completed;
     if (payload.lastCompletedAt !== undefined) updateData.last_completed_at = payload.lastCompletedAt;
+    if (payload.type !== undefined) updateData.type = payload.type;
+    if (payload.must !== undefined) updateData.must = payload.must;
+    if (payload.duration !== undefined) updateData.duration = payload.duration;
+    if (payload.reminders !== undefined) updateData.reminders = payload.reminders;
+    if (payload.repeat !== undefined) updateData.repeat = payload.repeat;
+    if (payload.allDay !== undefined) updateData.all_day = payload.allDay;
+    if (payload.notes !== undefined) updateData.notes = payload.notes;
+    if (payload.workloadUnit !== undefined) updateData.workload_unit = payload.workloadUnit;
+    if (payload.workloadTotal !== undefined) updateData.workload_total = payload.workloadTotal;
+    if (payload.workloadPerCount !== undefined) updateData.workload_per_count = payload.workloadPerCount;
+    
+    console.log('[updateHabit] Supabase update data:', updateData);
     
     const { data, error } = await supabase
       .from('habits')
@@ -475,9 +714,14 @@ export class SupabaseDirectClient {
       .select()
       .single();
     
-    if (error) throw error;
+    if (error) {
+      console.error('[updateHabit] Supabase error:', error);
+      throw error;
+    }
     
-    return {
+    console.log('[updateHabit] Supabase response:', data);
+    
+    const result = {
       id: data.id,
       goalId: data.goal_id,
       name: data.name,
@@ -485,11 +729,27 @@ export class SupabaseDirectClient {
       type: data.type,
       count: data.count,
       must: data.must,
+      duration: data.duration,
+      reminders: data.reminders,
+      dueDate: data.due_date,
+      time: data.time,
+      endTime: data.end_time,
+      repeat: data.repeat,
+      timings: data.timings,
+      outdates: data.outdates,
+      allDay: data.all_day,
+      notes: data.notes,
+      workloadUnit: data.workload_unit,
+      workloadTotal: data.workload_total,
+      workloadPerCount: data.workload_per_count,
       completed: data.completed,
       lastCompletedAt: data.last_completed_at,
       createdAt: data.created_at,
       updatedAt: data.updated_at
     };
+    
+    console.log('[updateHabit] Final result:', result);
+    return result;
   }
 
   async deleteHabit(id: string) {

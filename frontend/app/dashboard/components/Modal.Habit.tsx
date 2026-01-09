@@ -187,6 +187,10 @@ export function HabitModal({ open, onClose, habit, onUpdate, onDelete, onCreate,
     if (!open) return null
 
     function handleSave() {
+        console.log('[HabitModal] handleSave called');
+        console.log('[HabitModal] Current timings state:', timings);
+        console.log('[HabitModal] Current outdates state:', outdates);
+        
         if (habit) {
             const updated: Habit = {
                 ...habit!,
@@ -203,11 +207,14 @@ export function HabitModal({ open, onClose, habit, onUpdate, onDelete, onCreate,
                 ...(workloadUnit ? { workloadUnit } as any : {}),
                 ...(workloadTotal !== undefined ? { workloadTotal } as any : {}),
                 ...(workloadPerCount ? { workloadPerCount } as any : {}),
-                ...(timings && timings.length ? { timings } as any : {}),
-                ...(outdates && outdates.length ? { outdates } as any : {}),
+                // Always include timings and outdates (even if empty)
+                timings: timings as any,
+                outdates: outdates as any,
                 endTime,
                 updatedAt: new Date().toISOString(),
             };
+
+            console.log('[HabitModal] Updated habit object:', updated);
 
             // recompute completed using workloadTotal/must and current count
             const totalVal = (updated as any).workloadTotal ?? (updated as any).must ?? 0;
@@ -225,13 +232,16 @@ export function HabitModal({ open, onClose, habit, onUpdate, onDelete, onCreate,
                 time: time ?? undefined,
                 endTime,
                 repeat: timingType,
-                timings: timings && timings.length ? timings : undefined,
+                timings: timings, // Always include timings
                 allDay,
                 workloadUnit: workloadUnit || undefined,
                 workloadTotal: workloadTotal ?? undefined,
                 workloadPerCount: workloadPerCount ?? 1,
                 notes: notes.trim() || undefined,
             };
+            
+            console.log('[HabitModal] Create payload:', payload);
+            
             const resolvedGoalId = goalId ?? (goals && goals.length ? goals[0].id : undefined)
             if (resolvedGoalId) payload.goalId = resolvedGoalId
             onCreate && onCreate(payload);
