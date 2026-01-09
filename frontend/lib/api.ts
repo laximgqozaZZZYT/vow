@@ -160,6 +160,10 @@ async function request(path: string, opts: RequestInit = {}) {
         return await supabaseDirectClient.setLayout(payload.sections);
       }
       return await supabaseDirectClient.getLayout();
+    } else if (path === '/clear-guest-data') {
+      if (opts.method === 'POST') {
+        return await supabaseDirectClient.clearGuestData();
+      }
     } else if (path === '/diary') {
       if (opts.method === 'POST') {
         const payload = JSON.parse(opts.body as string);
@@ -254,6 +258,11 @@ export async function saveLayout(sections: string[]) {
   return await request('/layout', { method: 'POST', body: JSON.stringify({ sections }) });
 }
 
+// Clear guest data API
+export async function clearGuestData() {
+  return await request('/clear-guest-data', { method: 'POST' });
+}
+
 // Diary API
 export async function getDiaryCards() {
   return await request('/diary');
@@ -319,6 +328,7 @@ const api = {
   deleteActivity,
   getLayout,
   saveLayout,
+  clearGuestData,
   getDiaryCards,
   createDiaryCard,
   updateDiaryCard,

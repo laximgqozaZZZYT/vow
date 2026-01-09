@@ -2,7 +2,6 @@ import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import api from '../../../lib/api';
 import { supabase } from '../../../lib/supabaseClient';
-import { GuestDataMigration } from '../../../lib/guest-data-migration';
 import type { AuthContext } from '../types';
 
 export function useAuth(): AuthContext {
@@ -86,7 +85,7 @@ export function useAuth(): AuthContext {
     })();
   }, []);
 
-  // ゲストから認証ユーザーへの変化を監視してデータ移行を実行
+  // ゲストから認証ユーザーへの変化を監視してゲストデータをクリア
   useEffect(() => {
     const handleGuestToUserTransition = async () => {
       console.log('[auth] Transition check:', { 
@@ -96,69 +95,41 @@ export function useAuth(): AuthContext {
         migrationInProgress: migrationInProgressRef.current 
       });
       
-      // 認証ユーザーになった場合（ゲストからの変化でなくても移行をチェック）
+      // 認証ユーザーになった場合、ゲストデータをクリア
       if (!isGuest && isAuthed && !migrationInProgressRef.current) {
-        console.log('[auth] Authenticated user detected, checking for guest data migration');
+        console.log('[auth] Authenticated user detected, clearing guest data');
         
         // 移行中フラグを設定
         migrationInProgressRef.current = true;
         
         try {
           // ゲストデータが存在するかチェック
-          const hasGuestData = GuestDataMigration.hasGuestData();
-          console.log('[auth] Guest data check result:', hasGuestData);
+          const guestKeys = ['guest-goals', 'guest-habits', 'guest-activities', 'guest-diary-cards', 'guest-diary-tags'];
+          const hasGuestData = guestKeys.some(key => localStorage.getItem(key));
           
           if (hasGuestData) {
-            console.log('[auth] Guest data found, starting migration');
+            console.log('[auth] Guest data found, clearing localStorage');
             
-            // LocalStorageの内容をログ出力
-            const guestGoals = JSON.parse(localStorage.getItem('guest-goals') || '[]');
-            const guestHabits = JSON.parse(localStorage.getItem('guest-habits') || '[]');
-            const guestActivities = JSON.parse(localStorage.getItem('guest-activities') || '[]');
-            console.log('[auth] Guest data to migrate:', { 
-              goals: guestGoals.length, 
-              habits: guestHabits.length, 
-              activities: guestActivities.length 
-            });
-            console.log('[auth] Guest goals:', guestGoals);
-            console.log('[auth] Guest habits:', guestHabits);
-            
-            // 現在のユーザーIDを取得
-            const me = await api.me();
-            const userId = (me as any)?.actor?.id;
-            console.log('[auth] Current user ID for migration:', userId);
-            
-            if (userId) {
-              console.log('[auth] Starting migration process...');
-              const migrationResult = await GuestDataMigration.migrateGuestDataToSupabase(userId);
-              console.log('[auth] Migration result:', migrationResult);
-              
-              if (migrationResult.success) {
-                console.log('[auth] Migration completed successfully:', migrationResult);
-                setAuthError(`Data migrated: ${migrationResult.migratedGoals} goals, ${migrationResult.migratedHabits} habits, ${migrationResult.migratedActivities} activities`);
-                
-                // 成功メッセージを5秒後にクリア（デバッグのため延長）
-                setTimeout(() => setAuthError(null), 5000);
-                
-                // 移行後にページをリロードしてデータを再取得
-                setTimeout(() => {
-                  console.log('[auth] Reloading page to refresh data after migration');
-                  window.location.reload();
-                }, 1000);
-              } else {
-                console.error('[auth] Migration failed:', migrationResult);
-                setAuthError(`Migration failed: ${migrationResult.errors.join(', ')}`);
+            // LocalStorageからゲストデータをクリア
+            guestKeys.forEach(key => {
+              const data = localStorage.getItem(key);
+              if (data) {
+                console.log(`[auth] Clearing ${key}:`, JSON.parse(data).length, 'items');
+                localStorage.removeItem(key);
               }
-            } else {
-              console.error('[auth] Could not get user ID for migration');
-              setAuthError('Migration failed: Could not get user ID');
-            }
+            });
+            
+            console.log('[auth] Guest data cleared successfully');
+            setAuthError('Previous guest data has been cleared. Starting fresh as authenticated user.');
+            
+            // 成功メッセージを3秒後にクリア
+            setTimeout(() => setAuthError(null), 3000);
           } else {
-            console.log('[auth] No guest data to migrate');
+            console.log('[auth] No guest data to clear');
           }
         } catch (error) {
-          console.error('[auth] Migration error:', error);
-          setAuthError(`Migration error: ${(error as any)?.message || error}`);
+          console.error('[auth] Error clearing guest data:', error);
+          setAuthError(`Error clearing guest data: ${(error as any)?.message || error}`);
         } finally {
           // 移行中フラグをクリア
           migrationInProgressRef.current = false;

@@ -9,6 +9,24 @@ export class SupabaseDirectClient {
     }
   }
 
+  // ゲストデータをクリアする機能
+  clearGuestData() {
+    const guestKeys = [
+      'guest-goals',
+      'guest-habits', 
+      'guest-activities',
+      'guest-diary-cards',
+      'guest-diary-tags',
+      'guest-preferences'
+    ];
+    
+    guestKeys.forEach(key => {
+      localStorage.removeItem(key);
+    });
+    
+    console.log('[clearGuestData] Cleared all guest data from localStorage');
+  }
+
   async getGoals() {
     this.checkEnvironment();
     

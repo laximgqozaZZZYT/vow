@@ -1,5 +1,7 @@
 import Link from 'next/link';
+import { useState } from 'react';
 import { useAuth } from '../hooks/useAuth';
+import api from '../../../lib/api';
 import type { DashboardHeaderProps } from '../types';
 
 export default function DashboardHeader({ 
@@ -8,6 +10,33 @@ export default function DashboardHeader({
   onEditLayout 
 }: DashboardHeaderProps) {
   const { isAuthed, actorLabel, authError, handleLogout, isGuest } = useAuth();
+  const [clearingData, setClearingData] = useState(false);
+
+  const handleClearGuestData = async () => {
+    if (!confirm('Are you sure you want to clear all guest data from localStorage? This cannot be undone.')) {
+      return;
+    }
+
+    setClearingData(true);
+    try {
+      // ゲストデータをクリア
+      const guestKeys = ['guest-goals', 'guest-habits', 'guest-activities', 'guest-diary-cards', 'guest-diary-tags'];
+      guestKeys.forEach(key => {
+        localStorage.removeItem(key);
+      });
+      
+      console.log('[Header] Guest data cleared successfully');
+      alert('Guest data cleared successfully. Page will reload.');
+      
+      // ページをリロードしてデータを再取得
+      window.location.reload();
+    } catch (error) {
+      console.error('[Header] Error clearing guest data:', error);
+      alert(`Error clearing guest data: ${(error as any)?.message || error}`);
+    } finally {
+      setClearingData(false);
+    }
+  };
 
   return (
     <header className="fixed inset-x-0 top-0 z-50 border-b border-zinc-200 bg-white/90 backdrop-blur dark:border-slate-700 dark:bg-[#071013]/90">
@@ -30,7 +59,7 @@ export default function DashboardHeader({
           {authError && (
             <div 
               className={`hidden max-w-[420px] truncate text-xs sm:block ${
-                authError.startsWith('Data migrated:') 
+                authError.startsWith('Data migrated:') || authError.includes('cleared')
                   ? 'text-green-700 dark:text-green-300' 
                   : 'text-amber-700 dark:text-amber-300'
               }`} 
@@ -38,6 +67,16 @@ export default function DashboardHeader({
             >
               {authError}
             </div>
+          )}
+          {/* ゲストデータクリアボタン（認証ユーザーのみ表示） */}
+          {isAuthed && !isGuest && (
+            <button
+              onClick={handleClearGuestData}
+              disabled={clearingData}
+              className="rounded border border-orange-200 bg-orange-50 px-3 py-1.5 text-sm text-orange-700 hover:bg-orange-100 disabled:opacity-50 dark:border-orange-900/40 dark:bg-orange-950/20 dark:text-orange-200 dark:hover:bg-orange-950/35"
+            >
+              {clearingData ? 'Clearing...' : 'Clear Guest Data'}
+            </button>
           )}
           {isAuthed && !isGuest ? (
             <button
