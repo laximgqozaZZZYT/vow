@@ -63,9 +63,9 @@ export function HabitModal({ open, onClose, habit, onUpdate, onDelete, onCreate,
     const [type, setType] = React.useState<"do" | "avoid">(habit?.type ?? "do")
     // workload fields replace the old Policy concept
     const [workloadUnit, setWorkloadUnit] = React.useState<string>('')
-    const [workloadTotal, setWorkloadTotal] = React.useState<number | undefined>(undefined)
-    const [workloadTotalEnd, setWorkloadTotalEnd] = React.useState<number | undefined>(undefined)
-    const [workloadPerCount, setWorkloadPerCount] = React.useState<number>(1)
+    const [workloadTotal, setWorkloadTotal] = React.useState<string>('')
+    const [workloadTotalEnd, setWorkloadTotalEnd] = React.useState<string>('')
+    const [workloadPerCount, setWorkloadPerCount] = React.useState<string>('1')
     const [goalId, setGoalId] = React.useState<string | undefined>(habit?.goalId)
     // clone incoming arrays to avoid accidentally sharing references between timings/outdates
     const [timings, setTimings] = React.useState<Timing[]>((((habit as any)?.timings ?? []) as Timing[]).map(x => ({ ...x })))
@@ -85,9 +85,9 @@ export function HabitModal({ open, onClose, habit, onUpdate, onDelete, onCreate,
         if (!open) return
         if (habit) {
             setWorkloadUnit((habit as any)?.workloadUnit ?? '')
-            setWorkloadTotal((habit as any)?.workloadTotal ?? (habit as any)?.targetCount ?? (habit as any)?.must ?? undefined)
-            setWorkloadTotalEnd((habit as any)?.workloadTotalEnd ?? undefined)
-            setWorkloadPerCount((habit as any)?.workloadPerCount ?? 1)
+            setWorkloadTotal(String((habit as any)?.workloadTotal ?? (habit as any)?.targetCount ?? (habit as any)?.must ?? ''))
+            setWorkloadTotalEnd(String((habit as any)?.workloadTotalEnd ?? ''))
+            setWorkloadPerCount(String((habit as any)?.workloadPerCount ?? 1))
             setName(habit?.name ?? '')
             setNotes(habit?.notes ?? '')
             setDueDate(habit?.dueDate ? new Date(habit.dueDate) : undefined)
@@ -113,9 +113,9 @@ export function HabitModal({ open, onClose, habit, onUpdate, onDelete, onCreate,
         } else {
             // creation defaults (use optional initial values)
             setWorkloadUnit('')
-            setWorkloadTotal(undefined)
-            setWorkloadTotalEnd(undefined)
-            setWorkloadPerCount(1)
+            setWorkloadTotal('')
+            setWorkloadTotalEnd('')
+            setWorkloadPerCount('1')
             setName('')
             setNotes('')
             setDueDate(initial?.date ? new Date(initial.date) : undefined)
@@ -205,8 +205,8 @@ export function HabitModal({ open, onClose, habit, onUpdate, onDelete, onCreate,
                 dueDate: dueDate ? formatLocalDate(dueDate) : undefined,
                 // workload fields
                 ...(workloadUnit ? { workloadUnit } as any : {}),
-                ...(workloadTotal !== undefined ? { workloadTotal } as any : {}),
-                ...(workloadPerCount ? { workloadPerCount } as any : {}),
+                ...(workloadTotal ? { workloadTotal: Number(workloadTotal) } as any : {}),
+                ...(Number(workloadPerCount) || 1 ? { workloadPerCount: Number(workloadPerCount) || 1 } as any : {}),
                 // Always include timings and outdates (even if empty)
                 timings: timings as any,
                 outdates: outdates as any,
@@ -235,8 +235,8 @@ export function HabitModal({ open, onClose, habit, onUpdate, onDelete, onCreate,
                 timings: timings, // Always include timings
                 allDay,
                 workloadUnit: workloadUnit || undefined,
-                workloadTotal: workloadTotal ?? undefined,
-                workloadPerCount: workloadPerCount ?? 1,
+                workloadTotal: workloadTotal ? Number(workloadTotal) : undefined,
+                workloadPerCount: Number(workloadPerCount) || 1,
                 notes: notes.trim() || undefined,
             };
             
@@ -290,18 +290,18 @@ export function HabitModal({ open, onClose, habit, onUpdate, onDelete, onCreate,
                                     </div>
                                     <div>
                                         <div className="text-xs text-slate-400 mb-1">Load per Count</div>
-                                        <input type="number" min={1} value={workloadPerCount ?? 1} onChange={(e) => setWorkloadPerCount(Number(e.target.value) || 1)} className="w-full rounded border px-3 py-2 bg-white text-black dark:bg-slate-800 dark:text-slate-100 text-sm" />
+                                        <input type="number" min={1} value={workloadPerCount} onChange={(e) => setWorkloadPerCount(e.target.value)} className="w-full rounded border px-3 py-2 bg-white text-black dark:bg-slate-800 dark:text-slate-100 text-sm [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" />
                                     </div>
                                     <div>
                                         <div className="text-xs text-slate-400 mb-1">Load Total(Day)</div>
-                                        <input type="number" min={0} value={workloadTotal ?? ''} onChange={(e) => setWorkloadTotal(Number(e.target.value) || undefined)} className="w-full rounded border px-3 py-2 bg-white text-black dark:bg-slate-800 dark:text-slate-100 text-sm" />
+                                        <input type="number" min={0} value={workloadTotal} onChange={(e) => setWorkloadTotal(e.target.value)} className="w-full rounded border px-3 py-2 bg-white text-black dark:bg-slate-800 dark:text-slate-100 text-sm [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" />
                                     </div>
                                 </div>
 
                                 <div className="mt-3 grid grid-cols-1 sm:grid-cols-3 gap-3 items-center">
                                     <div className="col-span-1">
                                         <div className="text-xs text-slate-400 mb-1">Load Total(End) (optional)</div>
-                                        <input type="number" min={0} value={workloadTotalEnd ?? ''} onChange={(e) => setWorkloadTotalEnd(Number(e.target.value) || undefined)} className="w-full rounded border px-3 py-2 bg-white text-black dark:bg-slate-800 dark:text-slate-100 text-sm" />
+                                        <input type="number" min={0} value={workloadTotalEnd} onChange={(e) => setWorkloadTotalEnd(e.target.value)} className="w-full rounded border px-3 py-2 bg-white text-black dark:bg-slate-800 dark:text-slate-100 text-sm [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" />
                                     </div>
                                     <div className="col-span-2 text-xs text-slate-500">
                                         Based on Load Total(Day), we estimate how many days it takes to reach Load Total(End).
