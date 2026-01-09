@@ -124,9 +124,22 @@ export class SupabaseDirectClient {
     }
     
     console.log('[getGoals] Successfully loaded', data?.length || 0, 'goals from Supabase');
-    console.log('[getGoals] Goals data:', data);
+    console.log('[getGoals] Raw goals data:', data);
     
-    return data || [];
+    // Convert snake_case to camelCase for frontend compatibility
+    const goals = (data || []).map((g: any) => ({
+      id: g.id,
+      name: g.name,
+      details: g.details,
+      dueDate: g.due_date,
+      parentId: g.parent_id, // 重要: snake_caseからcamelCaseに変換
+      isCompleted: g.is_completed,
+      createdAt: g.created_at,
+      updatedAt: g.updated_at
+    }));
+    
+    console.log('[getGoals] Converted goals data:', goals);
+    return goals;
   }
 
   async createGoal(payload: { name: string; details?: string; dueDate?: string; parentId?: string | null }) {
@@ -569,6 +582,7 @@ export class SupabaseDirectClient {
       
       // Update other fields if provided (map camelCase to match guest format)
       if (payload.name !== undefined) updatedHabit.name = payload.name;
+      if (payload.goalId !== undefined) updatedHabit.goalId = payload.goalId; // goalIdの更新を追加
       if (payload.active !== undefined) updatedHabit.active = payload.active;
       if (payload.count !== undefined) updatedHabit.count = payload.count;
       if (payload.completed !== undefined) updatedHabit.completed = payload.completed;
@@ -688,6 +702,7 @@ export class SupabaseDirectClient {
     
     // Map camelCase to snake_case - 全フィールドを対応
     if (payload.name !== undefined) updateData.name = payload.name;
+    if (payload.goalId !== undefined) updateData.goal_id = payload.goalId; // goalIdの更新を追加
     if (payload.active !== undefined) updateData.active = payload.active;
     if (payload.count !== undefined) updateData.count = payload.count;
     if (payload.completed !== undefined) updateData.completed = payload.completed;

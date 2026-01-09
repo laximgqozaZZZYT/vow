@@ -10,6 +10,8 @@ interface DashboardSidebarExtendedProps extends DashboardSidebarProps {
   onGoalEdit: (goalId: string) => void;
   onHabitEdit: (habitId: string) => void;
   onHabitAction: (habitId: string, action: 'start' | 'complete' | 'pause') => void;
+  onMoveGoal: (goalId: string, newParentId: string | null) => void;
+  onMoveHabit: (habitId: string, newGoalId: string) => void;
 }
 
 export default function DashboardSidebar({ 
@@ -23,7 +25,9 @@ export default function DashboardSidebar({
   onGoalSelect,
   onGoalEdit,
   onHabitEdit,
-  onHabitAction
+  onHabitAction,
+  onMoveGoal,
+  onMoveHabit
 }: DashboardSidebarExtendedProps) {
   if (!isVisible) return null;
 
@@ -42,6 +46,13 @@ export default function DashboardSidebar({
           </div>
         </div>
 
+        {/* ドラッグ&ドロップのヘルプテキスト */}
+        <div className="mb-4 p-2 bg-blue-50 dark:bg-blue-900/20 rounded text-xs text-blue-700 dark:text-blue-300">
+          💡 ドラッグ&ドロップでGoal・Habitを移動できます
+          <br />
+          📱 スマホ: 長押し→スライドで移動
+        </div>
+
         <GoalTree
           goals={goals}
           habits={habits}
@@ -50,6 +61,8 @@ export default function DashboardSidebar({
           onGoalEdit={onGoalEdit}
           onHabitEdit={onHabitEdit}
           onHabitAction={onHabitAction}
+          onMoveGoal={onMoveGoal}
+          onMoveHabit={onMoveHabit}
         />
 
         <div className="mt-auto flex flex-col sm:flex-row gap-2 pt-4">

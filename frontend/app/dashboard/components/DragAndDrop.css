@@ -1,0 +1,99 @@
+/* ドラッグ&ドロップ用のスタイル */
+
+/* ドラッグ中の要素 */
+.dragging {
+  opacity: 0.5;
+  transform: rotate(2deg);
+  transition: all 0.2s ease;
+}
+
+/* ドロップターゲット */
+.drop-target {
+  background-color: rgba(59, 130, 246, 0.1);
+  border: 2px dashed rgba(59, 130, 246, 0.5);
+  border-radius: 8px;
+  transition: all 0.2s ease;
+}
+
+.drop-target.dark {
+  background-color: rgba(59, 130, 246, 0.2);
+  border-color: rgba(59, 130, 246, 0.7);
+}
+
+/* ドラッグプレビュー */
+.drag-preview {
+  position: fixed;
+  z-index: 1000;
+  background: white;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  padding: 8px 12px;
+  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+  pointer-events: none;
+  font-size: 14px;
+  max-width: 200px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.drag-preview.dark {
+  background: #374151;
+  border-color: #4b5563;
+  color: white;
+}
+
+/* ドラッグ可能な要素のホバー効果 */
+.draggable:hover {
+  cursor: grab;
+}
+
+.draggable:active {
+  cursor: grabbing;
+}
+
+/* タッチデバイス用の長押し効果 */
+.touch-drag-ready {
+  animation: pulse 0.5s ease-in-out;
+}
+
+@keyframes pulse {
+  0%, 100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.05);
+  }
+}
+
+/* ドロップ禁止エリア */
+.drop-forbidden {
+  background-color: rgba(239, 68, 68, 0.1);
+  border: 2px dashed rgba(239, 68, 68, 0.5);
+  border-radius: 8px;
+}
+
+.drop-forbidden.dark {
+  background-color: rgba(239, 68, 68, 0.2);
+  border-color: rgba(239, 68, 68, 0.7);
+}
+
+/* ドラッグ中のスクロール領域 */
+.drag-scroll-zone {
+  position: fixed;
+  left: 0;
+  right: 0;
+  height: 50px;
+  z-index: 999;
+  pointer-events: none;
+}
+
+.drag-scroll-zone.top {
+  top: 0;
+  background: linear-gradient(to bottom, rgba(59, 130, 246, 0.2), transparent);
+}
+
+.drag-scroll-zone.bottom {
+  bottom: 0;
+  background: linear-gradient(to top, rgba(59, 130, 246, 0.2), transparent);
+}

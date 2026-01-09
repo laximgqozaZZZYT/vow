@@ -134,6 +134,8 @@ export interface GoalTreeProps {
   onGoalEdit: (goalId: string) => void;
   onHabitEdit: (habitId: string) => void;
   onHabitAction: (habitId: string, action: 'start' | 'complete' | 'pause') => void;
+  onMoveGoal: (goalId: string, newParentId: string | null) => void;
+  onMoveHabit: (habitId: string, newGoalId: string) => void;
 }
 
 export interface GuestDataMigrationResult {

@@ -156,6 +156,35 @@ export default function DashboardPage() {
     }
   }
 
+  // ドラッグ&ドロップハンドラー
+  async function handleMoveGoal(goalId: string, newParentId: string | null) {
+    try {
+      const updatedGoal = await api.updateGoal(goalId, { parentId: newParentId });
+      setGoals(prev => prev.map(g => g.id === goalId ? updatedGoal : g));
+      
+      // 成功フィードバック（簡単な方法）
+      console.log('Goal moved successfully');
+    } catch (error) {
+      console.error('Failed to move goal:', error);
+      // エラーフィードバック - 実際のアプリではトーストやアラートを表示
+      alert('Goalの移動に失敗しました。もう一度お試しください。');
+    }
+  }
+
+  async function handleMoveHabit(habitId: string, newGoalId: string) {
+    try {
+      const updatedHabit = await api.updateHabit(habitId, { goalId: newGoalId });
+      setHabits(prev => prev.map(h => h.id === habitId ? updatedHabit : h));
+      
+      // 成功フィードバック
+      console.log('Habit moved successfully');
+    } catch (error) {
+      console.error('Failed to move habit:', error);
+      // エラーフィードバック
+      alert('Habitの移動に失敗しました。もう一度お試しください。');
+    }
+  }
+
   // Prevent hydration mismatch by not rendering until client-side
   if (!isClient) {
     return <div className="flex min-h-screen items-center justify-center bg-zinc-50 dark:bg-black text-black dark:text-zinc-50 p-4">
@@ -199,6 +228,8 @@ export default function DashboardPage() {
           setOpenHabitModal(true);
         }}
         onHabitAction={handleHabitAction}
+        onMoveGoal={handleMoveGoal}
+        onMoveHabit={handleMoveHabit}
       />
 
   {/* Right pane */}
