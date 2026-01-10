@@ -1496,8 +1496,13 @@ export class SupabaseDirectClient {
     
     // 各MindMapのノードとエッジも取得
     const mindmapsWithData = await Promise.all((data || []).map(async (m: any) => {
+      console.log(`[getMindmaps] Loading nodes and edges for mindmap ${m.id}`);
       const nodes = await this.getMindmapNodes(m.id);
       const connections = await this.getMindmapConnections(m.id);
+      
+      console.log(`[getMindmaps] Mindmap ${m.id} - nodes:`, nodes.length, 'connections:', connections.length);
+      console.log(`[getMindmaps] Mindmap ${m.id} - node data:`, nodes);
+      console.log(`[getMindmaps] Mindmap ${m.id} - connection data:`, connections);
       
       return {
         id: m.id,
@@ -1510,6 +1515,7 @@ export class SupabaseDirectClient {
       };
     }));
     
+    console.log('[getMindmaps] Final mindmaps with data:', mindmapsWithData);
     return mindmapsWithData;
   }
 
@@ -1702,72 +1708,107 @@ export class SupabaseDirectClient {
   private async saveMindmapNodesAndEdges(mindmapId: string, nodes: any[], edges: any[], userId: string) {
     const now = new Date().toISOString();
     
-    // 既存のノードとエッジを削除
-    await supabase
-      .from('mindmap_nodes')
-      .delete()
-      .eq('mindmap_id', mindmapId)
-      .eq('owner_type', 'user')
-      .eq('owner_id', userId);
-      
-    await supabase
-      .from('mindmap_connections')
-      .delete()
-      .eq('mindmap_id', mindmapId)
-      .eq('owner_type', 'user')
-      .eq('owner_id', userId);
+    console.log('[saveMindmapNodesAndEdges] Starting save process:', {
+      mindmapId,
+      nodeCount: nodes.length,
+      edgeCount: edges.length,
+      userId
+    });
     
-    // 新しいノードを挿入
-    if (nodes.length > 0) {
-      const nodeData = nodes.map(node => ({
-        id: node.id,
-        mindmap_id: mindmapId,
-        text: node.label || '',
-        x: node.position?.x || 0,
-        y: node.position?.y || 0,
-        width: 150,
-        height: 50,
-        color: '#ffffff',
-        node_type: node.nodeType || 'default',
-        owner_type: 'user',
-        owner_id: userId,
-        created_at: now,
-        updated_at: now
-      }));
-      
-      const { error: nodesError } = await supabase
+    try {
+      // 既存のノードとエッジを削除
+      console.log('[saveMindmapNodesAndEdges] Deleting existing nodes...');
+      const { error: deleteNodesError } = await supabase
         .from('mindmap_nodes')
-        .insert(nodeData);
+        .delete()
+        .eq('mindmap_id', mindmapId)
+        .eq('owner_type', 'user')
+        .eq('owner_id', userId);
         
-      if (nodesError) {
-        console.error('Failed to save nodes:', nodesError);
-        throw nodesError;
+      if (deleteNodesError) {
+        console.error('[saveMindmapNodesAndEdges] Error deleting nodes:', deleteNodesError);
+        throw deleteNodesError;
       }
-    }
-    
-    // 新しいエッジを挿入
-    if (edges.length > 0) {
-      const edgeData = edges.map(edge => ({
-        id: edge.id,
-        mindmap_id: mindmapId,
-        source_node_id: edge.source,
-        target_node_id: edge.target,
-        source_handle: edge.sourceHandle,
-        target_handle: edge.targetHandle,
-        owner_type: 'user',
-        owner_id: userId,
-        created_at: now,
-        updated_at: now
-      }));
-      
-      const { error: edgesError } = await supabase
+        
+      console.log('[saveMindmapNodesAndEdges] Deleting existing connections...');
+      const { error: deleteConnectionsError } = await supabase
         .from('mindmap_connections')
-        .insert(edgeData);
+        .delete()
+        .eq('mindmap_id', mindmapId)
+        .eq('owner_type', 'user')
+        .eq('owner_id', userId);
         
-      if (edgesError) {
-        console.error('Failed to save edges:', edgesError);
-        throw edgesError;
+      if (deleteConnectionsError) {
+        console.error('[saveMindmapNodesAndEdges] Error deleting connections:', deleteConnectionsError);
+        throw deleteConnectionsError;
       }
+      
+      // 新しいノードを挿入
+      if (nodes.length > 0) {
+        console.log('[saveMindmapNodesAndEdges] Inserting nodes:', nodes);
+        const nodeData = nodes.map(node => ({
+          id: node.id,
+          mindmap_id: mindmapId,
+          text: node.label || '',
+          x: node.position?.x || 0,
+          y: node.position?.y || 0,
+          width: 150,
+          height: 50,
+          color: '#ffffff',
+          owner_type: 'user',
+          owner_id: userId,
+          created_at: now,
+          updated_at: now
+        }));
+        
+        console.log('[saveMindmapNodesAndEdges] Node data to insert:', nodeData);
+        
+        const { error: nodesError } = await supabase
+          .from('mindmap_nodes')
+          .insert(nodeData);
+          
+        if (nodesError) {
+          console.error('[saveMindmapNodesAndEdges] Failed to save nodes:', nodesError);
+          throw nodesError;
+        }
+        
+        console.log('[saveMindmapNodesAndEdges] Nodes saved successfully');
+      }
+      
+      // 新しいエッジを挿入
+      if (edges.length > 0) {
+        console.log('[saveMindmapNodesAndEdges] Inserting edges:', edges);
+        
+        // スキーマに合わせてカラム名を修正
+        const edgeData = edges.map(edge => ({
+          id: edge.id,
+          mindmap_id: mindmapId,
+          from_node_id: edge.source,  // source_node_id -> from_node_id
+          to_node_id: edge.target,    // target_node_id -> to_node_id
+          owner_type: 'user',
+          owner_id: userId,
+          created_at: now,
+          updated_at: now
+        }));
+        
+        console.log('[saveMindmapNodesAndEdges] Edge data to insert:', edgeData);
+        
+        const { error: edgesError } = await supabase
+          .from('mindmap_connections')
+          .insert(edgeData);
+          
+        if (edgesError) {
+          console.error('[saveMindmapNodesAndEdges] Failed to save edges:', edgesError);
+          throw edgesError;
+        }
+        
+        console.log('[saveMindmapNodesAndEdges] Edges saved successfully');
+      }
+      
+      console.log('[saveMindmapNodesAndEdges] Save process completed successfully');
+    } catch (error) {
+      console.error('[saveMindmapNodesAndEdges] Save process failed:', error);
+      throw error;
     }
   }
 

@@ -544,10 +544,15 @@ const initialNodes: Node<CustomNodeData>[] = [
 ];
 
 function MindmapFlow({ onClose, onRegisterAsHabit, onRegisterAsGoal, goals = [], mindmap, onSave }: MindmapProps) {
+  console.log('[MindmapFlow] Component initialized with mindmap prop:', mindmap);
+  
   // データベースから取得したノードをReact Flow形式に変換
   const convertedNodes = React.useMemo(() => {
+    console.log('[MindmapFlow] Converting nodes from mindmap:', mindmap);
+    console.log('[MindmapFlow] Raw nodes data:', mindmap?.nodes);
+    
     if (mindmap?.nodes && Array.isArray(mindmap.nodes)) {
-      return mindmap.nodes.map((node: any) => ({
+      const converted = mindmap.nodes.map((node: any) => ({
         id: node.id,
         position: { x: node.x || node.position?.x || 0, y: node.y || node.position?.y || 0 },
         data: { 
@@ -557,21 +562,30 @@ function MindmapFlow({ onClose, onRegisterAsHabit, onRegisterAsGoal, goals = [],
         },
         type: 'mindmapNode',
       }));
+      console.log('[MindmapFlow] Converted nodes:', converted);
+      return converted;
     }
+    console.log('[MindmapFlow] No nodes found, using initial nodes');
     return initialNodes;
   }, [mindmap?.nodes]);
 
   // データベースから取得したエッジをReact Flow形式に変換
   const convertedEdges = React.useMemo(() => {
+    console.log('[MindmapFlow] Converting edges from mindmap:', mindmap);
+    console.log('[MindmapFlow] Raw edges data:', mindmap?.edges);
+    
     if (mindmap?.edges && Array.isArray(mindmap.edges)) {
-      return mindmap.edges.map((edge: any) => ({
+      const converted = mindmap.edges.map((edge: any) => ({
         id: edge.id,
-        source: edge.source || edge.sourceNodeId || edge.source_node_id,
-        target: edge.target || edge.targetNodeId || edge.target_node_id,
+        source: edge.source || edge.fromNodeId || edge.from_node_id,
+        target: edge.target || edge.toNodeId || edge.to_node_id,
         sourceHandle: edge.sourceHandle || edge.source_handle,
         targetHandle: edge.targetHandle || edge.target_handle,
       }));
+      console.log('[MindmapFlow] Converted edges:', converted);
+      return converted;
     }
+    console.log('[MindmapFlow] No edges found, using empty array');
     return [];
   }, [mindmap?.edges]);
 
@@ -1027,6 +1041,8 @@ function MindmapFlow({ onClose, onRegisterAsHabit, onRegisterAsGoal, goals = [],
         }))
       };
 
+      console.log('[MindMap] Saving mindmap data:', mindmapData);
+
       if (onSave) {
         await onSave(mindmapData);
         setHasUnsavedChanges(false);
@@ -1037,7 +1053,7 @@ function MindmapFlow({ onClose, onRegisterAsHabit, onRegisterAsGoal, goals = [],
       }
     } catch (error) {
       console.error('Failed to save mindmap:', error);
-      addLog('Failed to save mindmap');
+      addLog(`Failed to save mindmap: ${error}`);
     }
   }, [mindmap, mindmapName, nodes, edges, onSave, addLog]);
 

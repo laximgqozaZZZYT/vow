@@ -245,6 +245,7 @@ export default function DashboardPage() {
         mindmaps={mindmaps}
         selectedMindmap={selectedMindmap}
         onMindmapSelect={(mindmap) => {
+          console.log('[Dashboard] Selected mindmap:', mindmap);
           setSelectedMindmap(mindmap);
           setOpenMindmap(true);
         }}
@@ -414,17 +415,21 @@ export default function DashboardPage() {
           mindmap={selectedMindmap}
           onSave={async (mindmapData) => {
             try {
+              console.log('[Dashboard] Saving mindmap:', mindmapData);
+              
               if (mindmapData.id) {
                 // Update existing mindmap
+                console.log('[Dashboard] Updating existing mindmap:', mindmapData.id);
                 const updatedMindmap = await api.updateMindmap(mindmapData.id, {
                   name: mindmapData.name,
                   nodes: mindmapData.nodes,
                   edges: mindmapData.edges
                 });
                 setMindmaps(prev => prev.map(m => m.id === mindmapData.id ? updatedMindmap : m));
-                console.log('Mindmap updated:', updatedMindmap);
+                console.log('[Dashboard] Mindmap updated successfully:', updatedMindmap);
               } else {
                 // Create new mindmap
+                console.log('[Dashboard] Creating new mindmap');
                 const newMindmap = await api.createMindmap({
                   name: mindmapData.name,
                   nodes: mindmapData.nodes,
@@ -432,10 +437,10 @@ export default function DashboardPage() {
                 });
                 setMindmaps(prev => [...prev, newMindmap]);
                 setSelectedMindmap(newMindmap);
-                console.log('Mindmap created:', newMindmap);
+                console.log('[Dashboard] Mindmap created successfully:', newMindmap);
               }
             } catch (error) {
-              console.error('Failed to save mindmap:', error);
+              console.error('[Dashboard] Failed to save mindmap:', error);
               throw error;
             }
           }}
