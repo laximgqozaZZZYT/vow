@@ -164,6 +164,47 @@ async function request(path: string, opts: RequestInit = {}) {
       if (opts.method === 'POST') {
         return await supabaseDirectClient.clearGuestData();
       }
+    } else if (path === '/mindmaps') {
+      if (opts.method === 'POST') {
+        const payload = JSON.parse(opts.body as string);
+        return await supabaseDirectClient.createMindmap(payload);
+      }
+      return await supabaseDirectClient.getMindmaps();
+    } else if (path.startsWith('/mindmaps/') && path.includes('/nodes')) {
+      const mindmapId = path.split('/')[2];
+      if (opts.method === 'POST') {
+        const payload = JSON.parse(opts.body as string);
+        return await supabaseDirectClient.createMindmapNode(mindmapId, payload);
+      }
+      return await supabaseDirectClient.getMindmapNodes(mindmapId);
+    } else if (path.startsWith('/mindmaps/') && path.includes('/connections')) {
+      const mindmapId = path.split('/')[2];
+      if (opts.method === 'POST') {
+        const payload = JSON.parse(opts.body as string);
+        return await supabaseDirectClient.createMindmapConnection(mindmapId, payload);
+      }
+      return await supabaseDirectClient.getMindmapConnections(mindmapId);
+    } else if (path.startsWith('/mindmaps/') && !path.includes('/nodes') && !path.includes('/connections')) {
+      const id = path.split('/')[2];
+      if (opts.method === 'PATCH') {
+        const payload = JSON.parse(opts.body as string);
+        return await supabaseDirectClient.updateMindmap(id, payload);
+      } else if (opts.method === 'DELETE') {
+        return await supabaseDirectClient.deleteMindmap(id);
+      }
+    } else if (path.startsWith('/mindmap-nodes/')) {
+      const id = path.split('/')[2];
+      if (opts.method === 'PATCH') {
+        const payload = JSON.parse(opts.body as string);
+        return await supabaseDirectClient.updateMindmapNode(id, payload);
+      } else if (opts.method === 'DELETE') {
+        return await supabaseDirectClient.deleteMindmapNode(id);
+      }
+    } else if (path.startsWith('/mindmap-connections/')) {
+      const id = path.split('/')[2];
+      if (opts.method === 'DELETE') {
+        return await supabaseDirectClient.deleteMindmapConnection(id);
+      }
     } else if (path === '/diary') {
       if (opts.method === 'POST') {
         const payload = JSON.parse(opts.body as string);
@@ -296,6 +337,51 @@ export async function deleteDiaryTag(id: string) {
   return await request(`/diary/tags/${id}`, { method: 'DELETE' });
 }
 
+// Mindmap API
+export async function getMindmaps() {
+  return await request('/mindmaps');
+}
+
+export async function createMindmap(payload: any) {
+  return await request('/mindmaps', { method: 'POST', body: JSON.stringify(payload) });
+}
+
+export async function updateMindmap(id: string, payload: any) {
+  return await request(`/mindmaps/${id}`, { method: 'PATCH', body: JSON.stringify(payload) });
+}
+
+export async function deleteMindmap(id: string) {
+  return await request(`/mindmaps/${id}`, { method: 'DELETE' });
+}
+
+export async function getMindmapNodes(mindmapId: string) {
+  return await request(`/mindmaps/${mindmapId}/nodes`);
+}
+
+export async function createMindmapNode(mindmapId: string, payload: any) {
+  return await request(`/mindmaps/${mindmapId}/nodes`, { method: 'POST', body: JSON.stringify(payload) });
+}
+
+export async function updateMindmapNode(id: string, payload: any) {
+  return await request(`/mindmap-nodes/${id}`, { method: 'PATCH', body: JSON.stringify(payload) });
+}
+
+export async function deleteMindmapNode(id: string) {
+  return await request(`/mindmap-nodes/${id}`, { method: 'DELETE' });
+}
+
+export async function getMindmapConnections(mindmapId: string) {
+  return await request(`/mindmaps/${mindmapId}/connections`);
+}
+
+export async function createMindmapConnection(mindmapId: string, payload: any) {
+  return await request(`/mindmaps/${mindmapId}/connections`, { method: 'POST', body: JSON.stringify(payload) });
+}
+
+export async function deleteMindmapConnection(id: string) {
+  return await request(`/mindmap-connections/${id}`, { method: 'DELETE' });
+}
+
 // Auth API
 export async function me() { 
   if (USE_EDGE_FUNCTIONS) {
@@ -337,6 +423,17 @@ const api = {
   createDiaryTag,
   updateDiaryTag,
   deleteDiaryTag,
+  getMindmaps,
+  createMindmap,
+  updateMindmap,
+  deleteMindmap,
+  getMindmapNodes,
+  createMindmapNode,
+  updateMindmapNode,
+  deleteMindmapNode,
+  getMindmapConnections,
+  createMindmapConnection,
+  deleteMindmapConnection,
   me,
   claim,
   

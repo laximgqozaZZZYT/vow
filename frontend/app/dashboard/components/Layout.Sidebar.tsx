@@ -12,6 +12,11 @@ interface DashboardSidebarExtendedProps extends DashboardSidebarProps {
   onHabitAction: (habitId: string, action: 'start' | 'complete' | 'pause') => void;
   onMoveGoal: (goalId: string, newParentId: string | null) => void;
   onMoveHabit: (habitId: string, newGoalId: string) => void;
+  onNewMindmap: () => void;
+  mindmaps?: any[];
+  selectedMindmap?: any;
+  onMindmapSelect?: (mindmap: any) => void;
+  onMindmapDelete?: (mindmapId: string) => void;
 }
 
 export default function DashboardSidebar({ 
@@ -27,7 +32,12 @@ export default function DashboardSidebar({
   onHabitEdit,
   onHabitAction,
   onMoveGoal,
-  onMoveHabit
+  onMoveHabit,
+  onNewMindmap,
+  mindmaps = [],
+  selectedMindmap,
+  onMindmapSelect,
+  onMindmapDelete
 }: DashboardSidebarExtendedProps) {
   if (!isVisible) return null;
 
@@ -65,21 +75,68 @@ export default function DashboardSidebar({
           onMoveHabit={onMoveHabit}
         />
 
-        <div className="mt-auto flex flex-col sm:flex-row gap-2 pt-4">
+        {/* Mindmaps Section */}
+        {mindmaps.length > 0 && (
+          <div className="mt-6 border-t border-gray-200 dark:border-gray-700 pt-4">
+            <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">
+              🧠 Saved Mindmaps
+            </h3>
+            <div className="space-y-1 max-h-40 overflow-y-auto">
+              {mindmaps.map((mindmap) => (
+                <div
+                  key={mindmap.id}
+                  className={`group flex items-center justify-between p-2 rounded text-sm cursor-pointer transition-colors ${
+                    selectedMindmap?.id === mindmap.id
+                      ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300'
+                      : 'hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-700 dark:text-gray-300'
+                  }`}
+                >
+                  <div
+                    className="flex-1 truncate"
+                    onClick={() => onMindmapSelect?.(mindmap)}
+                    title={mindmap.name}
+                  >
+                    {mindmap.name}
+                  </div>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (confirm(`Delete mindmap "${mindmap.name}"?`)) {
+                        onMindmapDelete?.(mindmap.id);
+                      }
+                    }}
+                    className="ml-2 text-red-500 hover:text-red-700 opacity-0 group-hover:opacity-100 transition-opacity text-xs"
+                    title="Delete mindmap"
+                  >
+                    🗑️
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        <div className="mt-auto flex flex-col gap-2 pt-4">
           <button
-            className="flex-1 rounded border px-3 py-2 text-sm"
+            className="rounded border px-3 py-2 text-sm"
             onClick={onNewGoal}
           >
             + New Goal
           </button>
           <button
-            className="flex-1 rounded bg-blue-600 px-3 py-2 text-sm text-white"
+            className="rounded bg-blue-600 px-3 py-2 text-sm text-white"
             onClick={() => {
               const today = new Date().toISOString().slice(0, 10);
               onNewHabit({ date: today });
             }}
           >
             + New Habit
+          </button>
+          <button
+            className="rounded bg-green-600 px-3 py-2 text-sm text-white hover:bg-green-700"
+            onClick={onNewMindmap}
+          >
+            + New Map
           </button>
         </div>
       </aside>

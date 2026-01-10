@@ -96,6 +96,45 @@ CREATE TABLE IF NOT EXISTS diary_tags (
     UNIQUE(owner_type, owner_id, name)
 );
 
+-- Mindmap tables
+CREATE TABLE IF NOT EXISTS mindmaps (
+    id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+    name TEXT NOT NULL,
+    description TEXT,
+    owner_type TEXT,
+    owner_id TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS mindmap_nodes (
+    id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+    mindmap_id TEXT NOT NULL REFERENCES mindmaps(id) ON DELETE CASCADE,
+    text TEXT NOT NULL,
+    x FLOAT NOT NULL,
+    y FLOAT NOT NULL,
+    width FLOAT DEFAULT 120,
+    height FLOAT DEFAULT 60,
+    color TEXT DEFAULT '#ffffff',
+    goal_id TEXT REFERENCES goals(id) ON DELETE SET NULL,
+    habit_id TEXT REFERENCES habits(id) ON DELETE SET NULL,
+    owner_type TEXT,
+    owner_id TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS mindmap_connections (
+    id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+    mindmap_id TEXT NOT NULL REFERENCES mindmaps(id) ON DELETE CASCADE,
+    from_node_id TEXT NOT NULL REFERENCES mindmap_nodes(id) ON DELETE CASCADE,
+    to_node_id TEXT NOT NULL REFERENCES mindmap_nodes(id) ON DELETE CASCADE,
+    owner_type TEXT,
+    owner_id TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
 -- User table (Supabaseのauth.usersと連携)
 CREATE TABLE IF NOT EXISTS users (
     id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
@@ -136,6 +175,11 @@ CREATE INDEX IF NOT EXISTS idx_diary_cards_created_at ON diary_cards(created_at)
 CREATE INDEX IF NOT EXISTS idx_diary_tags_owner ON diary_tags(owner_type, owner_id);
 CREATE INDEX IF NOT EXISTS idx_sessions_user_id ON sessions(user_id);
 CREATE INDEX IF NOT EXISTS idx_sessions_guest_id ON sessions(guest_id);
+CREATE INDEX IF NOT EXISTS idx_mindmaps_owner ON mindmaps(owner_type, owner_id);
+CREATE INDEX IF NOT EXISTS idx_mindmap_nodes_mindmap_id ON mindmap_nodes(mindmap_id);
+CREATE INDEX IF NOT EXISTS idx_mindmap_nodes_owner ON mindmap_nodes(owner_type, owner_id);
+CREATE INDEX IF NOT EXISTS idx_mindmap_connections_mindmap_id ON mindmap_connections(mindmap_id);
+CREATE INDEX IF NOT EXISTS idx_mindmap_connections_owner ON mindmap_connections(owner_type, owner_id);
 
 -- Row Level Security (RLS) 設定
 ALTER TABLE goals ENABLE ROW LEVEL SECURITY;
@@ -144,6 +188,9 @@ ALTER TABLE activities ENABLE ROW LEVEL SECURITY;
 ALTER TABLE preferences ENABLE ROW LEVEL SECURITY;
 ALTER TABLE diary_cards ENABLE ROW LEVEL SECURITY;
 ALTER TABLE diary_tags ENABLE ROW LEVEL SECURITY;
+ALTER TABLE mindmaps ENABLE ROW LEVEL SECURITY;
+ALTER TABLE mindmap_nodes ENABLE ROW LEVEL SECURITY;
+ALTER TABLE mindmap_connections ENABLE ROW LEVEL SECURITY;
 
 -- RLS ポリシー（認証ユーザーは自分のデータのみアクセス可能）
 CREATE POLICY "Users can access own goals" ON goals
@@ -177,6 +224,24 @@ CREATE POLICY "Users can access own diary cards" ON diary_cards
     );
 
 CREATE POLICY "Users can access own diary tags" ON diary_tags
+    FOR ALL USING (
+        owner_type = 'user' AND owner_id = auth.uid()::text
+        OR owner_type IS NULL
+    );
+
+CREATE POLICY "Users can access own mindmaps" ON mindmaps
+    FOR ALL USING (
+        owner_type = 'user' AND owner_id = auth.uid()::text
+        OR owner_type IS NULL
+    );
+
+CREATE POLICY "Users can access own mindmap nodes" ON mindmap_nodes
+    FOR ALL USING (
+        owner_type = 'user' AND owner_id = auth.uid()::text
+        OR owner_type IS NULL
+    );
+
+CREATE POLICY "Users can access own mindmap connections" ON mindmap_connections
     FOR ALL USING (
         owner_type = 'user' AND owner_id = auth.uid()::text
         OR owner_type IS NULL

@@ -1,4 +1,21 @@
 @import "tailwindcss";
+@import "reactflow/dist/style.css";
+
+/* Hide React Flow attribution */
+.react-flow__attribution {
+  display: none !important;
+}
+
+/* Make text cursor more visible in mindmap editor */
+.mindmap-text-input {
+  caret-color: #ff0000 !important;
+  animation: blink-caret 1s step-end infinite;
+}
+
+@keyframes blink-caret {
+  from, to { caret-color: #ff0000; }
+  50% { caret-color: transparent; }
+}
 
 :root {
   --background: #ffffff;

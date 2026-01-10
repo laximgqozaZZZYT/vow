@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mindmap Habit/Goal Popup Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background-color: #f5f5f5;
+        }
+        .test-container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        .test-section {
+            margin-bottom: 30px;
+            padding: 20px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+        }
+        .test-button {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        .test-button:hover {
+            background: #0056b3;
+        }
+        .test-button.habit {
+            background: #28a745;
+        }
+        .test-button.habit:hover {
+            background: #1e7e34;
+        }
+        .test-button.goal {
+            background: #6f42c1;
+        }
+        .test-button.goal:hover {
+            background: #5a32a3;
+        }
+        .log {
+            background: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 4px;
+            padding: 10px;
+            margin-top: 10px;
+            font-family: monospace;
+            font-size: 12px;
+            max-height: 200px;
+            overflow-y: auto;
+        }
+        .status {
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 4px;
+        }
+        .status.success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        .status.error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        .status.info {
+            background: #d1ecf1;
+            color: #0c5460;
+            border: 1px solid #bee5eb;
+        }
+    </style>
+</head>
+<body>
+    <div class="test-container">
+        <h1>🧠 Mindmap Habit/Goal Popup Test</h1>
+        
+        <div class="status info">
+            <strong>テスト目的:</strong> Mindmapの右クリックメニューからHabit/Goal登録ポップアップが正しく動作することを確認
+        </div>
+
+        <div class="test-section">
+            <h2>📋 テスト手順</h2>
+            <ol>
+                <li>ダッシュボードページを開く</li>
+                <li>サイドバーから「New Mindmap」をクリック</li>
+                <li>Mindmapエディターが開いたら、ノードを右クリック</li>
+                <li>コンテキストメニューから「Register as Habit」または「Register as Goal」を選択</li>
+                <li>ポップアップが表示され、ノードのラベルが名前欄にプリセットされることを確認</li>
+                <li>フォームに詳細情報を入力して「Register」ボタンをクリック</li>
+                <li>Habit/Goalが正常に作成されることを確認</li>
+            </ol>
+        </div>
+
+        <div class="test-section">
+            <h2>✅ 期待される動作</h2>
+            <ul>
+                <li><strong>右クリックメニュー:</strong> 「Register as Habit」と「Register as Goal」オプションが表示される</li>
+                <li><strong>ポップアップ表示:</strong> 選択したオプションに応じて適切なポップアップが開く</li>
+                <li><strong>名前プリセット:</strong> ノードのラベルがHabit/Goal名にプリセットされる</li>
+                <li><strong>フォーム機能:</strong> 
+                    <ul>
+                        <li>名前フィールドにフォーカスが当たり、テキストが選択される</li>
+                        <li>Habitの場合: 頻度（Daily/Weekly/Monthly）を選択可能</li>
+                        <li>Goalの場合: 目標日を設定可能</li>
+                        <li>共通: 説明、カテゴリ、優先度を設定可能</li>
+                    </ul>
+                </li>
+                <li><strong>キーボード操作:</strong> Escapeキーでポップアップを閉じる</li>
+                <li><strong>データ保存:</strong> 登録後にHabit/Goalがダッシュボードに表示される</li>
+                <li><strong>ノード表示:</strong> 登録後にノードの色が変わる（Habit: 緑、Goal: 紫）</li>
+            </ul>
+        </div>
+
+        <div class="test-section">
+            <h2>🎨 UI/UX 確認項目</h2>
+            <ul>
+                <li><strong>ポップアップデザイン:</strong> 
+                    <ul>
+                        <li>Habit: 緑色のアクセント（🔄 アイコン）</li>
+                        <li>Goal: 紫色のアクセント（🎯 アイコン）</li>
+                    </ul>
+                </li>
+                <li><strong>レスポンシブ:</strong> モバイルデバイスでも適切に表示される</li>
+                <li><strong>ダークモード:</strong> ダークテーマでも適切に表示される</li>
+                <li><strong>アクセシビリティ:</strong> キーボードナビゲーションが機能する</li>
+            </ul>
+        </div>
+
+        <div class="test-section">
+            <h2>🐛 潜在的な問題</h2>
+            <ul>
+                <li><strong>Tailwind動的クラス:</strong> 動的に生成されるTailwindクラスが正しく適用されない可能性</li>
+                <li><strong>フォーカス管理:</strong> ポップアップ開閉時のフォーカス管理</li>
+                <li><strong>データ検証:</strong> 必須フィールドの検証</li>
+                <li><strong>エラーハンドリング:</strong> API呼び出し失敗時の処理</li>
+            </ul>
+        </div>
+
+        <div class="test-section">
+            <h2>🔧 実装されたファイル</h2>
+            <ul>
+                <li><code>frontend/app/dashboard/components/HabitGoalPopup.tsx</code> - ポップアップコンポーネント</li>
+                <li><code>frontend/app/dashboard/components/Widget.Mindmap.tsx</code> - Mindmapコンポーネント（更新）</li>
+                <li><code>frontend/app/dashboard/page.tsx</code> - ダッシュボードページ（コールバック更新）</li>
+            </ul>
+        </div>
+
+        <div class="test-section">
+            <h2>📝 テスト結果ログ</h2>
+            <div class="log" id="testLog">
+                テスト開始前...
+            </div>
+            <button class="test-button" onclick="clearLog()">ログクリア</button>
+        </div>
+    </div>
+
+    <script>
+        function log(message, type = 'info') {
+            const logElement = document.getElementById('testLog');
+            const timestamp = new Date().toLocaleTimeString();
+            const logEntry = `[${timestamp}] ${message}\n`;
+            logElement.textContent += logEntry;
+            logElement.scrollTop = logElement.scrollHeight;
+        }
+
+        function clearLog() {
+            document.getElementById('testLog').textContent = 'ログクリア済み...\n';
+        }
+
+        // 初期化
+        log('テストページが読み込まれました');
+        log('ダッシュボードページでMindmap機能をテストしてください');
+    </script>
+</body>
+</html>

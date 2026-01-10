@@ -1,10 +1,12 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import type { Metadata } from "next";
 import ActivityModal from './components/Modal.Activity';
 import api from '../../lib/api';
 import { HabitModal } from "./components/Modal.Habit";
 import { GoalModal } from "./components/Modal.Goal";
+import WidgetMindmap from "./components/Widget.Mindmap";
 import EditLayoutModal from './components/Modal.LayoutEditor';
 import RecurringHabitConfirmModal from './components/Modal.RecurringHabitConfirm';
 import StaticsSection from './components/Section.Statistics';
@@ -65,6 +67,8 @@ export default function DashboardPage() {
 
   // Custom hooks for data and state management
   const { goals, setGoals, habits, setHabits, activities, setActivities, pageSections, setPageSections, isClient, isLoading } = useDataManager();
+  const [mindmaps, setMindmaps] = useState<any[]>([]);
+  const [selectedMindmap, setSelectedMindmap] = useState<any>(null);
   const { 
     recurringRequest, 
     setRecurringRequest, 
@@ -97,6 +101,25 @@ export default function DashboardPage() {
     editingGoalId,
     setEditingGoalId
   } = useModalManager();
+
+  // Mindmap state
+  const [openMindmap, setOpenMindmap] = useState(false);
+
+  // Load mindmaps on component mount
+  useEffect(() => {
+    const loadMindmaps = async () => {
+      try {
+        const mindmapList = await api.getMindmaps();
+        setMindmaps(mindmapList);
+      } catch (error) {
+        console.error('Failed to load mindmaps:', error);
+      }
+    };
+
+    if (isClient && !isLoading) {
+      loadMindmaps();
+    }
+  }, [isClient, isLoading]);
 
   // Activity management hook
   const {
@@ -214,6 +237,25 @@ export default function DashboardPage() {
         onNewHabit={(initial?: any) => {
           setNewHabitInitial(initial || { date: new Date().toISOString().slice(0, 10) });
           setOpenNewHabit(true);
+        }}
+        onNewMindmap={() => {
+          setSelectedMindmap(null);
+          setOpenMindmap(true);
+        }}
+        mindmaps={mindmaps}
+        selectedMindmap={selectedMindmap}
+        onMindmapSelect={(mindmap) => {
+          setSelectedMindmap(mindmap);
+          setOpenMindmap(true);
+        }}
+        onMindmapDelete={async (mindmapId) => {
+          try {
+            await api.deleteMindmap(mindmapId);
+            setMindmaps(prev => prev.filter(m => m.id !== mindmapId));
+            console.log('Mindmap deleted successfully');
+          } catch (error) {
+            console.error('Failed to delete mindmap:', error);
+          }
         }}
         goals={goals}
         habits={habits}
@@ -360,6 +402,79 @@ export default function DashboardPage() {
         onConfirm={handleRecurringConfirmation}
         onCancel={cancelRecurringConfirmation}
       />
+
+      {/* Mindmap Widget */}
+      {openMindmap && (
+        <WidgetMindmap
+          onClose={() => {
+            setOpenMindmap(false);
+            setSelectedMindmap(null);
+          }}
+          goals={goals}
+          mindmap={selectedMindmap}
+          onSave={async (mindmapData) => {
+            try {
+              if (mindmapData.id) {
+                // Update existing mindmap
+                const updatedMindmap = await api.updateMindmap(mindmapData.id, {
+                  name: mindmapData.name,
+                  nodes: mindmapData.nodes,
+                  edges: mindmapData.edges
+                });
+                setMindmaps(prev => prev.map(m => m.id === mindmapData.id ? updatedMindmap : m));
+                console.log('Mindmap updated:', updatedMindmap);
+              } else {
+                // Create new mindmap
+                const newMindmap = await api.createMindmap({
+                  name: mindmapData.name,
+                  nodes: mindmapData.nodes,
+                  edges: mindmapData.edges
+                });
+                setMindmaps(prev => [...prev, newMindmap]);
+                setSelectedMindmap(newMindmap);
+                console.log('Mindmap created:', newMindmap);
+              }
+            } catch (error) {
+              console.error('Failed to save mindmap:', error);
+              throw error;
+            }
+          }}
+          onRegisterAsHabit={async (data: any) => {
+            try {
+              const newHabit = await api.createHabit({
+                name: data.name || data,
+                type: 'simple',
+                must: 1,
+                goalId: selectedGoal || undefined,
+                description: data.description,
+                category: data.category,
+                priority: data.priority,
+                frequency: data.frequency
+              });
+              setHabits(prev => [...prev, newHabit]);
+              console.log('Habit created from mindmap:', newHabit);
+            } catch (error) {
+              console.error('Failed to create habit from mindmap:', error);
+            }
+          }}
+          onRegisterAsGoal={async (data: any) => {
+            try {
+              const newGoal = await api.createGoal({
+                name: data.name || data,
+                parentId: selectedGoal || null,
+                description: data.description,
+                category: data.category,
+                priority: data.priority,
+                targetDate: data.targetDate
+              });
+              setGoals(prev => [...prev, newGoal]);
+              console.log('Goal created from mindmap:', newGoal);
+            } catch (error) {
+              console.error('Failed to create goal from mindmap:', error);
+            }
+          }}
+        />
+      )}
     </div>
   );
 }

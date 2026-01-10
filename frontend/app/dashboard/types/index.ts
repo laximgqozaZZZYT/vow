@@ -147,3 +147,55 @@ export interface CalendarSectionProps {
   onEventChange: (habitId: string, changes: EventChanges) => void;
   onRecurringAttempt: (habitId: string, changes: EventChanges) => void;
 }
+
+// Mindmap interfaces
+export interface Mindmap {
+  id: string;
+  name: string;
+  description?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface MindmapNode {
+  id: string;
+  mindmapId: string;
+  text: string;
+  x: number;
+  y: number;
+  width?: number;
+  height?: number;
+  color?: string;
+  goalId?: string | null;
+  habitId?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface MindmapConnection {
+  id: string;
+  mindmapId: string;
+  fromNodeId: string;
+  toNodeId: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CreateMindmapPayload {
+  name: string;
+  description?: string;
+}
+
+export interface CreateMindmapNodePayload {
+  text: string;
+  x: number;
+  y: number;
+  width?: number;
+  height?: number;
+  color?: string;
+}
+
+export interface CreateMindmapConnectionPayload {
+  fromNodeId: string;
+  toNodeId: string;
+}

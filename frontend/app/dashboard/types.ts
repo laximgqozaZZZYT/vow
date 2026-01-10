@@ -9,6 +9,37 @@ export interface Goal {
   updatedAt?: string;
 }
 
+export interface Mindmap {
+  id: string;
+  name: string;
+  description?: string;
+  nodes: MindmapNode[];
+  edges: MindmapEdge[];
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface MindmapNode {
+  id: string;
+  mindmapId: string;
+  label: string;
+  position: { x: number; y: number };
+  nodeType?: 'default' | 'habit' | 'goal';
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface MindmapEdge {
+  id: string;
+  mindmapId: string;
+  source: string;
+  target: string;
+  sourceHandle?: string;
+  targetHandle?: string;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
 export interface Habit {
   id: string;
   name: string;

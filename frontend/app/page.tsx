@@ -1,5 +1,13 @@
 import Image from "next/image";
 import Link from "next/link";
+import type { Metadata } from "next";
+import { createPageMetadata } from "../lib/seo.metadata";
+
+export const metadata: Metadata = createPageMetadata({
+  title: "Welcome to VOW - Your Personal Habit & Goal Tracker",
+  description: "Start tracking your habits and achieving your goals with VOW. A simple, powerful tool for personal development and productivity. Get started for free.",
+  path: "/",
+});
 
 export default function Home() {
   return (

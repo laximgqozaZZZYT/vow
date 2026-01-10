@@ -1,0 +1,7 @@
+-- Step 4: RLS有効化
+-- テーブルが存在する場合のみ実行
+
+-- RLS有効化
+ALTER TABLE mindmaps ENABLE ROW LEVEL SECURITY;
+ALTER TABLE mindmap_nodes ENABLE ROW LEVEL SECURITY;
+ALTER TABLE mindmap_connections ENABLE ROW LEVEL SECURITY;

@@ -1463,6 +1463,517 @@ export class SupabaseDirectClient {
     console.log('[getOrCreateDefaultGoal] Created new default goal:', newGoal.id);
     return newGoal.id;
   }
+
+  // Mindmap methods
+  async getMindmaps() {
+    this.checkEnvironment();
+    
+    const { data: session } = await supabase.auth.getSession();
+    console.log('[getMindmaps] Session check:', { hasSession: !!session?.session, userId: session?.session?.user?.id });
+    
+    if (!session?.session?.user) {
+      // ゲストユーザーの場合はローカルストレージから取得
+      const guestMindmaps = JSON.parse(localStorage.getItem('guest-mindmaps') || '[]');
+      console.log('[getMindmaps] Guest mode - loaded from localStorage:', guestMindmaps.length, 'mindmaps');
+      return guestMindmaps;
+    }
+    
+    console.log('[getMindmaps] Authenticated mode - querying Supabase for user:', session.session.user.id);
+    
+    const { data, error } = await supabase
+      .from('mindmaps')
+      .select('*')
+      .eq('owner_type', 'user')
+      .eq('owner_id', session.session.user.id)
+      .order('created_at', { ascending: false });
+    
+    if (error) {
+      console.error('[getMindmaps] Supabase query error:', error);
+      throw error;
+    }
+    
+    console.log('[getMindmaps] Successfully loaded', data?.length || 0, 'mindmaps from Supabase');
+    
+    return (data || []).map((m: any) => ({
+      id: m.id,
+      name: m.name,
+      description: m.description,
+      createdAt: m.created_at,
+      updatedAt: m.updated_at
+    }));
+  }
+
+  async createMindmap(payload: any) {
+    this.checkEnvironment();
+    
+    const { data: session } = await supabase.auth.getSession();
+    
+    if (!session?.session?.user) {
+      // ゲストユーザーの場合はローカルストレージに保存
+      const now = new Date().toISOString();
+      const mindmap = {
+        id: 'mindmap-' + Date.now(),
+        name: payload.name || 'Untitled Map',
+        description: payload.description,
+        createdAt: now,
+        updatedAt: now
+      };
+      
+      const existingMindmaps = JSON.parse(localStorage.getItem('guest-mindmaps') || '[]');
+      existingMindmaps.push(mindmap);
+      localStorage.setItem('guest-mindmaps', JSON.stringify(existingMindmaps));
+      
+      return mindmap;
+    }
+    
+    const now = new Date().toISOString();
+    const { data, error } = await supabase
+      .from('mindmaps')
+      .insert({
+        name: payload.name || 'Untitled Map',
+        description: payload.description,
+        owner_type: 'user',
+        owner_id: session.session.user.id,
+        created_at: now,
+        updated_at: now
+      })
+      .select()
+      .single();
+    
+    if (error) throw error;
+    
+    return {
+      id: data.id,
+      name: data.name,
+      description: data.description,
+      createdAt: data.created_at,
+      updatedAt: data.updated_at
+    };
+  }
+
+  async updateMindmap(id: string, payload: any) {
+    this.checkEnvironment();
+    
+    const { data: session } = await supabase.auth.getSession();
+    
+    if (!session?.session?.user) {
+      // ゲストユーザーの場合はローカルストレージを更新
+      const guestMindmaps = JSON.parse(localStorage.getItem('guest-mindmaps') || '[]');
+      const mindmapIndex = guestMindmaps.findIndex((m: any) => m.id === id);
+      
+      if (mindmapIndex === -1) {
+        throw new Error(`Mindmap with id ${id} not found`);
+      }
+      
+      const now = new Date().toISOString();
+      const updatedMindmap = {
+        ...guestMindmaps[mindmapIndex],
+        updatedAt: now
+      };
+      
+      if (payload.name !== undefined) updatedMindmap.name = payload.name;
+      if (payload.description !== undefined) updatedMindmap.description = payload.description;
+      
+      guestMindmaps[mindmapIndex] = updatedMindmap;
+      localStorage.setItem('guest-mindmaps', JSON.stringify(guestMindmaps));
+      
+      return updatedMindmap;
+    }
+    
+    const updateData: any = {
+      updated_at: new Date().toISOString()
+    };
+    
+    if (payload.name !== undefined) updateData.name = payload.name;
+    if (payload.description !== undefined) updateData.description = payload.description;
+    
+    const { data, error } = await supabase
+      .from('mindmaps')
+      .update(updateData)
+      .eq('id', id)
+      .eq('owner_type', 'user')
+      .eq('owner_id', session.session.user.id)
+      .select()
+      .single();
+    
+    if (error) throw error;
+    
+    return {
+      id: data.id,
+      name: data.name,
+      description: data.description,
+      createdAt: data.created_at,
+      updatedAt: data.updated_at
+    };
+  }
+
+  async deleteMindmap(id: string) {
+    this.checkEnvironment();
+    
+    const { data: session } = await supabase.auth.getSession();
+    
+    if (!session?.session?.user) {
+      // ゲストユーザーの場合はローカルストレージから削除
+      const guestMindmaps = JSON.parse(localStorage.getItem('guest-mindmaps') || '[]');
+      const mindmapIndex = guestMindmaps.findIndex((m: any) => m.id === id);
+      
+      if (mindmapIndex === -1) {
+        throw new Error(`Mindmap with id ${id} not found`);
+      }
+      
+      guestMindmaps.splice(mindmapIndex, 1);
+      localStorage.setItem('guest-mindmaps', JSON.stringify(guestMindmaps));
+      
+      // Also remove related nodes and connections
+      const guestNodes = JSON.parse(localStorage.getItem('guest-mindmap-nodes') || '[]');
+      const filteredNodes = guestNodes.filter((n: any) => n.mindmapId !== id);
+      localStorage.setItem('guest-mindmap-nodes', JSON.stringify(filteredNodes));
+      
+      const guestConnections = JSON.parse(localStorage.getItem('guest-mindmap-connections') || '[]');
+      const filteredConnections = guestConnections.filter((c: any) => c.mindmapId !== id);
+      localStorage.setItem('guest-mindmap-connections', JSON.stringify(filteredConnections));
+      
+      return { success: true };
+    }
+    
+    const { error } = await supabase
+      .from('mindmaps')
+      .delete()
+      .eq('id', id)
+      .eq('owner_type', 'user')
+      .eq('owner_id', session.session.user.id);
+    
+    if (error) throw error;
+    return { success: true };
+  }
+
+  async getMindmapNodes(mindmapId: string) {
+    this.checkEnvironment();
+    
+    const { data: session } = await supabase.auth.getSession();
+    
+    if (!session?.session?.user) {
+      // ゲストユーザーの場合はローカルストレージから取得
+      const guestNodes = JSON.parse(localStorage.getItem('guest-mindmap-nodes') || '[]');
+      return guestNodes.filter((n: any) => n.mindmapId === mindmapId);
+    }
+    
+    const { data, error } = await supabase
+      .from('mindmap_nodes')
+      .select('*')
+      .eq('mindmap_id', mindmapId)
+      .eq('owner_type', 'user')
+      .eq('owner_id', session.session.user.id);
+    
+    if (error) throw error;
+    
+    return (data || []).map((n: any) => ({
+      id: n.id,
+      mindmapId: n.mindmap_id,
+      text: n.text,
+      x: n.x,
+      y: n.y,
+      width: n.width,
+      height: n.height,
+      color: n.color,
+      goalId: n.goal_id,
+      habitId: n.habit_id,
+      createdAt: n.created_at,
+      updatedAt: n.updated_at
+    }));
+  }
+
+  async createMindmapNode(mindmapId: string, payload: any) {
+    this.checkEnvironment();
+    
+    const { data: session } = await supabase.auth.getSession();
+    
+    if (!session?.session?.user) {
+      // ゲストユーザーの場合はローカルストレージに保存
+      const now = new Date().toISOString();
+      const node = {
+        id: 'node-' + Date.now(),
+        mindmapId,
+        text: payload.text || 'New Node',
+        x: payload.x || 0,
+        y: payload.y || 0,
+        width: payload.width || 120,
+        height: payload.height || 60,
+        color: payload.color || '#ffffff',
+        goalId: payload.goalId || null,
+        habitId: payload.habitId || null,
+        createdAt: now,
+        updatedAt: now
+      };
+      
+      const existingNodes = JSON.parse(localStorage.getItem('guest-mindmap-nodes') || '[]');
+      existingNodes.push(node);
+      localStorage.setItem('guest-mindmap-nodes', JSON.stringify(existingNodes));
+      
+      return node;
+    }
+    
+    const now = new Date().toISOString();
+    const { data, error } = await supabase
+      .from('mindmap_nodes')
+      .insert({
+        mindmap_id: mindmapId,
+        text: payload.text || 'New Node',
+        x: payload.x || 0,
+        y: payload.y || 0,
+        width: payload.width || 120,
+        height: payload.height || 60,
+        color: payload.color || '#ffffff',
+        goal_id: payload.goalId || null,
+        habit_id: payload.habitId || null,
+        owner_type: 'user',
+        owner_id: session.session.user.id,
+        created_at: now,
+        updated_at: now
+      })
+      .select()
+      .single();
+    
+    if (error) throw error;
+    
+    return {
+      id: data.id,
+      mindmapId: data.mindmap_id,
+      text: data.text,
+      x: data.x,
+      y: data.y,
+      width: data.width,
+      height: data.height,
+      color: data.color,
+      goalId: data.goal_id,
+      habitId: data.habit_id,
+      createdAt: data.created_at,
+      updatedAt: data.updated_at
+    };
+  }
+
+  async updateMindmapNode(id: string, payload: any) {
+    this.checkEnvironment();
+    
+    const { data: session } = await supabase.auth.getSession();
+    
+    if (!session?.session?.user) {
+      // ゲストユーザーの場合はローカルストレージを更新
+      const guestNodes = JSON.parse(localStorage.getItem('guest-mindmap-nodes') || '[]');
+      const nodeIndex = guestNodes.findIndex((n: any) => n.id === id);
+      
+      if (nodeIndex === -1) {
+        throw new Error(`Node with id ${id} not found`);
+      }
+      
+      const now = new Date().toISOString();
+      const updatedNode = {
+        ...guestNodes[nodeIndex],
+        updatedAt: now
+      };
+      
+      if (payload.text !== undefined) updatedNode.text = payload.text;
+      if (payload.x !== undefined) updatedNode.x = payload.x;
+      if (payload.y !== undefined) updatedNode.y = payload.y;
+      if (payload.width !== undefined) updatedNode.width = payload.width;
+      if (payload.height !== undefined) updatedNode.height = payload.height;
+      if (payload.color !== undefined) updatedNode.color = payload.color;
+      if (payload.goalId !== undefined) updatedNode.goalId = payload.goalId;
+      if (payload.habitId !== undefined) updatedNode.habitId = payload.habitId;
+      
+      guestNodes[nodeIndex] = updatedNode;
+      localStorage.setItem('guest-mindmap-nodes', JSON.stringify(guestNodes));
+      
+      return updatedNode;
+    }
+    
+    const updateData: any = {
+      updated_at: new Date().toISOString()
+    };
+    
+    if (payload.text !== undefined) updateData.text = payload.text;
+    if (payload.x !== undefined) updateData.x = payload.x;
+    if (payload.y !== undefined) updateData.y = payload.y;
+    if (payload.width !== undefined) updateData.width = payload.width;
+    if (payload.height !== undefined) updateData.height = payload.height;
+    if (payload.color !== undefined) updateData.color = payload.color;
+    if (payload.goalId !== undefined) updateData.goal_id = payload.goalId;
+    if (payload.habitId !== undefined) updateData.habit_id = payload.habitId;
+    
+    const { data, error } = await supabase
+      .from('mindmap_nodes')
+      .update(updateData)
+      .eq('id', id)
+      .eq('owner_type', 'user')
+      .eq('owner_id', session.session.user.id)
+      .select()
+      .single();
+    
+    if (error) throw error;
+    
+    return {
+      id: data.id,
+      mindmapId: data.mindmap_id,
+      text: data.text,
+      x: data.x,
+      y: data.y,
+      width: data.width,
+      height: data.height,
+      color: data.color,
+      goalId: data.goal_id,
+      habitId: data.habit_id,
+      createdAt: data.created_at,
+      updatedAt: data.updated_at
+    };
+  }
+
+  async deleteMindmapNode(id: string) {
+    this.checkEnvironment();
+    
+    const { data: session } = await supabase.auth.getSession();
+    
+    if (!session?.session?.user) {
+      // ゲストユーザーの場合はローカルストレージから削除
+      const guestNodes = JSON.parse(localStorage.getItem('guest-mindmap-nodes') || '[]');
+      const nodeIndex = guestNodes.findIndex((n: any) => n.id === id);
+      
+      if (nodeIndex === -1) {
+        throw new Error(`Node with id ${id} not found`);
+      }
+      
+      guestNodes.splice(nodeIndex, 1);
+      localStorage.setItem('guest-mindmap-nodes', JSON.stringify(guestNodes));
+      
+      // Also remove related connections
+      const guestConnections = JSON.parse(localStorage.getItem('guest-mindmap-connections') || '[]');
+      const filteredConnections = guestConnections.filter((c: any) => c.fromNodeId !== id && c.toNodeId !== id);
+      localStorage.setItem('guest-mindmap-connections', JSON.stringify(filteredConnections));
+      
+      return { success: true };
+    }
+    
+    const { error } = await supabase
+      .from('mindmap_nodes')
+      .delete()
+      .eq('id', id)
+      .eq('owner_type', 'user')
+      .eq('owner_id', session.session.user.id);
+    
+    if (error) throw error;
+    return { success: true };
+  }
+
+  async getMindmapConnections(mindmapId: string) {
+    this.checkEnvironment();
+    
+    const { data: session } = await supabase.auth.getSession();
+    
+    if (!session?.session?.user) {
+      // ゲストユーザーの場合はローカルストレージから取得
+      const guestConnections = JSON.parse(localStorage.getItem('guest-mindmap-connections') || '[]');
+      return guestConnections.filter((c: any) => c.mindmapId === mindmapId);
+    }
+    
+    const { data, error } = await supabase
+      .from('mindmap_connections')
+      .select('*')
+      .eq('mindmap_id', mindmapId)
+      .eq('owner_type', 'user')
+      .eq('owner_id', session.session.user.id);
+    
+    if (error) throw error;
+    
+    return (data || []).map((c: any) => ({
+      id: c.id,
+      mindmapId: c.mindmap_id,
+      fromNodeId: c.from_node_id,
+      toNodeId: c.to_node_id,
+      createdAt: c.created_at,
+      updatedAt: c.updated_at
+    }));
+  }
+
+  async createMindmapConnection(mindmapId: string, payload: any) {
+    this.checkEnvironment();
+    
+    const { data: session } = await supabase.auth.getSession();
+    
+    if (!session?.session?.user) {
+      // ゲストユーザーの場合はローカルストレージに保存
+      const now = new Date().toISOString();
+      const connection = {
+        id: 'connection-' + Date.now(),
+        mindmapId,
+        fromNodeId: payload.fromNodeId,
+        toNodeId: payload.toNodeId,
+        createdAt: now,
+        updatedAt: now
+      };
+      
+      const existingConnections = JSON.parse(localStorage.getItem('guest-mindmap-connections') || '[]');
+      existingConnections.push(connection);
+      localStorage.setItem('guest-mindmap-connections', JSON.stringify(existingConnections));
+      
+      return connection;
+    }
+    
+    const now = new Date().toISOString();
+    const { data, error } = await supabase
+      .from('mindmap_connections')
+      .insert({
+        mindmap_id: mindmapId,
+        from_node_id: payload.fromNodeId,
+        to_node_id: payload.toNodeId,
+        owner_type: 'user',
+        owner_id: session.session.user.id,
+        created_at: now,
+        updated_at: now
+      })
+      .select()
+      .single();
+    
+    if (error) throw error;
+    
+    return {
+      id: data.id,
+      mindmapId: data.mindmap_id,
+      fromNodeId: data.from_node_id,
+      toNodeId: data.to_node_id,
+      createdAt: data.created_at,
+      updatedAt: data.updated_at
+    };
+  }
+
+  async deleteMindmapConnection(id: string) {
+    this.checkEnvironment();
+    
+    const { data: session } = await supabase.auth.getSession();
+    
+    if (!session?.session?.user) {
+      // ゲストユーザーの場合はローカルストレージから削除
+      const guestConnections = JSON.parse(localStorage.getItem('guest-mindmap-connections') || '[]');
+      const connectionIndex = guestConnections.findIndex((c: any) => c.id === id);
+      
+      if (connectionIndex === -1) {
+        throw new Error(`Connection with id ${id} not found`);
+      }
+      
+      guestConnections.splice(connectionIndex, 1);
+      localStorage.setItem('guest-mindmap-connections', JSON.stringify(guestConnections));
+      
+      return { success: true };
+    }
+    
+    const { error } = await supabase
+      .from('mindmap_connections')
+      .delete()
+      .eq('id', id)
+      .eq('owner_type', 'user')
+      .eq('owner_id', session.session.user.id);
+    
+    if (error) throw error;
+    return { success: true };
+  }
 }
 
 export const supabaseDirectClient = new SupabaseDirectClient();

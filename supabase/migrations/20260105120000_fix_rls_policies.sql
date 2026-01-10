@@ -116,3 +116,57 @@ CREATE POLICY "Enable all operations for authenticated users" ON diary_tags
             OR owner_id IS NULL
         )
     );
+
+-- Mindmaps テーブル
+DROP POLICY IF EXISTS "Users can access own mindmaps" ON mindmaps;
+CREATE POLICY "Enable all operations for authenticated users" ON mindmaps
+    FOR ALL USING (
+        auth.uid() IS NOT NULL AND (
+            owner_type = 'user' AND owner_id = auth.uid()::text
+            OR owner_type IS NULL
+            OR owner_id IS NULL
+        )
+    )
+    WITH CHECK (
+        auth.uid() IS NOT NULL AND (
+            owner_type = 'user' AND owner_id = auth.uid()::text
+            OR owner_type IS NULL
+            OR owner_id IS NULL
+        )
+    );
+
+-- Mindmap Nodes テーブル
+DROP POLICY IF EXISTS "Users can access own mindmap nodes" ON mindmap_nodes;
+CREATE POLICY "Enable all operations for authenticated users" ON mindmap_nodes
+    FOR ALL USING (
+        auth.uid() IS NOT NULL AND (
+            owner_type = 'user' AND owner_id = auth.uid()::text
+            OR owner_type IS NULL
+            OR owner_id IS NULL
+        )
+    )
+    WITH CHECK (
+        auth.uid() IS NOT NULL AND (
+            owner_type = 'user' AND owner_id = auth.uid()::text
+            OR owner_type IS NULL
+            OR owner_id IS NULL
+        )
+    );
+
+-- Mindmap Connections テーブル
+DROP POLICY IF EXISTS "Users can access own mindmap connections" ON mindmap_connections;
+CREATE POLICY "Enable all operations for authenticated users" ON mindmap_connections
+    FOR ALL USING (
+        auth.uid() IS NOT NULL AND (
+            owner_type = 'user' AND owner_id = auth.uid()::text
+            OR owner_type IS NULL
+            OR owner_id IS NULL
+        )
+    )
+    WITH CHECK (
+        auth.uid() IS NOT NULL AND (
+            owner_type = 'user' AND owner_id = auth.uid()::text
+            OR owner_type IS NULL
+            OR owner_id IS NULL
+        )
+    );

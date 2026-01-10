@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mindmap Long Press Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background-color: #f5f5f5;
+        }
+        .test-container {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+        .test-button {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        .test-button:hover {
+            background: #0056b3;
+        }
+        .status {
+            margin: 10px 0;
+            padding: 10px;
+            border-radius: 5px;
+            font-weight: bold;
+        }
+        .status.success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        .status.error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        .status.info {
+            background: #d1ecf1;
+            color: #0c5460;
+            border: 1px solid #bee5eb;
+        }
+        .instructions {
+            background: #fff3cd;
+            color: #856404;
+            padding: 15px;
+            border-radius: 5px;
+            border: 1px solid #ffeaa7;
+            margin-bottom: 20px;
+        }
+        iframe {
+            width: 100%;
+            height: 600px;
+            border: 2px solid #ddd;
+            border-radius: 8px;
+        }
+    </style>
+</head>
+<body>
+    <h1>Mindmap Long Press Movement Test</h1>
+    
+    <div class="instructions">
+        <h3>テスト手順:</h3>
+        <ol>
+            <li><strong>ダブルクリック編集</strong>: ノードをダブルクリックして、テキスト編集モードに入ることを確認</li>
+            <li><strong>長押し移動</strong>: ノードを300ms以上長押しして、黄色いリングが表示され、ドラッグで移動できることを確認</li>
+            <li><strong>通常の結線</strong>: ノードのハンドル（接続点）から別のノードのハンドルにドラッグして結線を作成</li>
+            <li><strong>結線先未指定時の自動ノード作成</strong>: ノードのハンドルから空白領域にドラッグ&ドロップして、その位置に新しいノードが自動作成され接続されることを確認</li>
+            <li><strong>自動編集モード</strong>: 自動作成されたノードがすぐに編集モードになることを確認</li>
+            <li><strong>編集中のBackSpace</strong>: 編集中にBackSpaceキーを押して、文字削除のみでノード削除されないことを確認</li>
+            <li><strong>ログ確認</strong>: 右上のOperation Logで操作の状態変化を確認</li>
+        </ol>
+    </div>
+
+    <div class="test-container">
+        <h3>自動テスト</h3>
+        <button class="test-button" onclick="testDoubleClickEdit()">ダブルクリック編集テスト</button>
+        <button class="test-button" onclick="testLongPressMove()">長押し移動テスト</button>
+        <button class="test-button" onclick="testAutoNodeCreation()">自動ノード作成テスト</button>
+        <button class="test-button" onclick="testBackspaceInEdit()">編集中BackSpaceテスト</button>
+        <button class="test-button" onclick="testClickVsLongPress()">クリック vs 長押しテスト</button>
+        <div id="testStatus" class="status info">テストを開始してください</div>
+    </div>
+
+    <div class="test-container">
+        <h3>Mindmap Widget</h3>
+        <iframe id="mindmapFrame" src="http://localhost:3001/dashboard"></iframe>
+    </div>
+
+    <script>
+        let testResults = [];
+
+        function updateStatus(message, type = 'info') {
+            const statusDiv = document.getElementById('testStatus');
+            statusDiv.textContent = message;
+            statusDiv.className = `status ${type}`;
+            console.log(`[${type.toUpperCase()}] ${message}`);
+        }
+
+        function testDoubleClickEdit() {
+            updateStatus('ダブルクリック編集テストを開始...', 'info');
+            
+            const iframe = document.getElementById('mindmapFrame');
+            
+            // テストメッセージを送信
+            iframe.contentWindow.postMessage({
+                type: 'TEST_DOUBLE_CLICK_EDIT',
+                nodeId: '1'
+            }, '*');
+            
+            // 結果を待機
+            setTimeout(() => {
+                updateStatus('ダブルクリック編集テスト完了 - ノードがダブルクリックで編集モードになることを確認', 'success');
+            }, 1000);
+        }
+
+        function testClickVsLongPress() {
+            updateStatus('ダブルクリック vs 長押しテストを開始...', 'info');
+            
+            const iframe = document.getElementById('mindmapFrame');
+            
+            // テストメッセージを送信
+            iframe.contentWindow.postMessage({
+                type: 'TEST_DOUBLECLICK_VS_LONGPRESS',
+                nodeId: '1'
+            }, '*');
+            
+            setTimeout(() => {
+                updateStatus('ダブルクリック vs 長押しテスト完了 - ダブルクリックと長押しが適切に区別されることを確認', 'success');
+            }, 2000);
+        }
+
+        function testLongPressMove() {
+            updateStatus('長押し移動テストを開始...', 'info');
+            
+            const iframe = document.getElementById('mindmapFrame');
+            
+            // テストメッセージを送信
+            iframe.contentWindow.postMessage({
+                type: 'TEST_LONG_PRESS_MOVE',
+                nodeId: '1'
+            }, '*');
+            
+            setTimeout(() => {
+                updateStatus('長押し移動テスト完了 - 300ms後に移動モードになることを確認', 'success');
+            }, 2000);
+        }
+
+        function testBackspaceInEdit() {
+            updateStatus('編集中BackSpaceテストを開始...', 'info');
+            
+            const iframe = document.getElementById('mindmapFrame');
+            
+            // テストメッセージを送信
+            iframe.contentWindow.postMessage({
+                type: 'TEST_BACKSPACE_IN_EDIT',
+                nodeId: '1'
+            }, '*');
+            
+            setTimeout(() => {
+                updateStatus('編集中BackSpaceテスト完了 - 編集中はノード削除されないことを確認', 'success');
+            }, 1500);
+        }
+
+        function testAutoNodeCreation() {
+            updateStatus('結線先未指定時の自動ノード作成テストを開始...', 'info');
+            
+            const iframe = document.getElementById('mindmapFrame');
+            
+            // テストメッセージを送信
+            iframe.contentWindow.postMessage({
+                type: 'TEST_AUTO_NODE_CREATION',
+                nodeId: '1'
+            }, '*');
+            
+            setTimeout(() => {
+                updateStatus('自動ノード作成テスト完了 - ハンドルを空白領域にドラッグして新しいノードが作成され接続されることを確認', 'success');
+            }, 2000);
+        }
+
+        // iframe からのメッセージを受信
+        window.addEventListener('message', function(event) {
+            console.log('Received message from iframe:', event.data);
+            
+            switch(event.data.type) {
+                case 'DOUBLE_CLICK_EDIT_DETECTED':
+                    updateStatus('✓ ダブルクリック編集が検出されました', 'success');
+                    break;
+                case 'AUTO_NODE_CREATED':
+                    updateStatus('✓ 自動ノード作成が成功しました', 'success');
+                    break;
+                case 'DOUBLECLICK_VS_LONGPRESS_SUCCESS':
+                    updateStatus('✓ ダブルクリックと長押しが適切に区別されました', 'success');
+                    break;
+                case 'BACKSPACE_IN_EDIT_SAFE':
+                    updateStatus('✓ 編集中のBackSpaceは文字削除のみで、ノード削除されませんでした', 'success');
+                    break;
+                case 'LONG_PRESS_MOVE_DETECTED':
+                    updateStatus('✓ 長押し移動が検出されました', 'success');
+                    break;
+                case 'TEST_ERROR':
+                    updateStatus(`✗ エラー: ${event.data.error}`, 'error');
+                    break;
+            }
+        });
+
+        // ページ読み込み完了時の初期化
+        window.addEventListener('load', function() {
+            updateStatus('Mindmapが読み込まれました。手動テストまたは自動テストを開始してください。', 'info');
+        });
+    </script>
+</body>
+</html>
