@@ -544,10 +544,39 @@ const initialNodes: Node<CustomNodeData>[] = [
 ];
 
 function MindmapFlow({ onClose, onRegisterAsHabit, onRegisterAsGoal, goals = [], mindmap, onSave }: MindmapProps) {
-  const [nodes, setNodes, onNodesChange] = useNodesState<CustomNodeData>(
-    mindmap?.nodes || initialNodes
-  );
-  const [edges, setEdges, onEdgesChange] = useEdgesState(mindmap?.edges || []);
+  // データベースから取得したノードをReact Flow形式に変換
+  const convertedNodes = React.useMemo(() => {
+    if (mindmap?.nodes && Array.isArray(mindmap.nodes)) {
+      return mindmap.nodes.map((node: any) => ({
+        id: node.id,
+        position: { x: node.x || node.position?.x || 0, y: node.y || node.position?.y || 0 },
+        data: { 
+          label: node.text || node.label || 'Node', 
+          isEditing: false, 
+          nodeType: node.nodeType || node.node_type || 'default' 
+        },
+        type: 'mindmapNode',
+      }));
+    }
+    return initialNodes;
+  }, [mindmap?.nodes]);
+
+  // データベースから取得したエッジをReact Flow形式に変換
+  const convertedEdges = React.useMemo(() => {
+    if (mindmap?.edges && Array.isArray(mindmap.edges)) {
+      return mindmap.edges.map((edge: any) => ({
+        id: edge.id,
+        source: edge.source || edge.sourceNodeId || edge.source_node_id,
+        target: edge.target || edge.targetNodeId || edge.target_node_id,
+        sourceHandle: edge.sourceHandle || edge.source_handle,
+        targetHandle: edge.targetHandle || edge.target_handle,
+      }));
+    }
+    return [];
+  }, [mindmap?.edges]);
+
+  const [nodes, setNodes, onNodesChange] = useNodesState<CustomNodeData>(convertedNodes);
+  const [edges, setEdges, onEdgesChange] = useEdgesState(convertedEdges);
   const [selectedNodes, setSelectedNodes] = useState<Node<CustomNodeData>[]>([]);
   const [contextMenu, setContextMenu] = useState<ContextMenu | null>(null);
   const [mobileBottomMenu, setMobileBottomMenu] = useState<MobileBottomMenu>({
@@ -562,7 +591,7 @@ function MindmapFlow({ onClose, onRegisterAsHabit, onRegisterAsGoal, goals = [],
   });
   const [showSaveDialog, setShowSaveDialog] = useState(false);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
-  const [operationLogs, setOperationLogs] = useState<string[]>([]);
+
   const [isLongPressMode, setIsLongPressMode] = useState(false);
   const [connectionStartInfo, setConnectionStartInfo] = useState<{nodeId: string, handleId?: string} | null>(null);
   const [modalState, setModalState] = useState<ModalState>({
@@ -577,13 +606,35 @@ function MindmapFlow({ onClose, onRegisterAsHabit, onRegisterAsGoal, goals = [],
   const { project, getViewport, zoomIn, zoomOut, fitView } = useReactFlow();
   const isMobile = isMobileDevice();
 
-  // ログを追加する関数
+  // ログを追加する関数（削除予定）
   const addLog = useCallback((message: string) => {
-    const timestamp = new Date().toLocaleTimeString();
-    const logMessage = `[${timestamp}] ${message}`;
-    setOperationLogs(prev => [...prev.slice(-9), logMessage]); // 最新10件を保持
-    console.log(logMessage);
+    // ログ機能を無効化
+    console.log(`[Mindmap] ${message}`);
   }, []);
+
+  // ノードやエッジの変更を検出して未保存フラグを設定
+  React.useEffect(() => {
+    const handleNodeChanged = () => {
+      setHasUnsavedChanges(true);
+      addLog('Mindmap has unsaved changes');
+    };
+    
+    window.addEventListener('nodeChanged', handleNodeChanged);
+    
+    return () => {
+      window.removeEventListener('nodeChanged', handleNodeChanged);
+    };
+  }, [addLog]);
+
+  // ノードやエッジの数が変わった時も未保存フラグを設定
+  React.useEffect(() => {
+    const initialNodeCount = convertedNodes.length;
+    const initialEdgeCount = convertedEdges.length;
+    
+    if (nodes.length !== initialNodeCount || edges.length !== initialEdgeCount) {
+      setHasUnsavedChanges(true);
+    }
+  }, [nodes.length, edges.length, convertedNodes.length, convertedEdges.length]);
 
   // 長押しモードの状態を監視
   React.useEffect(() => {
@@ -1235,29 +1286,7 @@ function MindmapFlow({ onClose, onRegisterAsHabit, onRegisterAsGoal, goals = [],
         </div>
       </div>
 
-      {/* Operation Log Panel - Right Top */}
-      <div className="fixed top-20 right-4 w-80 max-h-60 bg-black/90 text-green-400 text-xs font-mono p-3 rounded-lg shadow-lg z-40 overflow-y-auto">
-        <div className="text-white mb-2 font-bold flex items-center justify-between">
-          <span>Operation Log</span>
-          {isLongPressMode && (
-            <span className="text-yellow-400 text-xs bg-yellow-900/30 px-2 py-1 rounded">
-              LONG PRESS MODE
-            </span>
-          )}
-        </div>
-        <div className="text-blue-300 text-xs mb-2">
-          💡 Tip: ノードのハンドルをドラッグして空白領域にドロップすると、その位置に新しいノードが自動作成され接続されます
-        </div>
-        {operationLogs.length === 0 ? (
-          <div className="text-gray-500">No operations yet...</div>
-        ) : (
-          operationLogs.map((log, index) => (
-            <div key={index} className="mb-1 break-words">
-              {log}
-            </div>
-          ))
-        )}
-      </div>
+
 
       {/* React Flow Container */}
       <div 

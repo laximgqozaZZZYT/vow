@@ -1494,13 +1494,23 @@ export class SupabaseDirectClient {
     
     console.log('[getMindmaps] Successfully loaded', data?.length || 0, 'mindmaps from Supabase');
     
-    return (data || []).map((m: any) => ({
-      id: m.id,
-      name: m.name,
-      description: m.description,
-      createdAt: m.created_at,
-      updatedAt: m.updated_at
+    // 各MindMapのノードとエッジも取得
+    const mindmapsWithData = await Promise.all((data || []).map(async (m: any) => {
+      const nodes = await this.getMindmapNodes(m.id);
+      const connections = await this.getMindmapConnections(m.id);
+      
+      return {
+        id: m.id,
+        name: m.name,
+        description: m.description,
+        nodes: nodes,
+        edges: connections,
+        createdAt: m.created_at,
+        updatedAt: m.updated_at
+      };
     }));
+    
+    return mindmapsWithData;
   }
 
   async createMindmap(payload: any) {
@@ -1515,6 +1525,8 @@ export class SupabaseDirectClient {
         id: 'mindmap-' + Date.now(),
         name: payload.name || 'Untitled Map',
         description: payload.description,
+        nodes: payload.nodes || [],
+        edges: payload.edges || [],
         createdAt: now,
         updatedAt: now
       };
@@ -1522,6 +1534,40 @@ export class SupabaseDirectClient {
       const existingMindmaps = JSON.parse(localStorage.getItem('guest-mindmaps') || '[]');
       existingMindmaps.push(mindmap);
       localStorage.setItem('guest-mindmaps', JSON.stringify(existingMindmaps));
+      
+      // ノードとエッジもローカルストレージに保存
+      if (payload.nodes && payload.nodes.length > 0) {
+        const guestNodes = payload.nodes.map((node: any) => ({
+          id: node.id,
+          mindmapId: mindmap.id,
+          text: node.label,
+          x: node.position.x,
+          y: node.position.y,
+          width: 150,
+          height: 50,
+          color: '#ffffff',
+          nodeType: node.nodeType || 'default',
+          createdAt: now,
+          updatedAt: now
+        }));
+        const existingNodes = JSON.parse(localStorage.getItem('guest-mindmap-nodes') || '[]');
+        localStorage.setItem('guest-mindmap-nodes', JSON.stringify([...existingNodes, ...guestNodes]));
+      }
+      
+      if (payload.edges && payload.edges.length > 0) {
+        const guestConnections = payload.edges.map((edge: any) => ({
+          id: edge.id,
+          mindmapId: mindmap.id,
+          sourceNodeId: edge.source,
+          targetNodeId: edge.target,
+          sourceHandle: edge.sourceHandle,
+          targetHandle: edge.targetHandle,
+          createdAt: now,
+          updatedAt: now
+        }));
+        const existingConnections = JSON.parse(localStorage.getItem('guest-mindmap-connections') || '[]');
+        localStorage.setItem('guest-mindmap-connections', JSON.stringify([...existingConnections, ...guestConnections]));
+      }
       
       return mindmap;
     }
@@ -1541,6 +1587,11 @@ export class SupabaseDirectClient {
       .single();
     
     if (error) throw error;
+    
+    // ノードとエッジを保存
+    if (payload.nodes || payload.edges) {
+      await this.saveMindmapNodesAndEdges(data.id, payload.nodes || [], payload.edges || [], session.session.user.id);
+    }
     
     return {
       id: data.id,
@@ -1573,9 +1624,43 @@ export class SupabaseDirectClient {
       
       if (payload.name !== undefined) updatedMindmap.name = payload.name;
       if (payload.description !== undefined) updatedMindmap.description = payload.description;
+      if (payload.nodes !== undefined) updatedMindmap.nodes = payload.nodes;
+      if (payload.edges !== undefined) updatedMindmap.edges = payload.edges;
       
       guestMindmaps[mindmapIndex] = updatedMindmap;
       localStorage.setItem('guest-mindmaps', JSON.stringify(guestMindmaps));
+      
+      // ノードとエッジもローカルストレージに保存
+      if (payload.nodes) {
+        const guestNodes = payload.nodes.map((node: any) => ({
+          id: node.id,
+          mindmapId: id,
+          text: node.label,
+          x: node.position.x,
+          y: node.position.y,
+          width: 150,
+          height: 50,
+          color: '#ffffff',
+          nodeType: node.nodeType || 'default',
+          createdAt: now,
+          updatedAt: now
+        }));
+        localStorage.setItem('guest-mindmap-nodes', JSON.stringify(guestNodes));
+      }
+      
+      if (payload.edges) {
+        const guestConnections = payload.edges.map((edge: any) => ({
+          id: edge.id,
+          mindmapId: id,
+          sourceNodeId: edge.source,
+          targetNodeId: edge.target,
+          sourceHandle: edge.sourceHandle,
+          targetHandle: edge.targetHandle,
+          createdAt: now,
+          updatedAt: now
+        }));
+        localStorage.setItem('guest-mindmap-connections', JSON.stringify(guestConnections));
+      }
       
       return updatedMindmap;
     }
@@ -1587,6 +1672,7 @@ export class SupabaseDirectClient {
     if (payload.name !== undefined) updateData.name = payload.name;
     if (payload.description !== undefined) updateData.description = payload.description;
     
+    // Mindmapメタデータを更新
     const { data, error } = await supabase
       .from('mindmaps')
       .update(updateData)
@@ -1598,6 +1684,11 @@ export class SupabaseDirectClient {
     
     if (error) throw error;
     
+    // ノードとエッジを保存
+    if (payload.nodes || payload.edges) {
+      await this.saveMindmapNodesAndEdges(id, payload.nodes || [], payload.edges || [], session.session.user.id);
+    }
+    
     return {
       id: data.id,
       name: data.name,
@@ -1605,6 +1696,79 @@ export class SupabaseDirectClient {
       createdAt: data.created_at,
       updatedAt: data.updated_at
     };
+  }
+
+  // ノードとエッジを保存するヘルパーメソッド
+  private async saveMindmapNodesAndEdges(mindmapId: string, nodes: any[], edges: any[], userId: string) {
+    const now = new Date().toISOString();
+    
+    // 既存のノードとエッジを削除
+    await supabase
+      .from('mindmap_nodes')
+      .delete()
+      .eq('mindmap_id', mindmapId)
+      .eq('owner_type', 'user')
+      .eq('owner_id', userId);
+      
+    await supabase
+      .from('mindmap_connections')
+      .delete()
+      .eq('mindmap_id', mindmapId)
+      .eq('owner_type', 'user')
+      .eq('owner_id', userId);
+    
+    // 新しいノードを挿入
+    if (nodes.length > 0) {
+      const nodeData = nodes.map(node => ({
+        id: node.id,
+        mindmap_id: mindmapId,
+        text: node.label || '',
+        x: node.position?.x || 0,
+        y: node.position?.y || 0,
+        width: 150,
+        height: 50,
+        color: '#ffffff',
+        node_type: node.nodeType || 'default',
+        owner_type: 'user',
+        owner_id: userId,
+        created_at: now,
+        updated_at: now
+      }));
+      
+      const { error: nodesError } = await supabase
+        .from('mindmap_nodes')
+        .insert(nodeData);
+        
+      if (nodesError) {
+        console.error('Failed to save nodes:', nodesError);
+        throw nodesError;
+      }
+    }
+    
+    // 新しいエッジを挿入
+    if (edges.length > 0) {
+      const edgeData = edges.map(edge => ({
+        id: edge.id,
+        mindmap_id: mindmapId,
+        source_node_id: edge.source,
+        target_node_id: edge.target,
+        source_handle: edge.sourceHandle,
+        target_handle: edge.targetHandle,
+        owner_type: 'user',
+        owner_id: userId,
+        created_at: now,
+        updated_at: now
+      }));
+      
+      const { error: edgesError } = await supabase
+        .from('mindmap_connections')
+        .insert(edgeData);
+        
+      if (edgesError) {
+        console.error('Failed to save edges:', edgesError);
+        throw edgesError;
+      }
+    }
   }
 
   async deleteMindmap(id: string) {
