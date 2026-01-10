@@ -21,6 +21,14 @@ import 'reactflow/dist/style.css'
 import { GoalModal } from './Modal.Goal'
 import { HabitModal } from './Modal.Habit'
 
+// デバイス判定ユーティリティ
+const isMobileDevice = () => {
+  if (typeof window === 'undefined') return false;
+  return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) ||
+         (window.innerWidth <= 768) ||
+         ('ontouchstart' in window);
+};
+
 // テスト用のハンドラーを組み込み
 if (typeof window !== 'undefined') {
   // テストハンドラーの初期化
@@ -113,6 +121,18 @@ interface ContextMenu {
   bottom?: number;
 }
 
+interface MobileBottomMenu {
+  nodeId: string;
+  nodeName: string;
+  isVisible: boolean;
+}
+
+interface ConnectionMode {
+  isActive: boolean;
+  sourceNodeId: string | null;
+  sourceHandleId: string | null;
+}
+
 interface ModalState {
   habitModal: boolean;
   goalModal: boolean;
@@ -129,7 +149,7 @@ interface CustomNodeData {
 
 // Custom Mindmap Node Component
 // This is a fully custom node that replaces React Flow's default nodes
-// Features: Double-click editing, Long-press dragging, Custom styling
+// Features: Double-click editing, Long-press dragging, Custom styling, Mobile touch support
 function MindmapNode({ id, data, selected }: NodeProps<CustomNodeData>) {
   const [isEditing, setIsEditing] = useState(false);
   const [text, setText] = useState(data.label);
@@ -140,6 +160,7 @@ function MindmapNode({ id, data, selected }: NodeProps<CustomNodeData>) {
   const longPressStartRef = useRef<{ x: number; y: number } | null>(null);
   const nodeRef = useRef<HTMLDivElement>(null);
   const { setNodes } = useReactFlow();
+  const isMobile = isMobileDevice();
 
   // 編集状態の変化をログ出力
   React.useEffect(() => {
@@ -268,12 +289,12 @@ function MindmapNode({ id, data, selected }: NodeProps<CustomNodeData>) {
     }
   }, [isEditing]);
 
-  // ダブルクリックで編集開始
+  // ダブルクリック/ダブルタップで編集開始
   const handleDoubleClick = useCallback((e: React.MouseEvent) => {
     if (isLongPressing || isDragging) return;
     
     e.stopPropagation();
-    console.log(`Double click on node ${id} - starting edit mode`);
+    console.log(`Double ${isMobile ? 'tap' : 'click'} on node ${id} - starting edit mode`);
     
     // 長押しタイマーをクリア（ダブルクリック優先）
     if (longPressTimerRef.current) {
@@ -300,7 +321,39 @@ function MindmapNode({ id, data, selected }: NodeProps<CustomNodeData>) {
         inputRef.current.select();
       }
     }, 50);
-  }, [isLongPressing, isDragging, id, data.label, setNodes]);
+  }, [isLongPressing, isDragging, id, data.label, setNodes, isMobile]);
+
+  // モバイル用のタップハンドラー
+  const handleMobileTap = useCallback((e: React.MouseEvent) => {
+    if (!isMobile || isEditing) return;
+    
+    e.stopPropagation();
+    
+    // モバイル用のボトムメニューを表示するイベントを発火
+    const event = new CustomEvent('showMobileBottomMenu', {
+      detail: {
+        nodeId: id,
+        nodeName: data.label
+      }
+    });
+    window.dispatchEvent(event);
+  }, [isMobile, isEditing, id, data.label]);
+
+  // ハンドルクリック/タップ処理（結線用）
+  const handleHandleClick = useCallback((e: React.MouseEvent, position: string) => {
+    if (!isMobile) return; // PC では従来のドラッグ操作を使用
+    
+    e.stopPropagation();
+    
+    // モバイル用の結線モードを開始するイベントを発火
+    const event = new CustomEvent('startMobileConnection', {
+      detail: {
+        sourceNodeId: id,
+        sourceHandleId: position
+      }
+    });
+    window.dispatchEvent(event);
+  }, [isMobile, id]);
 
   // マウスリーブ処理
   const handleMouseLeave = useCallback(() => {
@@ -338,14 +391,48 @@ function MindmapNode({ id, data, selected }: NodeProps<CustomNodeData>) {
     }
   }, [data.nodeType, selected]);
 
-  // クリーンアップ
-  React.useEffect(() => {
-    return () => {
-      if (longPressTimerRef.current) {
-        clearTimeout(longPressTimerRef.current);
-      }
-    };
-  }, []);
+  // タッチイベント用のハンドラー
+  const handleTouchStart = useCallback((e: React.TouchEvent) => {
+    if (!isMobile || isEditing) return;
+    
+    const touch = e.touches[0];
+    const mouseEvent = {
+      clientX: touch.clientX,
+      clientY: touch.clientY,
+      stopPropagation: () => e.stopPropagation(),
+      preventDefault: () => e.preventDefault()
+    } as React.MouseEvent;
+    
+    handleMouseDown(mouseEvent);
+  }, [isMobile, isEditing, handleMouseDown]);
+
+  const handleTouchEnd = useCallback((e: React.TouchEvent) => {
+    if (!isMobile) return;
+    
+    const touch = e.changedTouches[0];
+    const mouseEvent = {
+      clientX: touch.clientX,
+      clientY: touch.clientY,
+      stopPropagation: () => e.stopPropagation(),
+      preventDefault: () => e.preventDefault()
+    } as React.MouseEvent;
+    
+    handleMouseUp(mouseEvent);
+  }, [isMobile, handleMouseUp]);
+
+  const handleTouchMove = useCallback((e: React.TouchEvent) => {
+    if (!isMobile) return;
+    
+    const touch = e.touches[0];
+    const mouseEvent = {
+      clientX: touch.clientX,
+      clientY: touch.clientY,
+      stopPropagation: () => e.stopPropagation(),
+      preventDefault: () => e.preventDefault()
+    } as React.MouseEvent;
+    
+    handleMouseMove(mouseEvent);
+  }, [isMobile, handleMouseMove]);
 
   return (
     <div 
@@ -365,36 +452,44 @@ function MindmapNode({ id, data, selected }: NodeProps<CustomNodeData>) {
       onMouseMove={handleMouseMove}
       onMouseLeave={handleMouseLeave}
       onDoubleClick={handleDoubleClick}
+      onClick={isMobile ? handleMobileTap : undefined}
+      onTouchStart={isMobile ? handleTouchStart : undefined}
+      onTouchEnd={isMobile ? handleTouchEnd : undefined}
+      onTouchMove={isMobile ? handleTouchMove : undefined}
 
       style={{
         userSelect: isLongPressing ? 'none' : 'auto',
         pointerEvents: 'all'
       }}
     >
-      {/* Connection Handles */}
+      {/* Connection Handles - モバイルでは大きめに */}
       <Handle 
         type="target" 
         position={Position.Top} 
-        className="w-3 h-3 bg-blue-500 border-2 border-white" 
-        style={{ top: -6 }}
+        className={`${isMobile ? 'w-6 h-6' : 'w-3 h-3'} bg-blue-500 border-2 border-white`} 
+        style={{ top: isMobile ? -12 : -6 }}
+        onClick={isMobile ? (e) => handleHandleClick(e, 'top') : undefined}
       />
       <Handle 
         type="source" 
         position={Position.Bottom} 
-        className="w-3 h-3 bg-blue-500 border-2 border-white" 
-        style={{ bottom: -6 }}
+        className={`${isMobile ? 'w-6 h-6' : 'w-3 h-3'} bg-blue-500 border-2 border-white`} 
+        style={{ bottom: isMobile ? -12 : -6 }}
+        onClick={isMobile ? (e) => handleHandleClick(e, 'bottom') : undefined}
       />
       <Handle 
         type="target" 
         position={Position.Left} 
-        className="w-3 h-3 bg-blue-500 border-2 border-white" 
-        style={{ left: -6 }}
+        className={`${isMobile ? 'w-6 h-6' : 'w-3 h-3'} bg-blue-500 border-2 border-white`} 
+        style={{ left: isMobile ? -12 : -6 }}
+        onClick={isMobile ? (e) => handleHandleClick(e, 'left') : undefined}
       />
       <Handle 
         type="source" 
         position={Position.Right} 
-        className="w-3 h-3 bg-blue-500 border-2 border-white" 
-        style={{ right: -6 }}
+        className={`${isMobile ? 'w-6 h-6' : 'w-3 h-3'} bg-blue-500 border-2 border-white`} 
+        style={{ right: isMobile ? -12 : -6 }}
+        onClick={isMobile ? (e) => handleHandleClick(e, 'right') : undefined}
       />
       
       {/* Node Content */}
@@ -455,6 +550,16 @@ function MindmapFlow({ onClose, onRegisterAsHabit, onRegisterAsGoal, goals = [],
   const [edges, setEdges, onEdgesChange] = useEdgesState(mindmap?.edges || []);
   const [selectedNodes, setSelectedNodes] = useState<Node<CustomNodeData>[]>([]);
   const [contextMenu, setContextMenu] = useState<ContextMenu | null>(null);
+  const [mobileBottomMenu, setMobileBottomMenu] = useState<MobileBottomMenu>({
+    nodeId: '',
+    nodeName: '',
+    isVisible: false
+  });
+  const [connectionMode, setConnectionMode] = useState<ConnectionMode>({
+    isActive: false,
+    sourceNodeId: null,
+    sourceHandleId: null
+  });
   const [showSaveDialog, setShowSaveDialog] = useState(false);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [operationLogs, setOperationLogs] = useState<string[]>([]);
@@ -470,21 +575,7 @@ function MindmapFlow({ onClose, onRegisterAsHabit, onRegisterAsGoal, goals = [],
   const [showNameEditor, setShowNameEditor] = useState(false);
   const reactFlowWrapper = useRef<HTMLDivElement>(null);
   const { project, getViewport, zoomIn, zoomOut, fitView } = useReactFlow();
-
-  // モーダルが開いた時に名前フィールドを自動設定するためのエフェクト
-  React.useEffect(() => {
-    if (modalState.habitModal || modalState.goalModal) {
-      // モーダルが開いた後、少し遅延してから名前フィールドを設定
-      setTimeout(() => {
-        const nameInput = document.querySelector('input[placeholder="Add title"], input[placeholder="Goal name"]') as HTMLInputElement;
-        if (nameInput && modalState.selectedNodeName) {
-          nameInput.value = modalState.selectedNodeName;
-          nameInput.focus();
-          nameInput.select();
-        }
-      }, 100);
-    }
-  }, [modalState.habitModal, modalState.goalModal, modalState.selectedNodeName]);
+  const isMobile = isMobileDevice();
 
   // ログを追加する関数
   const addLog = useCallback((message: string) => {
@@ -493,8 +584,6 @@ function MindmapFlow({ onClose, onRegisterAsHabit, onRegisterAsGoal, goals = [],
     setOperationLogs(prev => [...prev.slice(-9), logMessage]); // 最新10件を保持
     console.log(logMessage);
   }, []);
-
-  const nodeTypes = customNodeTypes;
 
   // 長押しモードの状態を監視
   React.useEffect(() => {
@@ -517,6 +606,181 @@ function MindmapFlow({ onClose, onRegisterAsHabit, onRegisterAsGoal, goals = [],
       window.removeEventListener('longPressEnd', handleLongPressEnd);
     };
   }, [addLog]);
+
+  // モバイル用のイベントリスナー
+  React.useEffect(() => {
+    if (!isMobile) return;
+
+    // モバイル用ボトムメニュー表示
+    const handleShowMobileBottomMenu = (event: CustomEvent) => {
+      const { nodeId, nodeName } = event.detail;
+      setMobileBottomMenu({
+        nodeId,
+        nodeName,
+        isVisible: true
+      });
+      addLog(`Mobile bottom menu opened for node: ${nodeName}`);
+    };
+
+    // モバイル用結線モード開始
+    const handleStartMobileConnection = (event: CustomEvent) => {
+      const { sourceNodeId, sourceHandleId } = event.detail;
+      setConnectionMode({
+        isActive: true,
+        sourceNodeId,
+        sourceHandleId
+      });
+      setMobileBottomMenu({ nodeId: '', nodeName: '', isVisible: false });
+      addLog(`Mobile connection mode started from node: ${sourceNodeId}, handle: ${sourceHandleId}`);
+    };
+
+    window.addEventListener('showMobileBottomMenu', handleShowMobileBottomMenu as EventListener);
+    window.addEventListener('startMobileConnection', handleStartMobileConnection as EventListener);
+
+    return () => {
+      window.removeEventListener('showMobileBottomMenu', handleShowMobileBottomMenu as EventListener);
+      window.removeEventListener('startMobileConnection', handleStartMobileConnection as EventListener);
+    };
+  }, [isMobile, addLog]);
+
+  // モーダルが開いた時に名前フィールドを自動設定するためのエフェクト
+  React.useEffect(() => {
+    if (modalState.habitModal || modalState.goalModal) {
+      // モーダルが開いた後、少し遅延してから名前フィールドを設定
+      setTimeout(() => {
+        const nameInput = document.querySelector('input[placeholder="Add title"], input[placeholder="Goal name"]') as HTMLInputElement;
+        if (nameInput && modalState.selectedNodeName) {
+          nameInput.value = modalState.selectedNodeName;
+          nameInput.focus();
+          nameInput.select();
+        }
+      }, 100);
+    }
+  }, [modalState.habitModal, modalState.goalModal, modalState.selectedNodeName]);
+
+  const nodeTypes = customNodeTypes;
+
+  // モバイル用結線処理
+  const handleMobileNodeTap = useCallback((nodeId: string) => {
+    if (!connectionMode.isActive) return;
+
+    // 同じノードをタップした場合は結線モードをキャンセル
+    if (connectionMode.sourceNodeId === nodeId) {
+      setConnectionMode({
+        isActive: false,
+        sourceNodeId: null,
+        sourceHandleId: null
+      });
+      addLog('Mobile connection mode cancelled');
+      return;
+    }
+
+    // 結線を作成
+    const newEdge = {
+      id: `edge-${connectionMode.sourceNodeId}-${nodeId}`,
+      source: connectionMode.sourceNodeId!,
+      target: nodeId,
+      sourceHandle: connectionMode.sourceHandleId,
+      targetHandle: null,
+    };
+
+    setEdges((eds) => eds.concat(newEdge));
+    setHasUnsavedChanges(true);
+    addLog(`Mobile connection created: ${connectionMode.sourceNodeId} -> ${nodeId}`);
+
+    // 結線モードを終了
+    setConnectionMode({
+      isActive: false,
+      sourceNodeId: null,
+      sourceHandleId: null
+    });
+  }, [connectionMode, setEdges, addLog]);
+
+  // モバイル用ボトムメニューのハンドラー
+  const handleMobileMenuAction = useCallback((action: string) => {
+    const nodeId = mobileBottomMenu.nodeId;
+    const node = nodes.find(n => n.id === nodeId);
+    
+    if (!node) return;
+
+    switch (action) {
+      case 'edit':
+        addLog(`Mobile edit selected for node: ${nodeId}`);
+        setNodes((nds) =>
+          nds.map((n) =>
+            n.id === nodeId
+              ? { ...n, data: { ...n.data, isEditing: true } }
+              : { ...n, data: { ...n.data, isEditing: false } }
+          )
+        );
+        break;
+      case 'habit':
+        addLog(`Mobile habit registration for node: "${node.data.label}"`);
+        setModalState({
+          habitModal: true,
+          goalModal: false,
+          selectedNodeName: node.data.label,
+          selectedNodeId: nodeId
+        });
+        break;
+      case 'goal':
+        addLog(`Mobile goal registration for node: "${node.data.label}"`);
+        setModalState({
+          habitModal: false,
+          goalModal: true,
+          selectedNodeName: node.data.label,
+          selectedNodeId: nodeId
+        });
+        break;
+      case 'delete':
+        setNodes((nds) => nds.filter((n) => n.id !== nodeId));
+        setEdges((eds) => eds.filter((edge) => 
+          edge.source !== nodeId && edge.target !== nodeId
+        ));
+        setHasUnsavedChanges(true);
+        addLog(`Mobile delete node: ${nodeId}`);
+        break;
+    }
+
+    // メニューを閉じる
+    setMobileBottomMenu({ nodeId: '', nodeName: '', isVisible: false });
+  }, [mobileBottomMenu.nodeId, nodes, setNodes, setEdges, addLog]);
+
+  // モバイル用のイベントリスナー
+  React.useEffect(() => {
+    if (!isMobile) return;
+
+    // モバイル用ボトムメニュー表示
+    const handleShowMobileBottomMenu = (event: CustomEvent) => {
+      const { nodeId, nodeName } = event.detail;
+      setMobileBottomMenu({
+        nodeId,
+        nodeName,
+        isVisible: true
+      });
+      addLog(`Mobile bottom menu opened for node: ${nodeName}`);
+    };
+
+    // モバイル用結線モード開始
+    const handleStartMobileConnection = (event: CustomEvent) => {
+      const { sourceNodeId, sourceHandleId } = event.detail;
+      setConnectionMode({
+        isActive: true,
+        sourceNodeId,
+        sourceHandleId
+      });
+      setMobileBottomMenu({ nodeId: '', nodeName: '', isVisible: false });
+      addLog(`Mobile connection mode started from node: ${sourceNodeId}, handle: ${sourceHandleId}`);
+    };
+
+    window.addEventListener('showMobileBottomMenu', handleShowMobileBottomMenu as EventListener);
+    window.addEventListener('startMobileConnection', handleStartMobileConnection as EventListener);
+
+    return () => {
+      window.removeEventListener('showMobileBottomMenu', handleShowMobileBottomMenu as EventListener);
+      window.removeEventListener('startMobileConnection', handleStartMobileConnection as EventListener);
+    };
+  }, [isMobile, addLog]);
 
   // Listen for node label updates (simplified)
   React.useEffect(() => {
@@ -636,6 +900,9 @@ function MindmapFlow({ onClose, onRegisterAsHabit, onRegisterAsGoal, goals = [],
 
   const onNodeContextMenu = useCallback(
     (event: React.MouseEvent, node: Node<CustomNodeData>) => {
+      // モバイルでは右クリックメニューを無効化（ボトムメニューを使用）
+      if (isMobile) return;
+      
       console.log('onNodeContextMenu called for node:', node.id);
       event.preventDefault();
       event.stopPropagation();
@@ -665,7 +932,7 @@ function MindmapFlow({ onClose, onRegisterAsHabit, onRegisterAsGoal, goals = [],
         left: event.clientX < pane.width - 200 ? event.clientX : undefined,
       });
     },
-    [addLog, nodes, selectedNodes]
+    [addLog, nodes, selectedNodes, isMobile]
   );
 
   const addNodeAtCenter = useCallback(() => {
@@ -1008,6 +1275,7 @@ function MindmapFlow({ onClose, onRegisterAsHabit, onRegisterAsGoal, goals = [],
           onConnectEnd={onConnectEnd as any}
           onNodeContextMenu={onNodeContextMenu}
           onSelectionChange={onSelectionChange}
+          onNodeClick={isMobile && connectionMode.isActive ? (event, node) => handleMobileNodeTap(node.id) : undefined}
           nodeTypes={nodeTypes}
           nodesDraggable={true}
           nodesConnectable={true}
@@ -1017,7 +1285,20 @@ function MindmapFlow({ onClose, onRegisterAsHabit, onRegisterAsGoal, goals = [],
           fitView
           attributionPosition="bottom-left"
           className="bg-gray-50 dark:bg-gray-800"
-          onPaneClick={() => setContextMenu(null)}
+          onPaneClick={() => {
+            setContextMenu(null);
+            if (isMobile) {
+              setMobileBottomMenu({ nodeId: '', nodeName: '', isVisible: false });
+              if (connectionMode.isActive) {
+                setConnectionMode({
+                  isActive: false,
+                  sourceNodeId: null,
+                  sourceHandleId: null
+                });
+                addLog('Mobile connection mode cancelled by pane click');
+              }
+            }
+          }}
         >
           <Background variant={BackgroundVariant.Dots} gap={20} size={1} />
           <Controls />
@@ -1113,8 +1394,8 @@ function MindmapFlow({ onClose, onRegisterAsHabit, onRegisterAsGoal, goals = [],
         </div>
       )}
 
-      {/* Context Menu */}
-      {contextMenu && (
+      {/* Context Menu - PC only */}
+      {!isMobile && contextMenu && (
         <div
           className="fixed bg-gray-800 border border-gray-600 rounded-lg shadow-lg py-2 z-50"
           style={{
@@ -1157,6 +1438,78 @@ function MindmapFlow({ onClose, onRegisterAsHabit, onRegisterAsGoal, goals = [],
               : 'Delete Node'
             }
           </button>
+        </div>
+      )}
+
+      {/* Mobile Bottom Menu */}
+      {isMobile && mobileBottomMenu.isVisible && (
+        <div className="fixed bottom-0 left-0 right-0 bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700 z-50 safe-area-pb">
+          <div className="p-4">
+            <div className="text-center text-sm text-gray-600 dark:text-gray-400 mb-4">
+              {mobileBottomMenu.nodeName}
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <button
+                onClick={() => handleMobileMenuAction('edit')}
+                className="flex flex-col items-center justify-center p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800 text-blue-600 dark:text-blue-400"
+              >
+                <span className="text-2xl mb-1">✏️</span>
+                <span className="text-sm">Edit Text</span>
+              </button>
+              <button
+                onClick={() => handleMobileMenuAction('delete')}
+                className="flex flex-col items-center justify-center p-4 bg-red-50 dark:bg-red-900/20 rounded-lg border border-red-200 dark:border-red-800 text-red-600 dark:text-red-400"
+              >
+                <span className="text-2xl mb-1">🗑️</span>
+                <span className="text-sm">Delete</span>
+              </button>
+              <button
+                onClick={() => handleMobileMenuAction('habit')}
+                className="flex flex-col items-center justify-center p-4 bg-green-50 dark:bg-green-900/20 rounded-lg border border-green-200 dark:border-green-800 text-green-600 dark:text-green-400"
+              >
+                <span className="text-2xl mb-1">🔄</span>
+                <span className="text-sm">As Habit</span>
+              </button>
+              <button
+                onClick={() => handleMobileMenuAction('goal')}
+                className="flex flex-col items-center justify-center p-4 bg-purple-50 dark:bg-purple-900/20 rounded-lg border border-purple-200 dark:border-purple-800 text-purple-600 dark:text-purple-400"
+              >
+                <span className="text-2xl mb-1">🎯</span>
+                <span className="text-sm">As Goal</span>
+              </button>
+            </div>
+            <button
+              onClick={() => setMobileBottomMenu({ nodeId: '', nodeName: '', isVisible: false })}
+              className="w-full mt-4 p-3 bg-gray-100 dark:bg-gray-700 rounded-lg text-gray-600 dark:text-gray-400"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Mobile Connection Mode Overlay */}
+      {isMobile && connectionMode.isActive && (
+        <div className="fixed top-20 left-4 right-4 bg-blue-600 text-white p-4 rounded-lg shadow-lg z-40">
+          <div className="text-center">
+            <div className="text-lg font-semibold mb-2">Connection Mode</div>
+            <div className="text-sm mb-3">
+              Tap another node to create connection
+            </div>
+            <button
+              onClick={() => {
+                setConnectionMode({
+                  isActive: false,
+                  sourceNodeId: null,
+                  sourceHandleId: null
+                });
+                addLog('Mobile connection mode cancelled');
+              }}
+              className="px-4 py-2 bg-white text-blue-600 rounded-lg font-medium"
+            >
+              Cancel
+            </button>
+          </div>
         </div>
       )}
 

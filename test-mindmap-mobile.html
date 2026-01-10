@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mindmap Mobile Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .test-container {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+        .instructions {
+            background: #e3f2fd;
+            color: #1565c0;
+            padding: 15px;
+            border-radius: 5px;
+            border: 1px solid #bbdefb;
+            margin-bottom: 20px;
+        }
+        .test-section {
+            margin-bottom: 20px;
+            padding: 15px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+        }
+        .test-result {
+            margin-top: 10px;
+            padding: 10px;
+            border-radius: 4px;
+            font-weight: bold;
+        }
+        .success { background-color: #d4edda; color: #155724; }
+        .error { background-color: #f8d7da; color: #721c24; }
+        .info { background-color: #d1ecf1; color: #0c5460; }
+        .warning { background-color: #fff3cd; color: #856404; }
+        button {
+            background-color: #2196f3;
+            color: white;
+            border: none;
+            padding: 12px 20px;
+            border-radius: 6px;
+            cursor: pointer;
+            margin: 5px;
+            font-size: 16px;
+            min-height: 44px;
+        }
+        button:hover {
+            background-color: #1976d2;
+        }
+        .mobile-note {
+            background: #fff3cd;
+            color: #856404;
+            padding: 10px;
+            border-radius: 5px;
+            border: 1px solid #ffeaa7;
+            margin-bottom: 15px;
+            font-size: 14px;
+        }
+        iframe {
+            width: 100%;
+            height: 70vh;
+            border: 2px solid #ddd;
+            border-radius: 8px;
+        }
+        @media (max-width: 768px) {
+            body {
+                padding: 10px;
+            }
+            iframe {
+                height: 60vh;
+            }
+        }
+    </style>
+</head>
+<body>
+    <h1>📱 Mindmap Mobile Test</h1>
+    
+    <div class="mobile-note">
+        <strong>📱 モバイルテスト用ページ</strong><br>
+        このページはスマートフォンでの操作テスト用です。PCでも動作確認できますが、モバイル機能を確認するには実際のスマートフォンまたはブラウザの開発者ツールでモバイル表示にしてください。
+    </div>
+
+    <div class="instructions">
+        <h3>🎯 モバイル操作テスト手順:</h3>
+        <ol>
+            <li><strong>ノードタップ</strong>: ノードをタップして、ページ下部にボトムメニューが表示されることを確認</li>
+            <li><strong>ボトムメニュー操作</strong>: 
+                <ul>
+                    <li>✏️ Edit Text - テキスト編集</li>
+                    <li>🗑️ Delete - ノード削除</li>
+                    <li>🔄 As Habit - 習慣登録</li>
+                    <li>🎯 As Goal - 目標登録</li>
+                </ul>
+            </li>
+            <li><strong>結線操作</strong>: 
+                <ul>
+                    <li>ノードの青いハンドル（接続点）をタップ</li>
+                    <li>結線モードが開始され、上部に青いバナーが表示</li>
+                    <li>別のノードをタップして結線作成</li>
+                    <li>または「Cancel」で結線モード終了</li>
+                </ul>
+            </li>
+            <li><strong>ダブルタップ編集</strong>: ノードをダブルタップして直接編集モードに入る</li>
+            <li><strong>長押し移動</strong>: ノードを長押ししてドラッグで移動（黄色いリング表示）</li>
+            <li><strong>ハンドルサイズ</strong>: モバイルでは接続点が大きく表示されることを確認</li>
+        </ol>
+    </div>
+
+    <div class="test-container">
+        <h3>🔧 機能テスト</h3>
+        <div class="test-section">
+            <h4>デバイス判定</h4>
+            <div id="deviceInfo" class="test-result info">判定中...</div>
+            <button onclick="checkDeviceInfo()">デバイス情報確認</button>
+        </div>
+        
+        <div class="test-section">
+            <h4>タッチイベント対応</h4>
+            <div id="touchSupport" class="test-result info">確認中...</div>
+            <button onclick="checkTouchSupport()">タッチサポート確認</button>
+        </div>
+
+        <div class="test-section">
+            <h4>画面サイズ</h4>
+            <div id="screenInfo" class="test-result info">確認中...</div>
+            <button onclick="checkScreenInfo()">画面情報確認</button>
+        </div>
+    </div>
+
+    <div class="test-container">
+        <h3>📋 期待される動作</h3>
+        <div class="test-result success">
+            ✅ <strong>PC表示時</strong>: 右クリックメニューが表示される（従来通り）
+        </div>
+        <div class="test-result success">
+            ✅ <strong>モバイル表示時</strong>: ノードタップでページ下部にボトムメニューが表示される
+        </div>
+        <div class="test-result success">
+            ✅ <strong>結線操作</strong>: ハンドルタップで結線モード開始、ノードタップで結線作成
+        </div>
+        <div class="test-result success">
+            ✅ <strong>ハンドルサイズ</strong>: モバイルでは24px×24px、PCでは12px×12px
+        </div>
+        <div class="test-result success">
+            ✅ <strong>タッチフィードバック</strong>: 長押し時の黄色いリング表示
+        </div>
+    </div>
+
+    <div class="test-container">
+        <h3>🖥️ Mindmap Widget</h3>
+        <iframe id="mindmapFrame" src="http://localhost:3001/dashboard"></iframe>
+    </div>
+
+    <script>
+        function checkDeviceInfo() {
+            const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) ||
+                             (window.innerWidth <= 768) ||
+                             ('ontouchstart' in window);
+            
+            const info = {
+                userAgent: navigator.userAgent,
+                isMobile: isMobile,
+                hasTouch: 'ontouchstart' in window,
+                screenWidth: window.innerWidth,
+                screenHeight: window.innerHeight
+            };
+            
+            document.getElementById('deviceInfo').innerHTML = `
+                <strong>モバイル判定:</strong> ${isMobile ? '✅ モバイル' : '❌ デスクトップ'}<br>
+                <strong>User Agent:</strong> ${info.userAgent}<br>
+                <strong>画面幅:</strong> ${info.screenWidth}px
+            `;
+            document.getElementById('deviceInfo').className = `test-result ${isMobile ? 'success' : 'warning'}`;
+        }
+
+        function checkTouchSupport() {
+            const hasTouch = 'ontouchstart' in window;
+            const hasTouchEvents = 'TouchEvent' in window;
+            const maxTouchPoints = navigator.maxTouchPoints || 0;
+            
+            document.getElementById('touchSupport').innerHTML = `
+                <strong>タッチサポート:</strong> ${hasTouch ? '✅ 対応' : '❌ 非対応'}<br>
+                <strong>TouchEvent:</strong> ${hasTouchEvents ? '✅ 利用可能' : '❌ 利用不可'}<br>
+                <strong>最大タッチポイント:</strong> ${maxTouchPoints}
+            `;
+            document.getElementById('touchSupport').className = `test-result ${hasTouch ? 'success' : 'error'}`;
+        }
+
+        function checkScreenInfo() {
+            const info = {
+                width: window.innerWidth,
+                height: window.innerHeight,
+                devicePixelRatio: window.devicePixelRatio || 1,
+                orientation: screen.orientation ? screen.orientation.type : 'unknown'
+            };
+            
+            document.getElementById('screenInfo').innerHTML = `
+                <strong>画面サイズ:</strong> ${info.width} × ${info.height}px<br>
+                <strong>デバイス比率:</strong> ${info.devicePixelRatio}<br>
+                <strong>向き:</strong> ${info.orientation}
+            `;
+            document.getElementById('screenInfo').className = 'test-result info';
+        }
+
+        // 初期チェック
+        window.addEventListener('load', () => {
+            checkDeviceInfo();
+            checkTouchSupport();
+            checkScreenInfo();
+        });
+
+        // 画面サイズ変更時の再チェック
+        window.addEventListener('resize', () => {
+            setTimeout(() => {
+                checkDeviceInfo();
+                checkScreenInfo();
+            }, 100);
+        });
+
+        // iframe内のメッセージを監視
+        window.addEventListener('message', (event) => {
+            console.log('Received message from iframe:', event.data);
+            
+            if (event.data.type === 'MOBILE_MENU_OPENED') {
+                console.log('✅ Mobile bottom menu opened successfully');
+            } else if (event.data.type === 'CONNECTION_MODE_STARTED') {
+                console.log('✅ Mobile connection mode started successfully');
+            }
+        });
+    </script>
+</body>
+</html>
