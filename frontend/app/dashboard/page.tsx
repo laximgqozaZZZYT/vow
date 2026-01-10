@@ -440,7 +440,11 @@ export default function DashboardPage() {
                 console.log('[Dashboard] Mindmap created successfully:', newMindmap);
               }
             } catch (error) {
-              console.error('[Dashboard] Failed to save mindmap:', error);
+              console.error('[Dashboard] Failed to save mindmap:', {
+                message: error instanceof Error ? error.message : 'Unknown error',
+                stack: error instanceof Error ? error.stack : undefined,
+                error: error
+              });
               throw error;
             }
           }}

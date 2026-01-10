@@ -1750,8 +1750,8 @@ export class SupabaseDirectClient {
           id: node.id,
           mindmap_id: mindmapId,
           text: node.label || '',
-          x: node.position?.x || 0,
-          y: node.position?.y || 0,
+          x: node.x || node.position?.x || 0,
+          y: node.y || node.position?.y || 0,
           width: 150,
           height: 50,
           color: '#ffffff',
@@ -1768,7 +1768,12 @@ export class SupabaseDirectClient {
           .insert(nodeData);
           
         if (nodesError) {
-          console.error('[saveMindmapNodesAndEdges] Failed to save nodes:', nodesError);
+          console.error('[saveMindmapNodesAndEdges] Failed to save nodes:', {
+            message: nodesError.message,
+            details: nodesError.details,
+            hint: nodesError.hint,
+            code: nodesError.code
+          });
           throw nodesError;
         }
         
@@ -1783,8 +1788,8 @@ export class SupabaseDirectClient {
         const edgeData = edges.map(edge => ({
           id: edge.id,
           mindmap_id: mindmapId,
-          from_node_id: edge.source,  // source_node_id -> from_node_id
-          to_node_id: edge.target,    // target_node_id -> to_node_id
+          from_node_id: edge.source,
+          to_node_id: edge.target,
           owner_type: 'user',
           owner_id: userId,
           created_at: now,
@@ -1798,7 +1803,12 @@ export class SupabaseDirectClient {
           .insert(edgeData);
           
         if (edgesError) {
-          console.error('[saveMindmapNodesAndEdges] Failed to save edges:', edgesError);
+          console.error('[saveMindmapNodesAndEdges] Failed to save edges:', {
+            message: edgesError.message,
+            details: edgesError.details,
+            hint: edgesError.hint,
+            code: edgesError.code
+          });
           throw edgesError;
         }
         
@@ -1807,7 +1817,11 @@ export class SupabaseDirectClient {
       
       console.log('[saveMindmapNodesAndEdges] Save process completed successfully');
     } catch (error) {
-      console.error('[saveMindmapNodesAndEdges] Save process failed:', error);
+      console.error('[saveMindmapNodesAndEdges] Save process failed:', {
+        message: error instanceof Error ? error.message : 'Unknown error',
+        stack: error instanceof Error ? error.stack : undefined,
+        error: error
+      });
       throw error;
     }
   }
@@ -1874,13 +1888,14 @@ export class SupabaseDirectClient {
     
     return (data || []).map((n: any) => ({
       id: n.id,
-      mindmapId: n.mindmap_id,
-      text: n.text,
+      label: n.text,  // text -> label に変更
       x: n.x,
       y: n.y,
+      position: { x: n.x, y: n.y },  // position オブジェクトも追加
       width: n.width,
       height: n.height,
       color: n.color,
+      nodeType: 'default',  // デフォルトのnodeTypeを追加
       goalId: n.goal_id,
       habitId: n.habit_id,
       createdAt: n.created_at,
@@ -2090,9 +2105,10 @@ export class SupabaseDirectClient {
     
     return (data || []).map((c: any) => ({
       id: c.id,
-      mindmapId: c.mindmap_id,
-      fromNodeId: c.from_node_id,
-      toNodeId: c.to_node_id,
+      source: c.from_node_id,  // fromNodeId -> source に変更
+      target: c.to_node_id,    // toNodeId -> target に変更
+      sourceHandle: null,      // React Flow用のハンドル情報
+      targetHandle: null,      // React Flow用のハンドル情報
       createdAt: c.created_at,
       updatedAt: c.updated_at
     }));

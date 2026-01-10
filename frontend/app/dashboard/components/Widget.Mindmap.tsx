@@ -439,7 +439,7 @@ function MindmapNode({ id, data, selected }: NodeProps<CustomNodeData>) {
       ref={nodeRef}
       data-id={id}
       data-testid={`mindmap-node-${id}`}
-      className={`mindmap-custom-node px-4 py-2 shadow-md rounded-md border-2 min-w-[120px] transition-all duration-200 ${
+      className={`mindmap-custom-node px-3 py-2 sm:px-4 sm:py-2 shadow-md rounded-md border-2 min-w-[100px] sm:min-w-[120px] transition-all duration-200 ${
         (() => {
           const styles = getNodeTypeStyles();
           return `${styles.bgColor} ${styles.borderColor} ${styles.hoverColor}`;
@@ -462,33 +462,45 @@ function MindmapNode({ id, data, selected }: NodeProps<CustomNodeData>) {
         pointerEvents: 'all'
       }}
     >
-      {/* Connection Handles - モバイルでは大きめに */}
+      {/* Connection Handles - モバイルでは大きめに、タップしやすく */}
       <Handle 
         type="target" 
         position={Position.Top} 
-        className={`${isMobile ? 'w-6 h-6' : 'w-3 h-3'} bg-blue-500 border-2 border-white`} 
-        style={{ top: isMobile ? -12 : -6 }}
+        className={`${isMobile ? 'w-8 h-8' : 'w-3 h-3'} bg-blue-500 border-2 border-white rounded-full`} 
+        style={{ 
+          top: isMobile ? -16 : -6,
+          zIndex: 10
+        }}
         onClick={isMobile ? (e) => handleHandleClick(e, 'top') : undefined}
       />
       <Handle 
         type="source" 
         position={Position.Bottom} 
-        className={`${isMobile ? 'w-6 h-6' : 'w-3 h-3'} bg-blue-500 border-2 border-white`} 
-        style={{ bottom: isMobile ? -12 : -6 }}
+        className={`${isMobile ? 'w-8 h-8' : 'w-3 h-3'} bg-blue-500 border-2 border-white rounded-full`} 
+        style={{ 
+          bottom: isMobile ? -16 : -6,
+          zIndex: 10
+        }}
         onClick={isMobile ? (e) => handleHandleClick(e, 'bottom') : undefined}
       />
       <Handle 
         type="target" 
         position={Position.Left} 
-        className={`${isMobile ? 'w-6 h-6' : 'w-3 h-3'} bg-blue-500 border-2 border-white`} 
-        style={{ left: isMobile ? -12 : -6 }}
+        className={`${isMobile ? 'w-8 h-8' : 'w-3 h-3'} bg-blue-500 border-2 border-white rounded-full`} 
+        style={{ 
+          left: isMobile ? -16 : -6,
+          zIndex: 10
+        }}
         onClick={isMobile ? (e) => handleHandleClick(e, 'left') : undefined}
       />
       <Handle 
         type="source" 
         position={Position.Right} 
-        className={`${isMobile ? 'w-6 h-6' : 'w-3 h-3'} bg-blue-500 border-2 border-white`} 
-        style={{ right: isMobile ? -12 : -6 }}
+        className={`${isMobile ? 'w-8 h-8' : 'w-3 h-3'} bg-blue-500 border-2 border-white rounded-full`} 
+        style={{ 
+          right: isMobile ? -16 : -6,
+          zIndex: 10
+        }}
         onClick={isMobile ? (e) => handleHandleClick(e, 'right') : undefined}
       />
       
@@ -506,19 +518,24 @@ function MindmapNode({ id, data, selected }: NodeProps<CustomNodeData>) {
             onMouseDown={(e) => e.stopPropagation()}
             onMouseUp={(e) => e.stopPropagation()}
             onFocus={handleInputFocus}
-            className="w-full bg-white text-gray-900 border-none outline-none text-center text-sm mindmap-text-input"
+            className="w-full bg-white text-gray-900 border-none outline-none text-center text-sm sm:text-sm mindmap-text-input"
             style={{ 
               minWidth: '80px',
               color: '#000000',
-              fontSize: '14px',
+              fontSize: isMobile ? '16px' : '14px', // モバイルでは16px以上でズーム防止
               lineHeight: '1.2'
             }}
             autoFocus
           />
         ) : (
           <div 
-            className="text-center text-sm text-gray-900 select-none mindmap-node-text"
+            className="text-center text-sm sm:text-sm text-gray-900 select-none mindmap-node-text"
             onMouseDown={(e) => e.stopPropagation()}
+            style={{
+              fontSize: isMobile ? '16px' : '14px', // モバイルでは16px以上でズーム防止
+              lineHeight: '1.2',
+              wordBreak: 'break-word' // 長いテキストの折り返し
+            }}
           >
             {data.label}
           </div>
@@ -779,6 +796,14 @@ function MindmapFlow({ onClose, onRegisterAsHabit, onRegisterAsGoal, goals = [],
           )
         );
         break;
+      case 'connect':
+        addLog(`Mobile connect mode started for node: ${nodeId}`);
+        setConnectionMode({
+          isActive: true,
+          sourceNodeId: nodeId,
+          sourceHandleId: null
+        });
+        break;
       case 'habit':
         addLog(`Mobile habit registration for node: "${node.data.label}"`);
         setModalState({
@@ -914,10 +939,27 @@ function MindmapFlow({ onClose, onRegisterAsHabit, onRegisterAsGoal, goals = [],
         const clientX = 'clientX' in event ? event.clientX : event.touches[0].clientX;
         const clientY = 'clientY' in event ? event.clientY : event.touches[0].clientY;
         
-        const position = project({
+        let position = project({
           x: clientX - reactFlowBounds.left,
           y: clientY - reactFlowBounds.top,
         });
+
+        // モバイルでは位置を調整してより確実に画面内に配置
+        if (isMobile) {
+          const viewport = getViewport();
+          const screenWidth = window.innerWidth;
+          const screenHeight = window.innerHeight;
+          
+          // 画面端からの最小距離
+          const margin = 100;
+          const minX = (-viewport.x + margin) / viewport.zoom;
+          const maxX = (-viewport.x + screenWidth - margin) / viewport.zoom;
+          const minY = (-viewport.y + margin) / viewport.zoom;
+          const maxY = (-viewport.y + screenHeight - margin) / viewport.zoom;
+          
+          position.x = Math.max(minX, Math.min(maxX, position.x));
+          position.y = Math.max(minY, Math.min(maxY, position.y));
+        }
 
         // 新しいノードを作成
         const newNodeId = `node-${Date.now()}`;
@@ -960,7 +1002,7 @@ function MindmapFlow({ onClose, onRegisterAsHabit, onRegisterAsGoal, goals = [],
       // 接続開始情報をクリア
       setConnectionStartInfo(null);
     },
-    [project, setNodes, setEdges, addLog, connectionStartInfo]
+    [project, setNodes, setEdges, addLog, connectionStartInfo, getViewport, isMobile]
   );
 
   const onNodeContextMenu = useCallback(
@@ -1004,10 +1046,35 @@ function MindmapFlow({ onClose, onRegisterAsHabit, onRegisterAsGoal, goals = [],
     addLog('+ button clicked - creating new node');
     
     const viewport = getViewport();
-    const position = {
-      x: -viewport.x + window.innerWidth / 2 / viewport.zoom - 60,
-      y: -viewport.y + window.innerHeight / 2 / viewport.zoom - 30,
-    };
+    
+    // モバイルとデスクトップで異なる位置計算
+    let position;
+    if (isMobile) {
+      // モバイルでは画面中央により確実に配置
+      const screenWidth = window.innerWidth;
+      const screenHeight = window.innerHeight;
+      const headerHeight = 60; // ヘッダーの高さを考慮
+      
+      position = {
+        x: (-viewport.x + screenWidth / 2) / viewport.zoom - 60,
+        y: (-viewport.y + (screenHeight - headerHeight) / 2) / viewport.zoom - 30,
+      };
+    } else {
+      // デスクトップでは従来の方法
+      position = {
+        x: -viewport.x + window.innerWidth / 2 / viewport.zoom - 60,
+        y: -viewport.y + window.innerHeight / 2 / viewport.zoom - 30,
+      };
+    }
+
+    // 位置が極端に外れていないかチェック
+    const minX = (-viewport.x - 200) / viewport.zoom;
+    const maxX = (-viewport.x + window.innerWidth + 200) / viewport.zoom;
+    const minY = (-viewport.y - 200) / viewport.zoom;
+    const maxY = (-viewport.y + window.innerHeight + 200) / viewport.zoom;
+    
+    position.x = Math.max(minX, Math.min(maxX, position.x));
+    position.y = Math.max(minY, Math.min(maxY, position.y));
 
     const newNode: Node<CustomNodeData> = {
       id: `node-${Date.now()}`,
@@ -1016,10 +1083,10 @@ function MindmapFlow({ onClose, onRegisterAsHabit, onRegisterAsGoal, goals = [],
       type: 'mindmapNode',
     };
 
-    addLog(`New node created with ID: ${newNode.id}`);
+    addLog(`New node created with ID: ${newNode.id} at position (${Math.round(position.x)}, ${Math.round(position.y)})`);
     setNodes((nds) => nds.concat(newNode));
     setHasUnsavedChanges(true);
-  }, [getViewport, setNodes, addLog]);
+  }, [getViewport, setNodes, addLog, isMobile]);
 
   const handleSave = useCallback(async () => {
     try {
@@ -1029,7 +1096,8 @@ function MindmapFlow({ onClose, onRegisterAsHabit, onRegisterAsGoal, goals = [],
         nodes: nodes.map(node => ({
           id: node.id,
           label: node.data.label,
-          position: node.position,
+          x: node.position.x,
+          y: node.position.y,
           nodeType: node.data.nodeType || 'default'
         })),
         edges: edges.map(edge => ({
@@ -1053,7 +1121,12 @@ function MindmapFlow({ onClose, onRegisterAsHabit, onRegisterAsGoal, goals = [],
       }
     } catch (error) {
       console.error('Failed to save mindmap:', error);
-      addLog(`Failed to save mindmap: ${error}`);
+      console.error('Error details:', {
+        message: error instanceof Error ? error.message : 'Unknown error',
+        stack: error instanceof Error ? error.stack : undefined,
+        error: error
+      });
+      addLog(`Failed to save mindmap: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }, [mindmap, mindmapName, nodes, edges, onSave, addLog]);
 
@@ -1254,9 +1327,9 @@ function MindmapFlow({ onClose, onRegisterAsHabit, onRegisterAsGoal, goals = [],
 
   return (
     <div className="fixed inset-0 z-50 bg-white dark:bg-gray-900">
-      {/* Header */}
-      <div className="flex items-center justify-between p-4 border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 z-10">
-        <div className="flex items-center gap-3">
+      {/* Header - モバイル対応 */}
+      <div className="flex items-center justify-between p-2 sm:p-4 border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 z-10">
+        <div className="flex items-center gap-2 sm:gap-3 flex-1 min-w-0">
           {showNameEditor ? (
             <input
               type="text"
@@ -1273,12 +1346,12 @@ function MindmapFlow({ onClose, onRegisterAsHabit, onRegisterAsGoal, goals = [],
                   setShowNameEditor(false);
                 }
               }}
-              className="text-xl font-semibold bg-transparent border-b-2 border-blue-500 focus:outline-none text-gray-900 dark:text-white"
+              className="text-lg sm:text-xl font-semibold bg-transparent border-b-2 border-blue-500 focus:outline-none text-gray-900 dark:text-white flex-1 min-w-0"
               autoFocus
             />
           ) : (
             <h1 
-              className="text-xl font-semibold text-gray-900 dark:text-white cursor-pointer hover:text-blue-600 dark:hover:text-blue-400"
+              className="text-lg sm:text-xl font-semibold text-gray-900 dark:text-white cursor-pointer hover:text-blue-600 dark:hover:text-blue-400 truncate flex-1 min-w-0"
               onClick={() => setShowNameEditor(true)}
               title="Click to edit name"
             >
@@ -1286,18 +1359,18 @@ function MindmapFlow({ onClose, onRegisterAsHabit, onRegisterAsGoal, goals = [],
             </h1>
           )}
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1 sm:gap-2 flex-shrink-0">
           <button
             onClick={handleSave}
-            className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700"
+            className="px-2 py-1 sm:px-4 sm:py-2 bg-green-600 text-white rounded hover:bg-green-700 text-sm sm:text-base"
           >
-            Save
+            {isMobile ? '保存' : 'Save'}
           </button>
           <button
             onClick={handleClose}
-            className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+            className="px-2 py-1 sm:px-4 sm:py-2 bg-blue-600 text-white rounded hover:bg-blue-700 text-sm sm:text-base"
           >
-            Close
+            {isMobile ? '閉じる' : 'Close'}
           </button>
         </div>
       </div>
@@ -1326,10 +1399,12 @@ function MindmapFlow({ onClose, onRegisterAsHabit, onRegisterAsGoal, goals = [],
           nodesConnectable={true}
           elementsSelectable={true}
           selectNodesOnDrag={true}
-          panOnDrag={[1, 2]}
+          panOnDrag={isMobile ? [1] : [1, 2]} // モバイルでは左クリックのみでパン
           fitView
           attributionPosition="bottom-left"
           className="bg-gray-50 dark:bg-gray-800"
+          minZoom={isMobile ? 0.3 : 0.5} // モバイルでより小さくズームアウト可能
+          maxZoom={isMobile ? 2 : 4} // モバイルでズームイン制限
           onPaneClick={() => {
             setContextMenu(null);
             if (isMobile) {
@@ -1348,27 +1423,27 @@ function MindmapFlow({ onClose, onRegisterAsHabit, onRegisterAsGoal, goals = [],
           <Background variant={BackgroundVariant.Dots} gap={20} size={1} />
           <Controls />
           
-          {/* Custom Panels */}
-          <Panel position="bottom-left" className="flex flex-col gap-2 m-4">
+          {/* Custom Panels - モバイル対応 */}
+          <Panel position="bottom-left" className="flex flex-col gap-2 m-2 sm:m-4">
             {/* Zoom Controls */}
             <div className="flex flex-col gap-1">
               <button
                 onClick={() => zoomIn()}
-                className="w-10 h-10 bg-gray-600 hover:bg-gray-700 text-white rounded shadow-lg flex items-center justify-center text-lg transition-colors"
+                className={`${isMobile ? 'w-12 h-12' : 'w-10 h-10'} bg-gray-600 hover:bg-gray-700 text-white rounded shadow-lg flex items-center justify-center text-lg transition-colors`}
                 title="Zoom In"
               >
                 ＋
               </button>
               <button
                 onClick={() => fitView()}
-                className="w-10 h-10 bg-gray-600 hover:bg-gray-700 text-white rounded shadow-lg flex items-center justify-center text-xs transition-colors"
+                className={`${isMobile ? 'w-12 h-12' : 'w-10 h-10'} bg-gray-600 hover:bg-gray-700 text-white rounded shadow-lg flex items-center justify-center ${isMobile ? 'text-sm' : 'text-xs'} transition-colors`}
                 title="Fit View"
               >
                 ⌂
               </button>
               <button
                 onClick={() => zoomOut()}
-                className="w-10 h-10 bg-gray-600 hover:bg-gray-700 text-white rounded shadow-lg flex items-center justify-center text-lg transition-colors"
+                className={`${isMobile ? 'w-12 h-12' : 'w-10 h-10'} bg-gray-600 hover:bg-gray-700 text-white rounded shadow-lg flex items-center justify-center text-lg transition-colors`}
                 title="Zoom Out"
               >
                 －
@@ -1379,14 +1454,14 @@ function MindmapFlow({ onClose, onRegisterAsHabit, onRegisterAsGoal, goals = [],
             <div className="flex flex-col gap-2 mt-2">
               <button
                 onClick={addNodeAtCenter}
-                className="w-12 h-12 bg-blue-600 hover:bg-blue-700 text-white rounded-full shadow-lg flex items-center justify-center text-xl font-bold transition-colors"
+                className={`${isMobile ? 'w-14 h-14' : 'w-12 h-12'} bg-blue-600 hover:bg-blue-700 text-white rounded-full shadow-lg flex items-center justify-center text-xl font-bold transition-colors`}
                 title="Add Node"
               >
                 ＋
               </button>
               <button
                 onClick={clearAllConnections}
-                className="w-12 h-12 bg-red-600 hover:bg-red-700 text-white rounded-full shadow-lg flex items-center justify-center text-lg transition-colors"
+                className={`${isMobile ? 'w-14 h-14' : 'w-12 h-12'} bg-red-600 hover:bg-red-700 text-white rounded-full shadow-lg flex items-center justify-center text-lg transition-colors`}
                 title="Clear All Connections"
               >
                 ✂
@@ -1394,7 +1469,7 @@ function MindmapFlow({ onClose, onRegisterAsHabit, onRegisterAsGoal, goals = [],
               {selectedNodes.length > 0 && (
                 <button
                   onClick={deleteSelectedNodes}
-                  className="w-12 h-12 bg-orange-600 hover:bg-orange-700 text-white rounded-full shadow-lg flex items-center justify-center text-lg transition-colors"
+                  className={`${isMobile ? 'w-14 h-14' : 'w-12 h-12'} bg-orange-600 hover:bg-orange-700 text-white rounded-full shadow-lg flex items-center justify-center text-lg transition-colors`}
                   title={`Delete Selected (${selectedNodes.length})`}
                 >
                   🗑️
@@ -1486,14 +1561,14 @@ function MindmapFlow({ onClose, onRegisterAsHabit, onRegisterAsGoal, goals = [],
         </div>
       )}
 
-      {/* Mobile Bottom Menu */}
+      {/* Mobile Bottom Menu - 結線オプションを追加 */}
       {isMobile && mobileBottomMenu.isVisible && (
         <div className="fixed bottom-0 left-0 right-0 bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700 z-50 safe-area-pb">
           <div className="p-4">
             <div className="text-center text-sm text-gray-600 dark:text-gray-400 mb-4">
               {mobileBottomMenu.nodeName}
             </div>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-2 gap-3 mb-3">
               <button
                 onClick={() => handleMobileMenuAction('edit')}
                 className="flex flex-col items-center justify-center p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800 text-blue-600 dark:text-blue-400"
@@ -1502,11 +1577,11 @@ function MindmapFlow({ onClose, onRegisterAsHabit, onRegisterAsGoal, goals = [],
                 <span className="text-sm">Edit Text</span>
               </button>
               <button
-                onClick={() => handleMobileMenuAction('delete')}
-                className="flex flex-col items-center justify-center p-4 bg-red-50 dark:bg-red-900/20 rounded-lg border border-red-200 dark:border-red-800 text-red-600 dark:text-red-400"
+                onClick={() => handleMobileMenuAction('connect')}
+                className="flex flex-col items-center justify-center p-4 bg-orange-50 dark:bg-orange-900/20 rounded-lg border border-orange-200 dark:border-orange-800 text-orange-600 dark:text-orange-400"
               >
-                <span className="text-2xl mb-1">🗑️</span>
-                <span className="text-sm">Delete</span>
+                <span className="text-2xl mb-1">🔗</span>
+                <span className="text-sm">Connect</span>
               </button>
               <button
                 onClick={() => handleMobileMenuAction('habit')}
@@ -1524,8 +1599,15 @@ function MindmapFlow({ onClose, onRegisterAsHabit, onRegisterAsGoal, goals = [],
               </button>
             </div>
             <button
+              onClick={() => handleMobileMenuAction('delete')}
+              className="w-full p-3 bg-red-50 dark:bg-red-900/20 rounded-lg border border-red-200 dark:border-red-800 text-red-600 dark:text-red-400 mb-3"
+            >
+              <span className="text-xl mr-2">🗑️</span>
+              Delete Node
+            </button>
+            <button
               onClick={() => setMobileBottomMenu({ nodeId: '', nodeName: '', isVisible: false })}
-              className="w-full mt-4 p-3 bg-gray-100 dark:bg-gray-700 rounded-lg text-gray-600 dark:text-gray-400"
+              className="w-full p-3 bg-gray-100 dark:bg-gray-700 rounded-lg text-gray-600 dark:text-gray-400"
             >
               Cancel
             </button>
@@ -1533,27 +1615,32 @@ function MindmapFlow({ onClose, onRegisterAsHabit, onRegisterAsGoal, goals = [],
         </div>
       )}
 
-      {/* Mobile Connection Mode Overlay */}
+      {/* Mobile Connection Mode Overlay - 改善版 */}
       {isMobile && connectionMode.isActive && (
-        <div className="fixed top-20 left-4 right-4 bg-blue-600 text-white p-4 rounded-lg shadow-lg z-40">
+        <div className="fixed top-16 left-2 right-2 bg-gradient-to-r from-blue-600 to-blue-700 text-white p-4 rounded-xl shadow-lg z-40 border border-blue-500">
           <div className="text-center">
-            <div className="text-lg font-semibold mb-2">Connection Mode</div>
-            <div className="text-sm mb-3">
-              Tap another node to create connection
+            <div className="text-lg font-bold mb-2 flex items-center justify-center">
+              <span className="text-2xl mr-2">🔗</span>
+              結線モード
             </div>
-            <button
-              onClick={() => {
-                setConnectionMode({
-                  isActive: false,
-                  sourceNodeId: null,
-                  sourceHandleId: null
-                });
-                addLog('Mobile connection mode cancelled');
-              }}
-              className="px-4 py-2 bg-white text-blue-600 rounded-lg font-medium"
-            >
-              Cancel
-            </button>
+            <div className="text-sm mb-4 opacity-90">
+              接続したいノードをタップしてください
+            </div>
+            <div className="flex justify-center gap-3">
+              <button
+                onClick={() => {
+                  setConnectionMode({
+                    isActive: false,
+                    sourceNodeId: null,
+                    sourceHandleId: null
+                  });
+                  addLog('Mobile connection mode cancelled');
+                }}
+                className="px-6 py-2 bg-white/20 text-white rounded-lg font-medium border border-white/30 hover:bg-white/30 transition-colors"
+              >
+                キャンセル
+              </button>
+            </div>
           </div>
         </div>
       )}
