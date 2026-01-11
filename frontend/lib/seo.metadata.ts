@@ -76,6 +76,13 @@ export const baseMetadata: Metadata = {
   },
 };
 
+// Supported locales in the Next.js app and mapping to OpenGraph locale tags
+export const SUPPORTED_LOCALES = ['en', 'ja'] as const;
+export const OG_LOCALE_MAP: Record<string, string> = {
+  en: 'en_US',
+  ja: 'ja_JP',
+};
+
 // ページ別メタデータ生成ヘルパー
 export function createPageMetadata({
   title,
@@ -87,9 +94,24 @@ export function createPageMetadata({
   description: string;
   path?: string;
   noIndex?: boolean;
+  // optional locale for metadata generation
+  locale?: typeof SUPPORTED_LOCALES[number];
 }): Metadata {
   const url = `${APP_CONFIG.url}${path}`;
-  
+  const locale = arguments[0].locale || 'en';
+  const ogLocale = OG_LOCALE_MAP[locale] || 'en_US';
+
+  // build alternates for supported locales
+  const alternates: Metadata['alternates'] = {
+    canonical: url,
+    languages: {}
+  };
+  SUPPORTED_LOCALES.forEach((l) => {
+    // for default locale omit prefix (site root). For others include locale prefix.
+    const localePath = l === 'en' ? url : `${APP_CONFIG.url}/${l}${path}`;
+    alternates!.languages![l] = localePath;
+  });
+
   return {
     title,
     description,
@@ -97,6 +119,7 @@ export function createPageMetadata({
       title,
       description,
       url,
+      locale: ogLocale,
       images: [
         {
           url: APP_CONFIG.ogImage,
@@ -111,13 +134,13 @@ export function createPageMetadata({
       description,
       images: [APP_CONFIG.ogImage],
     },
-    alternates: {
-      canonical: url,
-    },
-    robots: noIndex ? {
-      index: false,
-      follow: false,
-    } : undefined,
+    alternates,
+    robots: noIndex
+      ? {
+          index: false,
+          follow: false,
+        }
+      : undefined,
   };
 }
 

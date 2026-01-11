@@ -3,60 +3,101 @@ import Link from "next/link";
 import type { Metadata } from "next";
 import { createPageMetadata } from "../lib/seo.metadata";
 
+// Default metadata for build-time, but Next.js App Router supports a locale-aware
+// generateMetadata which receives the params including locale.
 export const metadata: Metadata = createPageMetadata({
-  title: "Welcome to VOW - Your Personal Habit & Goal Tracker",
-  description: "Start tracking your habits and achieving your goals with VOW. A simple, powerful tool for personal development and productivity. Get started for free.",
+  title: "VOW — Habit & Goal Tracker",
+  description:
+    "VOW helps you build habits and make progress on goals with a minimal, focused workflow.",
   path: "/",
 });
 
+// locale-aware metadata generator
+export async function generateMetadata({ params, searchParams }: { params: { locale?: string }; searchParams: any }): Promise<Metadata> {
+  const locale = params?.locale || 'en';
+  return createPageMetadata({
+    title: "VOW — Habit & Goal Tracker",
+    description: "VOW helps you build habits and make progress on goals with a minimal, focused workflow.",
+    path: '/',
+    locale: locale as any,
+  });
+}
+
 export default function Home() {
   return (
-    <div className="flex min-h-screen items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex min-h-screen w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            Welcome to VOW
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Your personal habit and goal tracking application. 
+    <div className="min-h-screen bg-gradient-to-b from-white via-zinc-50 to-zinc-100 dark:from-black dark:via-zinc-900 dark:to-zinc-900 font-sans">
+      <main className="mx-auto flex max-w-6xl flex-col gap-12 px-6 py-20 sm:flex-row sm:items-center">
+        <section className="flex w-full flex-col gap-8 sm:w-1/2">
+          <div className="flex items-center gap-3">
+            <Image src="/window.svg" alt="VOW" width={48} height={48} />
+            <h1 className="text-3xl font-extrabold tracking-tight text-zinc-900 dark:text-zinc-50">
+              VOW
+            </h1>
+          </div>
+
+          <div>
+            <h2 className="text-4xl font-bold leading-tight text-black dark:text-zinc-50">
+              Build better habits. Achieve real goals.
+            </h2>
+            <p className="mt-4 max-w-xl text-lg text-zinc-600 dark:text-zinc-400">
+              Focused habit tracking, simple goal planning, and reflections that help
+              you keep momentum. Get started quickly as a guest or create an account
+              to sync your data.
+            </p>
+          </div>
+
+          <div className="flex w-full max-w-md gap-3">
             <Link
               href="/login"
-              className="font-medium text-zinc-950 dark:text-zinc-50 ml-1"
+              className="inline-flex h-12 items-center justify-center rounded-full bg-black px-6 text-sm font-semibold text-white transition hover:bg-zinc-800"
             >
-              Get started by logging in
+              Sign in
             </Link>
-            {" "}or{" "}
             <Link
               href="/dashboard"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
+              className="inline-flex h-12 items-center justify-center rounded-full border border-zinc-200 bg-white px-6 text-sm font-medium text-zinc-900 transition hover:bg-zinc-50"
             >
-              continue as guest
-            </Link>.
-          </p>
-        </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <Link
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px] touch-target"
-            href="/login"
-          >
-            Login
-          </Link>
-          <Link
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px] touch-target"
-            href="/dashboard"
-          >
-            Continue as Guest
-          </Link>
-        </div>
+              Continue as Guest
+            </Link>
+          </div>
+
+          <ul className="mt-6 flex max-w-md flex-col gap-3">
+            <li className="rounded-md bg-zinc-50 p-4 text-sm text-zinc-700 dark:bg-zinc-900 dark:text-zinc-300">
+              • Daily habit tracking with simple streaks
+            </li>
+            <li className="rounded-md bg-zinc-50 p-4 text-sm text-zinc-700 dark:bg-zinc-900 dark:text-zinc-300">
+              • Goal planning and review to keep progress visible
+            </li>
+            <li className="rounded-md bg-zinc-50 p-4 text-sm text-zinc-700 dark:bg-zinc-900 dark:text-zinc-300">
+              • Lightweight, privacy-first approach — your data belongs to you
+            </li>
+          </ul>
+        </section>
+
+        <aside className="hidden w-1/2 flex-col gap-6 sm:flex">
+          <div className="rounded-2xl bg-white/60 p-6 shadow-md dark:bg-zinc-900/60">
+            <h3 className="mb-3 text-lg font-semibold text-zinc-900 dark:text-zinc-50">Quick glance</h3>
+            <p className="text-sm text-zinc-600 dark:text-zinc-400">
+              Your dashboard surfaces today's habits, active goals, and recent reflections so you can act in minutes.
+            </p>
+          </div>
+
+          <div className="grid gap-4">
+            <div className="rounded-lg border border-zinc-100 p-4 dark:border-zinc-800">
+              <h4 className="text-sm font-semibold text-zinc-900 dark:text-zinc-50">Habits</h4>
+              <p className="mt-1 text-xs text-zinc-600 dark:text-zinc-400">Daily check-ins, custom reminders, and streak tracking.</p>
+            </div>
+            <div className="rounded-lg border border-zinc-100 p-4 dark:border-zinc-800">
+              <h4 className="text-sm font-semibold text-zinc-900 dark:text-zinc-50">Goals</h4>
+              <p className="mt-1 text-xs text-zinc-600 dark:text-zinc-400">Break goals into small steps and review progress weekly.</p>
+            </div>
+          </div>
+        </aside>
       </main>
+
+      <footer className="border-t border-zinc-200 bg-transparent py-8 text-center text-sm text-zinc-600 dark:border-zinc-800 dark:text-zinc-400">
+        <div className="mx-auto max-w-4xl px-6">© {new Date().getFullYear()} VOW — Built for focus and consistency.</div>
+      </footer>
     </div>
   );
 }
