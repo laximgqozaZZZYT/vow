@@ -343,12 +343,7 @@ export default function CalendarWidget({
       if (!h.active) {
         continue;
       }
-      if (h.completed) {
-        continue;
-      }
-      if (goalCompleted(h.goalId)) {
-        continue;
-      }
+
       if (h.type === 'avoid') {
         continue;
       }
