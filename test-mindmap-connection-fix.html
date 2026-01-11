@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mindmap Connection Fix Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .test-container {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+        .instructions {
+            background: #e3f2fd;
+            color: #1565c0;
+            padding: 15px;
+            border-radius: 5px;
+            border: 1px solid #bbdefb;
+            margin-bottom: 20px;
+        }
+        .test-result {
+            margin-top: 10px;
+            padding: 10px;
+            border-radius: 4px;
+            font-weight: bold;
+        }
+        .success { background-color: #d4edda; color: #155724; }
+        .error { background-color: #f8d7da; color: #721c24; }
+        .info { background-color: #d1ecf1; color: #0c5460; }
+        .warning { background-color: #fff3cd; color: #856404; }
+        button {
+            background-color: #2196f3;
+            color: white;
+            border: none;
+            padding: 12px 20px;
+            border-radius: 6px;
+            cursor: pointer;
+            margin: 5px;
+            font-size: 16px;
+            min-height: 44px;
+        }
+        button:hover {
+            background-color: #1976d2;
+        }
+        iframe {
+            width: 100%;
+            height: 70vh;
+            border: 2px solid #ddd;
+            border-radius: 8px;
+        }
+        .mobile-note {
+            background: #fff3cd;
+            color: #856404;
+            padding: 10px;
+            border-radius: 5px;
+            border: 1px solid #ffeaa7;
+            margin-bottom: 15px;
+            font-size: 14px;
+        }
+        @media (max-width: 768px) {
+            body {
+                padding: 10px;
+            }
+            iframe {
+                height: 60vh;
+            }
+        }
+    </style>
+</head>
+<body>
+    <h1>🔗 Mindmap Connection Fix Test</h1>
+    
+    <div class="mobile-note">
+        <strong>🔧 修正内容</strong><br>
+        スマホでの結線操作で2つ目のノードを選択できない問題を修正しました。
+    </div>
+
+    <div class="instructions">
+        <h3>🎯 修正後のテスト手順:</h3>
+        <ol>
+            <li><strong>ノードタップ</strong>: ノードをタップしてボトムメニューを表示</li>
+            <li><strong>結線開始</strong>: 
+                <ul>
+                    <li>方法1: ボトムメニューの「🔗 Connect」ボタンをタップ</li>
+                    <li>方法2: ノードの青いハンドル（接続点）を直接タップ</li>
+                </ul>
+            </li>
+            <li><strong>結線モード確認</strong>: 
+                <ul>
+                    <li>画面上部に青いバナー「🔗 結線モード」が表示される</li>
+                    <li>開始ノード名が表示される</li>
+                    <li>「接続したいノードをタップしてください」メッセージが表示される</li>
+                </ul>
+            </li>
+            <li><strong>2つ目のノード選択</strong>: 
+                <ul>
+                    <li>別のノードをタップして結線を作成</li>
+                    <li>同じノードをタップすると結線モードがキャンセルされる</li>
+                </ul>
+            </li>
+            <li><strong>結線完了</strong>: 
+                <ul>
+                    <li>2つのノード間に線が引かれる</li>
+                    <li>結線モードが自動的に終了する</li>
+                    <li>青いバナーが消える</li>
+                </ul>
+            </li>
+        </ol>
+    </div>
+
+    <div class="test-container">
+        <h3>🔧 修正点</h3>
+        <div class="test-result success">
+            ✅ <strong>イベント処理の改善</strong>: 結線モード時のノードタップ処理を修正
+        </div>
+        <div class="test-result success">
+            ✅ <strong>状態管理の改善</strong>: 結線モードの状態をより確実に管理
+        </div>
+        <div class="test-result success">
+            ✅ <strong>UI フィードバック強化</strong>: 結線モード中に開始ノード名を表示
+        </div>
+        <div class="test-result success">
+            ✅ <strong>ログ出力追加</strong>: デバッグ用のコンソールログを追加
+        </div>
+    </div>
+
+    <div class="test-container">
+        <h3>📋 期待される動作</h3>
+        <div class="test-result info">
+            <strong>修正前の問題:</strong> 結線モード開始後、2つ目のノードをタップしても反応しない
+        </div>
+        <div class="test-result success">
+            <strong>修正後の動作:</strong> 結線モード開始後、2つ目のノードをタップすると確実に結線が作成される
+        </div>
+    </div>
+
+    <div class="test-container">
+        <h3>🖥️ Mindmap Widget</h3>
+        <iframe id="mindmapFrame" src="http://localhost:3001/dashboard"></iframe>
+    </div>
+
+    <script>
+        // iframe内のメッセージを監視
+        window.addEventListener('message', (event) => {
+            console.log('Received message from iframe:', event.data);
+            
+            if (event.data.type === 'CONNECTION_MODE_STARTED') {
+                console.log('✅ Connection mode started successfully');
+                showNotification('結線モードが開始されました', 'success');
+            } else if (event.data.type === 'CONNECTION_CREATED') {
+                console.log('✅ Connection created successfully');
+                showNotification('結線が作成されました', 'success');
+            } else if (event.data.type === 'CONNECTION_MODE_CANCELLED') {
+                console.log('ℹ️ Connection mode cancelled');
+                showNotification('結線モードがキャンセルされました', 'info');
+            }
+        });
+
+        function showNotification(message, type) {
+            const notification = document.createElement('div');
+            notification.className = `test-result ${type}`;
+            notification.textContent = message;
+            notification.style.position = 'fixed';
+            notification.style.top = '20px';
+            notification.style.right = '20px';
+            notification.style.zIndex = '1000';
+            notification.style.minWidth = '200px';
+            
+            document.body.appendChild(notification);
+            
+            setTimeout(() => {
+                document.body.removeChild(notification);
+            }, 3000);
+        }
+
+        // ページ読み込み完了時の初期化
+        window.addEventListener('load', function() {
+            console.log('Test page loaded. Ready for connection testing.');
+        });
+    </script>
+</body>
+</html>

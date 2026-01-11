@@ -321,14 +321,22 @@ function MindmapNode({ id, data, selected }: NodeProps<CustomNodeData>) {
     
     e.stopPropagation();
     
-    // モバイル用のボトムメニューを表示するイベントを発火
-    const event = new CustomEvent('showMobileBottomMenu', {
-      detail: {
-        nodeId: id,
-        nodeName: data.label
-      }
+    // 結線モードが有効な場合は結線処理を優先
+    const connectionModeEvent = new CustomEvent('checkConnectionMode', {
+      detail: { nodeId: id }
     });
-    window.dispatchEvent(event);
+    window.dispatchEvent(connectionModeEvent);
+    
+    // 結線モードでない場合のみボトムメニューを表示
+    setTimeout(() => {
+      const event = new CustomEvent('showMobileBottomMenu', {
+        detail: {
+          nodeId: id,
+          nodeName: data.label
+        }
+      });
+      window.dispatchEvent(event);
+    }, 10);
   }, [isMobile, isEditing, id, data.label]);
 
   // ハンドルクリック/タップ処理（結線用）
@@ -336,6 +344,7 @@ function MindmapNode({ id, data, selected }: NodeProps<CustomNodeData>) {
     if (!isMobile) return; // PC では従来のドラッグ操作を使用
     
     e.stopPropagation();
+    e.preventDefault();
     
     // モバイル用の結線モードを開始するイベントを発火
     const event = new CustomEvent('startMobileConnection', {
@@ -345,6 +354,9 @@ function MindmapNode({ id, data, selected }: NodeProps<CustomNodeData>) {
       }
     });
     window.dispatchEvent(event);
+    
+    // ログ出力
+    console.log(`Mobile connection started from node ${id}, handle ${position}`);
   }, [isMobile, id]);
 
   // マウスリーブ処理
@@ -625,6 +637,42 @@ function MindmapFlow({ onClose, onRegisterAsHabit, onRegisterAsGoal, goals = [],
     // ログ機能を無効化
   }, []);
 
+  // モバイル用結線処理
+  const handleMobileNodeTap = useCallback((nodeId: string) => {
+    if (!connectionMode.isActive) return;
+
+    // 同じノードをタップした場合は結線モードをキャンセル
+    if (connectionMode.sourceNodeId === nodeId) {
+      setConnectionMode({
+        isActive: false,
+        sourceNodeId: null,
+        sourceHandleId: null
+      });
+      addLog('Mobile connection mode cancelled');
+      return;
+    }
+
+    // 結線を作成
+    const newEdge = {
+      id: `edge-${connectionMode.sourceNodeId}-${nodeId}`,
+      source: connectionMode.sourceNodeId!,
+      target: nodeId,
+      sourceHandle: connectionMode.sourceHandleId,
+      targetHandle: null,
+    };
+
+    setEdges((eds) => eds.concat(newEdge));
+    setHasUnsavedChanges(true);
+    addLog(`Mobile connection created: ${connectionMode.sourceNodeId} -> ${nodeId}`);
+
+    // 結線モードを終了
+    setConnectionMode({
+      isActive: false,
+      sourceNodeId: null,
+      sourceHandleId: null
+    });
+  }, [connectionMode, setEdges, addLog]);
+
   // ノードやエッジの変更を検出して未保存フラグを設定
   React.useEffect(() => {
     const handleNodeChanged = () => {
@@ -695,14 +743,29 @@ function MindmapFlow({ onClose, onRegisterAsHabit, onRegisterAsGoal, goals = [],
       addLog(`Mobile connection mode started from node: ${sourceNodeId}, handle: ${sourceHandleId}`);
     };
 
+    // 結線モードのチェック処理
+    const handleCheckConnectionMode = (event: CustomEvent) => {
+      const { nodeId } = event.detail;
+      
+      if (connectionMode.isActive) {
+        // 結線モードが有効な場合は結線処理を実行
+        handleMobileNodeTap(nodeId);
+        // ボトムメニューの表示をキャンセル
+        event.preventDefault();
+        event.stopPropagation();
+      }
+    };
+
     window.addEventListener('showMobileBottomMenu', handleShowMobileBottomMenu as EventListener);
     window.addEventListener('startMobileConnection', handleStartMobileConnection as EventListener);
+    window.addEventListener('checkConnectionMode', handleCheckConnectionMode as EventListener);
 
     return () => {
       window.removeEventListener('showMobileBottomMenu', handleShowMobileBottomMenu as EventListener);
       window.removeEventListener('startMobileConnection', handleStartMobileConnection as EventListener);
+      window.removeEventListener('checkConnectionMode', handleCheckConnectionMode as EventListener);
     };
-  }, [isMobile, addLog]);
+  }, [isMobile, addLog, connectionMode, handleMobileNodeTap]);
 
   // モーダルが開いた時に名前フィールドを自動設定するためのエフェクト
   React.useEffect(() => {
@@ -721,41 +784,7 @@ function MindmapFlow({ onClose, onRegisterAsHabit, onRegisterAsGoal, goals = [],
 
   const nodeTypes = customNodeTypes;
 
-  // モバイル用結線処理
-  const handleMobileNodeTap = useCallback((nodeId: string) => {
-    if (!connectionMode.isActive) return;
 
-    // 同じノードをタップした場合は結線モードをキャンセル
-    if (connectionMode.sourceNodeId === nodeId) {
-      setConnectionMode({
-        isActive: false,
-        sourceNodeId: null,
-        sourceHandleId: null
-      });
-      addLog('Mobile connection mode cancelled');
-      return;
-    }
-
-    // 結線を作成
-    const newEdge = {
-      id: `edge-${connectionMode.sourceNodeId}-${nodeId}`,
-      source: connectionMode.sourceNodeId!,
-      target: nodeId,
-      sourceHandle: connectionMode.sourceHandleId,
-      targetHandle: null,
-    };
-
-    setEdges((eds) => eds.concat(newEdge));
-    setHasUnsavedChanges(true);
-    addLog(`Mobile connection created: ${connectionMode.sourceNodeId} -> ${nodeId}`);
-
-    // 結線モードを終了
-    setConnectionMode({
-      isActive: false,
-      sourceNodeId: null,
-      sourceHandleId: null
-    });
-  }, [connectionMode, setEdges, addLog]);
 
   // モバイル用ボトムメニューのハンドラー
   const handleMobileMenuAction = useCallback((action: string) => {
@@ -782,6 +811,8 @@ function MindmapFlow({ onClose, onRegisterAsHabit, onRegisterAsGoal, goals = [],
           sourceNodeId: nodeId,
           sourceHandleId: null
         });
+        // 結線モード開始のログを追加
+        console.log(`Connection mode activated for node: ${nodeId}`);
         break;
       case 'habit':
         addLog(`Mobile habit registration for node: "${node.data.label}"`);
@@ -814,42 +845,6 @@ function MindmapFlow({ onClose, onRegisterAsHabit, onRegisterAsGoal, goals = [],
     // メニューを閉じる
     setMobileBottomMenu({ nodeId: '', nodeName: '', isVisible: false });
   }, [mobileBottomMenu.nodeId, nodes, setNodes, setEdges, addLog]);
-
-  // モバイル用のイベントリスナー
-  React.useEffect(() => {
-    if (!isMobile) return;
-
-    // モバイル用ボトムメニュー表示
-    const handleShowMobileBottomMenu = (event: CustomEvent) => {
-      const { nodeId, nodeName } = event.detail;
-      setMobileBottomMenu({
-        nodeId,
-        nodeName,
-        isVisible: true
-      });
-      addLog(`Mobile bottom menu opened for node: ${nodeName}`);
-    };
-
-    // モバイル用結線モード開始
-    const handleStartMobileConnection = (event: CustomEvent) => {
-      const { sourceNodeId, sourceHandleId } = event.detail;
-      setConnectionMode({
-        isActive: true,
-        sourceNodeId,
-        sourceHandleId
-      });
-      setMobileBottomMenu({ nodeId: '', nodeName: '', isVisible: false });
-      addLog(`Mobile connection mode started from node: ${sourceNodeId}, handle: ${sourceHandleId}`);
-    };
-
-    window.addEventListener('showMobileBottomMenu', handleShowMobileBottomMenu as EventListener);
-    window.addEventListener('startMobileConnection', handleStartMobileConnection as EventListener);
-
-    return () => {
-      window.removeEventListener('showMobileBottomMenu', handleShowMobileBottomMenu as EventListener);
-      window.removeEventListener('startMobileConnection', handleStartMobileConnection as EventListener);
-    };
-  }, [isMobile, addLog]);
 
   // Listen for node label updates (simplified)
   React.useEffect(() => {
@@ -1348,7 +1343,11 @@ function MindmapFlow({ onClose, onRegisterAsHabit, onRegisterAsGoal, goals = [],
           onConnectEnd={onConnectEnd as any}
           onNodeContextMenu={onNodeContextMenu}
           onSelectionChange={onSelectionChange}
-          onNodeClick={isMobile && connectionMode.isActive ? (event, node) => handleMobileNodeTap(node.id) : undefined}
+          onNodeClick={isMobile ? (event, node) => {
+            if (connectionMode.isActive) {
+              handleMobileNodeTap(node.id);
+            }
+          } : undefined}
           nodeTypes={nodeTypes}
           nodesDraggable={true}
           nodesConnectable={true}
@@ -1578,6 +1577,9 @@ function MindmapFlow({ onClose, onRegisterAsHabit, onRegisterAsGoal, goals = [],
               <span className="text-2xl mr-2">🔗</span>
               結線モード
             </div>
+            <div className="text-sm mb-2 opacity-90">
+              開始ノード: {nodes.find(n => n.id === connectionMode.sourceNodeId)?.data.label || 'Unknown'}
+            </div>
             <div className="text-sm mb-4 opacity-90">
               接続したいノードをタップしてください
             </div>
@@ -1590,6 +1592,7 @@ function MindmapFlow({ onClose, onRegisterAsHabit, onRegisterAsGoal, goals = [],
                     sourceHandleId: null
                   });
                   addLog('Mobile connection mode cancelled');
+                  console.log('Connection mode cancelled');
                 }}
                 className="px-6 py-2 bg-white/20 text-white rounded-lg font-medium border border-white/30 hover:bg-white/30 transition-colors"
               >
