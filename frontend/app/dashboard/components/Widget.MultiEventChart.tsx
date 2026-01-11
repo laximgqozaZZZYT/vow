@@ -264,7 +264,7 @@ export default function MultiEventChart({
   visibleHabitIds,
   onHover,
   range,
-  window,
+  timeWindow,
   onEditGraph,
 }: {
   habits: Habit[]
@@ -272,7 +272,7 @@ export default function MultiEventChart({
   visibleHabitIds: string[]
   onHover: (p: EventPoint | null) => void
   range: RangeKey
-  window?: { fromTs: number; untilTs: number }
+  timeWindow?: { fromTs: number; untilTs: number }
   onEditGraph?: () => void
 }) {
   // Responsive chart dimensions - smaller for mobile
@@ -297,11 +297,11 @@ export default function MultiEventChart({
   // Planned overlays are also plotted as progress ratio (0..1), so they share y-scale with actual.
 
   const domain = React.useMemo(() => {
-    if (window && Number.isFinite(window.fromTs) && Number.isFinite(window.untilTs) && window.untilTs > window.fromTs) {
-      return { minTs: window.fromTs, maxTs: window.untilTs }
+    if (timeWindow && Number.isFinite(timeWindow.fromTs) && Number.isFinite(timeWindow.untilTs) && timeWindow.untilTs > timeWindow.fromTs) {
+      return { minTs: timeWindow.fromTs, maxTs: timeWindow.untilTs }
     }
     return computeDomainTs(range, points)
-  }, [range, points, window?.fromTs, window?.untilTs])
+  }, [range, points, timeWindow?.fromTs, timeWindow?.untilTs])
   const minTs = domain.minTs
   const maxTs = domain.maxTs
 
