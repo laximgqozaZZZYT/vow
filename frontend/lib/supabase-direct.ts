@@ -801,6 +801,112 @@ export class SupabaseDirectClient {
     return { success: true };
   }
 
+  // Habit relations: related habits per habit
+  async getHabitRelations(habitId: string) {
+    this.checkEnvironment();
+
+    const { data: session } = await supabase.auth.getSession();
+
+    if (!session?.session?.user) {
+      // Guest: load from localStorage
+      const guestRelations = JSON.parse(localStorage.getItem('guest-habit-relations') || '[]');
+      return guestRelations.filter((r: any) => r.habitId === habitId || r.relatedHabitId === habitId);
+    }
+
+    const { data, error } = await supabase
+      .from('habit_relations')
+      .select('*')
+      .or(`habit_id.eq.${habitId},related_habit_id.eq.${habitId}`)
+      .eq('owner_type', 'user')
+      .eq('owner_id', session.session.user.id)
+      .order('created_at', { ascending: false });
+
+    if (error) throw error;
+
+    return (data || []).map((r: any) => ({
+      id: r.id,
+      habitId: r.habit_id,
+      relatedHabitId: r.related_habit_id,
+      relation: r.relation,
+      createdAt: r.created_at,
+      updatedAt: r.updated_at
+    }));
+  }
+
+  async createHabitRelation(payload: { habitId: string; relatedHabitId: string; relation: string }) {
+    this.checkEnvironment();
+
+    const { data: session } = await supabase.auth.getSession();
+
+    if (!session?.session?.user) {
+      const now = new Date().toISOString();
+      const rel = {
+        id: 'habit-rel-' + Date.now(),
+        habitId: payload.habitId,
+        relatedHabitId: payload.relatedHabitId,
+        relation: payload.relation,
+        createdAt: now,
+        updatedAt: now
+      };
+
+      const existing = JSON.parse(localStorage.getItem('guest-habit-relations') || '[]');
+      existing.push(rel);
+      localStorage.setItem('guest-habit-relations', JSON.stringify(existing));
+      return rel;
+    }
+
+    const now = new Date().toISOString();
+    const { data, error } = await supabase
+      .from('habit_relations')
+      .insert({
+        habit_id: payload.habitId,
+        related_habit_id: payload.relatedHabitId,
+        relation: payload.relation,
+        owner_type: 'user',
+        owner_id: session.session.user.id,
+        created_at: now,
+        updated_at: now
+      })
+      .select()
+      .single();
+
+    if (error) throw error;
+
+    return {
+      id: data.id,
+      habitId: data.habit_id,
+      relatedHabitId: data.related_habit_id,
+      relation: data.relation,
+      createdAt: data.created_at,
+      updatedAt: data.updated_at
+    };
+  }
+
+  async deleteHabitRelation(id: string) {
+    this.checkEnvironment();
+
+    const { data: session } = await supabase.auth.getSession();
+
+    if (!session?.session?.user) {
+      const existing = JSON.parse(localStorage.getItem('guest-habit-relations') || '[]');
+      const idx = existing.findIndex((r: any) => r.id === id);
+      if (idx === -1) throw new Error(`Habit relation with id ${id} not found`);
+      existing.splice(idx, 1);
+      localStorage.setItem('guest-habit-relations', JSON.stringify(existing));
+      return { success: true };
+    }
+
+    const { error } = await supabase
+      .from('habit_relations')
+      .delete()
+      .eq('id', id)
+      .eq('owner_type', 'user')
+      .eq('owner_id', session.session.user.id);
+
+    if (error) throw error;
+    return { success: true };
+  }
+
   async getActivities() {
     console.log('[getActivities] Starting to load activities');
     if (!supabase) throw new Error('Supabase not configured');

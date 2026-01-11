@@ -1,6 +1,7 @@
 "use client"
 
 import React from "react"
+import { supabaseDirectClient } from '../../../lib/supabase-direct'
 import { Popover } from "@headlessui/react"
 import { DayPicker } from "react-day-picker"
 import "react-day-picker/dist/style.css"
@@ -80,6 +81,66 @@ export function HabitModal({ open, onClose, habit, onUpdate, onDelete, onCreate,
 
     // stable id for this modal instance (used when creating a new habit where `habit` may be null)
     const instanceId = React.useId()
+
+    // Related habits UI state
+    type HabitRelation = { id: string; habitId: string; relatedHabitId: string; relation: 'main' | 'sub' | 'next'; createdAt?: string; updatedAt?: string }
+    const [allHabits, setAllHabits] = React.useState<Habit[]>([])
+    const [relations, setRelations] = React.useState<HabitRelation[]>([])
+    const [selectedRelatedHabitId, setSelectedRelatedHabitId] = React.useState<string>('')
+    const [selectedRelationType, setSelectedRelationType] = React.useState<'main'|'sub'|'next'>('main')
+    const [loadingRelations, setLoadingRelations] = React.useState(false)
+
+    async function loadAllHabits() {
+        try {
+            const h = await supabaseDirectClient.getHabits()
+            setAllHabits(Array.isArray(h) ? h : [])
+        } catch (err) {
+            console.error('[HabitModal] loadAllHabits error', err)
+        }
+    }
+
+    async function loadRelations() {
+        if (!habit) {
+            setRelations([])
+            return
+        }
+        setLoadingRelations(true)
+        try {
+            const r = await supabaseDirectClient.getHabitRelations(habit.id)
+            setRelations(Array.isArray(r) ? r : [])
+        } catch (err) {
+            console.error('[HabitModal] loadRelations error', err)
+        } finally {
+            setLoadingRelations(false)
+        }
+    }
+
+    React.useEffect(() => {
+        if (!open) return
+        loadAllHabits()
+        loadRelations()
+    }, [open, habit?.id])
+
+    async function handleAddRelation() {
+        if (!habit) return
+        if (!selectedRelatedHabitId) return
+        try {
+            await supabaseDirectClient.createHabitRelation({ habitId: habit.id, relatedHabitId: selectedRelatedHabitId, relation: selectedRelationType })
+            setSelectedRelatedHabitId('')
+            await loadRelations()
+        } catch (err) {
+            console.error('[HabitModal] create relation error', err)
+        }
+    }
+
+    async function handleDeleteRelation(id: string) {
+        try {
+            await supabaseDirectClient.deleteHabitRelation(id)
+            await loadRelations()
+        } catch (err) {
+            console.error('[HabitModal] delete relation error', err)
+        }
+    }
 
     React.useEffect(() => {
         if (!open) return
@@ -623,6 +684,57 @@ export function HabitModal({ open, onClose, habit, onUpdate, onDelete, onCreate,
                                 <div className="mt-4">
                                     <h3 className="text-lg font-medium">Description</h3>
                                     <textarea value={notes} onChange={(e) => setNotes(e.target.value)} className="mt-2 w-full rounded border px-3 py-2 bg-white text-black dark:bg-slate-800 dark:text-slate-100" placeholder="Add description" />
+                                </div>
+                                
+                                {/* Related Habits */}
+                                <div className="mt-4">
+                                    <h3 className="text-lg font-medium">Related Habits</h3>
+                                    <div className="mt-2 space-y-2">
+                                        {loadingRelations && <div className="text-xs text-zinc-500">Loading...</div>}
+                                        {!loadingRelations && relations.length === 0 && <div className="text-xs text-zinc-500">No related habits.</div>}
+                                        {relations.map((r) => {
+                                            const other = allHabits.find(h => h.id === r.relatedHabitId) || { name: r.relatedHabitId }
+                                            return (
+                                                <div key={r.id} className="flex items-center justify-between rounded px-2 py-2 border">
+                                                    <div className="text-sm"><span className="font-medium">{other.name}</span> <span className="text-xs text-zinc-500">({r.relation})</span></div>
+                                                    <div>
+                                                        <button type="button" onClick={() => handleDeleteRelation(r.id)} className="p-1 text-red-600" aria-label="Delete relation" title="Delete relation">
+                                                            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                                                                <path fillRule="evenodd" d="M6 2a1 1 0 011-1h6a1 1 0 011 1v1h3a1 1 0 110 2h-1v11a2 2 0 01-2 2H6a2 2 0 01-2-2V5H3a1 1 0 110-2h3V2zm2 5a1 1 0 10-2 0v7a1 1 0 102 0V7zm4 0a1 1 0 10-2 0v7a1 1 0 102 0V7z" clipRule="evenodd" />
+                                                            </svg>
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            )
+                                        })}
+
+                                        <div className="flex gap-2 items-center">
+                                            <select value={selectedRelatedHabitId} onChange={(e) => setSelectedRelatedHabitId(e.target.value)} className="rounded border px-2 py-1 bg-white text-black dark:bg-slate-800 dark:text-slate-100 flex-1">
+                                                <option value="">Select habit...</option>
+                                                {allHabits.filter(h => h.id !== habit?.id).map(h => (
+                                                    <option key={h.id} value={h.id}>{h.name}</option>
+                                                ))}
+                                            </select>
+                                            <select value={selectedRelationType} onChange={(e) => setSelectedRelationType(e.target.value as any)} className="rounded border px-2 py-1 bg-white text-black dark:bg-slate-800 dark:text-slate-100">
+                                                <option value="main">Main</option>
+                                                <option value="sub">Sub</option>
+                                                <option value="next">Next</option>
+                                            </select>
+                                            <button
+                                                type="button"
+                                                onClick={handleAddRelation}
+                                                disabled={!habit}
+                                                className="rounded bg-slate-100 p-1 disabled:opacity-50"
+                                                aria-label="Add relation"
+                                                title="Add relation"
+                                            >
+                                                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-slate-700" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+                                                </svg>
+                                            </button>
+                                        </div>
+                                        {!habit && <div className="text-xs text-zinc-500">Save the habit first to add relations.</div>}
+                                    </div>
                                 </div>
                             </div>
                         </div>
