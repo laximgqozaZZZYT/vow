@@ -321,22 +321,40 @@ function MindmapNode({ id, data, selected }: NodeProps<CustomNodeData>) {
     
     e.stopPropagation();
     
-    // 結線モードが有効な場合は結線処理を優先
-    const connectionModeEvent = new CustomEvent('checkConnectionMode', {
-      detail: { nodeId: id }
-    });
-    window.dispatchEvent(connectionModeEvent);
+    // 結線モードの状態を直接チェック（グローバル状態から）
+    const connectionModeCheckEvent = new CustomEvent('getConnectionModeState');
+    let currentConnectionMode = { isActive: false, sourceNodeId: null };
     
-    // 結線モードでない場合のみボトムメニューを表示
+    const stateHandler = (event: Event) => {
+      const customEvent = event as CustomEvent;
+      currentConnectionMode = customEvent.detail;
+    };
+    
+    window.addEventListener('connectionModeStateResponse', stateHandler as EventListener);
+    window.dispatchEvent(connectionModeCheckEvent);
+    
+    // 少し待ってから状態をチェック
     setTimeout(() => {
-      const event = new CustomEvent('showMobileBottomMenu', {
-        detail: {
-          nodeId: id,
-          nodeName: data.label
-        }
-      });
-      window.dispatchEvent(event);
-    }, 10);
+      window.removeEventListener('connectionModeStateResponse', stateHandler as EventListener);
+      
+      if (currentConnectionMode.isActive) {
+        // 結線モードが有効な場合は結線処理を実行
+        console.log(`Connection mode active: connecting node ${currentConnectionMode.sourceNodeId} to ${id}`);
+        const connectionEvent = new CustomEvent('executeConnection', {
+          detail: { targetNodeId: id }
+        });
+        window.dispatchEvent(connectionEvent);
+      } else {
+        // 結線モードでない場合はボトムメニューを表示
+        const event = new CustomEvent('showMobileBottomMenu', {
+          detail: {
+            nodeId: id,
+            nodeName: data.label
+          }
+        });
+        window.dispatchEvent(event);
+      }
+    }, 5);
   }, [isMobile, isEditing, id, data.label]);
 
   // ハンドルクリック/タップ処理（結線用）
@@ -743,27 +761,38 @@ function MindmapFlow({ onClose, onRegisterAsHabit, onRegisterAsGoal, goals = [],
       addLog(`Mobile connection mode started from node: ${sourceNodeId}, handle: ${sourceHandleId}`);
     };
 
-    // 結線モードのチェック処理
-    const handleCheckConnectionMode = (event: CustomEvent) => {
-      const { nodeId } = event.detail;
-      
+    // 結線モードの状態を返すハンドラー
+    const handleGetConnectionModeState = (event: Event) => {
+      const stateEvent = new CustomEvent('connectionModeStateResponse', {
+        detail: {
+          isActive: connectionMode.isActive,
+          sourceNodeId: connectionMode.sourceNodeId,
+          sourceHandleId: connectionMode.sourceHandleId
+        }
+      });
+      window.dispatchEvent(stateEvent);
+    };
+
+    // 結線実行ハンドラー
+    const handleExecuteConnection = (event: Event) => {
+      const customEvent = event as CustomEvent;
+      const { targetNodeId } = customEvent.detail;
       if (connectionMode.isActive) {
-        // 結線モードが有効な場合は結線処理を実行
-        handleMobileNodeTap(nodeId);
-        // ボトムメニューの表示をキャンセル
-        event.preventDefault();
-        event.stopPropagation();
+        console.log(`Executing connection: ${connectionMode.sourceNodeId} -> ${targetNodeId}`);
+        handleMobileNodeTap(targetNodeId);
       }
     };
 
     window.addEventListener('showMobileBottomMenu', handleShowMobileBottomMenu as EventListener);
     window.addEventListener('startMobileConnection', handleStartMobileConnection as EventListener);
-    window.addEventListener('checkConnectionMode', handleCheckConnectionMode as EventListener);
+    window.addEventListener('getConnectionModeState', handleGetConnectionModeState as EventListener);
+    window.addEventListener('executeConnection', handleExecuteConnection as EventListener);
 
     return () => {
       window.removeEventListener('showMobileBottomMenu', handleShowMobileBottomMenu as EventListener);
       window.removeEventListener('startMobileConnection', handleStartMobileConnection as EventListener);
-      window.removeEventListener('checkConnectionMode', handleCheckConnectionMode as EventListener);
+      window.removeEventListener('getConnectionModeState', handleGetConnectionModeState as EventListener);
+      window.removeEventListener('executeConnection', handleExecuteConnection as EventListener);
     };
   }, [isMobile, addLog, connectionMode, handleMobileNodeTap]);
 

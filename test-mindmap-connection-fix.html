@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Mindmap Connection Fix Test</title>
+    <title>Mindmap Connection Fix Test v2</title>
     <style>
         body {
             font-family: Arial, sans-serif;
@@ -65,6 +65,14 @@
             margin-bottom: 15px;
             font-size: 14px;
         }
+        .fix-note {
+            background: #d4edda;
+            color: #155724;
+            padding: 15px;
+            border-radius: 5px;
+            border: 1px solid #c3e6cb;
+            margin-bottom: 20px;
+        }
         @media (max-width: 768px) {
             body {
                 padding: 10px;
@@ -76,21 +84,26 @@
     </style>
 </head>
 <body>
-    <h1>🔗 Mindmap Connection Fix Test</h1>
+    <h1>🔗 Mindmap Connection Fix Test v2</h1>
     
-    <div class="mobile-note">
-        <strong>🔧 修正内容</strong><br>
-        スマホでの結線操作で2つ目のノードを選択できない問題を修正しました。
+    <div class="fix-note">
+        <strong>🔧 修正内容 v2</strong><br>
+        結線モード時に2つ目のノードをタップした際、ボトムメニューではなく直接結線処理が実行されるように修正しました。
+        <ul>
+            <li>結線モードの状態チェックを改善</li>
+            <li>ノードタップ時の処理優先順位を修正</li>
+            <li>結線処理の確実な実行を保証</li>
+        </ul>
     </div>
 
     <div class="instructions">
         <h3>🎯 修正後のテスト手順:</h3>
         <ol>
-            <li><strong>ノードタップ</strong>: ノードをタップしてボトムメニューを表示</li>
-            <li><strong>結線開始</strong>: 
+            <li><strong>1つ目のノード選択</strong>: 
                 <ul>
-                    <li>方法1: ボトムメニューの「🔗 Connect」ボタンをタップ</li>
-                    <li>方法2: ノードの青いハンドル（接続点）を直接タップ</li>
+                    <li>ノードをタップしてボトムメニューを表示</li>
+                    <li>「🔗 Connect」ボタンをタップ</li>
+                    <li>または、ノードの青いハンドル（接続点）を直接タップ</li>
                 </ul>
             </li>
             <li><strong>結線モード確認</strong>: 
@@ -100,13 +113,14 @@
                     <li>「接続したいノードをタップしてください」メッセージが表示される</li>
                 </ul>
             </li>
-            <li><strong>2つ目のノード選択</strong>: 
+            <li><strong>2つ目のノード選択（重要）</strong>: 
                 <ul>
-                    <li>別のノードをタップして結線を作成</li>
+                    <li>別のノードを<strong>1回タップ</strong>するだけで結線が作成される</li>
+                    <li>ボトムメニューは表示されず、直接結線処理が実行される</li>
                     <li>同じノードをタップすると結線モードがキャンセルされる</li>
                 </ul>
             </li>
-            <li><strong>結線完了</strong>: 
+            <li><strong>結線完了確認</strong>: 
                 <ul>
                     <li>2つのノード間に線が引かれる</li>
                     <li>結線モードが自動的に終了する</li>
@@ -117,28 +131,28 @@
     </div>
 
     <div class="test-container">
-        <h3>🔧 修正点</h3>
+        <h3>🔧 修正点 v2</h3>
         <div class="test-result success">
-            ✅ <strong>イベント処理の改善</strong>: 結線モード時のノードタップ処理を修正
+            ✅ <strong>優先処理の実装</strong>: 結線モード時はボトムメニューより結線処理を優先
         </div>
         <div class="test-result success">
-            ✅ <strong>状態管理の改善</strong>: 結線モードの状態をより確実に管理
+            ✅ <strong>状態管理の改善</strong>: 結線モードの状態を確実にチェック
         </div>
         <div class="test-result success">
-            ✅ <strong>UI フィードバック強化</strong>: 結線モード中に開始ノード名を表示
+            ✅ <strong>直接実行</strong>: 2つ目のノードタップで即座に結線実行
         </div>
         <div class="test-result success">
-            ✅ <strong>ログ出力追加</strong>: デバッグ用のコンソールログを追加
+            ✅ <strong>デバッグログ強化</strong>: 結線処理の詳細ログを追加
         </div>
     </div>
 
     <div class="test-container">
         <h3>📋 期待される動作</h3>
-        <div class="test-result info">
-            <strong>修正前の問題:</strong> 結線モード開始後、2つ目のノードをタップしても反応しない
+        <div class="test-result error">
+            <strong>修正前の問題:</strong> 結線モード中に2つ目のノードをタップすると、ボトムメニューが表示されて結線処理が実行されない
         </div>
         <div class="test-result success">
-            <strong>修正後の動作:</strong> 結線モード開始後、2つ目のノードをタップすると確実に結線が作成される
+            <strong>修正後の動作:</strong> 結線モード中に2つ目のノードをタップすると、ボトムメニューは表示されず、直接結線が作成される
         </div>
     </div>
 
@@ -161,6 +175,9 @@
             } else if (event.data.type === 'CONNECTION_MODE_CANCELLED') {
                 console.log('ℹ️ Connection mode cancelled');
                 showNotification('結線モードがキャンセルされました', 'info');
+            } else if (event.data.type === 'BOTTOM_MENU_BLOCKED') {
+                console.log('✅ Bottom menu blocked during connection mode');
+                showNotification('結線モード中のため、ボトムメニューをブロックしました', 'success');
             }
         });
 
@@ -173,17 +190,21 @@
             notification.style.right = '20px';
             notification.style.zIndex = '1000';
             notification.style.minWidth = '200px';
+            notification.style.maxWidth = '300px';
             
             document.body.appendChild(notification);
             
             setTimeout(() => {
-                document.body.removeChild(notification);
-            }, 3000);
+                if (document.body.contains(notification)) {
+                    document.body.removeChild(notification);
+                }
+            }, 4000);
         }
 
         // ページ読み込み完了時の初期化
         window.addEventListener('load', function() {
-            console.log('Test page loaded. Ready for connection testing.');
+            console.log('Test page v2 loaded. Ready for connection testing.');
+            showNotification('テストページ v2 が読み込まれました', 'info');
         });
     </script>
 </body>
