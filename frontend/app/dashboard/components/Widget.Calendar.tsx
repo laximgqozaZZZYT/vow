@@ -338,6 +338,11 @@ export default function CalendarWidget({
                 const isExcluded = outdates.some((outdate: any) => {
                   if (outdate.date !== dateS) return false;
                   
+                  // Skip empty outdates (default entries with no meaningful exclusion data)
+                  if (!outdate.start && !outdate.end && outdate.type === t.type) {
+                    return false; // Don't exclude based on empty default outdate entries
+                  }
+                  
                   // If outdate has specific time, check if it matches this timing
                   if (outdate.start && outdate.end) {
                     return outdate.start === t.start && outdate.end === t.end;
@@ -396,7 +401,14 @@ export default function CalendarWidget({
                 
                 // Check if this specific date is excluded by outdates
                 const isExcluded = outdates.some((outdate: any) => {
-                  return outdate.date === dateS && !outdate.start; // All-day exclusion
+                  if (outdate.date !== dateS) return false;
+                  
+                  // Skip empty outdates (default entries with no meaningful exclusion data)
+                  if (!outdate.start && !outdate.end && outdate.type === t.type) {
+                    return false; // Don't exclude based on empty default outdate entries
+                  }
+                  
+                  return !outdate.start; // All-day exclusion
                 });
                 
                 if (isExcluded) {
@@ -426,6 +438,11 @@ export default function CalendarWidget({
       const outdates = (h as any).outdates ?? [];
       const isExcluded = outdates.some((outdate: any) => {
         if (outdate.date !== dateStr) return false;
+        
+        // Skip empty outdates (default entries with no meaningful exclusion data)
+        if (!outdate.start && !outdate.end) {
+          return false; // Don't exclude based on empty default outdate entries
+        }
         
         // If habit has time and outdate has specific time, check if they match
         if ((h as any).time && outdate.start && outdate.end) {
