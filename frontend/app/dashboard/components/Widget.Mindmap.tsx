@@ -634,6 +634,7 @@ function MindmapFlow({ onClose, onRegisterAsHabit, onRegisterAsGoal, goals = [],
     sourceHandleId: null
   });
   const [showSaveDialog, setShowSaveDialog] = useState(false);
+  const [showCoachMark, setShowCoachMark] = useState(false);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
 
   const [isLongPressMode, setIsLongPressMode] = useState(false);
@@ -646,9 +647,22 @@ function MindmapFlow({ onClose, onRegisterAsHabit, onRegisterAsGoal, goals = [],
   });
   const [mindmapName, setMindmapName] = useState(mindmap?.name || 'Untitled Mindmap');
   const [showNameEditor, setShowNameEditor] = useState(false);
+  const [showSaveToast, setShowSaveToast] = useState(false);
   const reactFlowWrapper = useRef<HTMLDivElement>(null);
   const { project, getViewport, zoomIn, zoomOut, fitView } = useReactFlow();
   const isMobile = isMobileDevice();
+
+  // 初回オンボーディング（簡易 coach-mark）
+  React.useEffect(() => {
+    try {
+      const seen = typeof window !== 'undefined' && window.localStorage.getItem('mindmap_coach_seen');
+      if (!seen) {
+        setShowCoachMark(true);
+      }
+    } catch (e) {
+      // ignore
+    }
+  }, []);
 
   // ログを追加する関数（削除予定）
   const addLog = useCallback((message: string) => {
@@ -1338,18 +1352,26 @@ function MindmapFlow({ onClose, onRegisterAsHabit, onRegisterAsGoal, goals = [],
             </h1>
           )}
         </div>
-        <div className="flex items-center gap-1 sm:gap-2 flex-shrink-0">
+          <div className="flex items-center gap-1 sm:gap-2 flex-shrink-0">
           <button
-            onClick={handleSave}
+            onClick={async () => {
+              await handleSave();
+              setShowSaveToast(true);
+              setTimeout(() => setShowSaveToast(false), 1500);
+            }}
+            title="保存"
+            aria-label="保存"
             className="px-2 py-1 sm:px-4 sm:py-2 bg-green-600 text-white rounded hover:bg-green-700 text-sm sm:text-base"
           >
-            {isMobile ? '保存' : 'Save'}
+            保存
           </button>
           <button
             onClick={handleClose}
+            title="閉じる"
+            aria-label="閉じる"
             className="px-2 py-1 sm:px-4 sm:py-2 bg-blue-600 text-white rounded hover:bg-blue-700 text-sm sm:text-base"
           >
-            {isMobile ? '閉じる' : 'Close'}
+            閉じる
           </button>
         </div>
       </div>
@@ -1667,6 +1689,34 @@ function MindmapFlow({ onClose, onRegisterAsHabit, onRegisterAsGoal, goals = [],
         }}
         goals={goals}
       />
+
+      {/* 保存トースト */}
+      {showSaveToast && (
+        <div className="fixed bottom-6 right-6 z-50 bg-black/80 text-white px-4 py-2 rounded-lg">
+          保存しました ✓
+        </div>
+      )}
+
+      {/* Coach-mark（初回のみ） */}
+      {showCoachMark && (
+        <div className="fixed top-20 left-1/2 -translate-x-1/2 z-50 max-w-md bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-4 shadow-lg">
+          <div className="text-lg font-semibold mb-2">はじめに</div>
+          <div className="text-sm text-gray-700 dark:text-gray-300 mb-3">
+            ノードを長押しで移動、ダブルタップで編集できます。モバイルではノードをタップして操作メニューを開いてください。
+          </div>
+          <div className="flex justify-end">
+            <button
+              onClick={() => {
+                try { window.localStorage.setItem('mindmap_coach_seen', '1'); } catch (e) {}
+                setShowCoachMark(false);
+              }}
+              className="px-3 py-1 bg-blue-600 text-white rounded"
+            >
+              わかった
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
