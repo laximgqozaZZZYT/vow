@@ -113,6 +113,14 @@ body {
     min-width: 0 !important;
     flex: 1 1 auto !important;
   }
+
+  /* Ensure tappable targets meet recommended minimums */
+  .touch-target, button, a[role="button"], .btn {
+    min-height: 44px !important;
+    min-width: 44px !important;
+    padding: 0.5rem 0.75rem !important;
+    touch-action: manipulation;
+  }
 }
 
 /* Frame event styles (calendar) */
