@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
+import Header from "./components/Header";
 import { baseMetadata, createWebApplicationSchema } from "../lib/seo.metadata";
 
 const geistSans = Geist({
@@ -52,12 +53,7 @@ export default function RootLayout({
         <a href="#skip-target" className="skip-link">Skip to content</a>
 
         {/* Header */}
-        {/* eslint-disable-next-line @next/next/no-before-interactive-script-outside-document */}
-        <div>
-          {/* Importing client component */}
-          {/* @ts-ignore */}
-          {typeof window !== 'undefined' ? require('./components/Header').default() : null}
-        </div>
+        <Header />
 
         {/* Wrap children in a landmark role to avoid nesting <main> if pages already use it */}
         <div id="skip-target" role="main">
