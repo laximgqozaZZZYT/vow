@@ -6,6 +6,7 @@ import { DayPicker } from 'react-day-picker'
 import 'react-day-picker/dist/style.css'
 import GoalMermaid from './Widget.GoalDiagram'
 import MultiEventChart from './Widget.MultiEventChart'
+import HeatmapWidget from './Widget.Heatmap'
 import type { Goal as SharedGoal } from '../types'
 
 type TimingType = 'Date' | 'Daily' | 'Weekly' | 'Monthly'
@@ -541,6 +542,7 @@ export default function StaticsSection({ habits, activities, goals }: { habits: 
   // Carousel (we'll add more stat pages later)
   const pages = React.useMemo(() => ([
     { id: 'counts', title: 'Counts vs Time' },
+    { id: 'heatmap', title: 'Activity Heatmap' },
     { id: 'summary', title: 'Summary' },
     { id: 'goals', title: 'Goals' },
   ] as const), [])
@@ -935,6 +937,25 @@ export default function StaticsSection({ habits, activities, goals }: { habits: 
                   )}
                 </div>
               </div>
+              </div>
+            </div>
+          ) : activePage === 'heatmap' ? (
+            <div className="min-w-0">
+              <HeatmapWidget
+                habits={habits}
+                activities={activities}
+                visibleHabitIds={visibleHabitIds}
+                range="month"
+              />
+              
+              {/* Edit Graph button for heatmap */}
+              <div className="mt-4 flex justify-end">
+                <button 
+                  className="rounded border px-3 py-2 text-xs hover:bg-zinc-50 dark:hover:bg-zinc-800" 
+                  onClick={() => setEditGraphOpen(true)}
+                >
+                  Edit Habits
+                </button>
               </div>
             </div>
           ) : activePage === 'goals' ? (
