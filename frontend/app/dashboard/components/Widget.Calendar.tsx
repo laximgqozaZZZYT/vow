@@ -1,11 +1,6 @@
 "use client";
 
 import { useState, useMemo, useRef, useEffect } from "react";
-import FullCalendar from '@fullcalendar/react';
-import timeGridPlugin from '@fullcalendar/timegrid';
-import interactionPlugin from '@fullcalendar/interaction';
-import dayGridPlugin from '@fullcalendar/daygrid';
-import rrulePlugin from '@fullcalendar/rrule';
 import type { Goal, Habit } from '../types';
 
 interface CalendarWidgetProps {
@@ -133,6 +128,37 @@ export default function CalendarWidget({
     
     return result;
   }
+
+  // Dynamically load FullCalendar and plugins on the client to avoid bundling
+  // heavy libraries into the initial payload (benefits mobile cold-start).
+  const [FCModules, setFCModules] = useState<any>(null);
+  useEffect(() => {
+    let mounted = true;
+    async function load() {
+      try {
+        const [FullCalendarMod, timeGridMod, interactionMod, dayGridMod, rruleMod] = await Promise.all([
+          import('@fullcalendar/react'),
+          import('@fullcalendar/timegrid'),
+          import('@fullcalendar/interaction'),
+          import('@fullcalendar/daygrid'),
+          import('@fullcalendar/rrule'),
+        ]);
+        if (!mounted) return;
+        setFCModules({
+          FullCalendar: FullCalendarMod && (FullCalendarMod.default ?? FullCalendarMod),
+          timeGrid: timeGridMod && (timeGridMod.default ?? timeGridMod),
+          interaction: interactionMod && (interactionMod.default ?? interactionMod),
+          dayGrid: dayGridMod && (dayGridMod.default ?? dayGridMod),
+          rrule: rruleMod && (rruleMod.default ?? rruleMod),
+        });
+      } catch (e) {
+        // Non-fatal: if dynamic import fails, keep the UI functional (no calendar)
+        console.error('Failed to load FullCalendar modules', e);
+      }
+    }
+    load();
+    return () => { mounted = false; };
+  }, []);
 
   const calendarRef = useRef<any>(null);
   const [navSelection, setNavSelection] = useState<'today' | 'tomorrow' | 'week' | 'month'>('today');
@@ -597,52 +623,53 @@ export default function CalendarWidget({
             }
           `}</style>
       
-      <FullCalendar
-        ref={calendarRef}
-        plugins={[ timeGridPlugin, dayGridPlugin, interactionPlugin, rrulePlugin ]}
-        initialView={navSelection === 'today' || navSelection === 'tomorrow' ? 'timeGridDay' : navSelection === 'week' ? 'timeGridWeek' : 'dayGridMonth'}
-        nowIndicator={true}
-        height={600}
-        aspectRatio={window.innerWidth < 768 ? 1.0 : 1.35}
-        viewDidMount={() => {
-          if (navSelection === 'today') window.setTimeout(() => scrollToNowCenter(), 0);
-        }}
-        datesSet={() => {
-          if (navSelection === 'today') window.setTimeout(() => scrollToNowCenter(), 0);
-        }}
-        editable={true}
-        eventStartEditable={!isMobile}
-        eventDurationEditable={!isMobile}
-        eventResizableFromStart={!isMobile}
-        eventOverlap={true}
-        eventClassNames={(arg) => {
-          const classes = [];
-          if (selectedEventId === arg.event.id) {
-            classes.push('selected-event');
-          }
-          if (touchMoveMode && selectedEventId === arg.event.id) {
-            classes.push('move-mode');
-          }
-          return classes;
-        }}
-        eventConstraint={{
-          start: '00:00',
-          end: '24:00'
-        }}
-        headerToolbar={{ 
-          left: 'prev,next', 
-          center: 'title', 
-          right: '' 
-        }}
-        slotMinTime="00:00:00"
-        slotMaxTime="24:00:00"
-        selectable={true}
-        selectMirror={true}
-        slotLabelFormat={{ hour: '2-digit', minute: '2-digit', hour12: false }}
-        eventTimeFormat={{ hour: '2-digit', minute: '2-digit', hour12: false }}
-        dayHeaderFormat={window.innerWidth < 768 ? { weekday: 'short' } : { weekday: 'long' }}
-        slotLabelInterval={window.innerWidth < 768 ? '02:00:00' : '01:00:00'}
-        select={(selectionInfo) => {
+      {FCModules && FCModules.FullCalendar ? (
+        <FCModules.FullCalendar
+          ref={calendarRef}
+          plugins={[ FCModules.timeGrid, FCModules.dayGrid, FCModules.interaction, FCModules.rrule ]}
+          initialView={navSelection === 'today' || navSelection === 'tomorrow' ? 'timeGridDay' : navSelection === 'week' ? 'timeGridWeek' : 'dayGridMonth'}
+          nowIndicator={true}
+          height={600}
+          aspectRatio={window.innerWidth < 768 ? 1.0 : 1.35}
+          viewDidMount={() => {
+            if (navSelection === 'today') window.setTimeout(() => scrollToNowCenter(), 0);
+          }}
+          datesSet={() => {
+            if (navSelection === 'today') window.setTimeout(() => scrollToNowCenter(), 0);
+          }}
+          editable={true}
+          eventStartEditable={!isMobile}
+          eventDurationEditable={!isMobile}
+          eventResizableFromStart={!isMobile}
+          eventOverlap={true}
+          eventClassNames={(arg: any) => {
+            const classes: string[] = [];
+            if (selectedEventId === arg.event.id) {
+              classes.push('selected-event');
+            }
+            if (touchMoveMode && selectedEventId === arg.event.id) {
+              classes.push('move-mode');
+            }
+            return classes;
+          }}
+          eventConstraint={{
+            start: '00:00',
+            end: '24:00'
+          }}
+          headerToolbar={{ 
+            left: 'prev,next', 
+            center: 'title', 
+            right: '' 
+          }}
+          slotMinTime="00:00:00"
+          slotMaxTime="24:00:00"
+          selectable={true}
+          selectMirror={true}
+          slotLabelFormat={{ hour: '2-digit', minute: '2-digit', hour12: false }}
+          eventTimeFormat={{ hour: '2-digit', minute: '2-digit', hour12: false }}
+          dayHeaderFormat={window.innerWidth < 768 ? { weekday: 'short' } : { weekday: 'long' }}
+          slotLabelInterval={window.innerWidth < 768 ? '02:00:00' : '01:00:00'}
+          select={(selectionInfo: any) => {
           // Handle mobile event moving
           if (isMobile && touchMoveMode) {
             handleMobileSlotSelect(selectionInfo);
@@ -657,8 +684,8 @@ export default function CalendarWidget({
             : (selectionInfo.end ? selectionInfo.end.toISOString() : undefined);
           const endTime = endSrc && endSrc.length > 10 ? endSrc.slice(11,16) : undefined;
           if (onSlotSelect && iso) onSlotSelect(iso, startTime, endTime);
-        }}
-        eventClick={(clickInfo) => {
+          }}
+          eventClick={(clickInfo: any) => {
           // Handle mobile touch interactions
           if (isMobile) {
             const handled = handleMobileEventClick(clickInfo, clickInfo.jsEvent);
@@ -670,8 +697,8 @@ export default function CalendarWidget({
           const ext = (clickInfo.event as any).extendedProps ?? {};
           const habitId = ext.habitId ?? id;
           if (onEventClick) onEventClick(habitId);
-        }}
-        eventDidMount={(info) => {
+          }}
+          eventDidMount={(info: any) => {
           if (!isMobile) return;
           
           let longPressTimer: NodeJS.Timeout;
@@ -701,8 +728,8 @@ export default function CalendarWidget({
             info.el.removeEventListener('touchmove', handleTouchMove);
             clearTimeout(longPressTimer);
           };
-        }}
-        dateClick={(dateClickInfo) => {
+          }}
+          dateClick={(dateClickInfo: any) => {
           // Reset mobile selection when clicking empty space
           if (isMobile) {
             setSelectedEventId(null);
@@ -713,8 +740,8 @@ export default function CalendarWidget({
           const iso = dateClickInfo.dateStr?.slice(0,10) ?? dateClickInfo.date?.toISOString().slice(0,10);
           const time = dateClickInfo.dateStr && dateClickInfo.dateStr.length > 10 ? dateClickInfo.dateStr.slice(11,16) : undefined;
           if (onSlotSelect && iso) onSlotSelect(iso, time, undefined);
-        }}
-        eventDrop={(dropInfo) => {
+          }}
+          eventDrop={(dropInfo: any) => {
           // Disable drag and drop on mobile - use touch interactions instead
           if (isMobile) {
             dropInfo.revert();
@@ -777,8 +804,8 @@ export default function CalendarWidget({
           if (onEventChange) {
             onEventChange(habitId, { start: startStr, end: endStr, timingIndex });
           }
-        }}
-        eventResize={(resizeInfo) => {
+          }}
+          eventResize={(resizeInfo: any) => {
           // Disable resize on mobile - use touch interactions instead
           if (isMobile) {
             resizeInfo.revert();
@@ -841,9 +868,12 @@ export default function CalendarWidget({
           if (onEventChange) {
             onEventChange(habitId, { start: startStr, end: endStr, timingIndex });
           }
-        }}
-        events={events}
-      />
+          }}
+          events={events}
+        />
+      ) : (
+        <div className="p-6 text-center text-sm text-gray-500">Loading calendar...</div>
+      )}
         </div>
       </div>
 
