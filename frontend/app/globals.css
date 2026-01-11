@@ -163,3 +163,35 @@ body {
 
 /* Slight padding helper to ensure scrollbars don't overlap content */
 .modal-scroll-gap { padding-right: 0.6rem; }
+
+/* Skip link styles (visually hidden but visible on keyboard focus) */
+.skip-link {
+  position: absolute;
+  left: -9999px;
+  top: auto;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+}
+.skip-link:focus, .skip-link:active {
+  position: fixed;
+  left: 1rem;
+  top: 1rem;
+  width: auto;
+  height: auto;
+  padding: 0.5rem 0.75rem;
+  background: var(--foreground);
+  color: var(--background);
+  border-radius: 6px;
+  z-index: 9999;
+}
+
+/* Improve focus visibility for keyboard users */
+:focus {
+  outline: 3px solid rgba(96,165,250,0.9);
+  outline-offset: 2px;
+}
+
+:focus:not(:focus-visible) {
+  outline: none;
+}

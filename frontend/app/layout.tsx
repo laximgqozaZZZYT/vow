@@ -48,7 +48,13 @@ export default function RootLayout({
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
-        {children}
+        {/* Accessible skip link for keyboard users */}
+        <a href="#skip-target" className="skip-link">Skip to content</a>
+
+        {/* Wrap children in a landmark role to avoid nesting <main> if pages already use it */}
+        <div id="skip-target" role="main">
+          {children}
+        </div>
       </body>
     </html>
   );
