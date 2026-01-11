@@ -337,7 +337,7 @@ export function HabitModal({ open, onClose, habit, onUpdate, onDelete, onCreate,
             <div className="w-full max-w-[720px] rounded bg-white px-4 pt-4 pb-0 shadow-lg text-black dark:bg-[#0f1724] dark:text-slate-100 flex flex-col max-h-[95vh] sm:max-h-[90vh]">
                 <div className="flex items-center justify-between">
                     <h2 className="text-xl sm:text-2xl font-semibold">Habit</h2>
-                    <button onClick={onClose} className="text-slate-500 text-lg sm:text-xl">✕</button>
+                    <button onClick={onClose} className="text-slate-500 text-lg sm:text-xl p-2 min-w-[44px] min-h-[44px] flex items-center justify-center">✕</button>
                 </div>
 
                 {/* Scrollable content area with modern scrollbar */}
@@ -351,68 +351,68 @@ export function HabitModal({ open, onClose, habit, onUpdate, onDelete, onCreate,
 
                 <div className="mt-4 flex flex-col lg:flex-row gap-4 habit-scroll-area overflow-auto flex-1 pr-2 modal-scroll-gap">
                     <div className="flex-1">
-                        <h3 className="text-base sm:text-lg font-medium mb-2 text-slate-100">Name</h3>
-                        <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Add title" className="w-full rounded border px-3 py-2 bg-white text-black dark:bg-slate-800 dark:text-slate-100 text-sm" />
+                        <h3 className="text-base sm:text-lg font-medium mb-3 text-slate-100">Name</h3>
+                        <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Add title" className="w-full rounded border px-3 py-3 bg-white text-black dark:bg-slate-800 dark:text-slate-100 text-base" />
 
-                        <div className="mt-6">
+                        <div className="mt-8">
                             {/* Workload section (moved) */}
-                            <div className="mt-3">
+                            <div className="mt-4">
                                 <h3 className="text-lg font-medium text-slate-100">Workload</h3>
                                 {estimatedDaysToTotalEnd !== null ? (
-                                    <div className="mt-1 text-xs text-slate-400">Estimated days to reach Load Total(End): <span className="font-semibold text-slate-200">{estimatedDaysToTotalEnd}</span> days</div>
+                                        <div className="text-sm text-slate-400 mb-2">Estimated days to reach Load Total(End): <span className="font-semibold text-slate-200">{estimatedDaysToTotalEnd}</span> days</div>
                                 ) : null}
-                                <div className="mt-2 grid grid-cols-1 sm:grid-cols-3 gap-3 items-center">
+                                <div className="mt-4 grid grid-cols-1 sm:grid-cols-3 gap-4 items-center">
                                     <div>
-                                        <div className="text-xs text-slate-400 mb-1">Unit</div>
-                                        <input value={workloadUnit} onChange={(e) => setWorkloadUnit(e.target.value)} placeholder="e.g. hrs, pages" className="w-full rounded border px-3 py-2 bg-white text-black dark:bg-slate-800 dark:text-slate-100" />
+                                        <div className="text-sm text-slate-400 mb-2">Unit</div>
+                                        <input value={workloadUnit} onChange={(e) => setWorkloadUnit(e.target.value)} placeholder="e.g. hrs, pages" className="w-full rounded border px-3 py-3 bg-white text-black dark:bg-slate-800 dark:text-slate-100 text-base" />
                                     </div>
                                     <div>
-                                        <div className="text-xs text-slate-400 mb-1">Load per Count</div>
-                                        <input type="number" min={1} value={workloadPerCount} onChange={(e) => setWorkloadPerCount(e.target.value)} className="w-full rounded border px-3 py-2 bg-white text-black dark:bg-slate-800 dark:text-slate-100 text-sm [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" />
+                                        <div className="text-sm text-slate-400 mb-2">Load per Count</div>
+                                        <input type="number" min={1} value={workloadPerCount} onChange={(e) => setWorkloadPerCount(e.target.value)} className="w-full rounded border px-3 py-3 bg-white text-black dark:bg-slate-800 dark:text-slate-100 text-base [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" />
                                     </div>
                                     <div>
-                                        <div className="text-xs text-slate-400 mb-1">Load Total(Day)</div>
-                                        <input type="number" min={0} value={workloadTotal} onChange={(e) => setWorkloadTotal(e.target.value)} className="w-full rounded border px-3 py-2 bg-white text-black dark:bg-slate-800 dark:text-slate-100 text-sm [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" />
+                                        <div className="text-sm text-slate-400 mb-2">Load Total(Day)</div>
+                                        <input type="number" min={0} value={workloadTotal} onChange={(e) => setWorkloadTotal(e.target.value)} className="w-full rounded border px-3 py-3 bg-white text-black dark:bg-slate-800 dark:text-slate-100 text-base [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" />
                                     </div>
                                 </div>
 
-                                <div className="mt-3 grid grid-cols-1 sm:grid-cols-3 gap-3 items-center">
+                                <div className="mt-4 grid grid-cols-1 sm:grid-cols-3 gap-4 items-center">
                                     <div className="col-span-1">
-                                        <div className="text-xs text-slate-400 mb-1">Load Total(End) (optional)</div>
-                                        <input type="number" min={0} value={workloadTotalEnd} onChange={(e) => setWorkloadTotalEnd(e.target.value)} className="w-full rounded border px-3 py-2 bg-white text-black dark:bg-slate-800 dark:text-slate-100 text-sm [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" />
+                                        <div className="text-sm text-slate-400 mb-2">Load Total(End) (optional)</div>
+                                        <input type="number" min={0} value={workloadTotalEnd} onChange={(e) => setWorkloadTotalEnd(e.target.value)} className="w-full rounded border px-3 py-3 bg-white text-black dark:bg-slate-800 dark:text-slate-100 text-base [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" />
                                     </div>
-                                    <div className="col-span-2 text-xs text-slate-500">
+                                    <div className="col-span-2 text-base text-slate-500">
                                         Based on Load Total(Day), we estimate how many days it takes to reach Load Total(End).
                                     </div>
                                 </div>
                             </div>
-                                <div className="mt-4">
+                                <div className="mt-6">
                                     <h3 className="text-lg font-medium">Timings</h3>
-                                    <div className="mt-2 space-y-2">
+                                    <div className="mt-4 space-y-4">
                                         {timings.map((t, idx) => (
-                                            <div key={idx} className="flex flex-col sm:flex-row items-start sm:items-end gap-2 rounded px-2 py-2 border-b border-slate-200 dark:border-slate-700">
-                                                <div className="w-full sm:w-28">
-                                                    <div className="text-xs text-slate-500 mb-1">Timing</div>
+                                            <div key={idx} className="flex flex-col sm:flex-row items-start sm:items-end gap-3 rounded px-3 py-3 border-b border-slate-200 dark:border-slate-700">
+                                                <div className="w-full sm:w-32">
+                                                    <div className="text-sm text-slate-500 mb-2">Timing</div>
                                                     <div className="rounded border bg-white text-black dark:bg-slate-800 dark:text-slate-100">
                                                         <Popover className="relative">
-                                                            <Popover.Button className="w-full text-left px-3 py-2 text-sm">{t.type === 'Date' ? 'A Day' : t.type}</Popover.Button>
+                                                            <Popover.Button className="w-full text-left px-3 py-3 text-base">{t.type === 'Date' ? 'A Day' : t.type}</Popover.Button>
                                                             <Popover.Panel className={`absolute z-50 mt-2 left-0 w-36`}>
                                                                 <div className="rounded bg-white p-2 shadow text-black dark:bg-slate-800 dark:text-slate-100 max-w-full">
-                                                                    <button type="button" onClick={() => setTimings(s => s.map((x, i) => i === idx ? { ...x, type: 'Date' } : x))} className={`w-full text-left px-2 py-1 hover:bg-gray-100 dark:hover:bg-slate-700 ${t.type === 'Date' ? 'bg-sky-600 text-white' : ''}`}>A Day</button>
-                                                                    <button type="button" onClick={() => setTimings(s => s.map((x, i) => i === idx ? { ...x, type: 'Daily' } : x))} className={`w-full text-left px-2 py-1 hover:bg-gray-100 dark:hover:bg-slate-700 ${t.type === 'Daily' ? 'bg-sky-600 text-white' : ''}`}>Daily</button>
-                                                                    <button type="button" onClick={() => setTimings(s => s.map((x, i) => i === idx ? { ...x, type: 'Weekly' } : x))} className={`w-full text-left px-2 py-1 hover:bg-gray-100 dark:hover:bg-slate-700 ${t.type === 'Weekly' ? 'bg-sky-600 text-white' : ''}`}>Weekly</button>
-                                                                    <button type="button" onClick={() => setTimings(s => s.map((x, i) => i === idx ? { ...x, type: 'Monthly' } : x))} className={`w-full text-left px-2 py-1 hover:bg-gray-100 dark:hover:bg-slate-700 ${t.type === 'Monthly' ? 'bg-sky-600 text-white' : ''}`}>Monthly</button>
+                                                                    <button type="button" onClick={() => setTimings(s => s.map((x, i) => i === idx ? { ...x, type: 'Date' } : x))} className={`w-full text-left px-3 py-2 hover:bg-gray-100 dark:hover:bg-slate-700 ${t.type === 'Date' ? 'bg-sky-600 text-white' : ''}`}>A Day</button>
+                                                                    <button type="button" onClick={() => setTimings(s => s.map((x, i) => i === idx ? { ...x, type: 'Daily' } : x))} className={`w-full text-left px-3 py-2 hover:bg-gray-100 dark:hover:bg-slate-700 ${t.type === 'Daily' ? 'bg-sky-600 text-white' : ''}`}>Daily</button>
+                                                                    <button type="button" onClick={() => setTimings(s => s.map((x, i) => i === idx ? { ...x, type: 'Weekly' } : x))} className={`w-full text-left px-3 py-2 hover:bg-gray-100 dark:hover:bg-slate-700 ${t.type === 'Weekly' ? 'bg-sky-600 text-white' : ''}`}>Weekly</button>
+                                                                    <button type="button" onClick={() => setTimings(s => s.map((x, i) => i === idx ? { ...x, type: 'Monthly' } : x))} className={`w-full text-left px-3 py-2 hover:bg-gray-100 dark:hover:bg-slate-700 ${t.type === 'Monthly' ? 'bg-sky-600 text-white' : ''}`}>Monthly</button>
                                                                 </div>
                                                             </Popover.Panel>
                                                         </Popover>
                                                     </div>
                                                 </div>
 
-                                                <div className="w-full sm:w-28">
-                                                    <div className="text-xs text-slate-500 mb-1">Date</div>
+                                                <div className="w-full sm:w-32">
+                                                    <div className="text-sm text-slate-500 mb-2">Date</div>
                                                     <div className="rounded border bg-white text-black dark:bg-slate-800 dark:text-slate-100">
                                                         <Popover className="relative">
-                                                            <Popover.Button className="w-full text-left px-3 py-2 text-sm">{t.date ? (parseYMD(t.date) ? parseYMD(t.date)!.toDateString() : new Date(t.date).toDateString()) : 'Select date'}</Popover.Button>
+                                                            <Popover.Button className="w-full text-left px-3 py-3 text-base">{t.date ? (parseYMD(t.date) ? parseYMD(t.date)!.toDateString() : new Date(t.date).toDateString()) : 'Select date'}</Popover.Button>
                                                             <Popover.Panel className={`absolute z-50 mt-2 left-0 w-[min(380px,90vw)]`}>
                                                                 <div className="rounded bg-white p-4 shadow text-black dark:bg-slate-800 dark:text-slate-100 max-w-full">
                                                                     <DayPicker mode="single" selected={t.date ? parseYMD(t.date) : undefined} onSelect={(d) => setTimings(s => s.map((x, i) => i === idx ? { ...x, date: d ? formatLocalDate(d) : undefined } : x))} />
@@ -423,16 +423,16 @@ export function HabitModal({ open, onClose, habit, onUpdate, onDelete, onCreate,
 
                                                 </div>
 
-                                                <div className="w-full sm:w-28">
-                                                    <div className="text-xs text-slate-500 mb-1">Start</div>
+                                                <div className="w-full sm:w-32">
+                                                    <div className="text-sm text-slate-500 mb-2">Start</div>
                                                     <div className="rounded border bg-white text-black dark:bg-slate-800 dark:text-slate-100">
                                                         <Popover className="relative">
-                                                            <Popover.Button className="w-full text-left px-3 py-2 text-sm">{t.start ?? '--:--'}</Popover.Button>
+                                                            <Popover.Button className="w-full text-left px-3 py-3 text-base">{t.start ?? '--:--'}</Popover.Button>
                                                             <Popover.Panel className={`absolute z-50 mt-2 left-0 w-40`}>
                                                                 <div className="rounded bg-white p-3 shadow text-black dark:bg-slate-800 dark:text-slate-100 max-w-full">
                                                                     <div className="max-h-56 overflow-auto">
                                                                         {buildTimeOptions().map((opt) => (
-                                                                            <button key={opt.value} type="button" onClick={() => setTimings(s => s.map((x, i) => i === idx ? { ...x, start: opt.value } : x))} className={`w-full text-left px-2 py-1 hover:bg-gray-100 dark:hover:bg-slate-700 ${t.start === opt.value ? 'bg-sky-600 text-white' : ''}`}>{opt.label}</button>
+                                                                            <button key={opt.value} type="button" onClick={() => setTimings(s => s.map((x, i) => i === idx ? { ...x, start: opt.value } : x))} className={`w-full text-left px-3 py-2 hover:bg-gray-100 dark:hover:bg-slate-700 ${t.start === opt.value ? 'bg-sky-600 text-white' : ''}`}>{opt.label}</button>
                                                                         ))}
                                                                     </div>
                                                                 </div>
@@ -441,16 +441,16 @@ export function HabitModal({ open, onClose, habit, onUpdate, onDelete, onCreate,
                                                     </div>
                                                 </div>
 
-                                                <div className="w-full sm:w-28">
-                                                    <div className="text-xs text-slate-500 mb-1">End</div>
+                                                <div className="w-full sm:w-32">
+                                                    <div className="text-sm text-slate-500 mb-2">End</div>
                                                     <div className="rounded border bg-white text-black dark:bg-slate-800 dark:text-slate-100">
                                                         <Popover className="relative">
-                                                            <Popover.Button className="w-full text-left px-3 py-2 text-sm">{t.end ?? '--:--'}</Popover.Button>
+                                                            <Popover.Button className="w-full text-left px-3 py-3 text-base">{t.end ?? '--:--'}</Popover.Button>
                                                             <Popover.Panel className={`absolute z-50 mt-2 left-0 w-40`}>
                                                                 <div className="rounded bg-white p-3 shadow text-black dark:bg-slate-800 dark:text-slate-100 max-w-full">
                                                                     <div className="max-h-56 overflow-auto">
                                                                         {buildTimeOptions().map((opt) => (
-                                                                            <button key={opt.value} type="button" onClick={() => setTimings(s => s.map((x, i) => i === idx ? { ...x, end: opt.value } : x))} className={`w-full text-left px-2 py-1 hover:bg-gray-100 dark:hover:bg-slate-700 ${t.end === opt.value ? 'bg-sky-600 text-white' : ''}`}>{opt.label}</button>
+                                                                            <button key={opt.value} type="button" onClick={() => setTimings(s => s.map((x, i) => i === idx ? { ...x, end: opt.value } : x))} className={`w-full text-left px-3 py-2 hover:bg-gray-100 dark:hover:bg-slate-700 ${t.end === opt.value ? 'bg-sky-600 text-white' : ''}`}>{opt.label}</button>
                                                                         ))}
                                                                     </div>
                                                                 </div>
@@ -459,9 +459,9 @@ export function HabitModal({ open, onClose, habit, onUpdate, onDelete, onCreate,
                                                     </div>
                                                 </div>
 
-                                                <div className="w-40">
-                                                    <div className="text-xs text-slate-500 mb-1">Auto Load / Set</div>
-                                                    <div className="w-full rounded border px-3 py-2 bg-slate-50 text-black dark:bg-slate-900/40 dark:text-slate-100 text-sm">
+                                                <div className="w-44">
+                                                    <div className="text-sm text-slate-500 mb-2">Auto Load / Set</div>
+                                                    <div className="w-full rounded border px-3 py-3 bg-slate-50 text-black dark:bg-slate-900/40 dark:text-slate-100 text-base">
                                                         {autoLoadPerSetByTiming[idx] === null ? (
                                                             <span className="text-slate-400">-</span>
                                                         ) : (
@@ -470,7 +470,7 @@ export function HabitModal({ open, onClose, habit, onUpdate, onDelete, onCreate,
                                                     </div>
                                                 </div>
 
-                                                <div className="ml-auto flex items-center gap-2">
+                                                <div className="ml-auto flex items-center gap-3">
                                                     {idx === 0 ? (
                                                         <button
                                                             type="button"
@@ -484,17 +484,17 @@ export function HabitModal({ open, onClose, habit, onUpdate, onDelete, onCreate,
                                                                     end: s[0]?.end ?? undefined,
                                                                 },
                                                             ])}
-                                                            className="rounded bg-slate-100 p-1"
+                                                            className="rounded bg-slate-100 p-2 min-w-[44px] min-h-[44px] flex items-center justify-center"
                                                             aria-label="Add row"
                                                             title="Add row"
                                                         >
-                                                            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-slate-700" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                                            <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-slate-700" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                                                                 <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
                                                             </svg>
                                                         </button>
                                                     ) : (
-                                                        <button type="button" onClick={() => setTimings(s => s.filter((_, i) => i !== idx))} className="p-1 text-red-600" aria-label="Remove row" title="Remove row">
-                                                            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                                                        <button type="button" onClick={() => setTimings(s => s.filter((_, i) => i !== idx))} className="p-2 text-red-600 min-w-[44px] min-h-[44px] flex items-center justify-center" aria-label="Remove row" title="Remove row">
+                                                            <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" viewBox="0 0 20 20" fill="currentColor">
                                                                 <path fillRule="evenodd" d="M6 2a1 1 0 011-1h6a1 1 0 011 1v1h3a1 1 0 110 2h-1v11a2 2 0 01-2 2H6a2 2 0 01-2-2V5H3a1 1 0 110-2h3V2zm2 5a1 1 0 10-2 0v7a1 1 0 102 0V7zm4 0a1 1 0 10-2 0v7a1 1 0 102 0V7z" clipRule="evenodd" />
                                                             </svg>
                                                         </button>
@@ -518,7 +518,10 @@ export function HabitModal({ open, onClose, habit, onUpdate, onDelete, onCreate,
                                             if (tType === 'Date' && dueDate) t.date = formatLocalDate(dueDate)
                                             if (tType === 'Weekly' && timingWeekdays.length) t.cron = `WEEKDAYS:${timingWeekdays.join(',')}`
                                             setOutdates((s) => [...s, t])
-                                        }} className="rounded bg-slate-100 p-1" aria-label="Add outdate" title="Add outdate">
+                                        }} className="rounded bg-slate-100 p-2 min-w-[44px] min-h-[44px] flex items-center justify-center" aria-label="Add outdate" title="Add outdate">
+                                            <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-slate-700" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                                <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+                                            </svg>
                                         </button>
                                         <button type="button" onClick={() => setShowOutdates(s => !s)} className="text-xs text-slate-500">{showOutdates ? 'Collapse' : 'Expand'}</button>
                                     </div>
@@ -611,24 +614,24 @@ export function HabitModal({ open, onClose, habit, onUpdate, onDelete, onCreate,
                                                                         end: s[0]?.end ?? undefined,
                                                                     },
                                                                 ])}
-                                                                className="rounded bg-slate-100 p-1"
+                                                                className="rounded bg-slate-100 p-2 min-w-[44px] min-h-[44px] flex items-center justify-center"
                                                                 aria-label="Add outdate"
                                                                 title="Add outdate"
                                                             >
-                                                                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-slate-700" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                                                <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-slate-700" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                                                                     <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
                                                                 </svg>
                                                             </button>
                                                             {/* Also allow deleting the first outdate row */}
-                                                            <button type="button" onClick={() => setOutdates(s => s.filter((_, i) => i !== idx))} className="p-1 text-red-600" aria-label="Remove outdate" title="Remove outdate">
-                                                                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                                                            <button type="button" onClick={() => setOutdates(s => s.filter((_, i) => i !== idx))} className="p-2 text-red-600 min-w-[44px] min-h-[44px] flex items-center justify-center" aria-label="Remove outdate" title="Remove outdate">
+                                                                <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" viewBox="0 0 20 20" fill="currentColor">
                                                                     <path fillRule="evenodd" d="M6 2a1 1 0 011-1h6a1 1 0 011 1v1h3a1 1 0 110 2h-1v11a2 2 0 01-2 2H6a2 2 0 01-2-2V5H3a1 1 0 110-2h3V2zm2 5a1 1 0 10-2 0v7a1 1 0 102 0V7zm4 0a1 1 0 10-2 0v7a1 1 0 102 0V7z" clipRule="evenodd" />
                                                                 </svg>
                                                             </button>
                                                         </div>
                                                     ) : (
-                                                        <button type="button" onClick={() => setOutdates(s => s.filter((_, i) => i !== idx))} className="p-1 text-red-600" aria-label="Remove outdate" title="Remove outdate">
-                                                            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                                                        <button type="button" onClick={() => setOutdates(s => s.filter((_, i) => i !== idx))} className="p-2 text-red-600 min-w-[44px] min-h-[44px] flex items-center justify-center" aria-label="Remove outdate" title="Remove outdate">
+                                                            <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" viewBox="0 0 20 20" fill="currentColor">
                                                                 <path fillRule="evenodd" d="M6 2a1 1 0 011-1h6a1 1 0 011 1v1h3a1 1 0 110 2h-1v11a2 2 0 01-2 2H6a2 2 0 01-2-2V5H3a1 1 0 110-2h3V2zm2 5a1 1 0 10-2 0v7a1 1 0 102 0V7zm4 0a1 1 0 10-2 0v7a1 1 0 102 0V7z" clipRule="evenodd" />
                                                             </svg>
                                                         </button>
@@ -643,47 +646,47 @@ export function HabitModal({ open, onClose, habit, onUpdate, onDelete, onCreate,
                             {/* workload moved above */}
                         </div>
 
-                        <div className="mt-6">
+                        <div className="mt-8">
                             <h3 className="text-lg font-medium">Type</h3>
-                            <div className="mt-2 flex flex-col gap-2">
-                                <div className="flex gap-3">
-                                    <label className="inline-flex items-center gap-2">
+                            <div className="mt-4 flex flex-col gap-4">
+                                <div className="flex gap-6">
+                                    <label className="inline-flex items-center gap-3">
                                         <input
                                             type="radio"
                                             name="habit-type"
                                             value="do"
                                             checked={type === 'do'}
                                             onChange={() => setType('do')}
-                                            className="form-radio"
+                                            className="form-radio w-5 h-5"
                                         />
-                                        <span className="text-sm">Good</span>
+                                        <span className="text-base">Good</span>
                                     </label>
 
-                                    <label className="inline-flex items-center gap-2">
+                                    <label className="inline-flex items-center gap-3">
                                         <input
                                             type="radio"
                                             name="habit-type"
                                             value="avoid"
                                             checked={type === 'avoid'}
                                             onChange={() => setType('avoid')}
-                                            className="form-radio"
+                                            className="form-radio w-5 h-5"
                                         />
-                                        <span className="text-sm">Bad</span>
+                                        <span className="text-base">Bad</span>
                                     </label>
                                 </div>
-                                <div className="text-xs text-zinc-500 mt-1">Good = show on calendar. Bad = track but hide from calendar.</div>
-                                <div className="mt-4">
-                                    <h3 className="text-lg font-medium mb-2">Goal</h3>
-                                    <select value={goalId} onChange={(e) => setGoalId(e.target.value)} className="w-full rounded border px-3 py-2 bg-white text-black dark:bg-slate-800 dark:text-slate-100">
+                                <div className="text-sm text-zinc-500 mt-2">Good = show on calendar. Bad = track but hide from calendar.</div>
+                                <div className="mt-6">
+                                    <h3 className="text-lg font-medium mb-3">Goal</h3>
+                                    <select value={goalId} onChange={(e) => setGoalId(e.target.value)} className="w-full rounded border px-3 py-3 bg-white text-black dark:bg-slate-800 dark:text-slate-100 text-base">
                                         {(goals ?? []).map((c) => (
                                             <option key={c.id} value={c.id}>{c.name}</option>
                                         ))}
                                     </select>
                                 </div>
 
-                                <div className="mt-4">
+                                <div className="mt-6">
                                     <h3 className="text-lg font-medium">Description</h3>
-                                    <textarea value={notes} onChange={(e) => setNotes(e.target.value)} className="mt-2 w-full rounded border px-3 py-2 bg-white text-black dark:bg-slate-800 dark:text-slate-100" placeholder="Add description" />
+                                    <textarea value={notes} onChange={(e) => setNotes(e.target.value)} className="mt-3 w-full rounded border px-3 py-3 bg-white text-black dark:bg-slate-800 dark:text-slate-100 text-base min-h-[100px]" placeholder="Add description" />
                                 </div>
                                 
                                 {/* Related Habits */}
@@ -698,8 +701,8 @@ export function HabitModal({ open, onClose, habit, onUpdate, onDelete, onCreate,
                                                 <div key={r.id} className="flex items-center justify-between rounded px-2 py-2 border">
                                                     <div className="text-sm"><span className="font-medium">{other.name}</span> <span className="text-xs text-zinc-500">({r.relation})</span></div>
                                                     <div>
-                                                        <button type="button" onClick={() => handleDeleteRelation(r.id)} className="p-1 text-red-600" aria-label="Delete relation" title="Delete relation">
-                                                            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                                                        <button type="button" onClick={() => handleDeleteRelation(r.id)} className="p-2 text-red-600 min-w-[44px] min-h-[44px] flex items-center justify-center" aria-label="Delete relation" title="Delete relation">
+                                                            <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" viewBox="0 0 20 20" fill="currentColor">
                                                                 <path fillRule="evenodd" d="M6 2a1 1 0 011-1h6a1 1 0 011 1v1h3a1 1 0 110 2h-1v11a2 2 0 01-2 2H6a2 2 0 01-2-2V5H3a1 1 0 110-2h3V2zm2 5a1 1 0 10-2 0v7a1 1 0 102 0V7zm4 0a1 1 0 10-2 0v7a1 1 0 102 0V7z" clipRule="evenodd" />
                                                             </svg>
                                                         </button>
@@ -724,11 +727,11 @@ export function HabitModal({ open, onClose, habit, onUpdate, onDelete, onCreate,
                                                 type="button"
                                                 onClick={handleAddRelation}
                                                 disabled={!habit}
-                                                className="rounded bg-slate-100 p-1 disabled:opacity-50"
+                                                className="rounded bg-slate-100 p-2 disabled:opacity-50 min-w-[44px] min-h-[44px] flex items-center justify-center"
                                                 aria-label="Add relation"
                                                 title="Add relation"
                                             >
-                                                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-slate-700" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                                <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-slate-700" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                                                     <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
                                                 </svg>
                                             </button>
@@ -742,10 +745,10 @@ export function HabitModal({ open, onClose, habit, onUpdate, onDelete, onCreate,
 
                 </div>
 
-                <div className="flex flex-col sm:flex-row gap-2 p-3 border-t border-slate-200 dark:border-slate-700">
-                    <button onClick={handleSave} className="rounded bg-blue-600 px-4 py-2 text-white text-sm sm:text-base">Save</button>
-                    <button onClick={onClose} className="px-4 py-2 dark:bg-slate-800 dark:text-slate-100 text-black border rounded text-sm sm:text-base">Cancel</button>
-                    {habit && <button onClick={handleDelete} className="sm:ml-auto text-sm text-red-600 px-4 py-2">Delete</button>}
+                <div className="flex flex-col sm:flex-row gap-3 p-4 border-t border-slate-200 dark:border-slate-700">
+                    <button onClick={handleSave} className="rounded bg-blue-600 px-6 py-3 text-white text-base font-medium min-h-[44px]">Save</button>
+                    <button onClick={onClose} className="px-6 py-3 dark:bg-slate-800 dark:text-slate-100 text-black border rounded text-base font-medium min-h-[44px]">Cancel</button>
+                    {habit && <button onClick={handleDelete} className="sm:ml-auto text-base text-red-600 px-6 py-3 font-medium min-h-[44px]">Delete</button>}
                 </div>
             </div>
         </div>
