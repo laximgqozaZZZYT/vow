@@ -62,7 +62,7 @@ function generateHeatmapData(
   
   // Filter activities for visible habits
   const filteredActivities = activities.filter(
-    activity => visibleHabitSet.has(activity.habitId) && 
+    activity => activity.habitId && visibleHabitSet.has(activity.habitId) && 
     (activity.kind === 'complete' || activity.kind === 'pause')
   );
 
@@ -87,6 +87,7 @@ function generateHeatmapData(
   // Group activities by date
   const activityMap = new Map<string, Activity[]>();
   filteredActivities.forEach(activity => {
+    if (!activity.timestamp) return;
     const date = getDateString(new Date(activity.timestamp));
     if (!activityMap.has(date)) {
       activityMap.set(date, []);

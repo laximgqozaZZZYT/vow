@@ -7,7 +7,7 @@ import 'react-day-picker/dist/style.css'
 import GoalMermaid from './Widget.GoalDiagram'
 import MultiEventChart from './Widget.MultiEventChart'
 import HeatmapWidget from './Widget.Heatmap'
-import type { Goal as SharedGoal } from '../types'
+import type { Goal as SharedGoal, Habit, Activity } from '../types'
 
 type TimingType = 'Date' | 'Daily' | 'Weekly' | 'Monthly'
 type Timing = {
@@ -17,36 +17,6 @@ type Timing = {
   start?: string
   end?: string
   cron?: string
-}
-
-type Habit = {
-  id: string
-  name: string
-  createdAt?: string | null
-  dueDate?: string | null
-  repeat?: string | null
-  // schedule
-  timings?: Timing[] | null
-  outdates?: Timing[] | null
-  // legacy-ish fields used by calendar UI
-  time?: string | null
-  endTime?: string | null
-  // workload
-  workloadUnit?: string | null
-  workloadTotal?: number | null
-  must?: number | null
-  workloadPerCount?: number | null
-}
-
-type Activity = {
-  id: string
-  kind: string
-  habitId: string
-  timestamp: string
-  amount?: number | null
-  newCount?: number | null
-  prevCount?: number | null
-  durationSeconds?: number | null
 }
 
 type Goal = {
@@ -167,7 +137,7 @@ function buildDailyCountSeries(activities: Activity[], habitId: string): Point[]
   const map = new Map<string, number>()
 
   for (const a of activities) {
-    if (a.habitId !== habitId) continue
+    if (a.habitId !== habitId || !a.timestamp) continue
     const d = isoDay(a.timestamp)
     if (!d) continue
 
@@ -183,7 +153,8 @@ function buildDailyCountSeries(activities: Activity[], habitId: string): Point[]
   return points
 }
 
-function safeTs(iso: string): number {
+function safeTs(iso: string | undefined): number {
+  if (!iso) return 0
   const t = new Date(iso).getTime()
   return Number.isFinite(t) ? t : 0
 }
@@ -416,7 +387,7 @@ function buildEventPoints(
 
   const filtered = activities
     .filter(a => (a.kind === 'pause' || a.kind === 'complete'))
-    .filter(a => visible.has(a.habitId))
+    .filter(a => a.habitId && visible.has(a.habitId))
     .map(a => ({ a, ts: safeTs(a.timestamp) }))
     .filter(x => x.ts > 0)
     .sort((x, y) => x.ts - y.ts)
@@ -449,6 +420,7 @@ function buildEventPoints(
   for (const { a, ts } of filtered) {
     if (ts < startTs) continue
     if (ts > endTs) continue
+    if (!a.habitId) continue
 
     const habit = habitMap.get(a.habitId)
     const unit = (habit?.workloadUnit ?? '') || 'work'
@@ -467,7 +439,7 @@ function buildEventPoints(
     out.push({
       habitId: a.habitId,
       ts,
-      iso: a.timestamp,
+      iso: a.timestamp || '',
       kind: a.kind as any,
       workloadDelta: delta,
       workloadCumulative: nextCum,
