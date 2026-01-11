@@ -245,8 +245,8 @@ export function useActivityManager({
       }
       // after propagation, update the habit's stored count to the most recent newCount for this habit (if any)
       const mostRecent = copy.find(x => x.habitId === updated.habitId && typeof x.newCount === 'number');
-      if (typeof latestCount === 'number') {
-        setHabits(hs => hs.map(h => h.id === updated.habitId ? { ...h, count: latestCount, updatedAt: new Date().toISOString() } : h));
+      if (typeof mostRecent?.newCount === 'number') {
+        setHabits(hs => hs.map(h => h.id === updated.habitId ? { ...h, count: mostRecent.newCount, updatedAt: new Date().toISOString() } : h));
       }
 
       // if the updated activity was a pause, update pausedLoads for that habit
