@@ -235,6 +235,8 @@ export default function CalendarWidget({
     const ev: any[] = [];
     const goalsById = Object.fromEntries((goals ?? []).map(g => [g.id, g])) as Record<string, Goal>;
     
+    console.log('[Calendar] Processing habits for events:', habits.length);
+    
     const goalCompleted = (goalId: string) => {
       let g: Goal | undefined = goalsById[goalId];
       while (g) {
@@ -245,12 +247,36 @@ export default function CalendarWidget({
     };
 
     for (const h of (habits ?? [])) {
-      if (!h.active) continue;
-      if (h.completed) continue;
-      if (goalCompleted(h.goalId)) continue;
-      if (h.type === 'avoid') continue;
+      console.log('[Calendar] Processing habit:', { 
+        id: h.id, 
+        name: h.name, 
+        active: h.active, 
+        completed: h.completed, 
+        type: h.type,
+        timings: (h as any).timings,
+        time: (h as any).time,
+        dueDate: h.dueDate
+      });
+      
+      if (!h.active) {
+        console.log('[Calendar] Skipping inactive habit:', h.name);
+        continue;
+      }
+      if (h.completed) {
+        console.log('[Calendar] Skipping completed habit:', h.name);
+        continue;
+      }
+      if (goalCompleted(h.goalId)) {
+        console.log('[Calendar] Skipping habit with completed goal:', h.name);
+        continue;
+      }
+      if (h.type === 'avoid') {
+        console.log('[Calendar] Skipping avoid-type habit:', h.name);
+        continue;
+      }
       
       const timings = (h as any).timings ?? [];
+      console.log('[Calendar] Habit timings:', { habitName: h.name, timings });
       
       if (timings.length) {
         for (let ti = 0; ti < timings.length; ti++) {

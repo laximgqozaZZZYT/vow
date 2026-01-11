@@ -161,7 +161,8 @@ export function HabitModal({ open, onClose, habit, onUpdate, onDelete, onCreate,
     const totalTimingMinutes = React.useMemo(() => timingDurations.reduce((a, b) => a + b, 0), [timingDurations])
 
     const autoLoadPerSetByTiming = React.useMemo(() => {
-        const dayTotal = typeof workloadTotal === 'number' && Number.isFinite(workloadTotal) ? workloadTotal : null
+        const dayTotalNum = Number(workloadTotal)
+        const dayTotal = !isNaN(dayTotalNum) && dayTotalNum > 0 ? dayTotalNum : null
         if (dayTotal === null || dayTotal <= 0) return (timings ?? []).map(() => null as number | null)
         if (!timingDurations.length) return (timings ?? []).map(() => null as number | null)
 
@@ -176,8 +177,10 @@ export function HabitModal({ open, onClose, habit, onUpdate, onDelete, onCreate,
     }, [timings, timingDurations, totalTimingMinutes, workloadTotal])
 
     const estimatedDaysToTotalEnd = React.useMemo(() => {
-        const endTotal = typeof workloadTotalEnd === 'number' && Number.isFinite(workloadTotalEnd) ? workloadTotalEnd : null
-        const dayTotal = typeof workloadTotal === 'number' && Number.isFinite(workloadTotal) ? workloadTotal : null
+        const endTotalNum = Number(workloadTotalEnd)
+        const dayTotalNum = Number(workloadTotal)
+        const endTotal = !isNaN(endTotalNum) && endTotalNum > 0 ? endTotalNum : null
+        const dayTotal = !isNaN(dayTotalNum) && dayTotalNum > 0 ? dayTotalNum : null
         if (endTotal === null || endTotal <= 0) return null
         if (dayTotal === null || dayTotal <= 0) return null
         return Math.ceil(endTotal / dayTotal)
@@ -225,6 +228,20 @@ export function HabitModal({ open, onClose, habit, onUpdate, onDelete, onCreate,
             onClose();
         } else {
             // creation flow
+            let finalTimings = timings;
+            
+            // If timings array is empty, create a default timing based on current form values
+            if (!finalTimings || finalTimings.length === 0) {
+                const tType: TimingType = timingType || (dueDate ? 'Date' : 'Daily');
+                finalTimings = [{
+                    type: tType,
+                    date: dueDate ? formatLocalDate(dueDate) : undefined,
+                    start: time ?? undefined,
+                    end: endTime ?? undefined
+                }];
+                console.log('[HabitModal] Generated default timing for empty timings array:', finalTimings);
+            }
+            
             const payload: CreateHabitPayload = {
                 name: name.trim() || "Untitled",
                 type,
@@ -232,7 +249,7 @@ export function HabitModal({ open, onClose, habit, onUpdate, onDelete, onCreate,
                 time: time ?? undefined,
                 endTime,
                 repeat: timingType,
-                timings: timings, // Always include timings
+                timings: finalTimings, // Use finalTimings instead of timings
                 allDay,
                 workloadUnit: workloadUnit || undefined,
                 workloadTotal: workloadTotal ? Number(workloadTotal) : undefined,
