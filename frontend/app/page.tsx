@@ -3,15 +3,6 @@ import Link from "next/link";
 import type { Metadata } from "next";
 import { createPageMetadata } from "../lib/seo.metadata";
 
-// Default metadata for build-time, but Next.js App Router supports a locale-aware
-// generateMetadata which receives the params including locale.
-export const metadata: Metadata = createPageMetadata({
-  title: "VOW — Habit & Goal Tracker",
-  description:
-    "VOW helps you build habits and make progress on goals with a minimal, focused workflow.",
-  path: "/",
-});
-
 // locale-aware metadata generator
 export async function generateMetadata({ params, searchParams }: { params: { locale?: string }; searchParams: any }): Promise<Metadata> {
   const locale = params?.locale || 'en';
