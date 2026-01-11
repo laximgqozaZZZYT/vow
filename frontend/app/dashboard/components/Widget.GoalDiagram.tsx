@@ -42,7 +42,8 @@ export default function GoalMermaid({ goals, showErrorDetails = false, compact =
       ? goals.filter(g => visibleGoalIds.includes(g.id))
       : goals;
       
-    let s = 'flowchart TD\n';
+    // Use LR (Left to Right) for better mobile display
+    let s = 'flowchart LR\n';
     for (const g of visibleGoals) {
       const gid = `G_${String(g.id).replace(/[^a-zA-Z0-9_]/g, '_')}`;
       s += `  ${gid}["${String(g.name).replace(/"/g, '\\"')}"]\n`;
@@ -135,7 +136,7 @@ export default function GoalMermaid({ goals, showErrorDetails = false, compact =
           ref={containerRef} 
           className={compact 
             ? "min-w-0 rounded border border-zinc-100 bg-black/10 p-2 dark:border-slate-800 dark:bg-white/5" 
-            : "overflow-auto border rounded p-2 min-w-[400px]"
+            : "overflow-auto border rounded p-2 min-w-[300px] sm:min-w-[400px]"
           } 
           style={{ minHeight: 120 }} 
         />
