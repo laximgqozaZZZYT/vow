@@ -20,6 +20,7 @@ import ReactFlow, {
 import 'reactflow/dist/style.css'
 import { GoalModal } from './Modal.Goal'
 import { HabitModal } from './Modal.Habit'
+import { ToastProvider, useToast } from './ToastManager'
 
 // デバイス判定ユーティリティ
 const isMobileDevice = () => {
@@ -711,7 +712,14 @@ function MindmapFlow({ onClose, onRegisterAsHabit, onRegisterAsGoal, goals = [],
   });
   const [mindmapName, setMindmapName] = useState(mindmap?.name || 'Untitled Mindmap');
   const [showNameEditor, setShowNameEditor] = useState(false);
-  const [showSaveToast, setShowSaveToast] = useState(false);
+  // toast will be used for save messages
+  const toastCtx = (() => {
+    try {
+      return useToast()
+    } catch (e) {
+      return null
+    }
+  })();
   const reactFlowWrapper = useRef<HTMLDivElement>(null);
   const { project, getViewport, zoomIn, zoomOut, fitView } = useReactFlow();
   const isMobile = isMobileDevice();
@@ -1420,8 +1428,9 @@ function MindmapFlow({ onClose, onRegisterAsHabit, onRegisterAsGoal, goals = [],
           <button
             onClick={async () => {
               await handleSave();
-              setShowSaveToast(true);
-              setTimeout(() => setShowSaveToast(false), 1500);
+              if (toastCtx) {
+                toastCtx.showToast({ message: t('saved'), duration: 1500 })
+              }
             }}
             title={t('save')}
             aria-label={t('save')}
@@ -1766,11 +1775,7 @@ function MindmapFlow({ onClose, onRegisterAsHabit, onRegisterAsGoal, goals = [],
       />
 
       {/* 保存トースト */}
-      {showSaveToast && (
-        <div className="fixed bottom-6 right-6 z-50 bg-black/80 text-white px-4 py-2 rounded-lg">
-          {t('saved')}
-        </div>
-      )}
+      {/* save toast is handled by ToastProvider */}
 
       {/* Coach-mark（初回のみ） */}
       {showCoachMark && (
@@ -1798,8 +1803,10 @@ function MindmapFlow({ onClose, onRegisterAsHabit, onRegisterAsGoal, goals = [],
 
 export default function WidgetMindmap(props: MindmapProps) {
   return (
-    <ReactFlowProvider>
-      <MindmapFlow {...props} />
-    </ReactFlowProvider>
+    <ToastProvider>
+      <ReactFlowProvider>
+        <MindmapFlow {...props} />
+      </ReactFlowProvider>
+    </ToastProvider>
   );
 }
