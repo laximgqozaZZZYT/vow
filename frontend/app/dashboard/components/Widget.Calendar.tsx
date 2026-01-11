@@ -49,17 +49,89 @@ export default function CalendarWidget({
 
   function getGoalDueDate(goalId: string): Date | undefined {
     const g = (goals ?? []).find((x) => x.id === goalId);
-    return g?.dueDate ? parseYmd(String(g.dueDate)) : undefined;
+    
+    if (!g?.dueDate) {
+      console.log('[Calendar] getGoalDueDate: No dueDate found', { goalId, goal: g });
+      return undefined;
+    }
+    
+    let result: Date | undefined;
+    
+    try {
+      if (g.dueDate instanceof Date) {
+        result = isNaN(g.dueDate.getTime()) ? undefined : g.dueDate;
+      } else {
+        // Try to parse string dueDate
+        const dueDateStr = String(g.dueDate).trim();
+        if (!dueDateStr || dueDateStr === 'null' || dueDateStr === 'undefined') {
+          result = undefined;
+        } else {
+          result = parseYmd(dueDateStr);
+        }
+      }
+    } catch (error) {
+      console.error('[Calendar] Error parsing goal dueDate:', error, { goalId, dueDate: g.dueDate });
+      result = undefined;
+    }
+    
+    // Safe logging - check if result is a valid Date before calling toISOString
+    const parsedDateStr = result && !isNaN(result.getTime()) ? result.toISOString().slice(0, 10) : 'Invalid Date';
+    console.log('[Calendar] getGoalDueDate:', { 
+      goalId, 
+      goal: g, 
+      dueDate: g?.dueDate, 
+      dueDateType: typeof g?.dueDate,
+      dueDateString: String(g?.dueDate), 
+      parsed: parsedDateStr,
+      isValidDate: result && !isNaN(result.getTime())
+    });
+    
+    // Return undefined if the parsed date is invalid
+    return result && !isNaN(result.getTime()) ? result : undefined;
   }
 
   function computeExpandDays(base: Date, goalDue?: Date): number {
-    const horizon = goalDue ?? addDays(base, INDEFINITE_HORIZON_DAYS);
+    // Validate input dates
+    if (!base || isNaN(base.getTime())) {
+      console.error('[Calendar] Invalid base date in computeExpandDays:', base);
+      base = new Date(); // Fallback to today
+    }
+    
+    if (goalDue && isNaN(goalDue.getTime())) {
+      console.error('[Calendar] Invalid goalDue date in computeExpandDays:', goalDue);
+      goalDue = undefined; // Ignore invalid goal due date
+    }
+    
+    // For Daily habits, always show events from today onwards, regardless of goal due date
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    
+    // Use the later of base date or today as the actual start
+    const actualBase = new Date(Math.max(base.getTime(), today.getTime()));
+    
+    const horizon = goalDue ?? addDays(actualBase, INDEFINITE_HORIZON_DAYS);
     const endDay = new Date(horizon);
     endDay.setHours(0, 0, 0, 0);
-    const baseDay = new Date(base);
+    const baseDay = new Date(actualBase);
     baseDay.setHours(0, 0, 0, 0);
-    const days = Math.ceil((endDay.getTime() - baseDay.getTime()) / (24 * 3600 * 1000));
-    return Math.max(1, days + 1);
+    
+    // If goal due date is in the past, extend to at least 30 days from today
+    const minHorizon = addDays(today, 30);
+    const finalHorizon = goalDue && endDay < minHorizon ? minHorizon : endDay;
+    
+    const days = Math.ceil((finalHorizon.getTime() - baseDay.getTime()) / (24 * 3600 * 1000));
+    const result = Math.max(1, days + 1);
+    
+    console.log('[Calendar] computeExpandDays:', { 
+      originalBase: base.toISOString().slice(0, 10),
+      actualBase: baseDay.toISOString().slice(0, 10), 
+      goalDue: goalDue?.toISOString().slice(0, 10), 
+      finalHorizon: finalHorizon.toISOString().slice(0, 10), 
+      days, 
+      result 
+    });
+    
+    return result;
   }
 
   const calendarRef = useRef<any>(null);
@@ -156,7 +228,6 @@ export default function CalendarWidget({
     const habitId = ext.habitId ?? id;
     const eventTitle = clickInfo.event.title;
     
-    const touch = event.touches?.[0] || event;
     const rect = (event.target as HTMLElement).getBoundingClientRect();
     setSelectedEventId(id);
     setContextMenu({
@@ -199,8 +270,6 @@ export default function CalendarWidget({
     const startStr = newStart.toISOString();
     const endStr = newEnd.toISOString();
     
-    console.log('[Calendar] Mobile move event:', { habitId, startStr, endStr, timingIndex });
-    
     // Check if recurring and handle accordingly
     const habit = habits.find(h => h.id === habitId);
     if (habit) {
@@ -235,8 +304,6 @@ export default function CalendarWidget({
     const ev: any[] = [];
     const goalsById = Object.fromEntries((goals ?? []).map(g => [g.id, g])) as Record<string, Goal>;
     
-    console.log('[Calendar] Processing habits for events:', habits.length);
-    
     const goalCompleted = (goalId: string) => {
       let g: Goal | undefined = goalsById[goalId];
       while (g) {
@@ -247,36 +314,21 @@ export default function CalendarWidget({
     };
 
     for (const h of (habits ?? [])) {
-      console.log('[Calendar] Processing habit:', { 
-        id: h.id, 
-        name: h.name, 
-        active: h.active, 
-        completed: h.completed, 
-        type: h.type,
-        timings: (h as any).timings,
-        time: (h as any).time,
-        dueDate: h.dueDate
-      });
-      
       if (!h.active) {
-        console.log('[Calendar] Skipping inactive habit:', h.name);
         continue;
       }
       if (h.completed) {
-        console.log('[Calendar] Skipping completed habit:', h.name);
         continue;
       }
       if (goalCompleted(h.goalId)) {
-        console.log('[Calendar] Skipping habit with completed goal:', h.name);
         continue;
       }
       if (h.type === 'avoid') {
-        console.log('[Calendar] Skipping avoid-type habit:', h.name);
         continue;
       }
       
       const timings = (h as any).timings ?? [];
-      console.log('[Calendar] Habit timings:', { habitName: h.name, timings });
+      const outdates = (h as any).outdates ?? [];
       
       if (timings.length) {
         for (let ti = 0; ti < timings.length; ti++) {
@@ -314,9 +366,6 @@ export default function CalendarWidget({
               const goalDue = getGoalDueDate(h.goalId);
               const expandDays = computeExpandDays(base, goalDue);
               
-              // Get outdates for this habit to exclude specific dates/times
-              const outdates = (h as any).outdates ?? [];
-              
               for (let d = 0; d < expandDays; d++) {
                 const day = addDays(base, d);
                 const dateS = ymd(day);
@@ -326,12 +375,16 @@ export default function CalendarWidget({
                   if (t.cron && String(t.cron).startsWith('WEEKDAYS:')) {
                     weekdays = (t.cron.split(':')[1] || '').split(',').map((x: string) => Number(x)).filter((n: number) => !Number.isNaN(n));
                   }
-                  if (weekdays && !weekdays.includes(day.getDay())) continue;
+                  if (weekdays && !weekdays.includes(day.getDay())) {
+                    continue;
+                  }
                 }
                 
                 if (t.type === 'Monthly') {
                   const ref = parseYmd(t.date);
-                  if (ref && ref.getDate() !== day.getDate()) continue;
+                  if (ref && ref.getDate() !== day.getDate()) {
+                    continue;
+                  }
                 }
                 
                 // Check if this specific date/time is excluded by outdates
@@ -345,12 +398,14 @@ export default function CalendarWidget({
                   
                   // If outdate has specific time, check if it matches this timing
                   if (outdate.start && outdate.end) {
-                    return outdate.start === t.start && outdate.end === t.end;
+                    const matches = outdate.start === t.start && outdate.end === t.end;
+                    return matches;
                   }
                   
                   // If outdate has only start time, check if it matches
                   if (outdate.start) {
-                    return outdate.start === t.start;
+                    const matches = outdate.start === t.start;
+                    return matches;
                   }
                   
                   // If outdate has no time specified, exclude the entire date
@@ -358,7 +413,6 @@ export default function CalendarWidget({
                 });
                 
                 if (isExcluded) {
-                  console.log(`[Calendar] Excluding event for ${dateS} due to outdate:`, { habitName: h.name, timing: t, dateS });
                   continue;
                 }
                 
@@ -378,9 +432,6 @@ export default function CalendarWidget({
               const base = parseYmd(t.date ?? h.dueDate ?? ymd(new Date())) ?? new Date();
               const goalDue = getGoalDueDate(h.goalId);
               const expandDays = computeExpandDays(base, goalDue);
-              
-              // Get outdates for this habit to exclude specific dates
-              const outdates = (h as any).outdates ?? [];
               
               for (let d = 0; d < expandDays; d++) {
                 const day = addDays(base, d);
@@ -412,7 +463,6 @@ export default function CalendarWidget({
                 });
                 
                 if (isExcluded) {
-                  console.log(`[Calendar] Excluding all-day event for ${dateS} due to outdate:`, { habitName: h.name, timing: t, dateS });
                   continue;
                 }
                 
@@ -435,7 +485,6 @@ export default function CalendarWidget({
       const dateStr = h.dueDate ?? new Date().toISOString().slice(0,10);
       
       // Check if this habit's date/time is excluded by outdates
-      const outdates = (h as any).outdates ?? [];
       const isExcluded = outdates.some((outdate: any) => {
         if (outdate.date !== dateStr) return false;
         
@@ -463,7 +512,6 @@ export default function CalendarWidget({
       });
       
       if (isExcluded) {
-        console.log(`[Calendar] Excluding habit due to outdate:`, { habitName: h.name, dateStr, time: (h as any).time });
         continue;
       }
       
@@ -680,22 +728,12 @@ export default function CalendarWidget({
           const habitId = ext.habitId ?? id;
           const timingIndex = ext.timingIndex;
           
-          console.log('[Calendar] Event dropped:', { habitId, startStr, endStr, timingIndex, eventId: id });
-          
           const habit = habits.find(h => h.id === habitId);
           if (!habit) {
-            console.warn('[Calendar] Habit not found:', habitId);
             return;
           }
           
           const timings = habit && (habit as any).timings && Array.isArray((habit as any).timings) ? (habit as any).timings : [];
-          console.log('[Calendar] Habit details:', {
-            id: habit.id,
-            name: habit.name,
-            repeat: habit.repeat,
-            timings: timings,
-            timingsLength: timings.length
-          });
           
           // Check if this specific event is editable
           let isEditable = true;
@@ -704,17 +742,14 @@ export default function CalendarWidget({
           if (typeof timingIndex === 'number' && timings[timingIndex]) {
             // If timingIndex is specified, check the specific timing entry
             const timing = timings[timingIndex];
-            console.log(`[Calendar] Checking specific timing ${timingIndex}:`, timing);
             
             // Date type timings are always editable (specific dates, not recurring)
             if (timing.type === 'Date') {
               isEditable = true;
               isRecurring = false;
-              console.log('[Calendar] Timing is Date type - editable');
             } else if (timing.type === 'Daily' || timing.type === 'Weekly' || timing.type === 'Monthly') {
               isEditable = true; // Allow editing but show confirmation
               isRecurring = true;
-              console.log('[Calendar] Timing is recurring type - show confirmation');
             }
           } else {
             // No timingIndex - check if habit has recurring patterns
@@ -724,18 +759,15 @@ export default function CalendarWidget({
             const hasRepeat = habit && habit.repeat && habit.repeat !== 'Does not repeat';
             isRecurring = hasRecurringTimings || hasRepeat;
             isEditable = true; // Allow editing but show confirmation for recurring
-            console.log('[Calendar] No timingIndex - checking habit level recurring:', { hasRecurringTimings, hasRepeat, isRecurring });
           }
           
           if (!isEditable) {
-            console.log('[Calendar] Reverting non-editable habit move');
             try { dropInfo.revert(); } catch (e) { /* ignore */ }
             if (onRecurringAttempt) onRecurringAttempt(habitId, { start: startStr, end: endStr });
             return;
           }
           
           if (isRecurring) {
-            console.log('[Calendar] Showing confirmation for recurring habit');
             if (onRecurringHabitRequest) {
               onRecurringHabitRequest(habitId, { start: startStr, end: endStr, timingIndex });
             }
@@ -743,7 +775,6 @@ export default function CalendarWidget({
           }
           
           if (onEventChange) {
-            console.log('[Calendar] Calling onEventChange for editable habit');
             onEventChange(habitId, { start: startStr, end: endStr, timingIndex });
           }
         }}
@@ -761,22 +792,12 @@ export default function CalendarWidget({
           const habitId = ext.habitId ?? id;
           const timingIndex = ext.timingIndex;
           
-          console.log('[Calendar] Event resized:', { habitId, startStr, endStr, timingIndex, eventId: id });
-          
           const habit = habits.find(h => h.id === habitId);
           if (!habit) {
-            console.warn('[Calendar] Habit not found:', habitId);
             return;
           }
           
           const timings = habit && (habit as any).timings && Array.isArray((habit as any).timings) ? (habit as any).timings : [];
-          console.log('[Calendar] Habit details:', {
-            id: habit.id,
-            name: habit.name,
-            repeat: habit.repeat,
-            timings: timings,
-            timingsLength: timings.length
-          });
           
           // Check if this specific event is editable
           let isEditable = true;
@@ -785,17 +806,14 @@ export default function CalendarWidget({
           if (typeof timingIndex === 'number' && timings[timingIndex]) {
             // If timingIndex is specified, check the specific timing entry
             const timing = timings[timingIndex];
-            console.log(`[Calendar] Checking specific timing ${timingIndex}:`, timing);
             
             // Date type timings are always editable (specific dates, not recurring)
             if (timing.type === 'Date') {
               isEditable = true;
               isRecurring = false;
-              console.log('[Calendar] Timing is Date type - editable');
             } else if (timing.type === 'Daily' || timing.type === 'Weekly' || timing.type === 'Monthly') {
               isEditable = true; // Allow editing but show confirmation
               isRecurring = true;
-              console.log('[Calendar] Timing is recurring type - show confirmation');
             }
           } else {
             // No timingIndex - check if habit has recurring patterns
@@ -805,18 +823,15 @@ export default function CalendarWidget({
             const hasRepeat = habit && habit.repeat && habit.repeat !== 'Does not repeat';
             isRecurring = hasRecurringTimings || hasRepeat;
             isEditable = true; // Allow editing but show confirmation for recurring
-            console.log('[Calendar] No timingIndex - checking habit level recurring:', { hasRecurringTimings, hasRepeat, isRecurring });
           }
           
           if (!isEditable) {
-            console.log('[Calendar] Reverting non-editable habit resize');
             try { resizeInfo.revert(); } catch (e) { /* ignore */ }
             if (onRecurringAttempt) onRecurringAttempt(habitId, { start: startStr, end: endStr });
             return;
           }
           
           if (isRecurring) {
-            console.log('[Calendar] Showing confirmation for recurring habit resize');
             if (onRecurringHabitRequest) {
               onRecurringHabitRequest(habitId, { start: startStr, end: endStr, timingIndex });
             }
@@ -824,7 +839,6 @@ export default function CalendarWidget({
           }
           
           if (onEventChange) {
-            console.log('[Calendar] Calling onEventChange for editable habit resize');
             onEventChange(habitId, { start: startStr, end: endStr, timingIndex });
           }
         }}

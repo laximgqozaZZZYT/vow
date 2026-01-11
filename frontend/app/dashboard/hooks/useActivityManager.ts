@@ -177,8 +177,6 @@ export function useActivityManager({
   }
 
   function propagateActivityChanges(updated: Activity) {
-    console.log('[propagateActivityChanges] Starting with activity:', updated);
-    
     // Persist the activity update to backend if it's not a temporary local activity
     const isTemporaryActivity = updated.id.startsWith('a') && /^a\d+$/.test(updated.id); // matches pattern like 'a1234567890'
     if (!isTemporaryActivity) {
@@ -197,24 +195,14 @@ export function useActivityManager({
               // If amount is provided, use it; otherwise use basePerCount
               const amount = typeof updated.amount === 'number' ? updated.amount : basePerCount;
               activityToSave.newCount = prevCount + amount;
-              
-              console.log('[propagateActivityChanges] Recalculated counts:', {
-                habitId: updated.habitId,
-                prevCount,
-                amount,
-                newCount: activityToSave.newCount
-              });
             }
           }
           
           await api.updateActivity(updated.id, activityToSave);
-          console.log('[propagateActivityChanges] Activity updated in backend:', updated.id);
         } catch (e) {
           console.error('[propagateActivityChanges] Failed to update activity in backend:', e);
         }
       })();
-    } else {
-      console.log('[propagateActivityChanges] Skipping backend update for temporary activity:', updated.id);
     }
 
     // update the specific activity
@@ -257,7 +245,6 @@ export function useActivityManager({
       }
       // after propagation, update the habit's stored count to the most recent newCount for this habit (if any)
       const mostRecent = copy.find(x => x.habitId === updated.habitId && typeof x.newCount === 'number');
-      const latestCount = mostRecent ? (mostRecent.newCount as number) : undefined;
       if (typeof latestCount === 'number') {
         setHabits(hs => hs.map(h => h.id === updated.habitId ? { ...h, count: latestCount, updatedAt: new Date().toISOString() } : h));
       }
@@ -272,15 +259,10 @@ export function useActivityManager({
   }
 
   function handleDeleteActivity(activityId: string) {
-    console.log('[handleDeleteActivity] Starting deletion for activity:', activityId);
-    
     const act = activities.find(a => a.id === activityId);
     if (!act) {
-      console.error('[handleDeleteActivity] Activity not found:', activityId);
       return;
     }
-    
-    console.log('[handleDeleteActivity] Found activity to delete:', act);
     
     const prevCount = act.prevCount ?? 0;
     
@@ -289,38 +271,27 @@ export function useActivityManager({
       if (h.id !== act.habitId) return h;
       const total = (h as any).workloadTotal ?? h.must ?? 0;
       const completed = (total > 0) ? (prevCount >= total) : false;
-      console.log('[handleDeleteActivity] Rolling back habit count:', {
-        habitId: h.id,
-        oldCount: h.count,
-        newCount: prevCount,
-        completed
-      });
       return { ...h, count: prevCount, completed, updatedAt: new Date().toISOString() };
     }));
     
     // remove activity from local state first
     setActivities(s => {
       const filtered = s.filter(a => a.id !== activityId);
-      console.log('[handleDeleteActivity] Removed from local state. Before:', s.length, 'After:', filtered.length);
       return filtered;
     });
     
     // delete on backend - check for temporary activity patterns
     const isTemporaryActivity = activityId.startsWith('a') && /^a\d+$/.test(activityId); // matches pattern like 'a1234567890'
     if (!isTemporaryActivity) {
-      console.log('[handleDeleteActivity] Deleting from backend (persistent activity):', activityId);
       (async () => { 
         try { 
           await api.deleteActivity(activityId);
-          console.log('[handleDeleteActivity] Successfully deleted from backend:', activityId);
         } catch(e) { 
           console.error('[handleDeleteActivity] Failed to delete from backend:', e);
           // If backend deletion fails, we should probably restore the local state
           // But for now, just log the error
         } 
       })();
-    } else {
-      console.log('[handleDeleteActivity] Skipping backend deletion for temporary activity:', activityId);
     }
   }
 

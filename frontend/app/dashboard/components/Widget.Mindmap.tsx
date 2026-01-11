@@ -40,7 +40,6 @@ if (typeof window !== 'undefined') {
     setupMessageListener() {
       window.addEventListener('message', (event) => {
         const data = event.data;
-        console.log('Received test message:', data);
 
         switch (data.type) {
           case 'CHECK_EDITING_STATE':
@@ -63,7 +62,6 @@ if (typeof window !== 'undefined') {
     }
 
     handleCheckEditingState(testType: string) {
-      console.log(`Checking editing state for test: ${testType}`);
       const input = document.querySelector('input.mindmap-text-input') as HTMLInputElement;
       const isEditing = !!input && (input as any).offsetParent !== null;
       
@@ -92,7 +90,6 @@ if (typeof window !== 'undefined') {
         }
       }
       
-      console.log(`Node ${nodeId} found:`, node);
       return node;
     }
   }
@@ -100,7 +97,6 @@ if (typeof window !== 'undefined') {
   // テストハンドラーを初期化
   if (!(window as any).mindmapTestHandler) {
     (window as any).mindmapTestHandler = new MindmapTestHandler();
-    console.log('Mindmap test handler initialized');
   }
 }
 
@@ -164,7 +160,6 @@ function MindmapNode({ id, data, selected }: NodeProps<CustomNodeData>) {
 
   // 編集状態の変化をログ出力
   React.useEffect(() => {
-    console.log(`Node ${id} editing state changed: ${isEditing}`);
   }, [isEditing, id]);
 
   // Sync text with data.label when not editing
@@ -240,7 +235,6 @@ function MindmapNode({ id, data, selected }: NodeProps<CustomNodeData>) {
       setIsDragging(true);
       // グローバルイベントを発火
       window.dispatchEvent(new CustomEvent('longPressStart'));
-      console.log(`Long press detected on node ${id} - drag mode enabled`);
       
       // React Flowのノードを選択状態にする
       setNodes((nds) =>
@@ -266,7 +260,6 @@ function MindmapNode({ id, data, selected }: NodeProps<CustomNodeData>) {
       setIsDragging(false);
       // グローバルイベントを発火
       window.dispatchEvent(new CustomEvent('longPressEnd'));
-      console.log(`Long press ended on node ${id}`);
     }
     
     longPressStartRef.current = null;
@@ -294,7 +287,6 @@ function MindmapNode({ id, data, selected }: NodeProps<CustomNodeData>) {
     if (isLongPressing || isDragging) return;
     
     e.stopPropagation();
-    console.log(`Double ${isMobile ? 'tap' : 'click'} on node ${id} - starting edit mode`);
     
     // 長押しタイマーをクリア（ダブルクリック優先）
     if (longPressTimerRef.current) {
@@ -561,12 +553,9 @@ const initialNodes: Node<CustomNodeData>[] = [
 ];
 
 function MindmapFlow({ onClose, onRegisterAsHabit, onRegisterAsGoal, goals = [], mindmap, onSave }: MindmapProps) {
-  console.log('[MindmapFlow] Component initialized with mindmap prop:', mindmap);
   
   // データベースから取得したノードをReact Flow形式に変換
   const convertedNodes = React.useMemo(() => {
-    console.log('[MindmapFlow] Converting nodes from mindmap:', mindmap);
-    console.log('[MindmapFlow] Raw nodes data:', mindmap?.nodes);
     
     if (mindmap?.nodes && Array.isArray(mindmap.nodes)) {
       const converted = mindmap.nodes.map((node: any) => ({
@@ -579,17 +568,13 @@ function MindmapFlow({ onClose, onRegisterAsHabit, onRegisterAsGoal, goals = [],
         },
         type: 'mindmapNode',
       }));
-      console.log('[MindmapFlow] Converted nodes:', converted);
       return converted;
     }
-    console.log('[MindmapFlow] No nodes found, using initial nodes');
     return initialNodes;
   }, [mindmap?.nodes]);
 
   // データベースから取得したエッジをReact Flow形式に変換
   const convertedEdges = React.useMemo(() => {
-    console.log('[MindmapFlow] Converting edges from mindmap:', mindmap);
-    console.log('[MindmapFlow] Raw edges data:', mindmap?.edges);
     
     if (mindmap?.edges && Array.isArray(mindmap.edges)) {
       const converted = mindmap.edges.map((edge: any) => ({
@@ -599,10 +584,8 @@ function MindmapFlow({ onClose, onRegisterAsHabit, onRegisterAsGoal, goals = [],
         sourceHandle: edge.sourceHandle || edge.source_handle,
         targetHandle: edge.targetHandle || edge.target_handle,
       }));
-      console.log('[MindmapFlow] Converted edges:', converted);
       return converted;
     }
-    console.log('[MindmapFlow] No edges found, using empty array');
     return [];
   }, [mindmap?.edges]);
 
@@ -640,14 +623,12 @@ function MindmapFlow({ onClose, onRegisterAsHabit, onRegisterAsGoal, goals = [],
   // ログを追加する関数（削除予定）
   const addLog = useCallback((message: string) => {
     // ログ機能を無効化
-    console.log(`[Mindmap] ${message}`);
   }, []);
 
   // ノードやエッジの変更を検出して未保存フラグを設定
   React.useEffect(() => {
     const handleNodeChanged = () => {
       setHasUnsavedChanges(true);
-      addLog('Mindmap has unsaved changes');
     };
     
     window.addEventListener('nodeChanged', handleNodeChanged);
@@ -671,12 +652,10 @@ function MindmapFlow({ onClose, onRegisterAsHabit, onRegisterAsGoal, goals = [],
   React.useEffect(() => {
     const handleLongPressStart = () => {
       setIsLongPressMode(true);
-      addLog('Long press mode activated');
     };
     
     const handleLongPressEnd = () => {
       setIsLongPressMode(false);
-      addLog('Long press mode deactivated');
     };
     
     // カスタムイベントリスナーを追加
@@ -918,19 +897,11 @@ function MindmapFlow({ onClose, onRegisterAsHabit, onRegisterAsGoal, goals = [],
     (event: MouseEvent | TouchEvent) => {
       // 接続開始情報がない場合は何もしない
       if (!connectionStartInfo) {
-        console.log('onConnectEnd: No connection start info available');
         return;
       }
       
-      console.log('onConnectEnd called with connection start info:', connectionStartInfo);
-      
       const target = event.target as Element;
       const targetIsPane = target?.classList.contains('react-flow__pane');
-      
-      console.log('Connection dropped on:', {
-        targetElement: target?.className,
-        isPane: targetIsPane
-      });
       
       // 空白領域（react-flow__pane）にドロップされた場合
       if (targetIsPane && reactFlowWrapper.current) {
@@ -1010,7 +981,6 @@ function MindmapFlow({ onClose, onRegisterAsHabit, onRegisterAsGoal, goals = [],
       // モバイルでは右クリックメニューを無効化（ボトムメニューを使用）
       if (isMobile) return;
       
-      console.log('onNodeContextMenu called for node:', node.id);
       event.preventDefault();
       event.stopPropagation();
       
@@ -1031,12 +1001,6 @@ function MindmapFlow({ onClose, onRegisterAsHabit, onRegisterAsGoal, goals = [],
         left: event.clientX < pane.width - 200 ? event.clientX : undefined,
         right: event.clientX >= pane.width - 200 ? pane.width - event.clientX : undefined,
         bottom: event.clientY >= pane.height - 200 ? pane.height - event.clientY : undefined,
-      });
-      
-      console.log('Context menu set:', {
-        id: node.id,
-        top: event.clientY < pane.height - 200 ? event.clientY : undefined,
-        left: event.clientX < pane.width - 200 ? event.clientX : undefined,
       });
     },
     [addLog, nodes, selectedNodes, isMobile]
@@ -1109,23 +1073,14 @@ function MindmapFlow({ onClose, onRegisterAsHabit, onRegisterAsGoal, goals = [],
         }))
       };
 
-      console.log('[MindMap] Saving mindmap data:', mindmapData);
-
       if (onSave) {
         await onSave(mindmapData);
         setHasUnsavedChanges(false);
         addLog(`Mindmap "${mindmapName}" saved successfully`);
       } else {
-        console.log('Mindmap saved locally:', mindmapData);
         setHasUnsavedChanges(false);
       }
     } catch (error) {
-      console.error('Failed to save mindmap:', error);
-      console.error('Error details:', {
-        message: error instanceof Error ? error.message : 'Unknown error',
-        stack: error instanceof Error ? error.stack : undefined,
-        error: error
-      });
       addLog(`Failed to save mindmap: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }, [mindmap, mindmapName, nodes, edges, onSave, addLog]);

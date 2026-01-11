@@ -190,7 +190,6 @@ export default function DashboardPage() {
     } catch (error) {
       console.error('Failed to move goal:', error);
       // エラーフィードバック - 実際のアプリではトーストやアラートを表示
-      alert('Goalの移動に失敗しました。もう一度お試しください。');
     }
   }
 
@@ -204,7 +203,6 @@ export default function DashboardPage() {
     } catch (error) {
       console.error('Failed to move habit:', error);
       // エラーフィードバック
-      alert('Habitの移動に失敗しました。もう一度お試しください。');
     }
   }
 

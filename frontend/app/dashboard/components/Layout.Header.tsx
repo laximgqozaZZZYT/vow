@@ -50,7 +50,6 @@ export default function DashboardHeader({
     const { GuestDataMigration } = await import('../../../lib/guest-data-migration');
     
     if (!GuestDataMigration.hasGuestData()) {
-      alert('No guest data found to migrate.');
       return;
     }
 
@@ -63,7 +62,6 @@ export default function DashboardHeader({
       await retryMigration();
     } catch (error) {
       console.error('[Header] Error triggering migration:', error);
-      alert(`Error triggering migration: ${(error as any)?.message || error}`);
     }
   };
 
