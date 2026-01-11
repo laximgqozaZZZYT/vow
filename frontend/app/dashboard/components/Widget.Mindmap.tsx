@@ -635,6 +635,70 @@ function MindmapFlow({ onClose, onRegisterAsHabit, onRegisterAsGoal, goals = [],
   });
   const [showSaveDialog, setShowSaveDialog] = useState(false);
   const [showCoachMark, setShowCoachMark] = useState(false);
+  // language: 'ja' or 'en'
+  const [lang, setLang] = useState<'ja' | 'en'>(() => {
+    if (typeof navigator !== 'undefined') {
+      return navigator.language && navigator.language.startsWith('en') ? 'en' : 'ja';
+    }
+    return 'ja';
+  });
+
+  const i18n = React.useMemo(() => ({
+    ja: {
+      save: '保存',
+      close: '閉じる',
+      saved: '保存しました ✓',
+      got_it: 'わかった',
+      coach_title: 'はじめに',
+      coach_desc: 'ノードを長押しで移動、ダブルタップで編集できます。モバイルではノードをタップして操作メニューを開いてください。',
+      edit_text: 'テキスト編集',
+      register_habit: '習慣として登録',
+      register_goal: '目標として登録',
+      delete_node: 'ノードを削除',
+      add_node: 'ノードを追加',
+      clear_connections: '全ての接続を削除',
+      zoom_in: 'ズームイン',
+      zoom_out: 'ズームアウト',
+      fit_view: '全体を表示',
+      cancel: 'キャンセル',
+      connect: '接続',
+      as_habit: '習慣に',
+      as_goal: '目標に',
+      save_changes_title: '変更を保存しますか？',
+      save_changes_desc: '保存されていない変更があります。閉じる前に保存しますか？',
+      dont_save: '保存しない',
+      save_and_close: '保存して閉じる',
+      click_to_edit_name: 'クリックして名前を編集'
+    },
+    en: {
+      save: 'Save',
+      close: 'Close',
+      saved: 'Saved ✓',
+      got_it: 'Got it',
+      coach_title: 'Getting started',
+      coach_desc: 'Long-press to drag, double-tap to edit. On mobile, tap a node to open the action menu.',
+      edit_text: 'Edit Text',
+      register_habit: 'Register as Habit',
+      register_goal: 'Register as Goal',
+      delete_node: 'Delete Node',
+      add_node: 'Add Node',
+      clear_connections: 'Clear All Connections',
+      zoom_in: 'Zoom In',
+      zoom_out: 'Zoom Out',
+      fit_view: 'Fit View',
+      cancel: 'Cancel',
+      connect: 'Connect',
+      as_habit: 'As Habit',
+      as_goal: 'As Goal',
+      save_changes_title: 'Save Changes?',
+      save_changes_desc: 'You have unsaved changes. Do you want to save before closing?',
+      dont_save: "Don't Save",
+      save_and_close: 'Save & Close',
+      click_to_edit_name: 'Click to edit name'
+    }
+  }), []);
+
+  const t = (key: string) => i18n[lang][key as keyof typeof i18n['ja']] || key;
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
 
   const [isLongPressMode, setIsLongPressMode] = useState(false);
@@ -1359,20 +1423,31 @@ function MindmapFlow({ onClose, onRegisterAsHabit, onRegisterAsGoal, goals = [],
               setShowSaveToast(true);
               setTimeout(() => setShowSaveToast(false), 1500);
             }}
-            title="保存"
-            aria-label="保存"
+            title={t('save')}
+            aria-label={t('save')}
             className="px-2 py-1 sm:px-4 sm:py-2 bg-green-600 text-white rounded hover:bg-green-700 text-sm sm:text-base"
           >
-            保存
+            {t('save')}
           </button>
           <button
             onClick={handleClose}
-            title="閉じる"
-            aria-label="閉じる"
+            title={t('close')}
+            aria-label={t('close')}
             className="px-2 py-1 sm:px-4 sm:py-2 bg-blue-600 text-white rounded hover:bg-blue-700 text-sm sm:text-base"
           >
-            閉じる
+            {t('close')}
           </button>
+          {/* 言語切替 */}
+          <div className="ml-2 flex items-center gap-1">
+            <button
+              onClick={() => setLang(lang === 'ja' ? 'en' : 'ja')}
+              title="Toggle language"
+              aria-label="Toggle language"
+              className="px-2 py-1 bg-transparent text-sm text-gray-700 dark:text-gray-200 border border-gray-300 rounded hover:bg-gray-100"
+            >
+              {lang === 'ja' ? 'EN' : '日本語'}
+            </button>
+          </div>
         </div>
       </div>
 
@@ -1435,21 +1510,21 @@ function MindmapFlow({ onClose, onRegisterAsHabit, onRegisterAsGoal, goals = [],
               <button
                 onClick={() => zoomIn()}
                 className={`${isMobile ? 'w-12 h-12' : 'w-10 h-10'} bg-gray-600 hover:bg-gray-700 text-white rounded shadow-lg flex items-center justify-center text-lg transition-colors`}
-                title="Zoom In"
+                title={t('zoom_in')}
               >
                 ＋
               </button>
               <button
                 onClick={() => fitView()}
                 className={`${isMobile ? 'w-12 h-12' : 'w-10 h-10'} bg-gray-600 hover:bg-gray-700 text-white rounded shadow-lg flex items-center justify-center ${isMobile ? 'text-sm' : 'text-xs'} transition-colors`}
-                title="Fit View"
+                title={t('fit_view')}
               >
                 ⌂
               </button>
               <button
                 onClick={() => zoomOut()}
                 className={`${isMobile ? 'w-12 h-12' : 'w-10 h-10'} bg-gray-600 hover:bg-gray-700 text-white rounded shadow-lg flex items-center justify-center text-lg transition-colors`}
-                title="Zoom Out"
+                title={t('zoom_out')}
               >
                 －
               </button>
@@ -1460,14 +1535,14 @@ function MindmapFlow({ onClose, onRegisterAsHabit, onRegisterAsGoal, goals = [],
               <button
                 onClick={addNodeAtCenter}
                 className={`${isMobile ? 'w-14 h-14' : 'w-12 h-12'} bg-blue-600 hover:bg-blue-700 text-white rounded-full shadow-lg flex items-center justify-center text-xl font-bold transition-colors`}
-                title="Add Node"
+                title={t('add_node')}
               >
                 ＋
               </button>
               <button
                 onClick={clearAllConnections}
                 className={`${isMobile ? 'w-14 h-14' : 'w-12 h-12'} bg-red-600 hover:bg-red-700 text-white rounded-full shadow-lg flex items-center justify-center text-lg transition-colors`}
-                title="Clear All Connections"
+                title={t('clear_connections')}
               >
                 ✂
               </button>
@@ -1475,7 +1550,7 @@ function MindmapFlow({ onClose, onRegisterAsHabit, onRegisterAsGoal, goals = [],
                 <button
                   onClick={deleteSelectedNodes}
                   className={`${isMobile ? 'w-14 h-14' : 'w-12 h-12'} bg-orange-600 hover:bg-orange-700 text-white rounded-full shadow-lg flex items-center justify-center text-lg transition-colors`}
-                  title={`Delete Selected (${selectedNodes.length})`}
+                  title={t('delete_node')}
                 >
                   🗑️
                 </button>
@@ -1490,29 +1565,29 @@ function MindmapFlow({ onClose, onRegisterAsHabit, onRegisterAsGoal, goals = [],
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
           <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-xl max-w-md">
             <h3 className="text-lg font-semibold mb-4 text-gray-900 dark:text-white">
-              Save Changes?
+              {t('save_changes_title')}
             </h3>
             <p className="text-gray-600 dark:text-gray-400 mb-6">
-              You have unsaved changes. Do you want to save your mindmap before closing?
+              {t('save_changes_desc')}
             </p>
             <div className="flex justify-end gap-3">
               <button
                 onClick={handleCancelClose}
                 className="px-4 py-2 text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200"
               >
-                Cancel
+                {t('cancel')}
               </button>
               <button
                 onClick={handleCloseWithoutSaving}
                 className="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700"
               >
-                Don't Save
+                {t('dont_save')}
               </button>
               <button
                 onClick={handleSaveAndClose}
                 className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700"
               >
-                Save & Close
+                {t('save_and_close')}
               </button>
             </div>
           </div>
@@ -1535,7 +1610,7 @@ function MindmapFlow({ onClose, onRegisterAsHabit, onRegisterAsGoal, goals = [],
             className="w-full px-4 py-2 text-left text-sm text-white hover:bg-gray-700 flex items-center gap-2 transition-colors"
           >
             <span>✏️</span>
-            Edit Text
+            {t('edit_text')}
           </button>
           <hr className="my-1 border-gray-600" />
           <button
@@ -1543,14 +1618,14 @@ function MindmapFlow({ onClose, onRegisterAsHabit, onRegisterAsGoal, goals = [],
             className="w-full px-4 py-2 text-left text-sm text-green-400 hover:bg-gray-700 hover:text-green-300 flex items-center gap-2 transition-colors"
           >
             <span>🔄</span>
-            Register as Habit
+            {t('register_habit')}
           </button>
           <button
             onClick={handleRegisterAsGoal}
             className="w-full px-4 py-2 text-left text-sm text-green-400 hover:bg-gray-700 hover:text-green-300 flex items-center gap-2 transition-colors"
           >
             <span>🎯</span>
-            Register as Goal
+            {t('register_goal')}
           </button>
           <hr className="my-1 border-gray-600" />
           <button
@@ -1559,8 +1634,8 @@ function MindmapFlow({ onClose, onRegisterAsHabit, onRegisterAsGoal, goals = [],
           >
             <span>🗑️</span>
             {selectedNodes.some(node => node.id === contextMenu.id) && selectedNodes.length > 1
-              ? `Delete Selected (${selectedNodes.length})`
-              : 'Delete Node'
+              ? `${t('delete_node')} (${selectedNodes.length})`
+              : t('delete_node')
             }
           </button>
         </div>
@@ -1579,28 +1654,28 @@ function MindmapFlow({ onClose, onRegisterAsHabit, onRegisterAsGoal, goals = [],
                 className="flex flex-col items-center justify-center p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800 text-blue-600 dark:text-blue-400"
               >
                 <span className="text-2xl mb-1">✏️</span>
-                <span className="text-sm">Edit Text</span>
+                <span className="text-sm">{t('edit_text')}</span>
               </button>
               <button
                 onClick={() => handleMobileMenuAction('connect')}
                 className="flex flex-col items-center justify-center p-4 bg-orange-50 dark:bg-orange-900/20 rounded-lg border border-orange-200 dark:border-orange-800 text-orange-600 dark:text-orange-400"
               >
                 <span className="text-2xl mb-1">🔗</span>
-                <span className="text-sm">Connect</span>
+                <span className="text-sm">{t('connect')}</span>
               </button>
               <button
                 onClick={() => handleMobileMenuAction('habit')}
                 className="flex flex-col items-center justify-center p-4 bg-green-50 dark:bg-green-900/20 rounded-lg border border-green-200 dark:border-green-800 text-green-600 dark:text-green-400"
               >
                 <span className="text-2xl mb-1">🔄</span>
-                <span className="text-sm">As Habit</span>
+                <span className="text-sm">{t('as_habit')}</span>
               </button>
               <button
                 onClick={() => handleMobileMenuAction('goal')}
                 className="flex flex-col items-center justify-center p-4 bg-purple-50 dark:bg-purple-900/20 rounded-lg border border-purple-200 dark:border-purple-800 text-purple-600 dark:text-purple-400"
               >
                 <span className="text-2xl mb-1">🎯</span>
-                <span className="text-sm">As Goal</span>
+                <span className="text-sm">{t('as_goal')}</span>
               </button>
             </div>
             <button
@@ -1608,13 +1683,13 @@ function MindmapFlow({ onClose, onRegisterAsHabit, onRegisterAsGoal, goals = [],
               className="w-full p-3 bg-red-50 dark:bg-red-900/20 rounded-lg border border-red-200 dark:border-red-800 text-red-600 dark:text-red-400 mb-3"
             >
               <span className="text-xl mr-2">🗑️</span>
-              Delete Node
+              {t('delete_node')}
             </button>
             <button
               onClick={() => setMobileBottomMenu({ nodeId: '', nodeName: '', isVisible: false })}
               className="w-full p-3 bg-gray-100 dark:bg-gray-700 rounded-lg text-gray-600 dark:text-gray-400"
             >
-              Cancel
+              {t('cancel')}
             </button>
           </div>
         </div>
@@ -1693,17 +1768,17 @@ function MindmapFlow({ onClose, onRegisterAsHabit, onRegisterAsGoal, goals = [],
       {/* 保存トースト */}
       {showSaveToast && (
         <div className="fixed bottom-6 right-6 z-50 bg-black/80 text-white px-4 py-2 rounded-lg">
-          保存しました ✓
+          {t('saved')}
         </div>
       )}
 
       {/* Coach-mark（初回のみ） */}
       {showCoachMark && (
         <div className="fixed top-20 left-1/2 -translate-x-1/2 z-50 max-w-md bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-4 shadow-lg">
-          <div className="text-lg font-semibold mb-2">はじめに</div>
-          <div className="text-sm text-gray-700 dark:text-gray-300 mb-3">
-            ノードを長押しで移動、ダブルタップで編集できます。モバイルではノードをタップして操作メニューを開いてください。
-          </div>
+          <div className="text-lg font-semibold mb-2">{t('coach_title')}</div>
+            <div className="text-sm text-gray-700 dark:text-gray-300 mb-3">
+              {t('coach_desc')}
+            </div>
           <div className="flex justify-end">
             <button
               onClick={() => {
@@ -1712,7 +1787,7 @@ function MindmapFlow({ onClose, onRegisterAsHabit, onRegisterAsGoal, goals = [],
               }}
               className="px-3 py-1 bg-blue-600 text-white rounded"
             >
-              わかった
+              {t('got_it')}
             </button>
           </div>
         </div>
