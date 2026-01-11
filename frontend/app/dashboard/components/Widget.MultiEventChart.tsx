@@ -275,9 +275,11 @@ export default function MultiEventChart({
   window?: { fromTs: number; untilTs: number }
   onEditGraph?: () => void
 }) {
-  const width = 860
-  const height = 220
-  const padding = 30
+  // Responsive chart dimensions - smaller for mobile
+  const isMobile = typeof window !== 'undefined' && window.innerWidth <= 768
+  const width = isMobile ? 600 : 860
+  const height = isMobile ? 180 : 220
+  const padding = isMobile ? 20 : 30
   const innerW = width - padding * 2
   const innerH = height - padding * 2
 
@@ -357,13 +359,13 @@ export default function MultiEventChart({
   return (
     <div className="space-y-3 w-full overflow-hidden">
       {/* Header with Edit Graph button */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
         <h3 className="text-sm font-medium text-zinc-600 dark:text-zinc-300">
           Habit Progress Timeline (Actual vs Planned)
         </h3>
         {onEditGraph && (
           <button 
-            className="rounded border px-2 py-1 text-xs hover:bg-zinc-50 dark:hover:bg-zinc-800" 
+            className="rounded border px-2 py-1 text-xs hover:bg-zinc-50 dark:hover:bg-zinc-800 self-start sm:self-auto" 
             onClick={onEditGraph}
           >
             Edit Graph
@@ -373,7 +375,8 @@ export default function MultiEventChart({
       
       {/* Chart */}
       <div className="w-full overflow-x-auto">
-        <svg viewBox={`0 0 ${width} ${height}`} className="w-full h-auto" preserveAspectRatio="xMidYMid meet">
+        <div className="min-w-[400px] sm:min-w-[600px]">
+          <svg viewBox={`0 0 ${width} ${height}`} className="w-full h-auto" preserveAspectRatio="xMidYMid meet">
           <line x1={padding} y1={height - padding} x2={width - padding} y2={height - padding} stroke="currentColor" opacity={0.25} />
           <line x1={padding} y1={padding} x2={padding} y2={height - padding} stroke="currentColor" opacity={0.25} />
 
@@ -498,21 +501,21 @@ export default function MultiEventChart({
         const stroke = p.kind === 'pause' ? '#f59e0b' : undefined
         return (
           <g key={p.habitId + ':' + p.ts}>
-            {/* Larger invisible hover area */}
+            {/* Larger invisible hover area - bigger on mobile */}
             <circle
               cx={x}
               cy={y}
-              r={8}
+              r={isMobile ? 12 : 8}
               fill="transparent"
               onMouseEnter={() => onHover(p)}
               onMouseLeave={() => onHover(null)}
               style={{ cursor: 'pointer' }}
             />
-            {/* Visible point */}
+            {/* Visible point - slightly larger on mobile */}
             <circle
               cx={x}
               cy={y}
-              r={3.5}
+              r={isMobile ? 4 : 3.5}
               fill={color}
               stroke={stroke}
               strokeWidth={stroke ? 1.5 : 0}
@@ -521,7 +524,8 @@ export default function MultiEventChart({
           </g>
         )
       })}
-      </svg>
+          </svg>
+        </div>
       </div>
     </div>
   )
