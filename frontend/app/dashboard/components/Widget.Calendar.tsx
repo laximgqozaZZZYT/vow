@@ -217,6 +217,9 @@ export default function CalendarWidget({
   const handleMobileEventClick = (clickInfo: any, event: any) => {
     if (!isMobile) return false;
     
+    // Don't show tooltip during drag & drop operations
+    if (touchMoveMode) return false;
+    
     event.preventDefault();
     event.stopPropagation();
     
@@ -225,29 +228,27 @@ export default function CalendarWidget({
     const habitId = ext.habitId ?? id;
     const eventTitle = clickInfo.event.title;
     
-    // If already selected, show context menu
-    if (selectedEventId === id) {
-      const rect = (event.target as HTMLElement).getBoundingClientRect();
-      setContextMenu({
-        show: true,
-        x: rect.left + rect.width / 2,
-        y: rect.top,
-        eventId: id,
-        habitId,
-        eventTitle
-      });
-      return true;
-    }
-    
-    // Select the event
+    // Show context menu immediately on single tap
+    const rect = (event.target as HTMLElement).getBoundingClientRect();
     setSelectedEventId(id);
-    setContextMenu(null);
+    setContextMenu({
+      show: true,
+      x: rect.left + rect.width / 2,
+      y: rect.top,
+      eventId: id,
+      habitId,
+      eventTitle
+    });
+    
     return true;
   };
 
   // Handle long press for context menu
   const handleLongPress = (clickInfo: any, event: any) => {
     if (!isMobile) return;
+    
+    // Don't show tooltip during drag & drop operations
+    if (touchMoveMode) return;
     
     const id = clickInfo.event.id;
     const ext = (clickInfo.event as any).extendedProps ?? {};
@@ -699,6 +700,9 @@ export default function CalendarWidget({
           let longPressTimer: NodeJS.Timeout;
           
           const handleTouchStart = (e: TouchEvent) => {
+            // Don't start long press timer during drag & drop operations
+            if (touchMoveMode) return;
+            
             longPressTimer = setTimeout(() => {
               handleLongPress(info, e as any);
             }, 500); // 500ms for long press
