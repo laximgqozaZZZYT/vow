@@ -230,8 +230,14 @@ function getRangeStartTs(range: RangeKey): number {
   return 0
 }
 
-function computeDomainTs(range: RangeKey, points: EventPoint[]): { minTs: number; maxTs: number } {
+function computeDomainTs(range: RangeKey, points: EventPoint[], timeWindow?: { fromTs: number; untilTs: number }): { minTs: number; maxTs: number } {
   const now = Date.now()
+  
+  // Use custom time window if provided and valid
+  if (timeWindow && Number.isFinite(timeWindow.fromTs) && Number.isFinite(timeWindow.untilTs) && timeWindow.untilTs > timeWindow.fromTs) {
+    return { minTs: timeWindow.fromTs, maxTs: timeWindow.untilTs }
+  }
+  
   if (range === 'auto') {
     // Auto: today window
     const d = new Date(now)
@@ -241,7 +247,209 @@ function computeDomainTs(range: RangeKey, points: EventPoint[]): { minTs: number
     const end = start + 24 * 60 * 60_000
     return { minTs: start, maxTs: end }
   }
-  return { minTs: getRangeStartTs(range), maxTs: now }
+  
+  // For extended ranges (7d/1mo/1y), align to day boundaries for consistent daily aggregation
+  const endDate = new Date(now)
+  endDate.setHours(23, 59, 59, 999) // End of current day
+  const maxTs = endDate.getTime()
+  
+  const startDate = new Date(now)
+  if (range === '24h') {
+    startDate.setTime(now - 24 * 60 * 60_000)
+  } else if (range === '7d') {
+    startDate.setDate(startDate.getDate() - 6) // 7 days including today
+    startDate.setHours(0, 0, 0, 0)
+  } else if (range === '1mo') {
+    startDate.setDate(startDate.getDate() - 29) // 30 days including today
+    startDate.setHours(0, 0, 0, 0)
+  } else if (range === '1y') {
+    startDate.setDate(startDate.getDate() - 364) // 365 days including today
+    startDate.setHours(0, 0, 0, 0)
+  } else {
+    return { minTs: getRangeStartTs(range), maxTs: now }
+  }
+  
+  return { minTs: startDate.getTime(), maxTs }
+}
+
+// Helper function to get day start timestamp
+function getDayStart(ts: number): number {
+  const d = new Date(ts)
+  d.setHours(0, 0, 0, 0)
+  return d.getTime()
+}
+
+// Helper function to get day end timestamp
+function getDayEnd(ts: number): number {
+  const d = new Date(ts)
+  d.setHours(23, 59, 59, 999)
+  return d.getTime()
+}
+
+// Build daily aggregated series for extended time ranges
+function buildDailyAggregatedSeries(
+  habits: Habit[],
+  points: EventPoint[],
+  visibleHabitIds: string[],
+  minTs: number,
+  maxTs: number,
+  range: RangeKey
+): {
+  actualSeriesByHabit: Map<string, Array<{ ts: number; ratio: number; cum: number; total: number }>>
+  plannedSeriesByHabit: Map<string, Array<{ ts: number; ratio: number; cum: number; total: number }>>
+} {
+  const actualSeriesByHabit = new Map<string, Array<{ ts: number; ratio: number; cum: number; total: number }>>()
+  const plannedSeriesByHabit = new Map<string, Array<{ ts: number; ratio: number; cum: number; total: number }>>()
+  
+  // Only aggregate for extended ranges
+  if (!['7d', '1mo', '1y'].includes(range)) {
+    return { actualSeriesByHabit, plannedSeriesByHabit }
+  }
+  
+  const habitMap = new Map(habits.map(h => [h.id, h]))
+  
+  // Generate daily timestamps
+  const dailyTimestamps: number[] = []
+  for (let dayTs = getDayStart(minTs); dayTs <= getDayStart(maxTs); dayTs += 24 * 60 * 60_000) {
+    dailyTimestamps.push(dayTs)
+  }
+  
+  for (const habitId of visibleHabitIds) {
+    const habit = habitMap.get(habitId)
+    if (!habit || !isRecurring(habit.repeat)) continue
+    
+    // Get habit creation date
+    const habitCreatedTs = habit.createdAt ? new Date(habit.createdAt).getTime() : minTs
+    const effectiveStartTs = Math.max(habitCreatedTs, minTs)
+    
+    // Calculate expected total for the range (from habit creation or range start to range end)
+    let totalExpectedForRange = 0
+    
+    // Check if habit has workload total
+    const workloadTotalDay = (typeof habit.workloadTotal === 'number' && Number.isFinite(habit.workloadTotal))
+      ? habit.workloadTotal
+      : ((typeof habit.must === 'number' && Number.isFinite(habit.must)) ? habit.must : null)
+    
+    if (workloadTotalDay && workloadTotalDay > 0) {
+      // Use existing planned series logic for habits with workload total
+      const plannedSeries = buildPlannedSeriesForHabit(habit, effectiveStartTs, maxTs)
+      totalExpectedForRange = plannedSeries.length > 0 ? Math.max(0, ...plannedSeries.map(p => p.v)) : 0
+    } else {
+      // For habits without workload total, calculate based on daily occurrences
+      // Count expected occurrences from habit creation to range end
+      const daysInRange = Math.ceil((maxTs - effectiveStartTs) / (24 * 60 * 60_000))
+      
+      // Assume 1 unit per day for habits without specific workload
+      let timings = (Array.isArray((habit as any).timings) ? ((habit as any).timings as any[]) : [])
+      if (!timings.length) {
+        // Default to daily if no timings specified
+        totalExpectedForRange = daysInRange
+      } else {
+        // Count expected occurrences based on timing rules
+        let expectedOccurrences = 0
+        for (let dayTs = getDayStart(effectiveStartTs); dayTs <= getDayStart(maxTs); dayTs += 24 * 60 * 60_000) {
+          const day = new Date(dayTs)
+          for (const timing of timings) {
+            if (timingAppliesOnDay(timing, day)) {
+              expectedOccurrences++
+              break // Count each day only once regardless of multiple timings
+            }
+          }
+        }
+        totalExpectedForRange = expectedOccurrences
+      }
+    }
+    
+    if (totalExpectedForRange <= 0) continue
+    
+    // Group actual points by day
+    const actualPointsByDay = new Map<number, EventPoint[]>()
+    for (const point of points) {
+      if (point.habitId !== habitId) continue
+      if (point.ts < minTs || point.ts > maxTs) continue
+      
+      const dayStart = getDayStart(point.ts)
+      const dayPoints = actualPointsByDay.get(dayStart) ?? []
+      dayPoints.push(point)
+      actualPointsByDay.set(dayStart, dayPoints)
+    }
+    
+    // Build daily series
+    const actualDailySeries: Array<{ ts: number; ratio: number; cum: number; total: number }> = []
+    const plannedDailySeries: Array<{ ts: number; ratio: number; cum: number; total: number }> = []
+    
+    let cumulativeActual = 0
+    let cumulativePlanned = 0
+    
+    for (const dayStart of dailyTimestamps) {
+      const dayEnd = getDayEnd(dayStart)
+      
+      // Skip days before habit creation
+      if (dayEnd < habitCreatedTs) continue
+      
+      // Calculate actual progress for this day
+      const dayPoints = actualPointsByDay.get(dayStart) ?? []
+      let dailyActual = 0
+      for (const point of dayPoints) {
+        if (workloadTotalDay && workloadTotalDay > 0) {
+          dailyActual += point.workloadDelta
+        } else {
+          // For habits without workload total, count occurrences
+          dailyActual += (point.kind === 'complete' ? 1 : 0)
+        }
+      }
+      cumulativeActual += dailyActual
+      
+      // Calculate planned progress for this day
+      if (workloadTotalDay && workloadTotalDay > 0) {
+        // Use existing planned series logic
+        const plannedSeries = buildPlannedSeriesForHabit(habit, effectiveStartTs, dayEnd)
+        cumulativePlanned = plannedSeries.length > 0 ? Math.max(0, ...plannedSeries.map(p => p.v)) : 0
+      } else {
+        // For habits without workload total, calculate expected occurrences up to this day
+        const day = new Date(dayStart)
+        let timings = (Array.isArray((habit as any).timings) ? ((habit as any).timings as any[]) : [])
+        if (!timings.length) {
+          // Default daily occurrence
+          cumulativePlanned += 1
+        } else {
+          // Check if this day should have an occurrence
+          for (const timing of timings) {
+            if (timingAppliesOnDay(timing, day)) {
+              cumulativePlanned += 1
+              break // Count each day only once
+            }
+          }
+        }
+      }
+      
+      // Use end of day as timestamp for consistent plotting
+      const plotTs = dayEnd
+      
+      actualDailySeries.push({
+        ts: plotTs,
+        ratio: Math.max(0, Math.min(1, cumulativeActual / totalExpectedForRange)),
+        cum: cumulativeActual,
+        total: totalExpectedForRange
+      })
+      
+      plannedDailySeries.push({
+        ts: plotTs,
+        ratio: Math.max(0, Math.min(1, cumulativePlanned / totalExpectedForRange)),
+        cum: cumulativePlanned,
+        total: totalExpectedForRange
+      })
+    }
+    
+    if (actualDailySeries.length) {
+      actualSeriesByHabit.set(habitId, actualDailySeries)
+    }
+    if (plannedDailySeries.length) {
+      plannedSeriesByHabit.set(habitId, plannedDailySeries)
+    }
+  }
+  
+  return { actualSeriesByHabit, plannedSeriesByHabit }
 }
 
 function isRecurring(repeat: string | null | undefined) {
@@ -275,6 +483,54 @@ export default function MultiEventChart({
   timeWindow?: { fromTs: number; untilTs: number }
   onEditGraph?: () => void
 }) {
+  // Tooltip state
+  const [tooltip, setTooltip] = React.useState<{
+    visible: boolean
+    x: number
+    y: number
+    content: {
+      habitName: string
+      kind: string
+      timestamp: string
+      workloadDelta: number
+      workloadCumulative: number
+      workloadTotal: number | null
+      workloadUnit: string
+      progressRatio: number
+    }
+  } | null>(null)
+
+  // Helper function to show tooltip
+  const showTooltip = (event: React.MouseEvent, point: EventPoint, progressRatio: number) => {
+    const rect = (event.currentTarget as SVGElement).getBoundingClientRect()
+    const habit = habits.find(h => h.id === point.habitId)
+    
+    setTooltip({
+      visible: true,
+      x: event.clientX,
+      y: event.clientY,
+      content: {
+        habitName: habit?.name ?? point.habitId,
+        kind: point.kind === 'pause' ? 'Pause' : 'Done',
+        timestamp: new Date(point.ts).toLocaleString(),
+        workloadDelta: point.workloadDelta,
+        workloadCumulative: point.workloadCumulative,
+        workloadTotal: point.workloadTotal,
+        workloadUnit: point.workloadUnit,
+        progressRatio: progressRatio
+      }
+    })
+    
+    // Also call the original onHover for backward compatibility
+    onHover(point)
+  }
+
+  // Helper function to hide tooltip
+  const hideTooltip = () => {
+    setTooltip(null)
+    onHover(null)
+  }
+
   // Responsive chart dimensions - smaller for mobile
   const isMobile = typeof window !== 'undefined' && window.innerWidth <= 768
   const width = isMobile ? 600 : 860
@@ -297,10 +553,7 @@ export default function MultiEventChart({
   // Planned overlays are also plotted as progress ratio (0..1), so they share y-scale with actual.
 
   const domain = React.useMemo(() => {
-    if (timeWindow && Number.isFinite(timeWindow.fromTs) && Number.isFinite(timeWindow.untilTs) && timeWindow.untilTs > timeWindow.fromTs) {
-      return { minTs: timeWindow.fromTs, maxTs: timeWindow.untilTs }
-    }
-    return computeDomainTs(range, points)
+    return computeDomainTs(range, points, timeWindow)
   }, [range, points, timeWindow?.fromTs, timeWindow?.untilTs])
   const minTs = domain.minTs
   const maxTs = domain.maxTs
@@ -310,6 +563,11 @@ export default function MultiEventChart({
     return padding + innerW * ((ts - minTs) / (maxTs - minTs))
   }
   const yOf = (v: number) => padding + innerH * (1 - v / yDomainMax)
+
+  // Use daily aggregation for extended ranges, original logic for others
+  const { actualSeriesByHabit: dailyActualSeries, plannedSeriesByHabit: dailyPlannedSeries } = React.useMemo(() => {
+    return buildDailyAggregatedSeries(habits, points, visibleHabitIds, minTs, maxTs, range)
+  }, [habits, points, visibleHabitIds, minTs, maxTs, range])
 
   const pointsByHabit = React.useMemo(() => {
     const m = new Map<string, EventPoint[]>()
@@ -324,6 +582,12 @@ export default function MultiEventChart({
   }, [points])
 
   const plannedSeriesByHabit = React.useMemo(() => {
+    // Use daily aggregated series for extended ranges
+    if (['7d', '1mo', '1y'].includes(range)) {
+      return dailyPlannedSeries
+    }
+    
+    // Original logic for auto/24h ranges
     const m = new Map<string, Array<{ ts: number; ratio: number; cum: number; total: number }>>()
     for (const hid of habitIds) {
       const h = habits.find(x => x.id === hid)
@@ -336,9 +600,15 @@ export default function MultiEventChart({
       m.set(hid, series.map(p => ({ ts: p.ts, cum: p.v, total, ratio: Math.max(0, Math.min(1, p.v / total)) })))
     }
     return m
-  }, [habitIds, habits, minTs, maxTs])
+  }, [habitIds, habits, minTs, maxTs, dailyPlannedSeries, range])
 
   const actualSeriesByHabit = React.useMemo(() => {
+    // Use daily aggregated series for extended ranges
+    if (['7d', '1mo', '1y'].includes(range)) {
+      return dailyActualSeries
+    }
+    
+    // Original logic for auto/24h ranges
     const m = new Map<string, Array<{ ts: number; ratio: number; cum: number; total: number; kind: EventPoint['kind'] }>>()
     for (const hid of habitIds) {
       const planned = plannedSeriesByHabit.get(hid)
@@ -354,7 +624,7 @@ export default function MultiEventChart({
       if (arr.length) m.set(hid, arr)
     }
     return m
-  }, [habitIds, plannedSeriesByHabit, pointsByHabit])
+  }, [habitIds, plannedSeriesByHabit, pointsByHabit, dailyActualSeries, range])
 
   return (
     <div className="space-y-3 w-full overflow-hidden">
@@ -384,8 +654,61 @@ export default function MultiEventChart({
 
       {/* lines per habit (workloadAt proxy / count) */}
       {habitIds.map((hid, i) => {
-        const arr = actualSeriesByHabit.get(hid) ?? []
         const color = palette(i)
+        
+        // For extended ranges, use daily aggregated series
+        if (['7d', '1mo', '1y'].includes(range)) {
+          const actualSeries = actualSeriesByHabit.get(hid) ?? []
+          const plannedSeries = plannedSeriesByHabit.get(hid) ?? []
+          
+          // Draw actual line
+          const actualD = actualSeries
+            .map((p, idx) => {
+              const x = xOf(p.ts)
+              const y = yOf(p.ratio)
+              return `${idx === 0 ? 'M' : 'L'} ${x.toFixed(2)} ${y.toFixed(2)}`
+            })
+            .join(' ')
+          
+          // Draw planned line
+          const plannedD = plannedSeries
+            .map((p, idx) => {
+              const x = xOf(p.ts)
+              const y = yOf(p.ratio)
+              return `${idx === 0 ? 'M' : 'L'} ${x.toFixed(2)} ${y.toFixed(2)}`
+            })
+            .join(' ')
+          
+          return (
+            <g key={hid + ':dailyLines'}>
+              {/* Actual line (solid) */}
+              {actualD ? (
+                <path 
+                  d={actualD} 
+                  fill="none" 
+                  stroke={color} 
+                  strokeWidth={2} 
+                  opacity={0.75} 
+                />
+              ) : null}
+              
+              {/* Planned line (dashed) */}
+              {plannedD ? (
+                <path 
+                  d={plannedD} 
+                  fill="none" 
+                  stroke={color} 
+                  strokeWidth={1.8} 
+                  opacity={0.55} 
+                  strokeDasharray="6 5" 
+                />
+              ) : null}
+            </g>
+          )
+        }
+        
+        // Original logic for auto/24h ranges
+        const arr = actualSeriesByHabit.get(hid) ?? []
         const d = arr
           .map((p, idx) => {
             const x = xOf(p.ts)
@@ -490,8 +813,8 @@ export default function MultiEventChart({
         )
       })}
 
-      {/* points */}
-      {points.map((p) => {
+      {/* points - for non-aggregated ranges, show individual event points */}
+      {!['7d', '1mo', '1y'].includes(range) && points.map((p) => {
         const i = habitIds.indexOf(p.habitId)
         const color = palette(Math.max(0, i))
         const series = actualSeriesByHabit.get(p.habitId) ?? []
@@ -507,8 +830,8 @@ export default function MultiEventChart({
               cy={y}
               r={isMobile ? 12 : 8}
               fill="transparent"
-              onMouseEnter={() => onHover(p)}
-              onMouseLeave={() => onHover(null)}
+              onMouseEnter={(e) => showTooltip(e, p, ratio)}
+              onMouseLeave={hideTooltip}
               style={{ cursor: 'pointer' }}
             />
             {/* Visible point - slightly larger on mobile */}
@@ -524,9 +847,166 @@ export default function MultiEventChart({
           </g>
         )
       })}
+
+      {/* Daily aggregated points - for extended ranges */}
+      {['7d', '1mo', '1y'].includes(range) && habitIds.map((hid, i) => {
+        const actualSeries = actualSeriesByHabit.get(hid) ?? []
+        const plannedSeries = plannedSeriesByHabit.get(hid) ?? []
+        const color = palette(i)
+        
+        return (
+          <g key={hid + ':dailyPoints'}>
+            {/* Actual data points */}
+            {actualSeries.map((point, idx) => {
+              const x = xOf(point.ts)
+              const y = yOf(point.ratio)
+              return (
+                <g key={hid + ':actual:' + point.ts}>
+                  {/* Hover area */}
+                  <circle
+                    cx={x}
+                    cy={y}
+                    r={isMobile ? 12 : 8}
+                    fill="transparent"
+                    onMouseEnter={(e) => {
+                      // Create a synthetic event point for tooltip display
+                      const syntheticPoint: EventPoint = {
+                        habitId: hid,
+                        ts: point.ts,
+                        iso: new Date(point.ts).toISOString(),
+                        kind: 'complete',
+                        workloadDelta: 0,
+                        workloadCumulative: point.cum,
+                        workloadTotal: point.total,
+                        progressDelta: 0,
+                        progressCumulative: point.ratio,
+                        workloadUnit: habits.find(h => h.id === hid)?.workloadUnit ?? 'work'
+                      }
+                      showTooltip(e, syntheticPoint, point.ratio)
+                    }}
+                    onMouseLeave={hideTooltip}
+                    style={{ cursor: 'pointer' }}
+                  />
+                  {/* Visible point */}
+                  <circle
+                    cx={x}
+                    cy={y}
+                    r={isMobile ? 4 : 3.5}
+                    fill={color}
+                    pointerEvents="none"
+                  />
+                </g>
+              )
+            })}
+            
+            {/* Planned data points */}
+            {plannedSeries.map((point, idx) => {
+              const x = xOf(point.ts)
+              const y = yOf(point.ratio)
+              return (
+                <g key={hid + ':planned:' + point.ts}>
+                  {/* Hover area for planned points */}
+                  <circle
+                    cx={x}
+                    cy={y}
+                    r={isMobile ? 10 : 6}
+                    fill="transparent"
+                    onMouseEnter={(e) => {
+                      // Create a synthetic event point for planned data tooltip
+                      const syntheticPoint: EventPoint = {
+                        habitId: hid,
+                        ts: point.ts,
+                        iso: new Date(point.ts).toISOString(),
+                        kind: 'complete',
+                        workloadDelta: 0,
+                        workloadCumulative: point.cum,
+                        workloadTotal: point.total,
+                        progressDelta: 0,
+                        progressCumulative: point.ratio,
+                        workloadUnit: habits.find(h => h.id === hid)?.workloadUnit ?? 'work'
+                      }
+                      
+                      // Show tooltip with planned data indication
+                      const habit = habits.find(h => h.id === hid)
+                      setTooltip({
+                        visible: true,
+                        x: e.clientX,
+                        y: e.clientY,
+                        content: {
+                          habitName: habit?.name ?? hid,
+                          kind: 'Planned',
+                          timestamp: new Date(point.ts).toLocaleString(),
+                          workloadDelta: 0,
+                          workloadCumulative: point.cum,
+                          workloadTotal: point.total,
+                          workloadUnit: habit?.workloadUnit ?? 'work',
+                          progressRatio: point.ratio
+                        }
+                      })
+                    }}
+                    onMouseLeave={hideTooltip}
+                    style={{ cursor: 'pointer' }}
+                  />
+                  {/* Visible planned point */}
+                  <circle
+                    cx={x}
+                    cy={y}
+                    r={3}
+                    fill="none"
+                    stroke={color}
+                    strokeWidth={1.8}
+                    opacity={0.8}
+                    strokeDasharray="3 3"
+                    pointerEvents="none"
+                  />
+                </g>
+              )
+            })}
+          </g>
+        )
+      })}
           </svg>
         </div>
       </div>
+      
+      {/* Tooltip */}
+      {tooltip && (
+        <div
+          className="fixed z-50 pointer-events-none"
+          style={{
+            left: tooltip.x + 10,
+            top: tooltip.y - 10,
+            transform: 'translateY(-100%)'
+          }}
+        >
+          <div className="rounded border border-zinc-100 p-2 text-xs text-zinc-700 dark:border-slate-800 dark:text-zinc-200 bg-white dark:bg-slate-900 shadow-lg max-w-xs">
+            <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
+              <div>
+                <span className="font-medium">{tooltip.content.habitName}</span>
+                <span className="ml-2 rounded bg-zinc-100 px-1.5 py-0.5 text-[10px] dark:bg-slate-800">
+                  {tooltip.content.kind}
+                </span>
+              </div>
+              <div className="text-zinc-500 text-[10px]">{tooltip.content.timestamp}</div>
+            </div>
+
+            <div className="grid grid-cols-1 gap-1">
+              <div className="rounded bg-zinc-50 p-1.5 dark:bg-slate-900/40">
+                <div className="text-[9px] text-zinc-500">Progress</div>
+                <div className="font-semibold text-[11px]">{Math.round(tooltip.content.progressRatio * 100)}%</div>
+              </div>
+              <div className="rounded bg-zinc-50 p-1.5 dark:bg-slate-900/40">
+                <div className="text-[9px] text-zinc-500">Workload Cumulative</div>
+                <div className="font-semibold text-[11px]">{tooltip.content.workloadCumulative} {tooltip.content.workloadUnit}</div>
+              </div>
+              <div className="rounded bg-zinc-50 p-1.5 dark:bg-slate-900/40">
+                <div className="text-[9px] text-zinc-500">Workload Total</div>
+                <div className="font-semibold text-[11px]">{tooltip.content.workloadTotal ?? '-'} {tooltip.content.workloadUnit}</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

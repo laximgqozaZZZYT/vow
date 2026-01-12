@@ -530,33 +530,6 @@ export default function StaticsSection({ habits, activities, goals }: { habits: 
     return { fromTs: w.from, untilTs: w.until }
   })
 
-  const [hoverPoint, setHoverPoint] = React.useState<EventPoint | null>(null)
-  const [stableHoverPoint, setStableHoverPoint] = React.useState<EventPoint | null>(null)
-  const hoverTimeoutRef = React.useRef<NodeJS.Timeout | undefined>(undefined)
-
-  // Debounced hover point to prevent flickering
-  React.useEffect(() => {
-    if (hoverTimeoutRef.current) {
-      clearTimeout(hoverTimeoutRef.current)
-    }
-
-    if (hoverPoint) {
-      // Immediately show hover info
-      setStableHoverPoint(hoverPoint)
-    } else {
-      // Delay hiding hover info to prevent flickering
-      hoverTimeoutRef.current = setTimeout(() => {
-        setStableHoverPoint(null)
-      }, 150) // 150ms delay before hiding
-    }
-
-    return () => {
-      if (hoverTimeoutRef.current) {
-        clearTimeout(hoverTimeoutRef.current)
-      }
-    }
-  }, [hoverPoint])
-
   // For now default to showing all habits; later we'll allow narrowing via Edit Graph.
   const [visibleHabitIds, setVisibleHabitIds] = React.useState<string[]>(() => habits.map(h => h.id))
   React.useEffect(() => {
@@ -946,41 +919,15 @@ export default function StaticsSection({ habits, activities, goals }: { habits: 
               <div className="text-sm text-zinc-500">No Pause/Done activity points in this range yet.</div>
             ) : (
               <div className="rounded border border-zinc-100 p-3 dark:border-slate-800">
-                <MultiEventChart habits={habits} points={eventPoints} visibleHabitIds={visibleHabitIds} onHover={setHoverPoint} range={range} onEditGraph={() => setEditGraphOpen(true)} />
-
-                {/* Fixed height container for hover info to prevent layout shifts */}
-                <div className="mt-2 min-h-[120px]">
-                  {stableHoverPoint ? (
-                    <div className="rounded border border-zinc-100 p-2 text-xs text-zinc-700 dark:border-slate-800 dark:text-zinc-200">
-                      <div className="flex flex-wrap items-center justify-between gap-2">
-                        <div>
-                          <span className="font-medium">{habits.find(h => h.id === stableHoverPoint.habitId)?.name ?? stableHoverPoint.habitId}</span>
-                          <span className="ml-2 rounded bg-zinc-100 px-1.5 py-0.5 text-[10px] dark:bg-slate-800">{stableHoverPoint.kind === 'pause' ? 'Pause' : 'Done'}</span>
-                        </div>
-                        <div className="text-zinc-500">{new Date(stableHoverPoint.ts).toLocaleString()}</div>
-                      </div>
-
-                      <div className="mt-2 grid grid-cols-1 sm:grid-cols-3 gap-2">
-                        <div className="rounded bg-zinc-50 p-2 dark:bg-slate-900/40">
-                          <div className="text-[10px] text-zinc-500">Workload (this point)</div>
-                          <div className="font-semibold">{stableHoverPoint.workloadDelta} {stableHoverPoint.workloadUnit}</div>
-                        </div>
-                        <div className="rounded bg-zinc-50 p-2 dark:bg-slate-900/40">
-                          <div className="text-[10px] text-zinc-500">WorkLoad Cumulative</div>
-                          <div className="font-semibold">{stableHoverPoint.workloadCumulative} {stableHoverPoint.workloadUnit}</div>
-                        </div>
-                        <div className="rounded bg-zinc-50 p-2 dark:bg-slate-900/40">
-                          <div className="text-[10px] text-zinc-500">WorkLoad Total</div>
-                          <div className="font-semibold">{stableHoverPoint.workloadTotal ?? '-'} {stableHoverPoint.workloadUnit}</div>
-                        </div>
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="flex items-center justify-center h-full text-xs text-zinc-400 dark:text-zinc-500">
-                      Hover over data points to see details
-                    </div>
-                  )}
-                </div>
+                <MultiEventChart 
+                  habits={habits} 
+                  points={eventPoints} 
+                  visibleHabitIds={visibleHabitIds} 
+                  onHover={() => {}} 
+                  range={range} 
+                  timeWindow={activeWindow}
+                  onEditGraph={() => setEditGraphOpen(true)} 
+                />
               </div>
             )}
             </>
