@@ -217,59 +217,14 @@ export default function CalendarWidget({
   const handleMobileEventClick = (clickInfo: any, event: any) => {
     if (!isMobile) return false;
     
-    // Don't show tooltip during drag & drop operations
-    if (touchMoveMode) return false;
-    
-    event.preventDefault();
-    event.stopPropagation();
-    
-    const id = clickInfo.event.id;
-    const ext = (clickInfo.event as any).extendedProps ?? {};
-    const habitId = ext.habitId ?? id;
-    const eventTitle = clickInfo.event.title;
-    
-    // Show context menu immediately on single tap
-    const rect = (event.target as HTMLElement).getBoundingClientRect();
-    setSelectedEventId(id);
-    setContextMenu({
-      show: true,
-      x: rect.left + rect.width / 2,
-      y: rect.top,
-      eventId: id,
-      habitId,
-      eventTitle
-    });
-    
-    return true;
+    // Completely disable tooltip display to prevent interference with drag & drop
+    return false;
   };
 
   // Handle long press for context menu
   const handleLongPress = (clickInfo: any, event: any) => {
-    if (!isMobile) return;
-    
-    // Don't show tooltip during drag & drop operations
-    if (touchMoveMode) return;
-    
-    const id = clickInfo.event.id;
-    const ext = (clickInfo.event as any).extendedProps ?? {};
-    const habitId = ext.habitId ?? id;
-    const eventTitle = clickInfo.event.title;
-    
-    const rect = (event.target as HTMLElement).getBoundingClientRect();
-    setSelectedEventId(id);
-    setContextMenu({
-      show: true,
-      x: rect.left + rect.width / 2,
-      y: rect.top,
-      eventId: id,
-      habitId,
-      eventTitle
-    });
-    
-    // Haptic feedback if available
-    if ('vibrate' in navigator) {
-      navigator.vibrate(50);
-    }
+    // Completely disable long press tooltips to prevent interference with drag & drop
+    return;
   };
 
   // Handle mobile slot selection for moving events
@@ -695,37 +650,12 @@ export default function CalendarWidget({
           if (onEventClick) onEventClick(habitId);
           }}
           eventDidMount={(info: any) => {
+          // Completely disable touch event handling to prevent tooltip interference
           if (!isMobile) return;
           
-          let longPressTimer: NodeJS.Timeout;
-          
-          const handleTouchStart = (e: TouchEvent) => {
-            // Don't start long press timer during drag & drop operations
-            if (touchMoveMode) return;
-            
-            longPressTimer = setTimeout(() => {
-              handleLongPress(info, e as any);
-            }, 500); // 500ms for long press
-          };
-          
-          const handleTouchEnd = () => {
-            clearTimeout(longPressTimer);
-          };
-          
-          const handleTouchMove = () => {
-            clearTimeout(longPressTimer);
-          };
-          
-          info.el.addEventListener('touchstart', handleTouchStart, { passive: true });
-          info.el.addEventListener('touchend', handleTouchEnd, { passive: true });
-          info.el.addEventListener('touchmove', handleTouchMove, { passive: true });
-          
-          // Cleanup
+          // No touch event listeners to prevent any tooltip display
           return () => {
-            info.el.removeEventListener('touchstart', handleTouchStart);
-            info.el.removeEventListener('touchend', handleTouchEnd);
-            info.el.removeEventListener('touchmove', handleTouchMove);
-            clearTimeout(longPressTimer);
+            // No cleanup needed since no listeners are added
           };
           }}
           dateClick={(dateClickInfo: any) => {
