@@ -14,89 +14,88 @@ import DiaryModal from './Modal.Diary'
 type Goal = { id: string; name: string }
 type Habit = { id: string; name: string }
 
-// Complete Mermaid isolation system
-const mermaidInstances = new Map<string, any>()
+function MermaidBlock({ code }: { code: string }) {
+  const containerRef = React.useRef<HTMLDivElement>(null)
+  const [err, setErr] = React.useState<string | null>(null)
+  const [isRendering, setIsRendering] = React.useState(false)
+  const instanceId = React.useMemo(() => 
+    `mermaid-${Math.random().toString(36).substring(2, 11)}-${Date.now()}`, 
+    []
+  )
 
-function createIsolatedMermaidRenderer(instanceId: string) {
-  // Create a completely isolated mermaid instance
-  const renderer = {
-    id: instanceId,
-    render: async (code: string, container: HTMLElement) => {
-      try {
-        // Clear container
-        container.innerHTML = ''
+  React.useEffect(() => {
+    let cancelled = false
+    let renderTimeout: NodeJS.Timeout
+
+    const performRender = async () => {
+      const container = containerRef.current
+      if (!container || isRendering || cancelled) return
+
+      // Only render on client side
+      if (typeof window === 'undefined') return
+
+      setIsRendering(true)
+      setErr(null)
+      
+      renderTimeout = setTimeout(async () => {
+        if (cancelled) return
         
-        // Create shadow DOM for complete isolation
-        const shadowHost = document.createElement('div')
-        shadowHost.style.cssText = `
-          width: 100%;
-          height: auto;
-          min-height: 100px;
-          position: relative;
-          isolation: isolate;
-          contain: layout style paint;
-        `
-        
-        const mermaidDiv = document.createElement('div')
-        mermaidDiv.className = 'mermaid'
-        mermaidDiv.id = `${instanceId}-render`
-        mermaidDiv.textContent = code.trim()
-        mermaidDiv.style.cssText = `
-          width: 100%;
-          height: auto;
-          visibility: hidden;
-        `
-        
-        shadowHost.appendChild(mermaidDiv)
-        container.appendChild(shadowHost)
-        
-        // Initialize mermaid if needed
-        const mm: any = mermaid as any
-        if (!mm) throw new Error('Mermaid not available')
-        
-        // Configure mermaid for this instance
-        if (mm.initialize) {
-          mm.initialize({
-            startOnLoad: false,
-            theme: 'dark',
-            securityLevel: 'loose',
-            deterministicIds: false,
-            flowchart: {
-              useMaxWidth: true,
-              htmlLabels: true
-            }
-          })
-        }
-        
-        // Render with multiple fallback methods
-        let rendered = false
-        
-        // Method 1: Modern run API
-        if (!rendered && mm.run) {
-          try {
-            await mm.run({ nodes: [mermaidDiv] })
-            rendered = true
-          } catch (e) {
-            console.warn('Mermaid run method failed:', e)
+        try {
+          // Clear container
+          container.innerHTML = ''
+          
+          const mermaidDiv = document.createElement('div')
+          mermaidDiv.className = 'mermaid'
+          mermaidDiv.id = `${instanceId}-render`
+          mermaidDiv.textContent = code.trim()
+          container.appendChild(mermaidDiv)
+          
+          // Initialize mermaid with safety checks
+          const mm: any = mermaid as any
+          if (!mm) throw new Error('Mermaid not available')
+          
+          // Check if we're in a proper browser environment
+          if (typeof document === 'undefined' || !document.createElementNS) {
+            throw new Error('Browser environment not available')
           }
-        }
-        
-        // Method 2: renderAsync API
-        if (!rendered && mm.renderAsync) {
-          try {
-            const result = await mm.renderAsync(`${instanceId}-svg-${Date.now()}`, code)
-            if (result?.svg) {
-              mermaidDiv.innerHTML = result.svg
-              rendered = true
-            }
-          } catch (e) {
-            console.warn('Mermaid renderAsync method failed:', e)
+          
+          // Configure mermaid
+          if (mm.initialize) {
+            mm.initialize({
+              startOnLoad: false,
+              theme: 'dark',
+              securityLevel: 'loose',
+              deterministicIds: false,
+              flowchart: {
+                useMaxWidth: true,
+                htmlLabels: true
+              }
+            })
           }
-        }
-        
-        // Method 3: Legacy render API
-        if (!rendered && mm.render) {
-          try {
+          
+          // Try modern run API first
+          if (mm.run) {
+            try {
+              await mm.run({ nodes: [mermaidDiv] })
+            } catch (e) {
+              console.warn('Mermaid run method failed, trying legacy render:', e)
+              // Fallback to legacy render
+              await new Promise<void>((resolve, reject) => {
+                const renderTimeout = setTimeout(() => reject(new Error('Render timeout')), 5000)
+                
+                mm.render(`${instanceId}-legacy-${Date.now()}`, code, (svgCode: string) => {
+                  clearTimeout(renderTimeout)
+                  try {
+                    mermaidDiv.innerHTML = svgCode
+                    resolve()
+                  } catch (e) {
+                    reject(e)
+                  }
+                })
+              })
+            }
+          } else if (mm.render) {
+            // Legacy render method
             await new Promise<void>((resolve, reject) => {
               const renderTimeout = setTimeout(() => reject(new Error('Render timeout')), 5000)
               
@@ -110,66 +109,9 @@ function createIsolatedMermaidRenderer(instanceId: string) {
                 }
               })
             })
-            rendered = true
-          } catch (e) {
-            console.warn('Mermaid render method failed:', e)
+          } else {
+            throw new Error('No mermaid render method available')
           }
-        }
-        
-        // Method 4: Legacy init API
-        if (!rendered && mm.init) {
-          try {
-            mm.init(undefined, mermaidDiv)
-            rendered = true
-          } catch (e) {
-            console.warn('Mermaid init method failed:', e)
-          }
-        }
-        
-        if (!rendered) {
-          throw new Error('All mermaid rendering methods failed')
-        }
-        
-        // Show the rendered content
-        mermaidDiv.style.visibility = 'visible'
-        
-        return true
-      } catch (error) {
-        throw error
-      }
-    }
-  }
-  
-  mermaidInstances.set(instanceId, renderer)
-  return renderer
-}
-
-function MermaidBlock({ code }: { code: string }) {
-  const containerRef = React.useRef<HTMLDivElement>(null)
-  const [err, setErr] = React.useState<string | null>(null)
-  const [isRendering, setIsRendering] = React.useState(false)
-  const instanceId = React.useMemo(() => 
-    `mermaid-isolated-${Math.random().toString(36).substring(2, 11)}-${Date.now()}`, 
-    []
-  )
-
-  React.useEffect(() => {
-    let cancelled = false
-    let renderTimeout: NodeJS.Timeout
-
-    const performRender = async () => {
-      const container = containerRef.current
-      if (!container || isRendering || cancelled) return
-
-      setIsRendering(true)
-      setErr(null)
-      
-      renderTimeout = setTimeout(async () => {
-        if (cancelled) return
-        
-        try {
-          const renderer = createIsolatedMermaidRenderer(instanceId)
-          await renderer.render(code, container)
           
           if (!cancelled) {
             setErr(null)
@@ -184,7 +126,7 @@ function MermaidBlock({ code }: { code: string }) {
             setIsRendering(false)
           }
         }
-      }, 200) // Increased delay for better stability
+      }, 300)
     }
 
     performRender()
@@ -193,14 +135,12 @@ function MermaidBlock({ code }: { code: string }) {
       cancelled = true
       if (renderTimeout) clearTimeout(renderTimeout)
       setIsRendering(false)
-      // Clean up instance
-      mermaidInstances.delete(instanceId)
     }
   }, [code, instanceId])
 
   return (
     <div className="my-3">
-      <div className="rounded-md border border-zinc-200 bg-zinc-50 p-3 shadow-inner dark:border-white/10 dark:bg-black/20 relative">
+      <div className="rounded-md border border-zinc-200 bg-zinc-50 p-3 shadow-inner dark:border-white/10 dark:bg-black/20">
         <div className="mb-2 flex items-center gap-2 text-[11px] text-zinc-400">
           <span className="rounded border border-zinc-300 bg-zinc-100 px-1.5 py-0.5 dark:border-white/10 dark:bg-white/5">mermaid</span>
           <span className="truncate">diagram</span>
@@ -208,12 +148,7 @@ function MermaidBlock({ code }: { code: string }) {
         </div>
         <div
           ref={containerRef}
-          className="overflow-x-auto relative min-h-[100px] [&_svg]:max-w-none [&_svg]:h-auto [&_svg]:w-full [&_svg]:text-zinc-800 dark:[&_svg]:text-zinc-100"
-          style={{ 
-            isolation: 'isolate',
-            zIndex: 1,
-            contain: 'layout style paint'
-          }}
+          className="overflow-x-auto [&_svg]:max-w-none [&_svg]:h-auto [&_svg]:w-full [&_svg]:text-zinc-800 dark:[&_svg]:text-zinc-100"
         />
       </div>
       {err ? (
@@ -228,47 +163,148 @@ function MermaidBlock({ code }: { code: string }) {
 }
 
 function Markdown({ value }: { value: string }) {
-  // Simplified markdown rendering for card display
-  const sanitizeSchema: any = React.useMemo(() => {
-    const schema: any = structuredClone ? structuredClone(defaultSchema as any) : JSON.parse(JSON.stringify(defaultSchema))
-    schema.tagNames = Array.from(new Set([...(schema.tagNames || []), 'input', 'table', 'thead', 'tbody', 'tr', 'th', 'td', 'mark']))
+  // Enhanced sanitize schema for better markdown support
+  const sanitizeSchema = React.useMemo(() => {
+    const schema = structuredClone ? structuredClone(defaultSchema) : JSON.parse(JSON.stringify(defaultSchema))
+    
+    // Add necessary HTML tags for markdown features
+    schema.tagNames = Array.from(new Set([
+      ...(schema.tagNames || []), 
+      'input', 'table', 'thead', 'tbody', 'tr', 'th', 'td', 'mark', 
+      'blockquote', 'pre', 'code', 'del', 'ins'
+    ]))
+    
+    // Enhanced attributes
     schema.attributes = schema.attributes || {}
     schema.attributes.code = [...(schema.attributes.code || []), ['className']]
-    schema.attributes.span = [...(schema.attributes.span || []), ['className']]
-    schema.attributes.a = [...(schema.attributes.a || []), ['target'], ['rel']]
-    schema.attributes.img = [...(schema.attributes.img || []), ['src'], ['alt'], ['title'], ['width'], ['height']]
+    schema.attributes.pre = [...(schema.attributes.pre || []), ['className']]
     schema.attributes.input = [...(schema.attributes.input || []), ['type'], ['checked'], ['disabled']]
-    schema.attributes.th = [...(schema.attributes.th || []), ['align']]
+    schema.attributes.th = [...(schema.attributes.th || []), ['align'], ['scope']]
     schema.attributes.td = [...(schema.attributes.td || []), ['align']]
+    schema.attributes.table = [...(schema.attributes.table || []), ['className']]
+    schema.attributes.blockquote = [...(schema.attributes.blockquote || []), ['className']]
+    schema.attributes.mark = [...(schema.attributes.mark || []), ['className']]
+    
     return schema
   }, [])
 
+  // Custom remark plugin for highlight syntax (==text==)
+  const remarkHighlight = React.useMemo(() => {
+    return () => (tree: any) => {
+      const visit = (node: any) => {
+        if (node.type === 'text' && node.value) {
+          const highlightRegex = /==(.*?)==/g
+          if (highlightRegex.test(node.value)) {
+            const parts = node.value.split(highlightRegex)
+            const newChildren: any[] = []
+            
+            for (let i = 0; i < parts.length; i++) {
+              if (i % 2 === 0) {
+                if (parts[i]) {
+                  newChildren.push({ type: 'text', value: parts[i] })
+                }
+              } else {
+                newChildren.push({ type: 'html', value: `<mark>${parts[i]}</mark>` })
+              }
+            }
+            
+            if (node.parent) {
+              const index = node.parent.children.indexOf(node)
+              node.parent.children.splice(index, 1, ...newChildren)
+            }
+          }
+        }
+        
+        if (node.children) {
+          node.children.forEach(visit)
+        }
+      }
+      
+      visit(tree)
+    }
+  }, [])
+
   return (
-    <div className="prose prose-sm max-w-none dark:prose-invert">
+    <div className="prose prose-sm max-w-none dark:prose-invert prose-zinc">
       <ReactMarkdown
-        remarkPlugins={[remarkGfm, remarkBreaks]}
-        rehypePlugins={[[rehypeRaw, { passThrough: ['code'] }], [rehypeSanitize, sanitizeSchema]]}
+        remarkPlugins={[remarkGfm, remarkBreaks, remarkHighlight]}
+        rehypePlugins={[[rehypeRaw], [rehypeSanitize, sanitizeSchema]]}
         components={{
           code(props: any) {
             const { className, children } = props
             const match = /language-(\w+)/.exec(className || '')
             const lang = match?.[1]
             const raw = String(children ?? '')
+            
             if (lang === 'mermaid') {
               return <MermaidBlock code={raw} />
             }
-            // Inline code: react-markdown uses <code> inside <pre> for fenced blocks;
-            // our <pre> styling handles those.
-            const isInline = !(props as any)?.node?.position?.start || (props as any)?.inline
+            
+            const isInline = !(props as any)?.node?.position?.start
             if (isInline) {
               return (
-                <code className="rounded bg-zinc-100 px-1 py-0.5 text-[0.92em] font-medium dark:bg-white/10 dark:text-zinc-100">
+                <code className="rounded bg-zinc-100 px-1.5 py-0.5 text-[0.9em] font-mono font-medium text-zinc-800 dark:bg-zinc-800 dark:text-zinc-200">
                   {children}
                 </code>
               )
             }
-            return <code {...props} />
+            
+            return (
+              <code className="block rounded bg-zinc-50 p-3 text-sm font-mono overflow-x-auto dark:bg-zinc-900 dark:text-zinc-100">
+                {children}
+              </code>
+            )
           },
+          
+          pre(props: any) {
+            return (
+              <pre className="rounded-lg bg-zinc-50 p-4 overflow-x-auto border dark:bg-zinc-900 dark:border-zinc-700">
+                {props.children}
+              </pre>
+            )
+          },
+          
+          blockquote(props: any) {
+            return (
+              <blockquote className="border-l-4 border-zinc-300 pl-4 py-2 my-4 italic text-zinc-600 bg-zinc-50 dark:border-zinc-600 dark:text-zinc-300 dark:bg-zinc-900/50">
+                {props.children}
+              </blockquote>
+            )
+          },
+          
+          table(props: any) {
+            return (
+              <div className="overflow-x-auto my-4">
+                <table className="min-w-full border-collapse border border-zinc-300 dark:border-zinc-600">
+                  {props.children}
+                </table>
+              </div>
+            )
+          },
+          
+          th(props: any) {
+            return (
+              <th className="border border-zinc-300 px-3 py-2 bg-zinc-100 font-semibold text-left dark:border-zinc-600 dark:bg-zinc-800">
+                {props.children}
+              </th>
+            )
+          },
+          
+          td(props: any) {
+            return (
+              <td className="border border-zinc-300 px-3 py-2 dark:border-zinc-600">
+                {props.children}
+              </td>
+            )
+          },
+          
+          mark(props: any) {
+            return (
+              <mark className="bg-yellow-200 px-1 py-0.5 rounded dark:bg-yellow-800 dark:text-yellow-100">
+                {props.children}
+              </mark>
+            )
+          }
         }}
       >
         {value}
@@ -456,22 +492,14 @@ export default function DiarySection({ goals, habits }: { goals: Goal[]; habits:
         </div>
 
         <div className="h-[520px] overflow-y-auto space-y-3 pr-1">
-          {cards.map((c, index) => (
-            <div 
-              key={c.id} 
-              className="rounded-lg border border-zinc-200 bg-white p-3 shadow-sm dark:border-white/10 dark:bg-[#0a0f16] relative"
-              style={{ 
-                isolation: 'isolate',
-                zIndex: cards.length - index,
-                contain: 'layout style paint'
-              }}
-            >
+          {cards.map((c) => (
+            <div key={c.id} className="rounded-lg border border-zinc-200 bg-white p-3 shadow-sm dark:border-white/10 dark:bg-[#0a0f16]">
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0 flex-1">
                   <div className="text-xs text-zinc-500">
                     {c.createdAt ? new Date(c.createdAt).toLocaleString() : ''}
                   </div>
-                  <div className="mt-2 relative" style={{ isolation: 'isolate' }}>
+                  <div className="mt-2">
                     <Markdown value={c.frontMd ?? ''} />
                   </div>
                 </div>
@@ -522,3 +550,4 @@ export default function DiarySection({ goals, habits }: { goals: Goal[]; habits:
     </section>
   )
 }
+
