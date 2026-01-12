@@ -68,7 +68,7 @@ function generateHeatmapData(
 
   // Determine date range
   let startDate: Date;
-  let endDate: Date = new Date(now);
+  const endDate: Date = new Date(now);
   
   switch (range) {
     case 'week':
@@ -141,7 +141,7 @@ function HeatmapGrid({
 }: { 
   data: HeatmapData; 
   range: 'week' | 'month' | 'year';
-  onHover?: (data: HeatmapCellData | null) => void;
+  onHover?: (data: HeatmapCellData | null, event?: React.MouseEvent) => void;
 }) {
   const { cells } = data;
   
@@ -196,7 +196,6 @@ function HeatmapGrid({
     const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 
                    'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
     const labels = [];
-    const currentYear = new Date().getFullYear();
     
     for (let i = 0; i < 12; i++) {
       labels.push(
@@ -230,17 +229,17 @@ function HeatmapGrid({
   };
 
   return (
-    <div className="w-full overflow-x-auto">
+    <div className="w-full max-w-4xl overflow-x-auto">
       {getMonthLabels()}
       {getWeekdayLabels()}
       <div className={`grid ${layout.gap} justify-center`} 
            style={{ gridTemplateColumns: `repeat(${layout.cols}, minmax(0, 1fr))` }}>
-        {cells.map((cell, index) => (
+        {cells.map((cell) => (
           <div
             key={cell.date}
             className={`${layout.cellSize} ${getColor(cell.level)} border rounded-sm cursor-pointer transition-all hover:scale-110 hover:shadow-md hover:z-10 relative`}
             title={`${cell.date}: ${cell.value} activities`}
-            onMouseEnter={() => onHover?.(cell)}
+            onMouseEnter={(e) => onHover?.(cell, e)}
             onMouseLeave={() => onHover?.(null)}
           />
         ))}
@@ -280,20 +279,34 @@ export default function HeatmapWidget({
   onHover 
 }: HeatmapWidgetProps) {
   const [selectedRange, setSelectedRange] = useState<'week' | 'month' | 'year'>(range);
-  const [hoveredCell, setHoveredCell] = useState<HeatmapCellData | null>(null);
+  const [tooltip, setTooltip] = useState<{
+    visible: boolean;
+    x: number;
+    y: number;
+    content: HeatmapCellData;
+  } | null>(null);
 
   const heatmapData = useMemo(() => {
     const habitIds = visibleHabitIds.length > 0 ? visibleHabitIds : habits.map(h => h.id);
     return generateHeatmapData(habits, activities, habitIds, selectedRange);
   }, [habits, activities, visibleHabitIds, selectedRange]);
 
-  const handleHover = (cell: HeatmapCellData | null) => {
-    setHoveredCell(cell);
+  const handleHover = (cell: HeatmapCellData | null, event?: React.MouseEvent) => {
+    if (cell && event) {
+      setTooltip({
+        visible: true,
+        x: event.clientX,
+        y: event.clientY,
+        content: cell
+      });
+    } else {
+      setTooltip(null);
+    }
     onHover?.(cell);
   };
 
   return (
-    <div className="w-full">
+    <div className="w-full max-w-4xl mx-auto">
       {/* Controls */}
       <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-2">
@@ -320,7 +333,7 @@ export default function HeatmapWidget({
       </div>
 
       {/* Heatmap Grid */}
-      <div className="mb-4">
+      <div className="mb-4 flex justify-center">
         <HeatmapGrid 
           data={heatmapData} 
           range={selectedRange} 
@@ -332,40 +345,6 @@ export default function HeatmapWidget({
       <div className="mb-4 flex justify-center">
         <HeatmapLegend />
       </div>
-
-      {/* Hover Info */}
-      {hoveredCell && (
-        <div className="rounded border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-3 text-sm">
-          <div className="flex items-center justify-between mb-2">
-            <span className="font-medium">{hoveredCell.date}</span>
-            <span className="text-gray-500 dark:text-gray-400">
-              {hoveredCell.value} activities
-            </span>
-          </div>
-          
-          {hoveredCell.activities.length > 0 && (
-            <div className="space-y-1">
-              {hoveredCell.activities.slice(0, 5).map((activity, index) => {
-                const habit = habits.find(h => h.id === activity.habitId);
-                return (
-                  <div key={index} className="flex items-center justify-between text-xs">
-                    <span className="truncate">{habit?.name || 'Unknown Habit'}</span>
-                    <span className="text-gray-500 dark:text-gray-400 ml-2">
-                      {activity.kind === 'complete' ? '✓' : '⏸'}
-                      {typeof activity.amount === 'number' ? ` (${activity.amount})` : ''}
-                    </span>
-                  </div>
-                );
-              })}
-              {hoveredCell.activities.length > 5 && (
-                <div className="text-xs text-gray-500 dark:text-gray-400">
-                  +{hoveredCell.activities.length - 5} more...
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-      )}
 
       {/* Summary Stats */}
       <div className="mt-4 grid grid-cols-2 sm:grid-cols-4 gap-3 text-center">
@@ -397,6 +376,49 @@ export default function HeatmapWidget({
           <div className="text-xs text-gray-600 dark:text-gray-400">Consistency</div>
         </div>
       </div>
+
+      {/* Tooltip */}
+      {tooltip && (
+        <div
+          className="fixed z-50 pointer-events-none"
+          style={{
+            left: tooltip.x + 10,
+            top: tooltip.y - 10,
+            transform: 'translateY(-100%)'
+          }}
+        >
+          <div className="rounded border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-3 text-sm shadow-lg max-w-xs">
+            <div className="flex items-center justify-between mb-2">
+              <span className="font-medium">{tooltip.content.date}</span>
+              <span className="text-gray-500 dark:text-gray-400">
+                {tooltip.content.value} activities
+              </span>
+            </div>
+            
+            {tooltip.content.activities.length > 0 && (
+              <div className="space-y-1">
+                {tooltip.content.activities.slice(0, 5).map((activity, index) => {
+                  const habit = habits.find(h => h.id === activity.habitId);
+                  return (
+                    <div key={index} className="flex items-center justify-between text-xs">
+                      <span className="truncate">{habit?.name || 'Unknown Habit'}</span>
+                      <span className="text-gray-500 dark:text-gray-400 ml-2">
+                        {activity.kind === 'complete' ? '✓' : '⏸'}
+                        {typeof activity.amount === 'number' ? ` (${activity.amount})` : ''}
+                      </span>
+                    </div>
+                  );
+                })}
+                {tooltip.content.activities.length > 5 && (
+                  <div className="text-xs text-gray-500 dark:text-gray-400">
+                    +{tooltip.content.activities.length - 5} more...
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

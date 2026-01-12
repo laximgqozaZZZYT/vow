@@ -1,65 +1,65 @@
-# Vow App
+# VOWアプリ
 
-A personal productivity application built with Next.js and Supabase, featuring goal tracking, habit management, and diary functionality.
+Next.jsとSupabaseで構築された個人向け生産性アプリケーションです。目標管理、習慣管理、日記機能を提供します。
 
-## 🚀 Tech Stack
+## 🚀 技術スタック
 
-- **Frontend**: Next.js 16.1.1, React 19, TypeScript
-- **Backend**: Supabase (PostgreSQL, Authentication, Real-time)
-- **Styling**: Tailwind CSS
-- **Deployment**: Vercel (Frontend) + Supabase (Backend)
+- **フロントエンド**: Next.js 16.1.1, React 19, TypeScript
+- **バックエンド**: Supabase (PostgreSQL, 認証, リアルタイム)
+- **スタイリング**: Tailwind CSS
+- **デプロイメント**: Vercel (フロントエンド) + Supabase (バックエンド)
 - **CI/CD**: GitHub Actions
 
-## 📋 Features
+## 📋 機能
 
-- 🎯 Goal tracking and management
-- 📅 Habit tracking with calendar integration
-- 📝 Activity logging
-- 📖 Digital diary with markdown support
-- 🔐 OAuth authentication (Google/GitHub)
-- 📱 Responsive design
-- 🔒 Row-level security for data isolation
+- 🎯 目標管理と追跡
+- 📅 カレンダー連携による習慣管理
+- 📝 活動記録
+- 📖 Markdownサポート付きデジタル日記
+- 🔐 OAuth認証 (Google/GitHub)
+- 📱 レスポンシブデザイン
+- 🔒 データ分離のための行レベルセキュリティ
 
-## 🛠️ Development Setup
+## 🛠️ 開発セットアップ
 
-### Prerequisites
+### 前提条件
 
-- Node.js 20.x or later
-- npm or yarn
-- Supabase account
-- Vercel account (for deployment)
+- Node.js 20.x 以降
+- npm または yarn
+- Supabaseアカウント
+- Vercelアカウント（デプロイメント用）
 
-### Local Development
+### ローカル開発
 
-1. **Clone the repository**
+1. **リポジトリをクローンする**
    ```bash
    git clone <repository-url>
    cd vow-app
    ```
 
-2. **Install dependencies**
+2. **依存関係をインストールする**
    ```bash
    cd frontend
    npm install
    ```
 
-3. **Environment setup**
+3. **環境設定**
    ```bash
    cp .env.local.example .env.local
-   # Edit .env.local with your Supabase credentials
+   # .env.localファイルにSupabaseの認証情報を設定してください
    ```
 
-4. **Start development server**
+4. **開発サーバーを起動する**
    ```bash
    npm run dev
    ```
 
-5. **Access the application**
-   - Open http://localhost:3000 in your browser
+5. **アプリケーションにアクセスする**
+   - ブラウザで http://localhost:3000 を開いてください
 
-### Environment Variables
+### 環境変数
 
-Create a `.env.local` file in the `frontend` directory:
+`frontend`ディレクトリに`.env.local`ファイルを作成してください：
 
 ```bash
 NEXT_PUBLIC_SUPABASE_URL=your-supabase-url
@@ -69,50 +69,50 @@ NEXT_PUBLIC_SITE_URL=http://localhost:3000
 NEXT_STATIC_EXPORT=false
 ```
 
-## 🚀 Deployment
+## 🚀 デプロイメント
 
-### Vercel Deployment (Recommended)
+### Vercelデプロイメント（推奨）
 
-1. **Fork/Clone this repository**
+1. **このリポジトリをフォーク/クローンする**
 
-2. **Import to Vercel**
-   - Go to [Vercel Dashboard](https://vercel.com/dashboard)
-   - Click "Add New..." → "Project"
-   - Import your GitHub repository
-   - Set Root Directory to `frontend`
+2. **Vercelにインポートする**
+   - [Vercel Dashboard](https://vercel.com/dashboard)にアクセス
+   - "Add New..." → "Project"をクリック
+   - GitHubリポジトリをインポート
+   - Root Directoryを`frontend`に設定
 
-3. **Configure Environment Variables**
-   - Add all environment variables from `.env.local`
-   - Set `NEXT_STATIC_EXPORT=false` for Vercel deployment
+3. **環境変数を設定する**
+   - `.env.local`からすべての環境変数を追加
+   - Vercelデプロイメント用に`NEXT_STATIC_EXPORT=false`を設定
 
-4. **Deploy**
-   - Vercel will automatically deploy on push to main branch
-   - Or use GitHub Actions for CI/CD control
+4. **デプロイする**
+   - Vercelはmainブランチへのプッシュ時に自動デプロイします
+   - またはCI/CD制御にGitHub Actionsを使用
 
-### Supabase Static Hosting (Alternative)
+### Supabase静的ホスティング（代替案）
 
-1. **Build for static export**
+1. **静的エクスポート用にビルドする**
    ```bash
    cd frontend
    npm run build:static
    ```
 
-2. **Deploy to Supabase Storage**
+2. **Supabase Storageにデプロイする**
    ```bash
    supabase storage cp -r out/* supabase://website/
    ```
 
-## 🔧 CI/CD Pipeline
+## 🔧 CI/CDパイプライン
 
-The project uses GitHub Actions for automated testing and deployment:
+このプロジェクトは自動テストとデプロイメントにGitHub Actionsを使用しています：
 
-- **Testing**: Runs on every push and PR
-- **Deployment**: Deploys to Vercel on push to main branch
-- **Security**: Automated security tests with Supabase integration
+- **テスト**: すべてのプッシュとPRで実行
+- **デプロイメント**: mainブランチへのプッシュ時にVercelにデプロイ
+- **セキュリティ**: Supabase統合による自動セキュリティテスト
 
-### GitHub Secrets Required
+### 必要なGitHubシークレット
 
-For CI/CD deployment, add these secrets to your GitHub repository:
+CI/CDデプロイメントには、GitHubリポジトリに以下のシークレットを追加してください：
 
 ```
 NEXT_PUBLIC_SUPABASE_URL
@@ -122,59 +122,59 @@ VERCEL_PROJECT_ID
 VERCEL_ORG_ID
 ```
 
-## 📁 Project Structure
+## 📁 プロジェクト構造
 
 ```
-├── frontend/                 # Next.js application
-│   ├── app/                 # App Router pages
-│   ├── lib/                 # Utilities and configurations
-│   ├── public/              # Static assets
+├── frontend/                 # Next.jsアプリケーション
+│   ├── app/                 # App Routerページ
+│   ├── lib/                 # ユーティリティと設定
+│   ├── public/              # 静的アセット
 │   └── package.json
-├── docs/                    # Documentation
-├── scripts/                 # Build and deployment scripts
+├── docs/                    # ドキュメント
+├── scripts/                 # ビルドとデプロイメントスクリプト
 ├── .github/workflows/       # GitHub Actions
-└── vercel.json             # Vercel configuration
+└── vercel.json             # Vercel設定
 ```
 
-## 🔒 Security
+## 🔒 セキュリティ
 
-- Row Level Security (RLS) enabled on all database tables
-- OAuth authentication with Google and GitHub
-- HTTPS enforced in production
-- Security headers configured
-- Environment variables encrypted
+- すべてのデータベーステーブルで行レベルセキュリティ（RLS）を有効化
+- GoogleとGitHubによるOAuth認証
+- 本番環境でHTTPS強制
+- セキュリティヘッダーを設定
+- 環境変数の暗号化
 
-## 📖 Documentation
+## 📖 ドキュメント
 
-- [Deployment Guide](docs/deployment-guide.md)
-- [Vercel Setup Guide](docs/vercel-setup-guide.md)
-- [API Documentation](docs/api.md)
-- [Security Guide](docs/security.md)
+- [デプロイメントガイド](docs/deployment-guide.md)
+- [Vercelセットアップガイド](docs/vercel-setup-guide.md)
+- [APIドキュメント](docs/api.md)
+- [セキュリティガイド](docs/security.md)
 
-## 🤝 Contributing
+## 🤝 貢献
 
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Add tests if applicable
-5. Submit a pull request
+1. リポジトリをフォークする
+2. 機能ブランチを作成する
+3. 変更を加える
+4. 該当する場合はテストを追加する
+5. プルリクエストを送信する
 
-## 📄 License
+## 📄 ライセンス
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+このプロジェクトはMITライセンスの下でライセンスされています。詳細は[LICENSE](LICENSE)ファイルをご覧ください。
 
-## 🆘 Support
+## 🆘 サポート
 
-If you encounter any issues:
+問題が発生した場合：
 
-1. Check the [troubleshooting guide](docs/troubleshooting.md)
-2. Search existing [GitHub issues](https://github.com/your-username/vow-app/issues)
-3. Create a new issue with detailed information
+1. [トラブルシューティングガイド](docs/troubleshooting.md)を確認してください
+2. 既存の[GitHubイシュー](https://github.com/your-username/vow-app/issues)を検索してください
+3. 詳細な情報とともに新しいイシューを作成してください
 
-## 🎯 Roadmap
+## 🎯 ロードマップ
 
-- [ ] Mobile app (React Native)
-- [ ] Advanced analytics and insights
-- [ ] Team collaboration features
-- [ ] API integrations (calendar, fitness trackers)
-- [ ] Offline support with sync
+- [ ] モバイルアプリ（React Native）
+- [ ] 高度な分析とインサイト
+- [ ] チームコラボレーション機能
+- [ ] API統合（カレンダー、フィットネストラッカー）
+- [ ] 同期機能付きオフラインサポート

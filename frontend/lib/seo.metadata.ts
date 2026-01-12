@@ -4,6 +4,7 @@ import type { Metadata } from 'next';
 export const APP_CONFIG = {
   name: 'VOW',
   description: 'Your personal habit and goal tracking application. Track your progress, build better habits, and achieve your goals with VOW.',
+  descriptionJa: 'あなた専用の習慣・目標管理アプリケーション。進捗を管理し、より良い習慣を身につけ、VOWで目標を達成しましょう。',
   url: process.env.NEXT_PUBLIC_SITE_URL || 'https://vow-app.vercel.app',
   ogImage: '/og-image.png',
   twitterHandle: '@vow_app',
@@ -26,6 +27,16 @@ export const baseMetadata: Metadata = {
     'goal tracker',
     'progress tracking',
     'self improvement',
+    '習慣管理',
+    '目標設定',
+    '生産性',
+    '自己啓発',
+    '習慣トラッカー',
+    '目標管理',
+    '進捗管理',
+    '自己改善',
+    '日記アプリ',
+    'タスク管理',
   ],
   authors: [{ name: 'VOW Team' }],
   creator: 'VOW Team',
@@ -101,6 +112,11 @@ export function createPageMetadata({
   const locale = arguments[0].locale || 'en';
   const ogLocale = OG_LOCALE_MAP[locale] || 'en_US';
 
+  // Use Japanese description for Japanese locale
+  const finalDescription = locale === 'ja' && description === APP_CONFIG.description 
+    ? APP_CONFIG.descriptionJa 
+    : description;
+
   // build alternates for supported locales
   const alternates: Metadata['alternates'] = {
     canonical: url,
@@ -114,10 +130,10 @@ export function createPageMetadata({
 
   return {
     title,
-    description,
+    description: finalDescription,
     openGraph: {
       title,
-      description,
+      description: finalDescription,
       url,
       locale: ogLocale,
       images: [
@@ -131,7 +147,7 @@ export function createPageMetadata({
     },
     twitter: {
       title,
-      description,
+      description: finalDescription,
       images: [APP_CONFIG.ogImage],
     },
     alternates,

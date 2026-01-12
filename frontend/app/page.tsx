@@ -7,8 +7,8 @@ import { createPageMetadata } from "../lib/seo.metadata";
 export async function generateMetadata({ params, searchParams }: { params: { locale?: string }; searchParams: any }): Promise<Metadata> {
   const locale = params?.locale || 'en';
   return createPageMetadata({
-    title: "VOW — Habit & Goal Tracker",
-    description: "VOW helps you build habits and make progress on goals with a minimal, focused workflow.",
+    title: "VOW — 習慣・目標トラッカー",
+    description: "VOWは最小限で集中的なワークフローで習慣を身につけ、目標を達成するお手伝いをします。",
     path: '/',
     locale: locale as any,
   });
@@ -28,12 +28,11 @@ export default function Home() {
 
           <div>
             <h2 className="text-4xl font-bold leading-tight text-black dark:text-zinc-50">
-              Build better habits. Achieve real goals.
+              より良い習慣を身につける。本当の目標を達成する。
             </h2>
             <p className="mt-4 max-w-xl text-lg text-zinc-600 dark:text-zinc-400">
-              Focused habit tracking, simple goal planning, and reflections that help
-              you keep momentum. Get started quickly as a guest or create an account
-              to sync your data.
+              集中的な習慣管理、シンプルな目標計画、そして継続をサポートする振り返り機能。
+              ゲストとしてすぐに始めるか、アカウントを作成してデータを同期できます。
             </p>
           </div>
 
@@ -42,52 +41,53 @@ export default function Home() {
               href="/login"
               className="inline-flex h-12 items-center justify-center rounded-full bg-black px-6 text-sm font-semibold text-white transition hover:bg-zinc-800"
             >
-              Sign in
+              ログイン
             </Link>
             <Link
               href="/dashboard"
               className="inline-flex h-12 items-center justify-center rounded-full border border-zinc-200 bg-white px-6 text-sm font-medium text-zinc-900 transition hover:bg-zinc-50"
             >
-              Continue as Guest
+              ゲストとして続行
             </Link>
           </div>
 
           <ul className="mt-6 flex max-w-md flex-col gap-3">
             <li className="rounded-md bg-zinc-50 p-4 text-sm text-zinc-700 dark:bg-zinc-900 dark:text-zinc-300">
-              • Daily habit tracking with simple streaks
+              • シンプルな継続記録による日々の習慣管理
             </li>
             <li className="rounded-md bg-zinc-50 p-4 text-sm text-zinc-700 dark:bg-zinc-900 dark:text-zinc-300">
-              • Goal planning and review to keep progress visible
+              • 進捗を見える化する目標計画とレビュー
             </li>
             <li className="rounded-md bg-zinc-50 p-4 text-sm text-zinc-700 dark:bg-zinc-900 dark:text-zinc-300">
-              • Lightweight, privacy-first approach — your data belongs to you
+              • 軽量でプライバシー重視のアプローチ — あなたのデータはあなたのもの
             </li>
           </ul>
         </section>
 
         <aside className="hidden w-1/2 flex-col gap-6 sm:flex">
           <div className="rounded-2xl bg-white/60 p-6 shadow-md dark:bg-zinc-900/60">
-            <h3 className="mb-3 text-lg font-semibold text-zinc-900 dark:text-zinc-50">Quick glance</h3>
+            <h3 className="mb-3 text-lg font-semibold text-zinc-900 dark:text-zinc-50">一目で確認</h3>
             <p className="text-sm text-zinc-600 dark:text-zinc-400">
-              Your dashboard surfaces today's habits, active goals, and recent reflections so you can act in minutes.
+              ダッシュボードには今日の習慣、アクティブな目標、最近の振り返りが表示され、
+              数分で行動に移すことができます。
             </p>
           </div>
 
           <div className="grid gap-4">
             <div className="rounded-lg border border-zinc-100 p-4 dark:border-zinc-800">
-              <h4 className="text-sm font-semibold text-zinc-900 dark:text-zinc-50">Habits</h4>
-              <p className="mt-1 text-xs text-zinc-600 dark:text-zinc-400">Daily check-ins, custom reminders, and streak tracking.</p>
+              <h4 className="text-sm font-semibold text-zinc-900 dark:text-zinc-50">習慣</h4>
+              <p className="mt-1 text-xs text-zinc-600 dark:text-zinc-400">日々のチェックイン、カスタムリマインダー、継続記録の管理。</p>
             </div>
             <div className="rounded-lg border border-zinc-100 p-4 dark:border-zinc-800">
-              <h4 className="text-sm font-semibold text-zinc-900 dark:text-zinc-50">Goals</h4>
-              <p className="mt-1 text-xs text-zinc-600 dark:text-zinc-400">Break goals into small steps and review progress weekly.</p>
+              <h4 className="text-sm font-semibold text-zinc-900 dark:text-zinc-50">目標</h4>
+              <p className="mt-1 text-xs text-zinc-600 dark:text-zinc-400">目標を小さなステップに分解し、週次で進捗をレビュー。</p>
             </div>
           </div>
         </aside>
       </main>
 
       <footer className="border-t border-zinc-200 bg-transparent py-8 text-center text-sm text-zinc-600 dark:border-zinc-800 dark:text-zinc-400">
-        <div className="mx-auto max-w-4xl px-6">© {new Date().getFullYear()} VOW — Built for focus and consistency.</div>
+        <div className="mx-auto max-w-4xl px-6">© {new Date().getFullYear()} VOW — 集中と継続のために作られました。</div>
       </footer>
     </div>
   );
