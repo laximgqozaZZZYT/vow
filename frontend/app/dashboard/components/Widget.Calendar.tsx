@@ -252,6 +252,10 @@ export default function CalendarWidget({
     const startStr = newStart.toISOString();
     const endStr = newEnd.toISOString();
     
+    // Update the event position in FullCalendar immediately (optimistic update)
+    selectedEvent.setStart(newStart);
+    selectedEvent.setEnd(newEnd);
+    
     // Check if recurring and handle accordingly
     const habit = habits.find(h => h.id === habitId);
     if (habit) {
