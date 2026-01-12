@@ -163,6 +163,32 @@ function MermaidBlock({ code }: { code: string }) {
 }
 
 function Markdown({ value }: { value: string }) {
+  // Normalize markdown input (same as Modal.Diary.tsx)
+  const normalized = React.useMemo(() => {
+    const v = value ?? ''
+    // Fix ATX headings without space (e.g. "#Title" -> "# Title")
+    const withHeadingSpace = v.replace(/^(#{1,6})([^\s#])/gm, '$1 $2')
+
+    // Obsidian-ish extras:
+    // - ==highlight== -> <mark>highlight</mark>
+    // - [[Page]] or [[Page|Alias]] -> link-like markdown
+    // - #tag -> link-like markdown (non-destructive; avoids inside URLs)
+    const withHighlight = withHeadingSpace.replace(/==([^\n=][^\n]*?)==/g, '<mark>$1</mark>')
+
+    const withWikiLinks = withHighlight.replace(/\[\[([^\]|\n]+?)(?:\|([^\]\n]+?))?\]\]/g, (_m, page, alias) => {
+      const text = (alias || page).trim()
+      const target = String(page).trim().replace(/\s+/g, '-')
+      // For now we link to a hash route so it works without new pages.
+      return `[${text}](#note:${encodeURIComponent(target)})`
+    })
+
+    const withHashTags = withWikiLinks.replace(/(^|\s)#([\p{L}0-9_\-\/]+)\b/gu, (_m, pre, tag) => {
+      return `${pre}[#${tag}](#tag:${encodeURIComponent(tag)})`
+    })
+
+    return withHashTags
+  }, [value])
+
   // Enhanced sanitize schema for better markdown support
   const sanitizeSchema = React.useMemo(() => {
     const schema = structuredClone ? structuredClone(defaultSchema) : JSON.parse(JSON.stringify(defaultSchema))
@@ -184,51 +210,18 @@ function Markdown({ value }: { value: string }) {
     schema.attributes.table = [...(schema.attributes.table || []), ['className']]
     schema.attributes.blockquote = [...(schema.attributes.blockquote || []), ['className']]
     schema.attributes.mark = [...(schema.attributes.mark || []), ['className']]
+    schema.attributes.span = [...(schema.attributes.span || []), ['className']]
+    schema.attributes.a = [...(schema.attributes.a || []), ['target'], ['rel']]
+    schema.attributes.img = [...(schema.attributes.img || []), ['src'], ['alt'], ['title'], ['width'], ['height']]
     
     return schema
-  }, [])
-
-  // Custom remark plugin for highlight syntax (==text==)
-  const remarkHighlight = React.useMemo(() => {
-    return () => (tree: any) => {
-      const visit = (node: any) => {
-        if (node.type === 'text' && node.value) {
-          const highlightRegex = /==(.*?)==/g
-          if (highlightRegex.test(node.value)) {
-            const parts = node.value.split(highlightRegex)
-            const newChildren: any[] = []
-            
-            for (let i = 0; i < parts.length; i++) {
-              if (i % 2 === 0) {
-                if (parts[i]) {
-                  newChildren.push({ type: 'text', value: parts[i] })
-                }
-              } else {
-                newChildren.push({ type: 'html', value: `<mark>${parts[i]}</mark>` })
-              }
-            }
-            
-            if (node.parent) {
-              const index = node.parent.children.indexOf(node)
-              node.parent.children.splice(index, 1, ...newChildren)
-            }
-          }
-        }
-        
-        if (node.children) {
-          node.children.forEach(visit)
-        }
-      }
-      
-      visit(tree)
-    }
   }, [])
 
   return (
     <div className="prose prose-sm max-w-none dark:prose-invert prose-zinc">
       <ReactMarkdown
-        remarkPlugins={[remarkGfm, remarkBreaks, remarkHighlight]}
-        rehypePlugins={[[rehypeRaw], [rehypeSanitize, sanitizeSchema]]}
+        remarkPlugins={[remarkGfm, remarkBreaks]}
+        rehypePlugins={[[rehypeRaw, { passThrough: ['code'] }], [rehypeSanitize, sanitizeSchema]]}
         components={{
           code(props: any) {
             const { className, children } = props
@@ -297,17 +290,85 @@ function Markdown({ value }: { value: string }) {
               </td>
             )
           },
+          h1(props: any) {
+            return <h1 {...props} className={`mt-0 mb-3 text-3xl font-semibold tracking-tight border-b border-zinc-200 dark:border-white/10 pb-2 ${props?.className ?? ''}`} />
+          },
+          h2(props: any) {
+            return <h2 {...props} className={`mt-8 mb-2 text-2xl font-semibold tracking-tight border-b border-zinc-200/80 dark:border-white/10 pb-1 pl-2 rounded bg-[linear-gradient(90deg,rgba(139,92,246,0.18),transparent)] ${props?.className ?? ''}`} />
+          },
+          h3(props: any) {
+            return <h3 {...props} className={`mt-6 mb-2 text-xl font-semibold tracking-tight ${props?.className ?? ''}`} />
+          },
+          h4(props: any) {
+            return <h4 {...props} className={`mt-5 mb-2 text-lg font-semibold ${props?.className ?? ''}`} />
+          },
+          h5(props: any) {
+            return <h5 {...props} className={`mt-4 mb-2 text-base font-semibold ${props?.className ?? ''}`} />
+          },
+          h6(props: any) {
+            return <h6 {...props} className={`mt-4 mb-2 text-sm font-semibold text-zinc-400 ${props?.className ?? ''}`} />
+          },
           
-          mark(props: any) {
+          ul(props: any) {
+            return <ul {...props} className={`my-3 list-disc pl-6 marker:text-violet-500 dark:marker:text-violet-300 ${props?.className ?? ''}`} />
+          },
+          ol(props: any) {
+            return <ol {...props} className={`my-3 list-decimal pl-6 marker:text-violet-500 dark:marker:text-violet-300 ${props?.className ?? ''}`} />
+          },
+          li(props: any) {
+            // If this is a task list item, react-markdown (remark-gfm) will include an <input type="checkbox" />
+            // as the first child. We make list items flex so the checkbox aligns with the first line.
+            const isTaskItem = Array.isArray(props?.children) && props.children.some((c: any) => c?.type === 'input' && c?.props?.type === 'checkbox')
             return (
-              <mark className="bg-yellow-200 px-1 py-0.5 rounded dark:bg-yellow-800 dark:text-yellow-100">
-                {props.children}
-              </mark>
+              <li
+                {...props}
+                className={`${isTaskItem ? 'flex items-start gap-2' : ''} my-1 leading-6 pl-1 ${props?.className ?? ''}`}
+              />
             )
-          }
+          },
+          
+          a(props: any) {
+            const href = props?.href as string | undefined
+            // external links: open in new tab
+            const isExternal = !!href && /^https?:\/\//i.test(href)
+            return (
+              <a
+                {...props}
+                target={isExternal ? '_blank' : undefined}
+                rel={isExternal ? 'noreferrer noopener' : undefined}
+                className={`text-violet-600 dark:text-violet-300 font-medium no-underline hover:underline ${props?.className ?? ''}`}
+              />
+            )
+          },
+          
+          img(props: any) {
+            const alt = props?.alt ?? ''
+            return (
+              <img
+                {...props}
+                alt={alt}
+                loading="lazy"
+                className={`max-w-full rounded-md border border-zinc-200/70 dark:border-white/10 ${props?.className ?? ''}`}
+              />
+            )
+          },
+          
+          input(props: any) {
+            // GFM task list checkboxes render as <input type="checkbox" checked />.
+            if (props?.type !== 'checkbox') return <input {...props} />
+            return (
+              <input
+                {...props}
+                type="checkbox"
+                checked={!!props?.checked}
+                readOnly
+                className={`mt-[2px] h-4 w-4 shrink-0 accent-violet-400 ${props?.className ?? ''}`}
+              />
+            )
+          },
         }}
       >
-        {value}
+        {normalized}
       </ReactMarkdown>
     </div>
   )
