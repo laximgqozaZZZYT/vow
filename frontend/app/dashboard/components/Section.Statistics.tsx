@@ -412,14 +412,54 @@ function buildEventPoints(
     return Number.POSITIVE_INFINITY
   })()
 
+  // For auto/24h ranges, merge activities within 1 minute of each other for the same habit
+  let processedActivities = filtered
+  if (range === 'auto' || range === '24h') {
+    const mergedActivities: Array<{ a: Activity; ts: number }> = []
+    const oneMinute = 60 * 1000 // 1 minute in milliseconds
+    
+    for (const current of filtered) {
+      if (current.ts < startTs || current.ts > endTs) continue
+      
+      // Find if there's a recent activity for the same habit within 1 minute
+      const recentIndex = mergedActivities.findIndex(prev => 
+        prev.a.habitId === current.a.habitId && 
+        (current.ts - prev.ts) <= oneMinute
+      )
+      
+      if (recentIndex >= 0) {
+        // Merge with existing activity
+        const existing = mergedActivities[recentIndex]
+        const existingAmount = (typeof existing.a.amount === 'number' && Number.isFinite(existing.a.amount)) ? existing.a.amount : 0
+        const currentAmount = (typeof current.a.amount === 'number' && Number.isFinite(current.a.amount)) ? current.a.amount : 0
+        
+        // Create merged activity: use first timestamp, sum amounts, use last kind
+        const mergedActivity: Activity = {
+          ...existing.a,
+          amount: existingAmount + currentAmount,
+          kind: current.a.kind, // Use last activity's kind
+          timestamp: existing.a.timestamp // Keep first timestamp
+        }
+        
+        mergedActivities[recentIndex] = { a: mergedActivity, ts: existing.ts }
+      } else {
+        // Add as new activity
+        mergedActivities.push(current)
+      }
+    }
+    
+    processedActivities = mergedActivities
+  } else {
+    // For extended ranges (7d/1mo/1y), use original activities
+    processedActivities = filtered.filter(x => x.ts >= startTs && x.ts <= endTs)
+  }
+
   // We'll compute cumulative workload as sum of `amount` deltas within the selected window.
   // The app records `amount` for complete and 0 for pause; treat null as 0.
   const cumByHabit = new Map<string, number>()
   const out: EventPoint[] = []
 
-  for (const { a, ts } of filtered) {
-    if (ts < startTs) continue
-    if (ts > endTs) continue
+  for (const { a, ts } of processedActivities) {
     if (!a.habitId) continue
 
     const habit = habitMap.get(a.habitId)
