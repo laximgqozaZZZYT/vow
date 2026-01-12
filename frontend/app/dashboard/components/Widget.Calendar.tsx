@@ -675,12 +675,6 @@ export default function CalendarWidget({
           if (onSlotSelect && iso) onSlotSelect(iso, time, undefined);
           }}
           eventDrop={(dropInfo: any) => {
-          // Disable drag and drop on mobile - use touch interactions instead
-          if (isMobile) {
-            dropInfo.revert();
-            return;
-          }
-          
           const id = dropInfo.event.id;
           const startStr = dropInfo.event.start ? dropInfo.event.start.toISOString() : undefined;
           const endStr = dropInfo.event.end ? dropInfo.event.end.toISOString() : undefined;
@@ -739,12 +733,6 @@ export default function CalendarWidget({
           }
           }}
           eventResize={(resizeInfo: any) => {
-          // Disable resize on mobile - use touch interactions instead
-          if (isMobile) {
-            resizeInfo.revert();
-            return;
-          }
-          
           const id = resizeInfo.event.id;
           const startStr = resizeInfo.event.start ? resizeInfo.event.start.toISOString() : undefined;
           const endStr = resizeInfo.event.end ? resizeInfo.event.end.toISOString() : undefined;
