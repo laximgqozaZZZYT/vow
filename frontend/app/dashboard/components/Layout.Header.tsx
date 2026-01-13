@@ -7,8 +7,9 @@ import type { DashboardHeaderProps } from '../types';
 export default function DashboardHeader({ 
   onToggleSidebar, 
   showSidebar, 
-  onEditLayout 
-}: DashboardHeaderProps) {
+  onEditLayout,
+  onManualReset
+}: DashboardHeaderProps & { onManualReset?: () => void }) {
   const { 
     isAuthed, 
     actorLabel, 
@@ -159,6 +160,16 @@ export default function DashboardHeader({
             <span className="hidden sm:inline">Editor Layout</span>
             <span className="sm:hidden">Edit</span>
           </button>
+          {/* Debug reset button */}
+          {onManualReset && (
+            <button
+              onClick={onManualReset}
+              className="rounded border border-orange-200 bg-orange-50 px-2 sm:px-3 py-1 sm:py-1.5 text-xs sm:text-sm font-medium text-orange-800 hover:bg-orange-100 dark:border-orange-900/40 dark:bg-orange-950/20 dark:text-orange-200 dark:hover:bg-orange-950/35"
+            >
+              <span className="hidden sm:inline">Reset Daily</span>
+              <span className="sm:hidden">Reset</span>
+            </button>
+          )}
         </div>
       </div>
     </header>

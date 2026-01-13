@@ -66,7 +66,7 @@ export default function DashboardPage() {
   }, [isAuthed, isGuest, migrationStatus]);
 
   // Custom hooks for data and state management
-  const { goals, setGoals, habits, setHabits, activities, setActivities, pageSections, setPageSections, isClient, isLoading } = useDataManager();
+  const { goals, setGoals, habits, setHabits, activities, setActivities, pageSections, setPageSections, isClient, isLoading, manualReset } = useDataManager();
   const [mindmaps, setMindmaps] = useState<any[]>([]);
   const [selectedMindmap, setSelectedMindmap] = useState<any>(null);
   const { 
@@ -226,6 +226,7 @@ export default function DashboardPage() {
         onToggleSidebar={() => setShowLeftPane((s) => !s)}
         showSidebar={showLeftPane}
         onEditLayout={() => setEditLayoutOpen(true)}
+        onManualReset={manualReset}
       />
 
       <DashboardSidebar
@@ -258,6 +259,7 @@ export default function DashboardPage() {
         }}
         goals={goals}
         habits={habits}
+        activities={activities}
         selectedGoal={selectedGoal}
         onGoalSelect={setSelectedGoal}
         onGoalEdit={(goalId) => {
@@ -290,6 +292,7 @@ export default function DashboardPage() {
                 activities={activities} 
                 onEditActivity={openEditActivity} 
                 onDeleteActivity={handleDeleteActivity} 
+                habits={habits}
               />
             ) : sec === 'calendar' ? (
               <CalendarWidget

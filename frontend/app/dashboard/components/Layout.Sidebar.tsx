@@ -1,10 +1,10 @@
-// Update GoalTree to accept habits prop
 import GoalTree from './Widget.GoalTree';
-import type { DashboardSidebarProps, Goal, Habit } from '../types';
+import type { DashboardSidebarProps, Goal, Habit, Activity } from '../types';
 
 interface DashboardSidebarExtendedProps extends DashboardSidebarProps {
   goals: Goal[];
   habits: Habit[];
+  activities: Activity[]; // 追加
   selectedGoal: string | null;
   onGoalSelect: (goalId: string | null) => void;
   onGoalEdit: (goalId: string) => void;
@@ -26,6 +26,7 @@ export default function DashboardSidebar({
   onNewHabit,
   goals,
   habits,
+  activities, // 追加
   selectedGoal,
   onGoalSelect,
   onGoalEdit,
@@ -66,6 +67,7 @@ export default function DashboardSidebar({
         <GoalTree
           goals={goals}
           habits={habits}
+          activities={activities}
           selectedGoal={selectedGoal}
           onGoalSelect={onGoalSelect}
           onGoalEdit={onGoalEdit}

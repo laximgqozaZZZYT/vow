@@ -155,6 +155,7 @@ export interface ActivitySectionProps {
   activities: Activity[];
   onEditActivity: (activityId: string) => void;
   onDeleteActivity: (activityId: string) => void;
+  habits: Habit[];
 }
 
 export interface GoalTreeProps {

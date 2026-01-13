@@ -11,6 +11,99 @@ export function useDataManager() {
   const [pageSections, setPageSections] = useState<SectionId[]>(['next','activity','calendar','statics','diary']);
   const [isClient, setIsClient] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const [lastResetDate, setLastResetDate] = useState<string>('');
+
+  // Daily reset function for habits (JST timezone aware)
+  const resetDailyHabits = () => {
+    // JST (UTC+9) での現在時刻を取得
+    const now = new Date();
+    // JST時刻を正確に計算
+    const jstTime = new Date(now.toLocaleString("en-US", {timeZone: "Asia/Tokyo"}));
+    const today = jstTime.toISOString().split('T')[0]; // YYYY-MM-DD format in JST
+    
+    console.log('[useDataManager] Current JST time:', jstTime.toISOString(), 'Today:', today, 'Last reset:', lastResetDate);
+    
+    if (lastResetDate === today) {
+      console.log('[useDataManager] Already reset today, skipping');
+      return; // Already reset today
+    }
+    
+    console.log('[useDataManager] Performing daily reset for JST date:', today);
+    
+    setHabits(prevHabits => {
+      const updatedHabits = prevHabits.map(habit => {
+        // Check if this is a Daily habit that should be reset
+        const isDaily = habit.repeat === 'Daily' || 
+                       (!habit.repeat || habit.repeat === 'Does not repeat') && !habit.dueDate;
+        
+        // Also check timings for Daily type
+        const hasDaily = (habit as any).timings?.some((t: any) => t.type === 'Daily');
+        
+        const shouldReset = isDaily || hasDaily;
+        
+        if (shouldReset && (habit.completed || (habit.count && habit.count > 0))) {
+          console.log('[useDataManager] Resetting habit:', habit.name, {
+            repeat: habit.repeat,
+            dueDate: habit.dueDate,
+            timings: (habit as any).timings,
+            shouldReset,
+            currentJSTTime: jstTime.toISOString(),
+            previousCount: habit.count,
+            previousCompleted: habit.completed
+          });
+          return {
+            ...habit,
+            completed: false,
+            count: 0, // Reset count for daily habits
+            updatedAt: new Date().toISOString()
+          };
+        }
+        
+        return habit;
+      });
+      
+      console.log('[useDataManager] Reset completed, updated habits count:', updatedHabits.filter(h => h.count === 0).length);
+      return updatedHabits;
+    });
+    
+    setLastResetDate(today);
+    
+    // Store last reset date in localStorage
+    try {
+      localStorage.setItem('lastHabitResetDate', today);
+      console.log('[useDataManager] Stored reset date in localStorage:', today);
+    } catch (e) {
+      console.error('Failed to store reset date:', e);
+    }
+  };
+
+  // Check for daily reset on component mount and periodically
+  useEffect(() => {
+    if (!isClient) return;
+    
+    // Load last reset date from localStorage
+    try {
+      const storedResetDate = localStorage.getItem('lastHabitResetDate');
+      console.log('[useDataManager] Loaded stored reset date:', storedResetDate);
+      if (storedResetDate) {
+        setLastResetDate(storedResetDate);
+      }
+    } catch (e) {
+      console.error('Failed to load reset date:', e);
+    }
+    
+    // Perform initial reset check immediately
+    console.log('[useDataManager] Performing initial reset check');
+    resetDailyHabits();
+    
+    // Set up interval to check for daily reset every 1 minute for debugging
+    const interval = setInterval(() => {
+      console.log('[useDataManager] Periodic reset check');
+      resetDailyHabits();
+    }, 1 * 60 * 1000); // Check every 1 minute for debugging
+    
+    return () => clearInterval(interval);
+  }, [isClient, lastResetDate]);
 
   // Load data function
   const loadData = async () => {
@@ -77,6 +170,15 @@ export function useDataManager() {
     } catch(e){} 
   }, [pageSections]);
 
+  // Manual reset function for debugging
+  const manualReset = () => {
+    console.log('[useDataManager] Manual reset triggered');
+    console.log('[useDataManager] Current localStorage lastHabitResetDate:', localStorage.getItem('lastHabitResetDate'));
+    console.log('[useDataManager] Current habits before reset:', habits.map(h => ({ name: h.name, count: h.count, completed: h.completed })));
+    setLastResetDate(''); // Force reset by clearing last reset date
+    resetDailyHabits();
+  };
+
   return {
     goals,
     setGoals,
@@ -87,6 +189,7 @@ export function useDataManager() {
     pageSections,
     setPageSections,
     isClient,
-    isLoading
+    isLoading,
+    manualReset // Export manual reset for debugging
   };
 }

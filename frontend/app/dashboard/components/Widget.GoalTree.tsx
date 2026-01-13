@@ -1,11 +1,47 @@
 import { useState, useMemo } from 'react';
-import type { Goal, Habit } from '../types';
+import type { Goal, Habit, Activity } from '../types';
 import { useDragAndDrop } from '../hooks/useDragAndDrop';
 import './DragAndDrop.css';
+
+// JST日付範囲でのActivity集計関数（Section.Activity.tsxと同じ）
+function calculateDailyWorkload(habitId: string, activities: Activity[]): number {
+  const now = new Date();
+  const jstTime = new Date(now.toLocaleString("en-US", {timeZone: "Asia/Tokyo"}));
+  
+  const todayStartJST = new Date(jstTime);
+  todayStartJST.setHours(0, 0, 0, 0);
+  
+  const todayEndJST = new Date(jstTime);
+  todayEndJST.setHours(23, 59, 59, 999);
+  
+  const todayActivities = activities.filter(activity => {
+    if (activity.habitId !== habitId || !activity.timestamp) return false;
+    
+    const activityTime = new Date(activity.timestamp);
+    const activityJST = new Date(activityTime.toLocaleString("en-US", {timeZone: "Asia/Tokyo"}));
+    
+    return activityJST >= todayStartJST && activityJST <= todayEndJST;
+  });
+  
+  return todayActivities
+    .filter(activity => activity.kind === 'complete')
+    .reduce((sum, activity) => sum + (activity.amount || 1), 0);
+}
+
+// JST日次ベースでのHabit完了判定
+function isHabitCompletedToday(habit: Habit, activities: Activity[]): boolean {
+  if (!habit.active || habit.type !== 'do') return false;
+  
+  const totalCount = (habit as any).workloadTotal || habit.must || 1;
+  const currentCount = calculateDailyWorkload(habit.id, activities);
+  
+  return currentCount >= totalCount;
+}
 
 interface GoalTreeProps {
   goals: Goal[];
   habits: Habit[];
+  activities: Activity[]; // 追加
   selectedGoal: string | null;
   onGoalSelect: (goalId: string | null) => void;
   onGoalEdit: (goalId: string) => void;
@@ -19,6 +55,7 @@ interface GoalNodeProps {
   goal: Goal;
   depth?: number;
   habits: Habit[];
+  activities: Activity[]; // 追加
   selectedGoal: string | null;
   openGoals: Record<string, boolean>;
   onlyHabit: Record<string, boolean>;
@@ -50,6 +87,7 @@ function GoalNode({
   goal, 
   depth = 1, 
   habits,
+  activities, // 追加
   selectedGoal,
   openGoals,
   onlyHabit,
@@ -138,7 +176,7 @@ function GoalNode({
                     key={h.id}
                     onClick={() => { onGoalSelect(goal.id); onHabitEdit(h.id); }}
                     className={`flex items-center justify-between rounded px-2 py-1 text-sm draggable ${
-                      (h.completed || goalCompleted || !h.active) ? 'line-through text-zinc-400' : 'text-zinc-700'
+                      (isHabitCompletedToday(h, activities) || goalCompleted || !h.active) ? 'line-through text-zinc-400' : 'text-zinc-700'
                     } hover:bg-zinc-100 dark:text-zinc-200 dark:hover:bg-white/5 cursor-pointer ${
                       isDraggedHabit ? 'dragging' : ''
                     }`}
@@ -178,7 +216,7 @@ function GoalNode({
                     key={h.id}
                     onClick={() => { onGoalSelect(goal.id); onHabitEdit(h.id); }}
                     className={`flex items-center justify-between rounded px-2 py-1 text-sm draggable ${
-                      (h.completed || goalCompleted || !h.active) ? 'line-through text-zinc-400' : 'text-zinc-700'
+                      (isHabitCompletedToday(h, activities) || goalCompleted || !h.active) ? 'line-through text-zinc-400' : 'text-zinc-700'
                     } hover:bg-zinc-100 dark:text-zinc-200 dark:hover:bg-white/5 cursor-pointer ${
                       isDraggedHabit ? 'dragging' : ''
                     }`}
@@ -214,6 +252,7 @@ function GoalNode({
                       goal={k} 
                       depth={depth + 1}
                       habits={habits}
+                      activities={activities}
                       selectedGoal={selectedGoal}
                       openGoals={openGoals}
                       onlyHabit={onlyHabit}
@@ -260,6 +299,7 @@ function GoalNode({
 export default function GoalTree({ 
   goals, 
   habits,
+  activities, // 追加
   selectedGoal, 
   onGoalSelect, 
   onGoalEdit, 
@@ -356,6 +396,7 @@ export default function GoalTree({
           goal={c} 
           depth={1}
           habits={habits}
+          activities={activities}
           selectedGoal={selectedGoal}
           openGoals={openGoals}
           onlyHabit={onlyHabit}
