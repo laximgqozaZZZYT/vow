@@ -148,7 +148,7 @@ export interface DashboardHeaderProps {
 
 export interface NextSectionProps {
   habits: Habit[];
-  onHabitAction: (habitId: string, action: 'start' | 'complete' | 'pause') => void;
+  onHabitAction: (habitId: string, action: 'start' | 'complete' | 'pause', amount?: number) => void;
 }
 
 export interface ActivitySectionProps {
@@ -165,7 +165,7 @@ export interface GoalTreeProps {
   onGoalSelect: (goalId: string | null) => void;
   onGoalEdit: (goalId: string) => void;
   onHabitEdit: (habitId: string) => void;
-  onHabitAction: (habitId: string, action: 'start' | 'complete' | 'pause') => void;
+  onHabitAction: (habitId: string, action: 'start' | 'complete' | 'pause', amount?: number) => void;
   onMoveGoal: (goalId: string, newParentId: string | null) => void;
   onMoveHabit: (habitId: string, newGoalId: string) => void;
 }

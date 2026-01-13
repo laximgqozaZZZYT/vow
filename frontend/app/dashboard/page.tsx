@@ -165,13 +165,13 @@ export default function DashboardPage() {
   });
 
   // Unified habit action handler for extracted components
-  function handleHabitAction(habitId: string, action: 'start' | 'complete' | 'pause') {
+  function handleHabitAction(habitId: string, action: 'start' | 'complete' | 'pause', amount?: number) {
     switch (action) {
       case 'start':
         handleStart(habitId);
         break;
       case 'complete':
-        handleComplete(habitId);
+        handleComplete(habitId, amount);
         break;
       case 'pause':
         handlePause(habitId);

@@ -46,7 +46,7 @@ interface GoalTreeProps {
   onGoalSelect: (goalId: string | null) => void;
   onGoalEdit: (goalId: string) => void;
   onHabitEdit: (habitId: string) => void;
-  onHabitAction: (habitId: string, action: 'start' | 'complete' | 'pause') => void;
+  onHabitAction: (habitId: string, action: 'start' | 'complete' | 'pause', amount?: number) => void;
   onMoveGoal: (goalId: string, newParentId: string | null) => void;
   onMoveHabit: (habitId: string, newGoalId: string) => void;
 }
@@ -64,7 +64,7 @@ interface GoalNodeProps {
   onGoalSelect: (goalId: string) => void;
   onGoalEdit: (goalId: string) => void;
   onHabitEdit: (habitId: string) => void;
-  onHabitAction: (habitId: string, action: 'start' | 'complete' | 'pause') => void;
+  onHabitAction: (habitId: string, action: 'start' | 'complete' | 'pause', amount?: number) => void;
   onSetOnlyHabitFor: (goalId: string, value: boolean) => void;
   childrenOf: (id: string) => Goal[];
   effectiveOnlyHabit: (goalId: string) => boolean;
@@ -113,6 +113,8 @@ function GoalNode({
   onTouchMove,
   onTouchEnd
 }: GoalNodeProps) {
+  const [inputValues, setInputValues] = useState<Record<string, string>>({});
+  
   const isOpen = !!openGoals[goal.id];
   const kids = childrenOf(goal.id);
   const myHabits = habits.filter(h => h.goalId === goal.id);
@@ -121,6 +123,48 @@ function GoalNode({
   // ドロップターゲットかどうかを判定
   const isDropTarget = dropTarget?.type === 'goal' && dropTarget?.id === goal.id;
   const isDraggedItem = draggedItem?.type === 'goal' && draggedItem?.id === goal.id;
+
+  const getInputValue = (habitId: string) => {
+    if (inputValues[habitId] !== undefined) {
+      return inputValues[habitId];
+    }
+    const habit = habits.find(h => h.id === habitId);
+    const workloadPerCount = (habit as any)?.workloadPerCount ?? 1;
+    return String(workloadPerCount);
+  };
+
+  const setInputValue = (habitId: string, value: string) => {
+    setInputValues(prev => ({ ...prev, [habitId]: value }));
+  };
+
+  const handleCompleteWithAmount = (habitId: string) => {
+    const amount = parseFloat(getInputValue(habitId)) || 1;
+    onHabitAction(habitId, 'complete', amount);
+  };
+
+  const renderHabitActions = (h: Habit) => (
+    <div className="flex items-center gap-2">
+      <input
+        type="number"
+        min="0"
+        step="0.1"
+        value={getInputValue(h.id)}
+        onChange={(e) => setInputValue(h.id, e.target.value)}
+        className="w-8 text-xs text-center bg-zinc-100 dark:bg-zinc-800 border-0 rounded px-1 py-0.5 focus:ring-1 focus:ring-blue-500 outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+        onClick={(e) => e.stopPropagation()}
+      />
+      <span className="text-xs text-zinc-500">
+        {(h as any)?.workloadUnit || 'units'}
+      </span>
+      <button
+        title="Complete"
+        onClick={(e) => { e.stopPropagation(); handleCompleteWithAmount(h.id) }}
+        className="bg-green-600 hover:bg-green-700 text-white rounded px-1.5 py-0.5 text-xs font-medium transition-colors"
+      >
+        ✓
+      </button>
+    </div>
+  );
 
   return (
     <div key={goal.id}>
@@ -176,8 +220,8 @@ function GoalNode({
                     key={h.id}
                     onClick={() => { onGoalSelect(goal.id); onHabitEdit(h.id); }}
                     className={`flex items-center justify-between rounded px-2 py-1 text-sm draggable ${
-                      (isHabitCompletedToday(h, activities) || goalCompleted || !h.active) ? 'line-through text-zinc-400' : 'text-zinc-700'
-                    } hover:bg-zinc-100 dark:text-zinc-200 dark:hover:bg-white/5 cursor-pointer ${
+                      (isHabitCompletedToday(h, activities) || goalCompleted || !h.active) ? 'line-through text-zinc-400' : 'text-zinc-700 dark:text-zinc-200'
+                    } hover:bg-zinc-100 dark:hover:bg-white/5 cursor-pointer ${
                       isDraggedHabit ? 'dragging' : ''
                     }`}
                     draggable={!isDragging}
@@ -187,21 +231,18 @@ function GoalNode({
                     onTouchMove={onTouchMove}
                     onTouchEnd={onTouchEnd}
                   >
-                    <div className="flex items-center gap-2 truncate">
+                    <div className="flex items-center gap-2 truncate flex-1">
                       <span>📄</span>
-                      <span className="truncate">{h.name}</span>
+                      <div className="flex flex-col min-w-0 flex-1">
+                        <span className="truncate">{h.name}</span>
+                        {(h as any)?.workloadUnit && (
+                          <span className="text-xs text-zinc-500">
+                            Target: {(h as any)?.workloadPerCount || 1} {(h as any)?.workloadUnit}
+                          </span>
+                        )}
+                      </div>
                     </div>
-                    <div className="flex items-center gap-2">
-                      <button title="Start" onClick={(e) => { e.stopPropagation(); onHabitAction(h.id, 'start') }} className="text-blue-600 hover:bg-blue-50 rounded px-2 py-1">▶️</button>
-                      <button title="Pause" onClick={(e) => { e.stopPropagation(); onHabitAction(h.id, 'pause') }} className="text-amber-600 hover:bg-amber-50 rounded px-2 py-1">⏸️</button>
-                      <button
-                        title="Complete"
-                        onClick={(e) => { e.stopPropagation(); onHabitAction(h.id, 'complete') }}
-                        className="text-green-600 hover:bg-green-50 rounded px-2 py-1"
-                      >
-                        ✅
-                      </button>
-                    </div>
+                    {renderHabitActions(h)}
                   </div>
                 );
               }) : <div className="px-2 py-1 text-xs text-zinc-500">(no habits)</div>
@@ -216,8 +257,8 @@ function GoalNode({
                     key={h.id}
                     onClick={() => { onGoalSelect(goal.id); onHabitEdit(h.id); }}
                     className={`flex items-center justify-between rounded px-2 py-1 text-sm draggable ${
-                      (isHabitCompletedToday(h, activities) || goalCompleted || !h.active) ? 'line-through text-zinc-400' : 'text-zinc-700'
-                    } hover:bg-zinc-100 dark:text-zinc-200 dark:hover:bg-white/5 cursor-pointer ${
+                      (isHabitCompletedToday(h, activities) || goalCompleted || !h.active) ? 'line-through text-zinc-400' : 'text-zinc-700 dark:text-zinc-200'
+                    } hover:bg-zinc-100 dark:hover:bg-white/5 cursor-pointer ${
                       isDraggedHabit ? 'dragging' : ''
                     }`}
                     draggable={!isDragging}
@@ -227,15 +268,18 @@ function GoalNode({
                     onTouchMove={onTouchMove}
                     onTouchEnd={onTouchEnd}
                   >
-                    <div className="flex items-center gap-2 truncate">
+                    <div className="flex items-center gap-2 truncate flex-1">
                       <span>📄</span>
-                      <span className="truncate">{h.name}</span>
+                      <div className="flex flex-col min-w-0 flex-1">
+                        <span className="truncate">{h.name}</span>
+                        {(h as any)?.workloadUnit && (
+                          <span className="text-xs text-zinc-500">
+                            Target: {(h as any)?.workloadPerCount || 1} {(h as any)?.workloadUnit}
+                          </span>
+                        )}
+                      </div>
                     </div>
-                    <div className="flex items-center gap-2">
-                      <button title="Start" onClick={(e) => { e.stopPropagation(); onHabitAction(h.id, 'start') }} className="text-blue-600 hover:bg-blue-50 rounded px-2 py-1">▶️</button>
-                      <button title="Pause" onClick={(e) => { e.stopPropagation(); onHabitAction(h.id, 'pause') }} className="text-amber-600 hover:bg-amber-50 rounded px-2 py-1">⏸️</button>
-                      <button title="Complete" onClick={(e) => { e.stopPropagation(); onHabitAction(h.id, 'complete') }} className="text-green-600 hover:bg-green-50 rounded px-2 py-1">✅</button>
-                    </div>
+                    {renderHabitActions(h)}
                   </div>
                 );
               })}

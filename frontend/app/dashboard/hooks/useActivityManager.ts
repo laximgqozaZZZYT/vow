@@ -14,7 +14,7 @@ interface UseActivityManagerReturn {
   pausedLoads: Record<string, number>;
   openActivityModal: boolean;
   editingActivityId: string | null;
-  handleComplete: (habitId: string) => void;
+  handleComplete: (habitId: string, amount?: number) => void;
   handleStart: (habitId: string) => void;
   handlePause: (habitId: string) => void;
   openEditActivity: (activityId: string) => void;
@@ -38,7 +38,7 @@ export function useActivityManager({
   // 重複実行防止のための状態
   const [processingActions, setProcessingActions] = useState<Set<string>>(new Set());
 
-  function handleComplete(habitId: string) {
+  function handleComplete(habitId: string, amount?: number) {
     // 重複実行防止
     const actionKey = `complete-${habitId}`;
     if (processingActions.has(actionKey)) {
@@ -60,10 +60,11 @@ export function useActivityManager({
         workloadTotal: (habit as any).workloadTotal,
         must: habit.must,
         completed: habit.completed,
-        pausedLoads: pausedLoads[habitId]
+        pausedLoads: pausedLoads[habitId],
+        customAmount: amount
       });
       
-      const basePerCount = (habit as any).workloadPerCount ?? 1;
+      const basePerCount = amount ?? (habit as any).workloadPerCount ?? 1;
       const paused = pausedLoads[habitId] ?? 0;
       
       // if there's a start recorded for this habit, convert that start to a complete with duration
@@ -133,8 +134,8 @@ export function useActivityManager({
       }
 
       // no start: create a standalone complete activity
-      // For standalone complete, always use full basePerCount (ignore paused loads from previous sessions)
-      const increment = basePerCount;
+      // For standalone complete, use custom amount if provided, otherwise use basePerCount
+      const increment = amount ?? basePerCount;
       const prev = habit.count ?? 0;
       const newCount = prev + increment;
       const total = (habit as any).workloadTotal ?? habit.must ?? 0;
