@@ -1,0 +1,364 @@
+<testsuites id="" name="" tests="16" failures="6" skipped="0" errors="0" time="52.065659999999994">
+<testsuite name="e2e/animation-capture.spec.ts" timestamp="2026-01-13T05:57:15.037Z" hostname="chromium" tests="8" failures="3" skipped="0" time="118.442" errors="0">
+<testcase name="Dashboard Animation Capture › should display animation capture control in development" classname="e2e/animation-capture.spec.ts" time="15.167">
+<system-out>
+<![CDATA[
+[[ATTACHMENT|../test-results/e2e-animation-capture-Dash-fa50b-ture-control-in-development-chromium/video.webm]]
+]]>
+</system-out>
+</testcase>
+<testcase name="Dashboard Animation Capture › should start and stop animation recording" classname="e2e/animation-capture.spec.ts" time="15.765">
+<system-out>
+<![CDATA[
+[[ATTACHMENT|../test-results/e2e-animation-capture-Dash-1d327-nd-stop-animation-recording-chromium/video.webm]]
+]]>
+</system-out>
+</testcase>
+<testcase name="Dashboard Animation Capture › should capture habit interactions" classname="e2e/animation-capture.spec.ts" time="15.633">
+<system-out>
+<![CDATA[
+[[ATTACHMENT|../test-results/e2e-animation-capture-Dash-34b08--capture-habit-interactions-chromium/video.webm]]
+]]>
+</system-out>
+</testcase>
+<testcase name="Dashboard Animation Capture › should capture goal interactions" classname="e2e/animation-capture.spec.ts" time="18.691">
+<failure message="animation-capture.spec.ts:98:7 should capture goal interactions" type="FAILURE">
+<![CDATA[  [chromium] › e2e/animation-capture.spec.ts:98:7 › Dashboard Animation Capture › should capture goal interactions 
+
+    Error: expect(locator).not.toBeVisible() failed
+
+    Locator:  locator('text=Recording')
+    Expected: not visible
+    Received: visible
+    Timeout:  3000ms
+
+    Call log:
+      - Expect "not toBeVisible" with timeout 3000ms
+      - waiting for locator('text=Recording')
+        7 × locator resolved to <button class="px-4 py-2 rounded-md text-sm font-medium transition-colors bg-blue-600 hover:bg-blue-700 text-white">🎬 Start Recording</button>
+          - unexpected value "visible"
+
+
+      118 |     
+      119 |     // Verify recording stopped
+    > 120 |     await expect(page.locator('text=Recording')).not.toBeVisible();
+          |                                                      ^
+      121 |   });
+      122 |
+      123 |   test('should capture calendar interactions', async ({ page }) => {
+        at /home/ubuntu/Downloads/vow/frontend/__tests__/e2e/animation-capture.spec.ts:120:54
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    ../test-results/e2e-animation-capture-Dash-bb95e-d-capture-goal-interactions-chromium/test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    ../test-results/e2e-animation-capture-Dash-bb95e-d-capture-goal-interactions-chromium/video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: ../test-results/e2e-animation-capture-Dash-bb95e-d-capture-goal-interactions-chromium/error-context.md
+]]>
+</failure>
+<system-out>
+<![CDATA[
+[[ATTACHMENT|../test-results/e2e-animation-capture-Dash-bb95e-d-capture-goal-interactions-chromium/test-failed-1.png]]
+
+[[ATTACHMENT|../test-results/e2e-animation-capture-Dash-bb95e-d-capture-goal-interactions-chromium/video.webm]]
+
+[[ATTACHMENT|../test-results/e2e-animation-capture-Dash-bb95e-d-capture-goal-interactions-chromium/error-context.md]]
+]]>
+</system-out>
+</testcase>
+<testcase name="Dashboard Animation Capture › should capture calendar interactions" classname="e2e/animation-capture.spec.ts" time="20.22">
+<failure message="animation-capture.spec.ts:123:7 should capture calendar interactions" type="FAILURE">
+<![CDATA[  [chromium] › e2e/animation-capture.spec.ts:123:7 › Dashboard Animation Capture › should capture calendar interactions 
+
+    Error: expect(locator).not.toBeVisible() failed
+
+    Locator:  locator('text=Recording')
+    Expected: not visible
+    Received: visible
+    Timeout:  3000ms
+
+    Call log:
+      - Expect "not toBeVisible" with timeout 3000ms
+      - waiting for locator('text=Recording')
+        7 × locator resolved to <button class="px-4 py-2 rounded-md text-sm font-medium transition-colors bg-blue-600 hover:bg-blue-700 text-white">🎬 Start Recording</button>
+          - unexpected value "visible"
+
+
+      147 |     
+      148 |     // Verify recording stopped
+    > 149 |     await expect(page.locator('text=Recording')).not.toBeVisible();
+          |                                                      ^
+      150 |   });
+      151 |
+      152 |   test('should export captured sequences', async ({ page }) => {
+        at /home/ubuntu/Downloads/vow/frontend/__tests__/e2e/animation-capture.spec.ts:149:54
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    ../test-results/e2e-animation-capture-Dash-1732f-pture-calendar-interactions-chromium/test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    ../test-results/e2e-animation-capture-Dash-1732f-pture-calendar-interactions-chromium/video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: ../test-results/e2e-animation-capture-Dash-1732f-pture-calendar-interactions-chromium/error-context.md
+]]>
+</failure>
+<system-out>
+<![CDATA[
+[[ATTACHMENT|../test-results/e2e-animation-capture-Dash-1732f-pture-calendar-interactions-chromium/test-failed-1.png]]
+
+[[ATTACHMENT|../test-results/e2e-animation-capture-Dash-1732f-pture-calendar-interactions-chromium/video.webm]]
+
+[[ATTACHMENT|../test-results/e2e-animation-capture-Dash-1732f-pture-calendar-interactions-chromium/error-context.md]]
+]]>
+</system-out>
+</testcase>
+<testcase name="Dashboard Animation Capture › should export captured sequences" classname="e2e/animation-capture.spec.ts" time="15.423">
+<failure message="animation-capture.spec.ts:152:7 should export captured sequences" type="FAILURE">
+<![CDATA[  [chromium] › e2e/animation-capture.spec.ts:152:7 › Dashboard Animation Capture › should export captured sequences 
+
+    Error: expect(locator).toBeVisible() failed
+
+    Locator: locator('text=Recording')
+    Expected: visible
+    Error: strict mode violation: locator('text=Recording') resolved to 3 elements:
+        1) <span class="text-sm font-medium">Recording</span> aka getByText('Recording', { exact: true })
+        2) <button class="px-4 py-2 rounded-md text-sm font-medium transition-colors bg-red-600 hover:bg-red-700 text-white">⏹️ Stop Recording</button> aka getByRole('button', { name: '⏹️ Stop Recording' })
+        3) <strong>Recording in progress:</strong> aka getByText('Recording in progress:')
+
+    Call log:
+      - Expect "toBeVisible" with timeout 3000ms
+      - waiting for locator('text=Recording')
+
+
+      153 |     // Start recording
+      154 |     await page.locator('button:has-text("Start Recording")').click();
+    > 155 |     await expect(page.locator('text=Recording')).toBeVisible();
+          |                                                  ^
+      156 |     
+      157 |     // Perform some interactions
+      158 |     const nextSection = page.locator('section:has(h2:text("Next"))');
+        at /home/ubuntu/Downloads/vow/frontend/__tests__/e2e/animation-capture.spec.ts:155:50
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    ../test-results/e2e-animation-capture-Dash-11b97-d-export-captured-sequences-chromium/test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    ../test-results/e2e-animation-capture-Dash-11b97-d-export-captured-sequences-chromium/video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: ../test-results/e2e-animation-capture-Dash-11b97-d-export-captured-sequences-chromium/error-context.md
+]]>
+</failure>
+<system-out>
+<![CDATA[
+[[ATTACHMENT|../test-results/e2e-animation-capture-Dash-11b97-d-export-captured-sequences-chromium/test-failed-1.png]]
+
+[[ATTACHMENT|../test-results/e2e-animation-capture-Dash-11b97-d-export-captured-sequences-chromium/video.webm]]
+
+[[ATTACHMENT|../test-results/e2e-animation-capture-Dash-11b97-d-export-captured-sequences-chromium/error-context.md]]
+]]>
+</system-out>
+</testcase>
+<testcase name="Dashboard Animation Capture › should clear captured sequences" classname="e2e/animation-capture.spec.ts" time="9.304">
+<system-out>
+<![CDATA[
+[[ATTACHMENT|../test-results/e2e-animation-capture-Dash-a98cb-ld-clear-captured-sequences-chromium/video.webm]]
+]]>
+</system-out>
+</testcase>
+<testcase name="Dashboard Animation Capture › should show recording instructions when recording" classname="e2e/animation-capture.spec.ts" time="8.239">
+<system-out>
+<![CDATA[
+[[ATTACHMENT|../test-results/e2e-animation-capture-Dash-8ded5-instructions-when-recording-chromium/video.webm]]
+]]>
+</system-out>
+</testcase>
+</testsuite>
+<testsuite name="e2e/animation-capture.spec.ts" timestamp="2026-01-13T05:57:15.037Z" hostname="firefox" tests="8" failures="3" skipped="0" time="122.243" errors="0">
+<testcase name="Dashboard Animation Capture › should display animation capture control in development" classname="e2e/animation-capture.spec.ts" time="19.196">
+<system-out>
+<![CDATA[
+[[ATTACHMENT|../test-results/e2e-animation-capture-Dash-fa50b-ture-control-in-development-firefox/video.webm]]
+]]>
+</system-out>
+</testcase>
+<testcase name="Dashboard Animation Capture › should start and stop animation recording" classname="e2e/animation-capture.spec.ts" time="18.486">
+<system-out>
+<![CDATA[
+[[ATTACHMENT|../test-results/e2e-animation-capture-Dash-1d327-nd-stop-animation-recording-firefox/video.webm]]
+]]>
+</system-out>
+</testcase>
+<testcase name="Dashboard Animation Capture › should capture habit interactions" classname="e2e/animation-capture.spec.ts" time="18.11">
+<system-out>
+<![CDATA[
+[[ATTACHMENT|../test-results/e2e-animation-capture-Dash-34b08--capture-habit-interactions-firefox/video.webm]]
+]]>
+</system-out>
+</testcase>
+<testcase name="Dashboard Animation Capture › should capture goal interactions" classname="e2e/animation-capture.spec.ts" time="17.462">
+<failure message="animation-capture.spec.ts:98:7 should capture goal interactions" type="FAILURE">
+<![CDATA[  [firefox] › e2e/animation-capture.spec.ts:98:7 › Dashboard Animation Capture › should capture goal interactions 
+
+    Error: expect(locator).not.toBeVisible() failed
+
+    Locator:  locator('text=Recording')
+    Expected: not visible
+    Received: visible
+    Timeout:  3000ms
+
+    Call log:
+      - Expect "not toBeVisible" with timeout 3000ms
+      - waiting for locator('text=Recording')
+        6 × locator resolved to <button class="px-4 py-2 rounded-md text-sm font-medium transition-colors bg-blue-600 hover:bg-blue-700 text-white">🎬 Start Recording</button>
+          - unexpected value "visible"
+
+
+      118 |     
+      119 |     // Verify recording stopped
+    > 120 |     await expect(page.locator('text=Recording')).not.toBeVisible();
+          |                                                      ^
+      121 |   });
+      122 |
+      123 |   test('should capture calendar interactions', async ({ page }) => {
+        at /home/ubuntu/Downloads/vow/frontend/__tests__/e2e/animation-capture.spec.ts:120:54
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    ../test-results/e2e-animation-capture-Dash-bb95e-d-capture-goal-interactions-firefox/test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    ../test-results/e2e-animation-capture-Dash-bb95e-d-capture-goal-interactions-firefox/video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: ../test-results/e2e-animation-capture-Dash-bb95e-d-capture-goal-interactions-firefox/error-context.md
+]]>
+</failure>
+<system-out>
+<![CDATA[
+[[ATTACHMENT|../test-results/e2e-animation-capture-Dash-bb95e-d-capture-goal-interactions-firefox/test-failed-1.png]]
+
+[[ATTACHMENT|../test-results/e2e-animation-capture-Dash-bb95e-d-capture-goal-interactions-firefox/video.webm]]
+
+[[ATTACHMENT|../test-results/e2e-animation-capture-Dash-bb95e-d-capture-goal-interactions-firefox/error-context.md]]
+]]>
+</system-out>
+</testcase>
+<testcase name="Dashboard Animation Capture › should capture calendar interactions" classname="e2e/animation-capture.spec.ts" time="18.46">
+<failure message="animation-capture.spec.ts:123:7 should capture calendar interactions" type="FAILURE">
+<![CDATA[  [firefox] › e2e/animation-capture.spec.ts:123:7 › Dashboard Animation Capture › should capture calendar interactions 
+
+    Error: expect(locator).not.toBeVisible() failed
+
+    Locator:  locator('text=Recording')
+    Expected: not visible
+    Received: visible
+    Timeout:  3000ms
+
+    Call log:
+      - Expect "not toBeVisible" with timeout 3000ms
+      - waiting for locator('text=Recording')
+        6 × locator resolved to <button class="px-4 py-2 rounded-md text-sm font-medium transition-colors bg-blue-600 hover:bg-blue-700 text-white">🎬 Start Recording</button>
+          - unexpected value "visible"
+
+
+      147 |     
+      148 |     // Verify recording stopped
+    > 149 |     await expect(page.locator('text=Recording')).not.toBeVisible();
+          |                                                      ^
+      150 |   });
+      151 |
+      152 |   test('should export captured sequences', async ({ page }) => {
+        at /home/ubuntu/Downloads/vow/frontend/__tests__/e2e/animation-capture.spec.ts:149:54
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    ../test-results/e2e-animation-capture-Dash-1732f-pture-calendar-interactions-firefox/test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    ../test-results/e2e-animation-capture-Dash-1732f-pture-calendar-interactions-firefox/video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: ../test-results/e2e-animation-capture-Dash-1732f-pture-calendar-interactions-firefox/error-context.md
+]]>
+</failure>
+<system-out>
+<![CDATA[
+[[ATTACHMENT|../test-results/e2e-animation-capture-Dash-1732f-pture-calendar-interactions-firefox/test-failed-1.png]]
+
+[[ATTACHMENT|../test-results/e2e-animation-capture-Dash-1732f-pture-calendar-interactions-firefox/video.webm]]
+
+[[ATTACHMENT|../test-results/e2e-animation-capture-Dash-1732f-pture-calendar-interactions-firefox/error-context.md]]
+]]>
+</system-out>
+</testcase>
+<testcase name="Dashboard Animation Capture › should export captured sequences" classname="e2e/animation-capture.spec.ts" time="12.042">
+<failure message="animation-capture.spec.ts:152:7 should export captured sequences" type="FAILURE">
+<![CDATA[  [firefox] › e2e/animation-capture.spec.ts:152:7 › Dashboard Animation Capture › should export captured sequences 
+
+    Error: expect(locator).toBeVisible() failed
+
+    Locator: locator('text=Recording')
+    Expected: visible
+    Error: strict mode violation: locator('text=Recording') resolved to 3 elements:
+        1) <span class="text-sm font-medium">Recording</span> aka getByText('Recording', { exact: true })
+        2) <button class="px-4 py-2 rounded-md text-sm font-medium transition-colors bg-red-600 hover:bg-red-700 text-white">⏹️ Stop Recording</button> aka getByRole('button', { name: '⏹️ Stop Recording' })
+        ...
+
+    Call log:
+      - Expect "toBeVisible" with timeout 3000ms
+      - waiting for locator('text=Recording')
+
+
+      153 |     // Start recording
+      154 |     await page.locator('button:has-text("Start Recording")').click();
+    > 155 |     await expect(page.locator('text=Recording')).toBeVisible();
+          |                                                  ^
+      156 |     
+      157 |     // Perform some interactions
+      158 |     const nextSection = page.locator('section:has(h2:text("Next"))');
+        at /home/ubuntu/Downloads/vow/frontend/__tests__/e2e/animation-capture.spec.ts:155:50
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    ../test-results/e2e-animation-capture-Dash-11b97-d-export-captured-sequences-firefox/test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    ../test-results/e2e-animation-capture-Dash-11b97-d-export-captured-sequences-firefox/video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: ../test-results/e2e-animation-capture-Dash-11b97-d-export-captured-sequences-firefox/error-context.md
+]]>
+</failure>
+<system-out>
+<![CDATA[
+[[ATTACHMENT|../test-results/e2e-animation-capture-Dash-11b97-d-export-captured-sequences-firefox/test-failed-1.png]]
+
+[[ATTACHMENT|../test-results/e2e-animation-capture-Dash-11b97-d-export-captured-sequences-firefox/video.webm]]
+
+[[ATTACHMENT|../test-results/e2e-animation-capture-Dash-11b97-d-export-captured-sequences-firefox/error-context.md]]
+]]>
+</system-out>
+</testcase>
+<testcase name="Dashboard Animation Capture › should clear captured sequences" classname="e2e/animation-capture.spec.ts" time="10.356">
+<system-out>
+<![CDATA[
+[[ATTACHMENT|../test-results/e2e-animation-capture-Dash-a98cb-ld-clear-captured-sequences-firefox/video.webm]]
+]]>
+</system-out>
+</testcase>
+<testcase name="Dashboard Animation Capture › should show recording instructions when recording" classname="e2e/animation-capture.spec.ts" time="8.131">
+<system-out>
+<![CDATA[
+[[ATTACHMENT|../test-results/e2e-animation-capture-Dash-8ded5-instructions-when-recording-firefox/video.webm]]
+]]>
+</system-out>
+</testcase>
+</testsuite>
+</testsuites>

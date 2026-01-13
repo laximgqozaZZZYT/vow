@@ -1,0 +1,962 @@
+{
+  "config": {
+    "configFile": "/home/ubuntu/Downloads/vow/frontend/playwright.config.ts",
+    "rootDir": "/home/ubuntu/Downloads/vow/frontend/__tests__",
+    "forbidOnly": false,
+    "fullyParallel": true,
+    "globalSetup": null,
+    "globalTeardown": null,
+    "globalTimeout": 0,
+    "grep": {},
+    "grepInvert": null,
+    "maxFailures": 0,
+    "metadata": {
+      "actualWorkers": 6
+    },
+    "preserveOutput": "always",
+    "reporter": [
+      [
+        "html",
+        {
+          "outputFolder": "__tests__/playwright-report"
+        }
+      ],
+      [
+        "json",
+        {
+          "outputFile": "__tests__/test-results.json"
+        }
+      ],
+      [
+        "junit",
+        {
+          "outputFile": "__tests__/test-results.xml"
+        }
+      ]
+    ],
+    "reportSlowTests": {
+      "max": 5,
+      "threshold": 300000
+    },
+    "quiet": false,
+    "projects": [
+      {
+        "outputDir": "/home/ubuntu/Downloads/vow/frontend/test-results",
+        "repeatEach": 1,
+        "retries": 0,
+        "metadata": {
+          "actualWorkers": 6
+        },
+        "id": "chromium",
+        "name": "chromium",
+        "testDir": "/home/ubuntu/Downloads/vow/frontend/__tests__",
+        "testIgnore": [],
+        "testMatch": [
+          "**/*.@(spec|test).?(c|m)[jt]s?(x)"
+        ],
+        "timeout": 15000
+      },
+      {
+        "outputDir": "/home/ubuntu/Downloads/vow/frontend/test-results",
+        "repeatEach": 1,
+        "retries": 0,
+        "metadata": {
+          "actualWorkers": 6
+        },
+        "id": "firefox",
+        "name": "firefox",
+        "testDir": "/home/ubuntu/Downloads/vow/frontend/__tests__",
+        "testIgnore": [],
+        "testMatch": [
+          "**/*.@(spec|test).?(c|m)[jt]s?(x)"
+        ],
+        "timeout": 15000
+      }
+    ],
+    "shard": null,
+    "tags": [],
+    "updateSnapshots": "missing",
+    "updateSourceMethod": "patch",
+    "version": "1.57.0",
+    "workers": 6,
+    "webServer": {
+      "command": "npm run dev",
+      "url": "http://localhost:3000",
+      "reuseExistingServer": true,
+      "timeout": 120000,
+      "ignoreHTTPSErrors": true
+    }
+  },
+  "suites": [
+    {
+      "title": "e2e/animation-capture.spec.ts",
+      "file": "e2e/animation-capture.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [],
+      "suites": [
+        {
+          "title": "Dashboard Animation Capture",
+          "file": "e2e/animation-capture.spec.ts",
+          "line": 10,
+          "column": 6,
+          "specs": [
+            {
+              "title": "should display animation capture control in development",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 60000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 0,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 15167,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-01-13T05:57:16.561Z",
+                      "annotations": [],
+                      "attachments": [
+                        {
+                          "name": "video",
+                          "contentType": "video/webm",
+                          "path": "/home/ubuntu/Downloads/vow/frontend/test-results/e2e-animation-capture-Dash-fa50b-ture-control-in-development-chromium/video.webm"
+                        }
+                      ]
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "6ae31b6d59870367800e-cdf1342de4a483dadbe7",
+              "file": "e2e/animation-capture.spec.ts",
+              "line": 27,
+              "column": 7
+            },
+            {
+              "title": "should start and stop animation recording",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 60000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 1,
+                      "parallelIndex": 1,
+                      "status": "passed",
+                      "duration": 15765,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-01-13T05:57:16.471Z",
+                      "annotations": [],
+                      "attachments": [
+                        {
+                          "name": "video",
+                          "contentType": "video/webm",
+                          "path": "/home/ubuntu/Downloads/vow/frontend/test-results/e2e-animation-capture-Dash-1d327-nd-stop-animation-recording-chromium/video.webm"
+                        }
+                      ]
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "6ae31b6d59870367800e-73eb0c74e59fd10086b9",
+              "file": "e2e/animation-capture.spec.ts",
+              "line": 41,
+              "column": 7
+            },
+            {
+              "title": "should capture habit interactions",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 60000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 2,
+                      "parallelIndex": 2,
+                      "status": "passed",
+                      "duration": 15633,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-01-13T05:57:16.557Z",
+                      "annotations": [],
+                      "attachments": [
+                        {
+                          "name": "video",
+                          "contentType": "video/webm",
+                          "path": "/home/ubuntu/Downloads/vow/frontend/test-results/e2e-animation-capture-Dash-34b08--capture-habit-interactions-chromium/video.webm"
+                        }
+                      ]
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "6ae31b6d59870367800e-e78b769f279f86535d85",
+              "file": "e2e/animation-capture.spec.ts",
+              "line": 64,
+              "column": 7
+            },
+            {
+              "title": "should capture goal interactions",
+              "ok": false,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 60000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 3,
+                      "parallelIndex": 3,
+                      "status": "failed",
+                      "duration": 18691,
+                      "error": {
+                        "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).not.\u001b[22mtoBeVisible\u001b[2m(\u001b[22m\u001b[2m)\u001b[22m failed\n\nLocator:  locator('text=Recording')\nExpected: not visible\nReceived: visible\nTimeout:  3000ms\n\nCall log:\n\u001b[2m  - Expect \"not toBeVisible\" with timeout 3000ms\u001b[22m\n\u001b[2m  - waiting for locator('text=Recording')\u001b[22m\n\u001b[2m    7 × locator resolved to <button class=\"px-4 py-2 rounded-md text-sm font-medium transition-colors bg-blue-600 hover:bg-blue-700 text-white\">🎬 Start Recording</button>\u001b[22m\n\u001b[2m      - unexpected value \"visible\"\u001b[22m\n",
+                        "stack": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).not.\u001b[22mtoBeVisible\u001b[2m(\u001b[22m\u001b[2m)\u001b[22m failed\n\nLocator:  locator('text=Recording')\nExpected: not visible\nReceived: visible\nTimeout:  3000ms\n\nCall log:\n\u001b[2m  - Expect \"not toBeVisible\" with timeout 3000ms\u001b[22m\n\u001b[2m  - waiting for locator('text=Recording')\u001b[22m\n\u001b[2m    7 × locator resolved to <button class=\"px-4 py-2 rounded-md text-sm font-medium transition-colors bg-blue-600 hover:bg-blue-700 text-white\">🎬 Start Recording</button>\u001b[22m\n\u001b[2m      - unexpected value \"visible\"\u001b[22m\n\n    at /home/ubuntu/Downloads/vow/frontend/__tests__/e2e/animation-capture.spec.ts:120:54",
+                        "location": {
+                          "file": "/home/ubuntu/Downloads/vow/frontend/__tests__/e2e/animation-capture.spec.ts",
+                          "column": 54,
+                          "line": 120
+                        },
+                        "snippet": "\u001b[0m \u001b[90m 118 |\u001b[39m     \n \u001b[90m 119 |\u001b[39m     \u001b[90m// Verify recording stopped\u001b[39m\n\u001b[31m\u001b[1m>\u001b[22m\u001b[39m\u001b[90m 120 |\u001b[39m     \u001b[36mawait\u001b[39m expect(page\u001b[33m.\u001b[39mlocator(\u001b[32m'text=Recording'\u001b[39m))\u001b[33m.\u001b[39mnot\u001b[33m.\u001b[39mtoBeVisible()\u001b[33m;\u001b[39m\n \u001b[90m     |\u001b[39m                                                      \u001b[31m\u001b[1m^\u001b[22m\u001b[39m\n \u001b[90m 121 |\u001b[39m   })\u001b[33m;\u001b[39m\n \u001b[90m 122 |\u001b[39m\n \u001b[90m 123 |\u001b[39m   test(\u001b[32m'should capture calendar interactions'\u001b[39m\u001b[33m,\u001b[39m \u001b[36masync\u001b[39m ({ page }) \u001b[33m=>\u001b[39m {\u001b[0m"
+                      },
+                      "errors": [
+                        {
+                          "location": {
+                            "file": "/home/ubuntu/Downloads/vow/frontend/__tests__/e2e/animation-capture.spec.ts",
+                            "column": 54,
+                            "line": 120
+                          },
+                          "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).not.\u001b[22mtoBeVisible\u001b[2m(\u001b[22m\u001b[2m)\u001b[22m failed\n\nLocator:  locator('text=Recording')\nExpected: not visible\nReceived: visible\nTimeout:  3000ms\n\nCall log:\n\u001b[2m  - Expect \"not toBeVisible\" with timeout 3000ms\u001b[22m\n\u001b[2m  - waiting for locator('text=Recording')\u001b[22m\n\u001b[2m    7 × locator resolved to <button class=\"px-4 py-2 rounded-md text-sm font-medium transition-colors bg-blue-600 hover:bg-blue-700 text-white\">🎬 Start Recording</button>\u001b[22m\n\u001b[2m      - unexpected value \"visible\"\u001b[22m\n\n\n\u001b[0m \u001b[90m 118 |\u001b[39m     \n \u001b[90m 119 |\u001b[39m     \u001b[90m// Verify recording stopped\u001b[39m\n\u001b[31m\u001b[1m>\u001b[22m\u001b[39m\u001b[90m 120 |\u001b[39m     \u001b[36mawait\u001b[39m expect(page\u001b[33m.\u001b[39mlocator(\u001b[32m'text=Recording'\u001b[39m))\u001b[33m.\u001b[39mnot\u001b[33m.\u001b[39mtoBeVisible()\u001b[33m;\u001b[39m\n \u001b[90m     |\u001b[39m                                                      \u001b[31m\u001b[1m^\u001b[22m\u001b[39m\n \u001b[90m 121 |\u001b[39m   })\u001b[33m;\u001b[39m\n \u001b[90m 122 |\u001b[39m\n \u001b[90m 123 |\u001b[39m   test(\u001b[32m'should capture calendar interactions'\u001b[39m\u001b[33m,\u001b[39m \u001b[36masync\u001b[39m ({ page }) \u001b[33m=>\u001b[39m {\u001b[0m\n\u001b[2m    at /home/ubuntu/Downloads/vow/frontend/__tests__/e2e/animation-capture.spec.ts:120:54\u001b[22m"
+                        }
+                      ],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-01-13T05:57:16.659Z",
+                      "annotations": [],
+                      "attachments": [
+                        {
+                          "name": "screenshot",
+                          "contentType": "image/png",
+                          "path": "/home/ubuntu/Downloads/vow/frontend/test-results/e2e-animation-capture-Dash-bb95e-d-capture-goal-interactions-chromium/test-failed-1.png"
+                        },
+                        {
+                          "name": "video",
+                          "contentType": "video/webm",
+                          "path": "/home/ubuntu/Downloads/vow/frontend/test-results/e2e-animation-capture-Dash-bb95e-d-capture-goal-interactions-chromium/video.webm"
+                        },
+                        {
+                          "name": "error-context",
+                          "contentType": "text/markdown",
+                          "path": "/home/ubuntu/Downloads/vow/frontend/test-results/e2e-animation-capture-Dash-bb95e-d-capture-goal-interactions-chromium/error-context.md"
+                        }
+                      ],
+                      "errorLocation": {
+                        "file": "/home/ubuntu/Downloads/vow/frontend/__tests__/e2e/animation-capture.spec.ts",
+                        "column": 54,
+                        "line": 120
+                      }
+                    }
+                  ],
+                  "status": "unexpected"
+                }
+              ],
+              "id": "6ae31b6d59870367800e-2af7ed364f1c98cb62b4",
+              "file": "e2e/animation-capture.spec.ts",
+              "line": 98,
+              "column": 7
+            },
+            {
+              "title": "should capture calendar interactions",
+              "ok": false,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 60000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 4,
+                      "parallelIndex": 4,
+                      "status": "failed",
+                      "duration": 20220,
+                      "error": {
+                        "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).not.\u001b[22mtoBeVisible\u001b[2m(\u001b[22m\u001b[2m)\u001b[22m failed\n\nLocator:  locator('text=Recording')\nExpected: not visible\nReceived: visible\nTimeout:  3000ms\n\nCall log:\n\u001b[2m  - Expect \"not toBeVisible\" with timeout 3000ms\u001b[22m\n\u001b[2m  - waiting for locator('text=Recording')\u001b[22m\n\u001b[2m    7 × locator resolved to <button class=\"px-4 py-2 rounded-md text-sm font-medium transition-colors bg-blue-600 hover:bg-blue-700 text-white\">🎬 Start Recording</button>\u001b[22m\n\u001b[2m      - unexpected value \"visible\"\u001b[22m\n",
+                        "stack": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).not.\u001b[22mtoBeVisible\u001b[2m(\u001b[22m\u001b[2m)\u001b[22m failed\n\nLocator:  locator('text=Recording')\nExpected: not visible\nReceived: visible\nTimeout:  3000ms\n\nCall log:\n\u001b[2m  - Expect \"not toBeVisible\" with timeout 3000ms\u001b[22m\n\u001b[2m  - waiting for locator('text=Recording')\u001b[22m\n\u001b[2m    7 × locator resolved to <button class=\"px-4 py-2 rounded-md text-sm font-medium transition-colors bg-blue-600 hover:bg-blue-700 text-white\">🎬 Start Recording</button>\u001b[22m\n\u001b[2m      - unexpected value \"visible\"\u001b[22m\n\n    at /home/ubuntu/Downloads/vow/frontend/__tests__/e2e/animation-capture.spec.ts:149:54",
+                        "location": {
+                          "file": "/home/ubuntu/Downloads/vow/frontend/__tests__/e2e/animation-capture.spec.ts",
+                          "column": 54,
+                          "line": 149
+                        },
+                        "snippet": "\u001b[0m \u001b[90m 147 |\u001b[39m     \n \u001b[90m 148 |\u001b[39m     \u001b[90m// Verify recording stopped\u001b[39m\n\u001b[31m\u001b[1m>\u001b[22m\u001b[39m\u001b[90m 149 |\u001b[39m     \u001b[36mawait\u001b[39m expect(page\u001b[33m.\u001b[39mlocator(\u001b[32m'text=Recording'\u001b[39m))\u001b[33m.\u001b[39mnot\u001b[33m.\u001b[39mtoBeVisible()\u001b[33m;\u001b[39m\n \u001b[90m     |\u001b[39m                                                      \u001b[31m\u001b[1m^\u001b[22m\u001b[39m\n \u001b[90m 150 |\u001b[39m   })\u001b[33m;\u001b[39m\n \u001b[90m 151 |\u001b[39m\n \u001b[90m 152 |\u001b[39m   test(\u001b[32m'should export captured sequences'\u001b[39m\u001b[33m,\u001b[39m \u001b[36masync\u001b[39m ({ page }) \u001b[33m=>\u001b[39m {\u001b[0m"
+                      },
+                      "errors": [
+                        {
+                          "location": {
+                            "file": "/home/ubuntu/Downloads/vow/frontend/__tests__/e2e/animation-capture.spec.ts",
+                            "column": 54,
+                            "line": 149
+                          },
+                          "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).not.\u001b[22mtoBeVisible\u001b[2m(\u001b[22m\u001b[2m)\u001b[22m failed\n\nLocator:  locator('text=Recording')\nExpected: not visible\nReceived: visible\nTimeout:  3000ms\n\nCall log:\n\u001b[2m  - Expect \"not toBeVisible\" with timeout 3000ms\u001b[22m\n\u001b[2m  - waiting for locator('text=Recording')\u001b[22m\n\u001b[2m    7 × locator resolved to <button class=\"px-4 py-2 rounded-md text-sm font-medium transition-colors bg-blue-600 hover:bg-blue-700 text-white\">🎬 Start Recording</button>\u001b[22m\n\u001b[2m      - unexpected value \"visible\"\u001b[22m\n\n\n\u001b[0m \u001b[90m 147 |\u001b[39m     \n \u001b[90m 148 |\u001b[39m     \u001b[90m// Verify recording stopped\u001b[39m\n\u001b[31m\u001b[1m>\u001b[22m\u001b[39m\u001b[90m 149 |\u001b[39m     \u001b[36mawait\u001b[39m expect(page\u001b[33m.\u001b[39mlocator(\u001b[32m'text=Recording'\u001b[39m))\u001b[33m.\u001b[39mnot\u001b[33m.\u001b[39mtoBeVisible()\u001b[33m;\u001b[39m\n \u001b[90m     |\u001b[39m                                                      \u001b[31m\u001b[1m^\u001b[22m\u001b[39m\n \u001b[90m 150 |\u001b[39m   })\u001b[33m;\u001b[39m\n \u001b[90m 151 |\u001b[39m\n \u001b[90m 152 |\u001b[39m   test(\u001b[32m'should export captured sequences'\u001b[39m\u001b[33m,\u001b[39m \u001b[36masync\u001b[39m ({ page }) \u001b[33m=>\u001b[39m {\u001b[0m\n\u001b[2m    at /home/ubuntu/Downloads/vow/frontend/__tests__/e2e/animation-capture.spec.ts:149:54\u001b[22m"
+                        }
+                      ],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-01-13T05:57:16.696Z",
+                      "annotations": [],
+                      "attachments": [
+                        {
+                          "name": "screenshot",
+                          "contentType": "image/png",
+                          "path": "/home/ubuntu/Downloads/vow/frontend/test-results/e2e-animation-capture-Dash-1732f-pture-calendar-interactions-chromium/test-failed-1.png"
+                        },
+                        {
+                          "name": "video",
+                          "contentType": "video/webm",
+                          "path": "/home/ubuntu/Downloads/vow/frontend/test-results/e2e-animation-capture-Dash-1732f-pture-calendar-interactions-chromium/video.webm"
+                        },
+                        {
+                          "name": "error-context",
+                          "contentType": "text/markdown",
+                          "path": "/home/ubuntu/Downloads/vow/frontend/test-results/e2e-animation-capture-Dash-1732f-pture-calendar-interactions-chromium/error-context.md"
+                        }
+                      ],
+                      "errorLocation": {
+                        "file": "/home/ubuntu/Downloads/vow/frontend/__tests__/e2e/animation-capture.spec.ts",
+                        "column": 54,
+                        "line": 149
+                      }
+                    }
+                  ],
+                  "status": "unexpected"
+                }
+              ],
+              "id": "6ae31b6d59870367800e-d76e2f2bbad51c1720dd",
+              "file": "e2e/animation-capture.spec.ts",
+              "line": 123,
+              "column": 7
+            },
+            {
+              "title": "should export captured sequences",
+              "ok": false,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 60000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 5,
+                      "parallelIndex": 5,
+                      "status": "failed",
+                      "duration": 15423,
+                      "error": {
+                        "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).\u001b[22mtoBeVisible\u001b[2m(\u001b[22m\u001b[2m)\u001b[22m failed\n\nLocator: locator('text=Recording')\nExpected: visible\nError: strict mode violation: locator('text=Recording') resolved to 3 elements:\n    1) <span class=\"text-sm font-medium\">Recording</span> aka getByText('Recording', { exact: true })\n    2) <button class=\"px-4 py-2 rounded-md text-sm font-medium transition-colors bg-red-600 hover:bg-red-700 text-white\">⏹️ Stop Recording</button> aka getByRole('button', { name: '⏹️ Stop Recording' })\n    3) <strong>Recording in progress:</strong> aka getByText('Recording in progress:')\n\nCall log:\n\u001b[2m  - Expect \"toBeVisible\" with timeout 3000ms\u001b[22m\n\u001b[2m  - waiting for locator('text=Recording')\u001b[22m\n",
+                        "stack": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).\u001b[22mtoBeVisible\u001b[2m(\u001b[22m\u001b[2m)\u001b[22m failed\n\nLocator: locator('text=Recording')\nExpected: visible\nError: strict mode violation: locator('text=Recording') resolved to 3 elements:\n    1) <span class=\"text-sm font-medium\">Recording</span> aka getByText('Recording', { exact: true })\n    2) <button class=\"px-4 py-2 rounded-md text-sm font-medium transition-colors bg-red-600 hover:bg-red-700 text-white\">⏹️ Stop Recording</button> aka getByRole('button', { name: '⏹️ Stop Recording' })\n    3) <strong>Recording in progress:</strong> aka getByText('Recording in progress:')\n\nCall log:\n\u001b[2m  - Expect \"toBeVisible\" with timeout 3000ms\u001b[22m\n\u001b[2m  - waiting for locator('text=Recording')\u001b[22m\n\n    at /home/ubuntu/Downloads/vow/frontend/__tests__/e2e/animation-capture.spec.ts:155:50",
+                        "location": {
+                          "file": "/home/ubuntu/Downloads/vow/frontend/__tests__/e2e/animation-capture.spec.ts",
+                          "column": 50,
+                          "line": 155
+                        },
+                        "snippet": "\u001b[0m \u001b[90m 153 |\u001b[39m     \u001b[90m// Start recording\u001b[39m\n \u001b[90m 154 |\u001b[39m     \u001b[36mawait\u001b[39m page\u001b[33m.\u001b[39mlocator(\u001b[32m'button:has-text(\"Start Recording\")'\u001b[39m)\u001b[33m.\u001b[39mclick()\u001b[33m;\u001b[39m\n\u001b[31m\u001b[1m>\u001b[22m\u001b[39m\u001b[90m 155 |\u001b[39m     \u001b[36mawait\u001b[39m expect(page\u001b[33m.\u001b[39mlocator(\u001b[32m'text=Recording'\u001b[39m))\u001b[33m.\u001b[39mtoBeVisible()\u001b[33m;\u001b[39m\n \u001b[90m     |\u001b[39m                                                  \u001b[31m\u001b[1m^\u001b[22m\u001b[39m\n \u001b[90m 156 |\u001b[39m     \n \u001b[90m 157 |\u001b[39m     \u001b[90m// Perform some interactions\u001b[39m\n \u001b[90m 158 |\u001b[39m     \u001b[36mconst\u001b[39m nextSection \u001b[33m=\u001b[39m page\u001b[33m.\u001b[39mlocator(\u001b[32m'section:has(h2:text(\"Next\"))'\u001b[39m)\u001b[33m;\u001b[39m\u001b[0m"
+                      },
+                      "errors": [
+                        {
+                          "location": {
+                            "file": "/home/ubuntu/Downloads/vow/frontend/__tests__/e2e/animation-capture.spec.ts",
+                            "column": 50,
+                            "line": 155
+                          },
+                          "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).\u001b[22mtoBeVisible\u001b[2m(\u001b[22m\u001b[2m)\u001b[22m failed\n\nLocator: locator('text=Recording')\nExpected: visible\nError: strict mode violation: locator('text=Recording') resolved to 3 elements:\n    1) <span class=\"text-sm font-medium\">Recording</span> aka getByText('Recording', { exact: true })\n    2) <button class=\"px-4 py-2 rounded-md text-sm font-medium transition-colors bg-red-600 hover:bg-red-700 text-white\">⏹️ Stop Recording</button> aka getByRole('button', { name: '⏹️ Stop Recording' })\n    3) <strong>Recording in progress:</strong> aka getByText('Recording in progress:')\n\nCall log:\n\u001b[2m  - Expect \"toBeVisible\" with timeout 3000ms\u001b[22m\n\u001b[2m  - waiting for locator('text=Recording')\u001b[22m\n\n\n\u001b[0m \u001b[90m 153 |\u001b[39m     \u001b[90m// Start recording\u001b[39m\n \u001b[90m 154 |\u001b[39m     \u001b[36mawait\u001b[39m page\u001b[33m.\u001b[39mlocator(\u001b[32m'button:has-text(\"Start Recording\")'\u001b[39m)\u001b[33m.\u001b[39mclick()\u001b[33m;\u001b[39m\n\u001b[31m\u001b[1m>\u001b[22m\u001b[39m\u001b[90m 155 |\u001b[39m     \u001b[36mawait\u001b[39m expect(page\u001b[33m.\u001b[39mlocator(\u001b[32m'text=Recording'\u001b[39m))\u001b[33m.\u001b[39mtoBeVisible()\u001b[33m;\u001b[39m\n \u001b[90m     |\u001b[39m                                                  \u001b[31m\u001b[1m^\u001b[22m\u001b[39m\n \u001b[90m 156 |\u001b[39m     \n \u001b[90m 157 |\u001b[39m     \u001b[90m// Perform some interactions\u001b[39m\n \u001b[90m 158 |\u001b[39m     \u001b[36mconst\u001b[39m nextSection \u001b[33m=\u001b[39m page\u001b[33m.\u001b[39mlocator(\u001b[32m'section:has(h2:text(\"Next\"))'\u001b[39m)\u001b[33m;\u001b[39m\u001b[0m\n\u001b[2m    at /home/ubuntu/Downloads/vow/frontend/__tests__/e2e/animation-capture.spec.ts:155:50\u001b[22m"
+                        }
+                      ],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-01-13T05:57:16.639Z",
+                      "annotations": [],
+                      "attachments": [
+                        {
+                          "name": "screenshot",
+                          "contentType": "image/png",
+                          "path": "/home/ubuntu/Downloads/vow/frontend/test-results/e2e-animation-capture-Dash-11b97-d-export-captured-sequences-chromium/test-failed-1.png"
+                        },
+                        {
+                          "name": "video",
+                          "contentType": "video/webm",
+                          "path": "/home/ubuntu/Downloads/vow/frontend/test-results/e2e-animation-capture-Dash-11b97-d-export-captured-sequences-chromium/video.webm"
+                        },
+                        {
+                          "name": "error-context",
+                          "contentType": "text/markdown",
+                          "path": "/home/ubuntu/Downloads/vow/frontend/test-results/e2e-animation-capture-Dash-11b97-d-export-captured-sequences-chromium/error-context.md"
+                        }
+                      ],
+                      "errorLocation": {
+                        "file": "/home/ubuntu/Downloads/vow/frontend/__tests__/e2e/animation-capture.spec.ts",
+                        "column": 50,
+                        "line": 155
+                      }
+                    }
+                  ],
+                  "status": "unexpected"
+                }
+              ],
+              "id": "6ae31b6d59870367800e-9b2e6006cb65270a3c77",
+              "file": "e2e/animation-capture.spec.ts",
+              "line": 152,
+              "column": 7
+            },
+            {
+              "title": "should clear captured sequences",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 60000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 0,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 9304,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-01-13T05:57:32.056Z",
+                      "annotations": [],
+                      "attachments": [
+                        {
+                          "name": "video",
+                          "contentType": "video/webm",
+                          "path": "/home/ubuntu/Downloads/vow/frontend/test-results/e2e-animation-capture-Dash-a98cb-ld-clear-captured-sequences-chromium/video.webm"
+                        }
+                      ]
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "6ae31b6d59870367800e-69642bc5ef1ef8cb1979",
+              "file": "e2e/animation-capture.spec.ts",
+              "line": 186,
+              "column": 7
+            },
+            {
+              "title": "should show recording instructions when recording",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 60000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 1,
+                      "parallelIndex": 1,
+                      "status": "passed",
+                      "duration": 8239,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-01-13T05:57:32.486Z",
+                      "annotations": [],
+                      "attachments": [
+                        {
+                          "name": "video",
+                          "contentType": "video/webm",
+                          "path": "/home/ubuntu/Downloads/vow/frontend/test-results/e2e-animation-capture-Dash-8ded5-instructions-when-recording-chromium/video.webm"
+                        }
+                      ]
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "6ae31b6d59870367800e-dd655215ae778b5750a6",
+              "file": "e2e/animation-capture.spec.ts",
+              "line": 205,
+              "column": 7
+            },
+            {
+              "title": "should display animation capture control in development",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 60000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "firefox",
+                  "projectName": "firefox",
+                  "results": [
+                    {
+                      "workerIndex": 7,
+                      "parallelIndex": 2,
+                      "status": "passed",
+                      "duration": 19196,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-01-13T05:57:34.241Z",
+                      "annotations": [],
+                      "attachments": [
+                        {
+                          "name": "video",
+                          "contentType": "video/webm",
+                          "path": "/home/ubuntu/Downloads/vow/frontend/test-results/e2e-animation-capture-Dash-fa50b-ture-control-in-development-firefox/video.webm"
+                        }
+                      ]
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "6ae31b6d59870367800e-4145a2a56081b1e86b09",
+              "file": "e2e/animation-capture.spec.ts",
+              "line": 27,
+              "column": 7
+            },
+            {
+              "title": "should start and stop animation recording",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 60000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "firefox",
+                  "projectName": "firefox",
+                  "results": [
+                    {
+                      "workerIndex": 6,
+                      "parallelIndex": 5,
+                      "status": "passed",
+                      "duration": 18486,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-01-13T05:57:34.220Z",
+                      "annotations": [],
+                      "attachments": [
+                        {
+                          "name": "video",
+                          "contentType": "video/webm",
+                          "path": "/home/ubuntu/Downloads/vow/frontend/test-results/e2e-animation-capture-Dash-1d327-nd-stop-animation-recording-firefox/video.webm"
+                        }
+                      ]
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "6ae31b6d59870367800e-5070be0fad5d1b0a6ccd",
+              "file": "e2e/animation-capture.spec.ts",
+              "line": 41,
+              "column": 7
+            },
+            {
+              "title": "should capture habit interactions",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 60000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "firefox",
+                  "projectName": "firefox",
+                  "results": [
+                    {
+                      "workerIndex": 8,
+                      "parallelIndex": 3,
+                      "status": "passed",
+                      "duration": 18110,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-01-13T05:57:37.701Z",
+                      "annotations": [],
+                      "attachments": [
+                        {
+                          "name": "video",
+                          "contentType": "video/webm",
+                          "path": "/home/ubuntu/Downloads/vow/frontend/test-results/e2e-animation-capture-Dash-34b08--capture-habit-interactions-firefox/video.webm"
+                        }
+                      ]
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "6ae31b6d59870367800e-bd9f6614ba6b3ae75fa9",
+              "file": "e2e/animation-capture.spec.ts",
+              "line": 64,
+              "column": 7
+            },
+            {
+              "title": "should capture goal interactions",
+              "ok": false,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 60000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "firefox",
+                  "projectName": "firefox",
+                  "results": [
+                    {
+                      "workerIndex": 9,
+                      "parallelIndex": 4,
+                      "status": "failed",
+                      "duration": 17462,
+                      "error": {
+                        "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).not.\u001b[22mtoBeVisible\u001b[2m(\u001b[22m\u001b[2m)\u001b[22m failed\n\nLocator:  locator('text=Recording')\nExpected: not visible\nReceived: visible\nTimeout:  3000ms\n\nCall log:\n\u001b[2m  - Expect \"not toBeVisible\" with timeout 3000ms\u001b[22m\n\u001b[2m  - waiting for locator('text=Recording')\u001b[22m\n\u001b[2m    6 × locator resolved to <button class=\"px-4 py-2 rounded-md text-sm font-medium transition-colors bg-blue-600 hover:bg-blue-700 text-white\">🎬 Start Recording</button>\u001b[22m\n\u001b[2m      - unexpected value \"visible\"\u001b[22m\n",
+                        "stack": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).not.\u001b[22mtoBeVisible\u001b[2m(\u001b[22m\u001b[2m)\u001b[22m failed\n\nLocator:  locator('text=Recording')\nExpected: not visible\nReceived: visible\nTimeout:  3000ms\n\nCall log:\n\u001b[2m  - Expect \"not toBeVisible\" with timeout 3000ms\u001b[22m\n\u001b[2m  - waiting for locator('text=Recording')\u001b[22m\n\u001b[2m    6 × locator resolved to <button class=\"px-4 py-2 rounded-md text-sm font-medium transition-colors bg-blue-600 hover:bg-blue-700 text-white\">🎬 Start Recording</button>\u001b[22m\n\u001b[2m      - unexpected value \"visible\"\u001b[22m\n\n    at /home/ubuntu/Downloads/vow/frontend/__tests__/e2e/animation-capture.spec.ts:120:54",
+                        "location": {
+                          "file": "/home/ubuntu/Downloads/vow/frontend/__tests__/e2e/animation-capture.spec.ts",
+                          "column": 54,
+                          "line": 120
+                        },
+                        "snippet": "\u001b[0m \u001b[90m 118 |\u001b[39m     \n \u001b[90m 119 |\u001b[39m     \u001b[90m// Verify recording stopped\u001b[39m\n\u001b[31m\u001b[1m>\u001b[22m\u001b[39m\u001b[90m 120 |\u001b[39m     \u001b[36mawait\u001b[39m expect(page\u001b[33m.\u001b[39mlocator(\u001b[32m'text=Recording'\u001b[39m))\u001b[33m.\u001b[39mnot\u001b[33m.\u001b[39mtoBeVisible()\u001b[33m;\u001b[39m\n \u001b[90m     |\u001b[39m                                                      \u001b[31m\u001b[1m^\u001b[22m\u001b[39m\n \u001b[90m 121 |\u001b[39m   })\u001b[33m;\u001b[39m\n \u001b[90m 122 |\u001b[39m\n \u001b[90m 123 |\u001b[39m   test(\u001b[32m'should capture calendar interactions'\u001b[39m\u001b[33m,\u001b[39m \u001b[36masync\u001b[39m ({ page }) \u001b[33m=>\u001b[39m {\u001b[0m"
+                      },
+                      "errors": [
+                        {
+                          "location": {
+                            "file": "/home/ubuntu/Downloads/vow/frontend/__tests__/e2e/animation-capture.spec.ts",
+                            "column": 54,
+                            "line": 120
+                          },
+                          "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).not.\u001b[22mtoBeVisible\u001b[2m(\u001b[22m\u001b[2m)\u001b[22m failed\n\nLocator:  locator('text=Recording')\nExpected: not visible\nReceived: visible\nTimeout:  3000ms\n\nCall log:\n\u001b[2m  - Expect \"not toBeVisible\" with timeout 3000ms\u001b[22m\n\u001b[2m  - waiting for locator('text=Recording')\u001b[22m\n\u001b[2m    6 × locator resolved to <button class=\"px-4 py-2 rounded-md text-sm font-medium transition-colors bg-blue-600 hover:bg-blue-700 text-white\">🎬 Start Recording</button>\u001b[22m\n\u001b[2m      - unexpected value \"visible\"\u001b[22m\n\n\n\u001b[0m \u001b[90m 118 |\u001b[39m     \n \u001b[90m 119 |\u001b[39m     \u001b[90m// Verify recording stopped\u001b[39m\n\u001b[31m\u001b[1m>\u001b[22m\u001b[39m\u001b[90m 120 |\u001b[39m     \u001b[36mawait\u001b[39m expect(page\u001b[33m.\u001b[39mlocator(\u001b[32m'text=Recording'\u001b[39m))\u001b[33m.\u001b[39mnot\u001b[33m.\u001b[39mtoBeVisible()\u001b[33m;\u001b[39m\n \u001b[90m     |\u001b[39m                                                      \u001b[31m\u001b[1m^\u001b[22m\u001b[39m\n \u001b[90m 121 |\u001b[39m   })\u001b[33m;\u001b[39m\n \u001b[90m 122 |\u001b[39m\n \u001b[90m 123 |\u001b[39m   test(\u001b[32m'should capture calendar interactions'\u001b[39m\u001b[33m,\u001b[39m \u001b[36masync\u001b[39m ({ page }) \u001b[33m=>\u001b[39m {\u001b[0m\n\u001b[2m    at /home/ubuntu/Downloads/vow/frontend/__tests__/e2e/animation-capture.spec.ts:120:54\u001b[22m"
+                        }
+                      ],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-01-13T05:57:39.162Z",
+                      "annotations": [],
+                      "attachments": [
+                        {
+                          "name": "screenshot",
+                          "contentType": "image/png",
+                          "path": "/home/ubuntu/Downloads/vow/frontend/test-results/e2e-animation-capture-Dash-bb95e-d-capture-goal-interactions-firefox/test-failed-1.png"
+                        },
+                        {
+                          "name": "video",
+                          "contentType": "video/webm",
+                          "path": "/home/ubuntu/Downloads/vow/frontend/test-results/e2e-animation-capture-Dash-bb95e-d-capture-goal-interactions-firefox/video.webm"
+                        },
+                        {
+                          "name": "error-context",
+                          "contentType": "text/markdown",
+                          "path": "/home/ubuntu/Downloads/vow/frontend/test-results/e2e-animation-capture-Dash-bb95e-d-capture-goal-interactions-firefox/error-context.md"
+                        }
+                      ],
+                      "errorLocation": {
+                        "file": "/home/ubuntu/Downloads/vow/frontend/__tests__/e2e/animation-capture.spec.ts",
+                        "column": 54,
+                        "line": 120
+                      }
+                    }
+                  ],
+                  "status": "unexpected"
+                }
+              ],
+              "id": "6ae31b6d59870367800e-af65b69aed7f21a57162",
+              "file": "e2e/animation-capture.spec.ts",
+              "line": 98,
+              "column": 7
+            },
+            {
+              "title": "should capture calendar interactions",
+              "ok": false,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 60000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "firefox",
+                  "projectName": "firefox",
+                  "results": [
+                    {
+                      "workerIndex": 10,
+                      "parallelIndex": 1,
+                      "status": "failed",
+                      "duration": 18460,
+                      "error": {
+                        "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).not.\u001b[22mtoBeVisible\u001b[2m(\u001b[22m\u001b[2m)\u001b[22m failed\n\nLocator:  locator('text=Recording')\nExpected: not visible\nReceived: visible\nTimeout:  3000ms\n\nCall log:\n\u001b[2m  - Expect \"not toBeVisible\" with timeout 3000ms\u001b[22m\n\u001b[2m  - waiting for locator('text=Recording')\u001b[22m\n\u001b[2m    6 × locator resolved to <button class=\"px-4 py-2 rounded-md text-sm font-medium transition-colors bg-blue-600 hover:bg-blue-700 text-white\">🎬 Start Recording</button>\u001b[22m\n\u001b[2m      - unexpected value \"visible\"\u001b[22m\n",
+                        "stack": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).not.\u001b[22mtoBeVisible\u001b[2m(\u001b[22m\u001b[2m)\u001b[22m failed\n\nLocator:  locator('text=Recording')\nExpected: not visible\nReceived: visible\nTimeout:  3000ms\n\nCall log:\n\u001b[2m  - Expect \"not toBeVisible\" with timeout 3000ms\u001b[22m\n\u001b[2m  - waiting for locator('text=Recording')\u001b[22m\n\u001b[2m    6 × locator resolved to <button class=\"px-4 py-2 rounded-md text-sm font-medium transition-colors bg-blue-600 hover:bg-blue-700 text-white\">🎬 Start Recording</button>\u001b[22m\n\u001b[2m      - unexpected value \"visible\"\u001b[22m\n\n    at /home/ubuntu/Downloads/vow/frontend/__tests__/e2e/animation-capture.spec.ts:149:54",
+                        "location": {
+                          "file": "/home/ubuntu/Downloads/vow/frontend/__tests__/e2e/animation-capture.spec.ts",
+                          "column": 54,
+                          "line": 149
+                        },
+                        "snippet": "\u001b[0m \u001b[90m 147 |\u001b[39m     \n \u001b[90m 148 |\u001b[39m     \u001b[90m// Verify recording stopped\u001b[39m\n\u001b[31m\u001b[1m>\u001b[22m\u001b[39m\u001b[90m 149 |\u001b[39m     \u001b[36mawait\u001b[39m expect(page\u001b[33m.\u001b[39mlocator(\u001b[32m'text=Recording'\u001b[39m))\u001b[33m.\u001b[39mnot\u001b[33m.\u001b[39mtoBeVisible()\u001b[33m;\u001b[39m\n \u001b[90m     |\u001b[39m                                                      \u001b[31m\u001b[1m^\u001b[22m\u001b[39m\n \u001b[90m 150 |\u001b[39m   })\u001b[33m;\u001b[39m\n \u001b[90m 151 |\u001b[39m\n \u001b[90m 152 |\u001b[39m   test(\u001b[32m'should export captured sequences'\u001b[39m\u001b[33m,\u001b[39m \u001b[36masync\u001b[39m ({ page }) \u001b[33m=>\u001b[39m {\u001b[0m"
+                      },
+                      "errors": [
+                        {
+                          "location": {
+                            "file": "/home/ubuntu/Downloads/vow/frontend/__tests__/e2e/animation-capture.spec.ts",
+                            "column": 54,
+                            "line": 149
+                          },
+                          "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).not.\u001b[22mtoBeVisible\u001b[2m(\u001b[22m\u001b[2m)\u001b[22m failed\n\nLocator:  locator('text=Recording')\nExpected: not visible\nReceived: visible\nTimeout:  3000ms\n\nCall log:\n\u001b[2m  - Expect \"not toBeVisible\" with timeout 3000ms\u001b[22m\n\u001b[2m  - waiting for locator('text=Recording')\u001b[22m\n\u001b[2m    6 × locator resolved to <button class=\"px-4 py-2 rounded-md text-sm font-medium transition-colors bg-blue-600 hover:bg-blue-700 text-white\">🎬 Start Recording</button>\u001b[22m\n\u001b[2m      - unexpected value \"visible\"\u001b[22m\n\n\n\u001b[0m \u001b[90m 147 |\u001b[39m     \n \u001b[90m 148 |\u001b[39m     \u001b[90m// Verify recording stopped\u001b[39m\n\u001b[31m\u001b[1m>\u001b[22m\u001b[39m\u001b[90m 149 |\u001b[39m     \u001b[36mawait\u001b[39m expect(page\u001b[33m.\u001b[39mlocator(\u001b[32m'text=Recording'\u001b[39m))\u001b[33m.\u001b[39mnot\u001b[33m.\u001b[39mtoBeVisible()\u001b[33m;\u001b[39m\n \u001b[90m     |\u001b[39m                                                      \u001b[31m\u001b[1m^\u001b[22m\u001b[39m\n \u001b[90m 150 |\u001b[39m   })\u001b[33m;\u001b[39m\n \u001b[90m 151 |\u001b[39m\n \u001b[90m 152 |\u001b[39m   test(\u001b[32m'should export captured sequences'\u001b[39m\u001b[33m,\u001b[39m \u001b[36masync\u001b[39m ({ page }) \u001b[33m=>\u001b[39m {\u001b[0m\n\u001b[2m    at /home/ubuntu/Downloads/vow/frontend/__tests__/e2e/animation-capture.spec.ts:149:54\u001b[22m"
+                        }
+                      ],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-01-13T05:57:42.664Z",
+                      "annotations": [],
+                      "attachments": [
+                        {
+                          "name": "screenshot",
+                          "contentType": "image/png",
+                          "path": "/home/ubuntu/Downloads/vow/frontend/test-results/e2e-animation-capture-Dash-1732f-pture-calendar-interactions-firefox/test-failed-1.png"
+                        },
+                        {
+                          "name": "video",
+                          "contentType": "video/webm",
+                          "path": "/home/ubuntu/Downloads/vow/frontend/test-results/e2e-animation-capture-Dash-1732f-pture-calendar-interactions-firefox/video.webm"
+                        },
+                        {
+                          "name": "error-context",
+                          "contentType": "text/markdown",
+                          "path": "/home/ubuntu/Downloads/vow/frontend/test-results/e2e-animation-capture-Dash-1732f-pture-calendar-interactions-firefox/error-context.md"
+                        }
+                      ],
+                      "errorLocation": {
+                        "file": "/home/ubuntu/Downloads/vow/frontend/__tests__/e2e/animation-capture.spec.ts",
+                        "column": 54,
+                        "line": 149
+                      }
+                    }
+                  ],
+                  "status": "unexpected"
+                }
+              ],
+              "id": "6ae31b6d59870367800e-0a7b0148d480f6fc4039",
+              "file": "e2e/animation-capture.spec.ts",
+              "line": 123,
+              "column": 7
+            },
+            {
+              "title": "should export captured sequences",
+              "ok": false,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 60000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "firefox",
+                  "projectName": "firefox",
+                  "results": [
+                    {
+                      "workerIndex": 11,
+                      "parallelIndex": 0,
+                      "status": "failed",
+                      "duration": 12042,
+                      "error": {
+                        "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).\u001b[22mtoBeVisible\u001b[2m(\u001b[22m\u001b[2m)\u001b[22m failed\n\nLocator: locator('text=Recording')\nExpected: visible\nError: strict mode violation: locator('text=Recording') resolved to 3 elements:\n    1) <span class=\"text-sm font-medium\">Recording</span> aka getByText('Recording', { exact: true })\n    2) <button class=\"px-4 py-2 rounded-md text-sm font-medium transition-colors bg-red-600 hover:bg-red-700 text-white\">⏹️ Stop Recording</button> aka getByRole('button', { name: '⏹️ Stop Recording' })\n    ...\n\nCall log:\n\u001b[2m  - Expect \"toBeVisible\" with timeout 3000ms\u001b[22m\n\u001b[2m  - waiting for locator('text=Recording')\u001b[22m\n",
+                        "stack": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).\u001b[22mtoBeVisible\u001b[2m(\u001b[22m\u001b[2m)\u001b[22m failed\n\nLocator: locator('text=Recording')\nExpected: visible\nError: strict mode violation: locator('text=Recording') resolved to 3 elements:\n    1) <span class=\"text-sm font-medium\">Recording</span> aka getByText('Recording', { exact: true })\n    2) <button class=\"px-4 py-2 rounded-md text-sm font-medium transition-colors bg-red-600 hover:bg-red-700 text-white\">⏹️ Stop Recording</button> aka getByRole('button', { name: '⏹️ Stop Recording' })\n    ...\n\nCall log:\n\u001b[2m  - Expect \"toBeVisible\" with timeout 3000ms\u001b[22m\n\u001b[2m  - waiting for locator('text=Recording')\u001b[22m\n\n    at /home/ubuntu/Downloads/vow/frontend/__tests__/e2e/animation-capture.spec.ts:155:50",
+                        "location": {
+                          "file": "/home/ubuntu/Downloads/vow/frontend/__tests__/e2e/animation-capture.spec.ts",
+                          "column": 50,
+                          "line": 155
+                        },
+                        "snippet": "\u001b[0m \u001b[90m 153 |\u001b[39m     \u001b[90m// Start recording\u001b[39m\n \u001b[90m 154 |\u001b[39m     \u001b[36mawait\u001b[39m page\u001b[33m.\u001b[39mlocator(\u001b[32m'button:has-text(\"Start Recording\")'\u001b[39m)\u001b[33m.\u001b[39mclick()\u001b[33m;\u001b[39m\n\u001b[31m\u001b[1m>\u001b[22m\u001b[39m\u001b[90m 155 |\u001b[39m     \u001b[36mawait\u001b[39m expect(page\u001b[33m.\u001b[39mlocator(\u001b[32m'text=Recording'\u001b[39m))\u001b[33m.\u001b[39mtoBeVisible()\u001b[33m;\u001b[39m\n \u001b[90m     |\u001b[39m                                                  \u001b[31m\u001b[1m^\u001b[22m\u001b[39m\n \u001b[90m 156 |\u001b[39m     \n \u001b[90m 157 |\u001b[39m     \u001b[90m// Perform some interactions\u001b[39m\n \u001b[90m 158 |\u001b[39m     \u001b[36mconst\u001b[39m nextSection \u001b[33m=\u001b[39m page\u001b[33m.\u001b[39mlocator(\u001b[32m'section:has(h2:text(\"Next\"))'\u001b[39m)\u001b[33m;\u001b[39m\u001b[0m"
+                      },
+                      "errors": [
+                        {
+                          "location": {
+                            "file": "/home/ubuntu/Downloads/vow/frontend/__tests__/e2e/animation-capture.spec.ts",
+                            "column": 50,
+                            "line": 155
+                          },
+                          "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).\u001b[22mtoBeVisible\u001b[2m(\u001b[22m\u001b[2m)\u001b[22m failed\n\nLocator: locator('text=Recording')\nExpected: visible\nError: strict mode violation: locator('text=Recording') resolved to 3 elements:\n    1) <span class=\"text-sm font-medium\">Recording</span> aka getByText('Recording', { exact: true })\n    2) <button class=\"px-4 py-2 rounded-md text-sm font-medium transition-colors bg-red-600 hover:bg-red-700 text-white\">⏹️ Stop Recording</button> aka getByRole('button', { name: '⏹️ Stop Recording' })\n    ...\n\nCall log:\n\u001b[2m  - Expect \"toBeVisible\" with timeout 3000ms\u001b[22m\n\u001b[2m  - waiting for locator('text=Recording')\u001b[22m\n\n\n\u001b[0m \u001b[90m 153 |\u001b[39m     \u001b[90m// Start recording\u001b[39m\n \u001b[90m 154 |\u001b[39m     \u001b[36mawait\u001b[39m page\u001b[33m.\u001b[39mlocator(\u001b[32m'button:has-text(\"Start Recording\")'\u001b[39m)\u001b[33m.\u001b[39mclick()\u001b[33m;\u001b[39m\n\u001b[31m\u001b[1m>\u001b[22m\u001b[39m\u001b[90m 155 |\u001b[39m     \u001b[36mawait\u001b[39m expect(page\u001b[33m.\u001b[39mlocator(\u001b[32m'text=Recording'\u001b[39m))\u001b[33m.\u001b[39mtoBeVisible()\u001b[33m;\u001b[39m\n \u001b[90m     |\u001b[39m                                                  \u001b[31m\u001b[1m^\u001b[22m\u001b[39m\n \u001b[90m 156 |\u001b[39m     \n \u001b[90m 157 |\u001b[39m     \u001b[90m// Perform some interactions\u001b[39m\n \u001b[90m 158 |\u001b[39m     \u001b[36mconst\u001b[39m nextSection \u001b[33m=\u001b[39m page\u001b[33m.\u001b[39mlocator(\u001b[32m'section:has(h2:text(\"Next\"))'\u001b[39m)\u001b[33m;\u001b[39m\u001b[0m\n\u001b[2m    at /home/ubuntu/Downloads/vow/frontend/__tests__/e2e/animation-capture.spec.ts:155:50\u001b[22m"
+                        }
+                      ],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-01-13T05:57:43.259Z",
+                      "annotations": [],
+                      "attachments": [
+                        {
+                          "name": "screenshot",
+                          "contentType": "image/png",
+                          "path": "/home/ubuntu/Downloads/vow/frontend/test-results/e2e-animation-capture-Dash-11b97-d-export-captured-sequences-firefox/test-failed-1.png"
+                        },
+                        {
+                          "name": "video",
+                          "contentType": "video/webm",
+                          "path": "/home/ubuntu/Downloads/vow/frontend/test-results/e2e-animation-capture-Dash-11b97-d-export-captured-sequences-firefox/video.webm"
+                        },
+                        {
+                          "name": "error-context",
+                          "contentType": "text/markdown",
+                          "path": "/home/ubuntu/Downloads/vow/frontend/test-results/e2e-animation-capture-Dash-11b97-d-export-captured-sequences-firefox/error-context.md"
+                        }
+                      ],
+                      "errorLocation": {
+                        "file": "/home/ubuntu/Downloads/vow/frontend/__tests__/e2e/animation-capture.spec.ts",
+                        "column": 50,
+                        "line": 155
+                      }
+                    }
+                  ],
+                  "status": "unexpected"
+                }
+              ],
+              "id": "6ae31b6d59870367800e-e6571052a76b50f428cd",
+              "file": "e2e/animation-capture.spec.ts",
+              "line": 152,
+              "column": 7
+            },
+            {
+              "title": "should clear captured sequences",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 60000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "firefox",
+                  "projectName": "firefox",
+                  "results": [
+                    {
+                      "workerIndex": 7,
+                      "parallelIndex": 2,
+                      "status": "passed",
+                      "duration": 10356,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-01-13T05:57:55.323Z",
+                      "annotations": [],
+                      "attachments": [
+                        {
+                          "name": "video",
+                          "contentType": "video/webm",
+                          "path": "/home/ubuntu/Downloads/vow/frontend/test-results/e2e-animation-capture-Dash-a98cb-ld-clear-captured-sequences-firefox/video.webm"
+                        }
+                      ]
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "6ae31b6d59870367800e-1078ce204fbee314b27c",
+              "file": "e2e/animation-capture.spec.ts",
+              "line": 186,
+              "column": 7
+            },
+            {
+              "title": "should show recording instructions when recording",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 60000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "firefox",
+                  "projectName": "firefox",
+                  "results": [
+                    {
+                      "workerIndex": 6,
+                      "parallelIndex": 5,
+                      "status": "passed",
+                      "duration": 8131,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-01-13T05:57:55.935Z",
+                      "annotations": [],
+                      "attachments": [
+                        {
+                          "name": "video",
+                          "contentType": "video/webm",
+                          "path": "/home/ubuntu/Downloads/vow/frontend/test-results/e2e-animation-capture-Dash-8ded5-instructions-when-recording-firefox/video.webm"
+                        }
+                      ]
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "6ae31b6d59870367800e-cafa0f1812bec5f1aa06",
+              "file": "e2e/animation-capture.spec.ts",
+              "line": 205,
+              "column": 7
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "errors": [],
+  "stats": {
+    "startTime": "2026-01-13T05:57:14.471Z",
+    "duration": 52065.659999999996,
+    "expected": 10,
+    "skipped": 0,
+    "unexpected": 6,
+    "flaky": 0
+  }
+}
