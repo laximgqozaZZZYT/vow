@@ -9,6 +9,7 @@ import { GoalModal } from "./components/Modal.Goal";
 import WidgetMindmap from "./components/Widget.Mindmap";
 import EditLayoutModal from './components/Modal.LayoutEditor';
 import RecurringHabitConfirmModal from './components/Modal.RecurringHabitConfirm';
+import ManageTagsModal from './components/Modal.ManageTags';
 import StaticsSection from './components/Section.Statistics';
 import DiarySection from './components/Section.Diary';
 
@@ -105,6 +106,43 @@ export default function DashboardPage() {
 
   // Mindmap state
   const [openMindmap, setOpenMindmap] = useState(false);
+
+  // Tags state
+  const [tags, setTags] = useState<any[]>([]);
+  const [openManageTags, setOpenManageTags] = useState(false);
+
+  // Load tags on component mount
+  useEffect(() => {
+    const loadTags = async () => {
+      try {
+        const tagList = await api.getTags();
+        
+        // If no tags exist, create preset tags
+        if (tagList.length === 0) {
+          console.log('[Dashboard] No tags found, creating preset tags...');
+          
+          // Create 'Habit' tag
+          await api.createTag({ name: 'Habit', color: '#3b82f6' });
+          
+          // Create 'Goal' tag
+          await api.createTag({ name: 'Goal', color: '#10b981' });
+          
+          // Reload tags
+          const updatedTagList = await api.getTags();
+          setTags(updatedTagList);
+          console.log('[Dashboard] Preset tags created successfully');
+        } else {
+          setTags(tagList);
+        }
+      } catch (error) {
+        console.error('Failed to load tags:', error);
+      }
+    };
+
+    if (isClient && !isLoading) {
+      loadTags();
+    }
+  }, [isClient, isLoading]);
 
   // Load mindmaps on component mount
   useEffect(() => {
@@ -207,6 +245,99 @@ export default function DashboardPage() {
     }
   }
 
+  // タグ管理ハンドラー
+  const refreshTags = async () => {
+    try {
+      const tagList = await api.getTags();
+      setTags(tagList);
+    } catch (error) {
+      console.error('Failed to refresh tags:', error);
+    }
+  };
+
+  const handleCreateTag = async (payload: { name: string; color?: string }) => {
+    try {
+      await api.createTag(payload);
+      await refreshTags();
+    } catch (error) {
+      console.error('Failed to create tag:', error);
+      throw error;
+    }
+  };
+
+  const handleUpdateTag = async (id: string, payload: { name?: string; color?: string }) => {
+    try {
+      await api.updateTag(id, payload);
+      await refreshTags();
+    } catch (error) {
+      console.error('Failed to update tag:', error);
+      throw error;
+    }
+  };
+
+  const handleDeleteTag = async (id: string) => {
+    try {
+      await api.deleteTag(id);
+      await refreshTags();
+    } catch (error) {
+      console.error('Failed to delete tag:', error);
+      throw error;
+    }
+  };
+
+  // Habit/Goal タグ変更ハンドラー
+  const handleHabitTagsChange = async (habitId: string, tagIds: string[]) => {
+    try {
+      // 現在のタグを取得
+      const currentTags = await api.getHabitTags(habitId);
+      const currentTagIds = currentTags.map((t: any) => t.id);
+
+      // 追加するタグ
+      const toAdd = tagIds.filter(id => !currentTagIds.includes(id));
+      // 削除するタグ
+      const toRemove = currentTagIds.filter((id: string) => !tagIds.includes(id));
+
+      // タグを追加
+      for (const tagId of toAdd) {
+        await api.addHabitTag(habitId, tagId);
+      }
+
+      // タグを削除
+      for (const tagId of toRemove) {
+        await api.removeHabitTag(habitId, tagId);
+      }
+    } catch (error) {
+      console.error('Failed to update habit tags:', error);
+      throw error;
+    }
+  };
+
+  const handleGoalTagsChange = async (goalId: string, tagIds: string[]) => {
+    try {
+      // 現在のタグを取得
+      const currentTags = await api.getGoalTags(goalId);
+      const currentTagIds = currentTags.map((t: any) => t.id);
+
+      // 追加するタグ
+      const toAdd = tagIds.filter(id => !currentTagIds.includes(id));
+      // 削除するタグ
+      const toRemove = currentTagIds.filter((id: string) => !tagIds.includes(id));
+
+      // タグを追加
+      for (const tagId of toAdd) {
+        await api.addGoalTag(goalId, tagId);
+      }
+
+      // タグを削除
+      for (const tagId of toRemove) {
+        await api.removeGoalTag(goalId, tagId);
+      }
+    } catch (error) {
+      console.error('Failed to update goal tags:', error);
+      throw error;
+    }
+  };
+
   // Prevent hydration mismatch by not rendering until client-side
   if (!isClient) {
     return <div className="flex min-h-screen items-center justify-center bg-zinc-50 dark:bg-black text-black dark:text-zinc-50 p-4">
@@ -269,6 +400,15 @@ export default function DashboardPage() {
         setEditingGoalId={setEditingGoalId}
         openMindmap={openMindmap}
         setOpenMindmap={setOpenMindmap}
+        tags={tags}
+        setTags={setTags}
+        openManageTags={openManageTags}
+        setOpenManageTags={setOpenManageTags}
+        handleCreateTag={handleCreateTag}
+        handleUpdateTag={handleUpdateTag}
+        handleDeleteTag={handleDeleteTag}
+        handleGoalTagsChange={handleGoalTagsChange}
+        handleHabitTagsChange={handleHabitTagsChange}
         starts={starts}
         pausedLoads={pausedLoads}
         openActivityModal={openActivityModal}
@@ -346,6 +486,15 @@ function DashboardLayout(props: any) {
     setEditingGoalId,
     openMindmap,
     setOpenMindmap,
+    tags,
+    setTags,
+    openManageTags,
+    setOpenManageTags,
+    handleCreateTag,
+    handleUpdateTag,
+    handleDeleteTag,
+    handleGoalTagsChange,
+    handleHabitTagsChange,
     starts,
     pausedLoads,
     openActivityModal,
@@ -392,6 +541,7 @@ function DashboardLayout(props: any) {
           setSelectedMindmap(null);
           setOpenMindmap(true);
         }}
+        onManageTags={() => setOpenManageTags(true)}
         mindmaps={mindmaps}
         selectedMindmap={selectedMindmap}
         onMindmapSelect={(mindmap) => {
@@ -463,7 +613,12 @@ function DashboardLayout(props: any) {
             ) : sec === 'statics' ? (
               <StaticsSection key="statics" habits={habits as any} activities={activities as any} goals={goals as any} />
             ) : sec === 'diary' ? (
-              <DiarySection key="diary" goals={goals as any} habits={habits as any} />
+              <DiarySection 
+                key="diary" 
+                goals={goals as any} 
+                habits={habits as any}
+                onManageTags={() => setOpenManageTags(true)}
+              />
             ) : null
           ))}
         </div>
@@ -476,6 +631,8 @@ function DashboardLayout(props: any) {
         goal={null}
         onCreate={(payload: CreateGoalPayload) => createGoal(payload)}
         goals={goals}
+        tags={tags}
+        onTagsChange={handleGoalTagsChange}
       />
 
       <EditLayoutModal
@@ -498,6 +655,8 @@ function DashboardLayout(props: any) {
         onDelete={(id) => deleteGoal(id)}
         onComplete={(id) => completeGoalCascade(id)}
         goals={goals}
+        tags={tags}
+        onTagsChange={handleGoalTagsChange}
       />
 
       <HabitModal
@@ -522,6 +681,8 @@ function DashboardLayout(props: any) {
           } 
         }}
         categories={goals}
+        tags={tags}
+        onTagsChange={handleHabitTagsChange}
       />
 
       <HabitModal
@@ -533,6 +694,8 @@ function DashboardLayout(props: any) {
           createHabit(payload as any);
         }}
         categories={goals}
+        tags={tags}
+        onTagsChange={handleHabitTagsChange}
       />
 
       <ActivityModal
@@ -554,6 +717,16 @@ function DashboardLayout(props: any) {
         date={recurringConfirmation?.date || ''}
         onConfirm={handleRecurringConfirmation}
         onCancel={cancelRecurringConfirmation}
+      />
+
+      {/* Manage Tags Modal */}
+      <ManageTagsModal
+        isOpen={openManageTags}
+        onClose={() => setOpenManageTags(false)}
+        tags={tags}
+        onCreateTag={handleCreateTag}
+        onUpdateTag={handleUpdateTag}
+        onDeleteTag={handleDeleteTag}
       />
 
       {/* Mindmap Widget */}

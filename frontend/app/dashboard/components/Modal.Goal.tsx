@@ -4,6 +4,8 @@ import React, { useState } from "react"
 import { Popover } from "@headlessui/react"
 import { DayPicker } from "react-day-picker"
 import "react-day-picker/dist/style.css"
+import TagSelector from './Widget.TagSelector'
+import { supabaseDirectClient } from '../../../lib/supabase-direct'
 
 // Helper: format a Date to local YYYY-MM-DD (avoid toISOString which uses UTC)
 function formatLocalDate(d: Date) {
@@ -24,11 +26,12 @@ function parseYMD(s?: string | Date | null) {
 
 type Goal = { id: string; name: string; details?: string; dueDate?: string | Date | null; parentId?: string | null; isCompleted?: boolean }
 
-export function GoalModal({ open, onClose, goal, onUpdate, onDelete, onCreate, onComplete, goals }: { open: boolean; onClose: () => void; goal: Goal | null; onUpdate?: (g: Goal) => void; onDelete?: (id: string) => void; onCreate?: (payload: { name: string; details?: string; dueDate?: string; parentId?: string | null }) => void; onComplete?: (goalId: string) => void; goals?: Goal[] }) {
+export function GoalModal({ open, onClose, goal, onUpdate, onDelete, onCreate, onComplete, goals, tags, onTagsChange }: { open: boolean; onClose: () => void; goal: Goal | null; onUpdate?: (g: Goal) => void; onDelete?: (id: string) => void; onCreate?: (payload: { name: string; details?: string; dueDate?: string; parentId?: string | null }) => void; onComplete?: (goalId: string) => void; goals?: Goal[]; tags?: any[]; onTagsChange?: (goalId: string, tagIds: string[]) => Promise<void> }) {
     const [name, setName] = useState(goal?.name ?? "")
     const [details, setDetails] = useState(goal?.details ?? "")
     const [dueDate, setDueDate] = useState<Date | undefined>(goal?.dueDate ? (typeof goal.dueDate === 'string' ? parseYMD(goal.dueDate) : (goal.dueDate as Date)) : undefined)
     const [parentId, setParentId] = useState<string | null>(goal?.parentId ?? null)
+    const [selectedTagIds, setSelectedTagIds] = useState<string[]>([])
 
     React.useEffect(() => {
         if (open) {
@@ -36,8 +39,23 @@ export function GoalModal({ open, onClose, goal, onUpdate, onDelete, onCreate, o
             setDetails(goal?.details ?? '')
             setDueDate(goal?.dueDate ? (typeof goal.dueDate === 'string' ? parseYMD(goal.dueDate) : (goal.dueDate as Date)) : undefined)
             setParentId(goal?.parentId ?? null)
+            if (goal) {
+                loadGoalTags(goal.id)
+            } else {
+                setSelectedTagIds([])
+            }
         }
     }, [goal, open])
+
+    // Load goal tags
+    async function loadGoalTags(goalId: string) {
+        try {
+            const goalTags = await supabaseDirectClient.getGoalTags(goalId)
+            setSelectedTagIds(goalTags.map((t: any) => t.id))
+        } catch (err) {
+            console.error('[GoalModal] loadGoalTags error', err)
+        }
+    }
 
     if (!open) return null
 
@@ -104,6 +122,36 @@ export function GoalModal({ open, onClose, goal, onUpdate, onDelete, onCreate, o
                             ))}
                         </select>
                     </div>
+
+                    {/* Tags */}
+                    {tags && tags.length > 0 && (
+                        <div>
+                            <label className="block text-sm mb-2">Tags</label>
+                            <TagSelector
+                                availableTags={tags}
+                                selectedTagIds={selectedTagIds}
+                                onTagAdd={async (tagId) => {
+                                    if (goal && onTagsChange) {
+                                        const newTagIds = [...selectedTagIds, tagId]
+                                        await onTagsChange(goal.id, newTagIds)
+                                        setSelectedTagIds(newTagIds)
+                                    } else {
+                                        setSelectedTagIds([...selectedTagIds, tagId])
+                                    }
+                                }}
+                                onTagRemove={async (tagId) => {
+                                    if (goal && onTagsChange) {
+                                        const newTagIds = selectedTagIds.filter(id => id !== tagId)
+                                        await onTagsChange(goal.id, newTagIds)
+                                        setSelectedTagIds(newTagIds)
+                                    } else {
+                                        setSelectedTagIds(selectedTagIds.filter(id => id !== tagId))
+                                    }
+                                }}
+                                placeholder="Search and add tags..."
+                            />
+                        </div>
+                    )}
 
                     <div className="mt-4 flex justify-between items-center">
                         <div>

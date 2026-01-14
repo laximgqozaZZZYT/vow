@@ -7,7 +7,7 @@ import remarkGfm from 'remark-gfm'
 import remarkBreaks from 'remark-breaks'
 import rehypeRaw from 'rehype-raw'
 import rehypeSanitize, { defaultSchema } from 'rehype-sanitize'
-import { DiaryTag } from '@/lib/api'
+import type { Tag } from '../types'
 
 type Goal = { id: string; name: string }
 type Habit = { id: string; name: string }
@@ -366,7 +366,7 @@ export default function DiaryModal({
   onClose: () => void
   goals: Goal[]
   habits: Habit[]
-  tags: DiaryTag[]
+  tags: Tag[]
   initial: null | {
     id?: string
     frontMd: string

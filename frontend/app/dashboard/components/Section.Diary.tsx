@@ -7,10 +7,11 @@ import remarkGfm from 'remark-gfm'
 import remarkBreaks from 'remark-breaks'
 import rehypeRaw from 'rehype-raw'
 import rehypeSanitize, { defaultSchema } from 'rehype-sanitize'
-import api, { DiaryCard, DiaryTag } from '@/lib/api'
+import api, { DiaryCard } from '@/lib/api'
 import DiaryTagManagerModal from './Modal.TagManager'
 import DiaryModal from './Modal.Diary'
 import { useHandedness } from '../contexts/HandednessContext'
+import type { Tag } from '../types'
 
 type Goal = { id: string; name: string }
 type Habit = { id: string; name: string }
@@ -382,10 +383,18 @@ function arraysEqualAsSets(a: string[], b: string[]) {
   return true
 }
 
-export default function DiarySection({ goals, habits }: { goals: Goal[]; habits: Habit[] }) {
+export default function DiarySection({ 
+  goals, 
+  habits,
+  onManageTags 
+}: { 
+  goals: Goal[]; 
+  habits: Habit[];
+  onManageTags?: () => void;
+}) {
   const { isLeftHanded } = useHandedness();
   const [cards, setCards] = React.useState<DiaryCard[]>([])
-  const [tags, setTags] = React.useState<DiaryTag[]>([])
+  const [tags, setTags] = React.useState<Tag[]>([])
 
   // filters
   const [query, setQuery] = React.useState('')
@@ -526,7 +535,16 @@ export default function DiarySection({ goals, habits }: { goals: Goal[]; habits:
           <button className="rounded border px-3 py-1.5 text-sm" onClick={refreshCards} disabled={loading}>
             Search
           </button>
-          <button className="rounded border px-3 py-1.5 text-sm" onClick={() => setTagManagerOpen(true)}>
+          <button 
+            className="rounded border px-3 py-1.5 text-sm" 
+            onClick={() => {
+              if (onManageTags) {
+                onManageTags();
+              } else {
+                setTagManagerOpen(true);
+              }
+            }}
+          >
             Manage Tags
           </button>
           <button className="rounded border px-3 py-1.5 text-sm" onClick={clearFilters}>

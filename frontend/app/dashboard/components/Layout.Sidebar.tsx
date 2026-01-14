@@ -14,6 +14,7 @@ interface DashboardSidebarExtendedProps extends DashboardSidebarProps {
   onMoveGoal: (goalId: string, newParentId: string | null) => void;
   onMoveHabit: (habitId: string, newGoalId: string) => void;
   onNewMindmap: () => void;
+  onManageTags: () => void;
   mindmaps?: any[];
   selectedMindmap?: any;
   onMindmapSelect?: (mindmap: any) => void;
@@ -36,6 +37,7 @@ export default function DashboardSidebar({
   onMoveGoal,
   onMoveHabit,
   onNewMindmap,
+  onManageTags,
   mindmaps = [],
   selectedMindmap,
   onMindmapSelect,
@@ -145,6 +147,12 @@ export default function DashboardSidebar({
             onClick={onNewMindmap}
           >
             + New Map
+          </button>
+          <button
+            className={`rounded bg-purple-600 px-3 py-2 text-sm text-white hover:bg-purple-700 ${isLeftHanded ? 'text-left' : ''}`}
+            onClick={onManageTags}
+          >
+            Manage Tags
           </button>
         </div>
       </aside>

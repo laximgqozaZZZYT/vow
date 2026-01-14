@@ -5,6 +5,7 @@ import { supabaseDirectClient } from '../../../lib/supabase-direct'
 import { Popover } from "@headlessui/react"
 import { DayPicker } from "react-day-picker"
 import "react-day-picker/dist/style.css"
+import TagSelector from './Widget.TagSelector'
 
 // Helper: format a Date to local YYYY-MM-DD (avoid toISOString which uses UTC)
 function formatLocalDate(d: Date) {
@@ -53,7 +54,7 @@ type Habit = { id: string; goalId: string; name: string; active: boolean; type: 
 
 type CreateHabitPayload = { name: string; goalId?: string; type: "do" | "avoid"; duration?: number; reminders?: any[]; dueDate?: string; time?: string; endTime?: string; repeat?: string; timings?: any[]; allDay?: boolean; notes?: string; workloadUnit?: string; workloadTotal?: number; workloadTotalEnd?: number; workloadPerCount?: number }
 
-export function HabitModal({ open, onClose, habit, onUpdate, onDelete, onCreate, initial, categories: goals }: { open: boolean; onClose: () => void; habit: Habit | null; onUpdate?: (h: Habit) => void; onDelete?: (id: string) => void; onCreate?: (payload: CreateHabitPayload) => void; initial?: { date?: string; time?: string; endTime?: string; type?: "do" | "avoid"; goalId?: string }; categories?: { id: string; name: string }[] }) {
+export function HabitModal({ open, onClose, habit, onUpdate, onDelete, onCreate, initial, categories: goals, tags, onTagsChange }: { open: boolean; onClose: () => void; habit: Habit | null; onUpdate?: (h: Habit) => void; onDelete?: (id: string) => void; onCreate?: (payload: CreateHabitPayload) => void; initial?: { date?: string; time?: string; endTime?: string; type?: "do" | "avoid"; goalId?: string }; categories?: { id: string; name: string }[]; tags?: any[]; onTagsChange?: (habitId: string, tagIds: string[]) => Promise<void> }) {
     const [name, setName] = React.useState<string>(habit?.name ?? "")
     const [notes, setNotes] = React.useState<string>(habit?.notes ?? "")
     const [dueDate, setDueDate] = React.useState<Date | undefined>(habit?.dueDate ? new Date(habit.dueDate) : undefined)
@@ -89,6 +90,9 @@ export function HabitModal({ open, onClose, habit, onUpdate, onDelete, onCreate,
     const [selectedRelatedHabitId, setSelectedRelatedHabitId] = React.useState<string>('')
     const [selectedRelationType, setSelectedRelationType] = React.useState<'main'|'sub'|'next'>('main')
     const [loadingRelations, setLoadingRelations] = React.useState(false)
+
+    // Tags state
+    const [selectedTagIds, setSelectedTagIds] = React.useState<string[]>([])
 
     async function loadAllHabits() {
         try {
@@ -171,6 +175,8 @@ export function HabitModal({ open, onClose, habit, onUpdate, onDelete, onCreate,
                     setTimingType(habit.repeat as TimingType)
                 }
             }
+            // Load tags for this habit
+            loadHabitTags(habit.id)
         } else {
             // creation defaults (use optional initial values)
             setWorkloadUnit('')
@@ -192,8 +198,20 @@ export function HabitModal({ open, onClose, habit, onUpdate, onDelete, onCreate,
             setOutdates([{ type: tType, date: initial?.date ?? undefined, start: initial?.time ?? undefined, end: initial?.endTime ?? undefined }])
             setTimingType(initial?.date ? 'Date' : 'Daily')
             setTimingWeekdays([])
+            setSelectedTagIds([])
         }
     }, [habit, initial, open])
+
+    // Load habit tags
+    async function loadHabitTags(habitId: string) {
+        try {
+            const habitTags = await supabaseDirectClient.getHabitTags(habitId)
+            setSelectedTagIds(habitTags.map((t: any) => t.id))
+        } catch (err) {
+            console.error('[HabitModal] loadHabitTags error', err)
+        }
+    }
+
 
     function minutesFromHHMM(s?: string) {
         if (!s) return null
@@ -690,6 +708,38 @@ export function HabitModal({ open, onClose, habit, onUpdate, onDelete, onCreate,
                                     <h3 className="text-lg font-medium">Description</h3>
                                     <textarea value={notes} onChange={(e) => setNotes(e.target.value)} className="mt-3 w-full rounded border px-3 py-3 bg-white text-black dark:bg-slate-800 dark:text-slate-100 text-base min-h-[100px]" placeholder="Add description" />
                                 </div>
+
+                                {/* Tags */}
+                                {tags && tags.length > 0 && (
+                                    <div className="mt-6">
+                                        <h3 className="text-lg font-medium">Tags</h3>
+                                        <div className="mt-3">
+                                            <TagSelector
+                                                availableTags={tags}
+                                                selectedTagIds={selectedTagIds}
+                                                onTagAdd={async (tagId) => {
+                                                    if (habit && onTagsChange) {
+                                                        const newTagIds = [...selectedTagIds, tagId]
+                                                        await onTagsChange(habit.id, newTagIds)
+                                                        setSelectedTagIds(newTagIds)
+                                                    } else {
+                                                        setSelectedTagIds([...selectedTagIds, tagId])
+                                                    }
+                                                }}
+                                                onTagRemove={async (tagId) => {
+                                                    if (habit && onTagsChange) {
+                                                        const newTagIds = selectedTagIds.filter(id => id !== tagId)
+                                                        await onTagsChange(habit.id, newTagIds)
+                                                        setSelectedTagIds(newTagIds)
+                                                    } else {
+                                                        setSelectedTagIds(selectedTagIds.filter(id => id !== tagId))
+                                                    }
+                                                }}
+                                                placeholder="Search and add tags..."
+                                            />
+                                        </div>
+                                    </div>
+                                )}
                                 
                                 {/* Related Habits */}
                                 <div className="mt-4">

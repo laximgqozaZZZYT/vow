@@ -1,7 +1,7 @@
 "use client"
 
 import React from 'react'
-import { DiaryTag } from '@/lib/api'
+import type { Tag } from '../types'
 
 type Goal = { id: string; name: string }
 type Habit = { id: string; name: string }
@@ -18,7 +18,7 @@ export default function DiaryTagManagerModal({
 }: {
   open: boolean
   onClose: () => void
-  tags: DiaryTag[]
+  tags: Tag[]
   goals?: Goal[]
   habits?: Habit[]
   onCreate: (payload: { name: string; color?: string | null }) => Promise<void>
