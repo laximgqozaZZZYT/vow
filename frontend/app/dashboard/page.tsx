@@ -226,7 +226,6 @@ export default function DashboardPage() {
         onToggleSidebar={() => setShowLeftPane((s) => !s)}
         showSidebar={showLeftPane}
         onEditLayout={() => setEditLayoutOpen(true)}
-        onManualReset={manualReset}
       />
 
       <DashboardSidebar
