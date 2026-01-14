@@ -4,6 +4,7 @@ import React from 'react'
 import GoalMermaid from './Widget.GoalDiagram'
 import MultiEventChart from './Widget.MultiEventChart'
 import HeatmapWidget from './Widget.Heatmap'
+import { HabitRelationMap } from './Widget.HabitRelationMap'
 import type { Goal as SharedGoal, Habit, Activity } from '../types'
 import { useHandedness } from '../contexts/HandednessContext'
 
@@ -483,6 +484,7 @@ export default function StaticsSection({ habits, activities, goals }: { habits: 
   const pages = React.useMemo(() => ([
     { id: 'counts', title: 'Counts vs Time' },
     { id: 'heatmap', title: 'Activity Heatmap' },
+    { id: 'relations', title: 'Habit Relations' },
     { id: 'summary', title: 'Summary' },
     { id: 'goals', title: 'Goals' },
   ] as const), [])
@@ -666,7 +668,16 @@ export default function StaticsSection({ habits, activities, goals }: { habits: 
       {/* Responsive height page viewport */}
       <div className="mt-4 rounded border border-zinc-100 dark:border-slate-800 h-[520px] sm:h-[400px] md:h-[520px] overflow-hidden">
         <div className="h-full overflow-auto p-3">
-          {activePage === 'summary' ? (
+          {activePage === 'relations' ? (
+            <div className="min-w-0 h-full -m-3">
+              <HabitRelationMap
+                habits={habits}
+                goals={(goals ?? []) as SharedGoal[]}
+                onClose={() => {}}
+                embedded={true}
+              />
+            </div>
+          ) : activePage === 'summary' ? (
             <div className="min-w-0">
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
               <div className="rounded border border-zinc-100 p-3 dark:border-slate-800">
