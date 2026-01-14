@@ -490,6 +490,7 @@ export default function StaticsSection({ habits, activities, goals }: { habits: 
 
   // Graph controls - allow range selection
   const [range, setRange] = React.useState<RangeKey>('7d')
+  const [displayMode, setDisplayMode] = React.useState<'linear' | 'radial'>('linear')
   const [editGraphOpen, setEditGraphOpen] = React.useState(false)
   const [editGoalGraphOpen, setEditGoalGraphOpen] = React.useState(false)
 
@@ -771,6 +772,8 @@ export default function StaticsSection({ habits, activities, goals }: { habits: 
                   timeWindow={activeWindow}
                   onEditGraph={() => setEditGraphOpen(true)}
                   onRangeChange={setRange}
+                  displayMode={displayMode}
+                  onDisplayModeChange={setDisplayMode}
                 />
               </div>
             )}

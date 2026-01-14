@@ -1,6 +1,7 @@
 "use client"
 
 import React from 'react'
+import RadialEventChart from './Widget.MultiEventChart.Radial'
 
 type TimingType = 'Date' | 'Daily' | 'Weekly' | 'Monthly'
 type Timing = {
@@ -475,6 +476,8 @@ export default function MultiEventChart({
   timeWindow,
   onEditGraph,
   onRangeChange,
+  displayMode = 'linear',
+  onDisplayModeChange,
 }: {
   habits: Habit[]
   points: EventPoint[]
@@ -484,6 +487,8 @@ export default function MultiEventChart({
   timeWindow?: { fromTs: number; untilTs: number }
   onEditGraph?: () => void
   onRangeChange?: (range: RangeKey) => void
+  displayMode?: 'linear' | 'radial'
+  onDisplayModeChange?: (mode: 'linear' | 'radial') => void
 }) {
   // Tooltip state
   const [tooltip, setTooltip] = React.useState<{
@@ -629,6 +634,103 @@ export default function MultiEventChart({
     return m
   }, [habitIds, plannedSeriesByHabit, pointsByHabit, dailyActualSeries, range])
 
+  // 同心円グラフの場合は別コンポーネントを使用
+  if (displayMode === 'radial') {
+    return (
+      <div className="space-y-3 w-full overflow-hidden">
+        {/* Header with Range selector and Edit Graph button */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+          <h3 className="text-sm font-medium text-zinc-600 dark:text-zinc-300">
+            Habit Progress Timeline (Actual vs Planned)
+          </h3>
+          <div className="flex items-center gap-2 self-start sm:self-auto">
+            {/* Display Mode Toggle */}
+            {onDisplayModeChange && (
+              <div className="flex items-center gap-1 rounded border border-zinc-200 dark:border-zinc-700 p-0.5">
+                <button
+                  className={`rounded px-2 py-1 text-xs transition-colors ${
+                    displayMode === 'linear'
+                      ? 'bg-blue-500 text-white'
+                      : 'hover:bg-zinc-50 dark:hover:bg-zinc-800'
+                  }`}
+                  onClick={() => onDisplayModeChange('linear')}
+                  title="Linear timeline view"
+                >
+                  📊
+                </button>
+                <button
+                  className={`rounded px-2 py-1 text-xs transition-colors ${
+                    displayMode === 'radial'
+                      ? 'bg-blue-500 text-white'
+                      : 'hover:bg-zinc-50 dark:hover:bg-zinc-800'
+                  }`}
+                  onClick={() => onDisplayModeChange('radial')}
+                  title="Radial timeline view"
+                >
+                  ⭕
+                </button>
+              </div>
+            )}
+            {/* Range selector buttons */}
+            {onRangeChange && (
+              <div className="flex items-center gap-1 rounded border border-zinc-200 dark:border-zinc-700 p-0.5">
+                <button
+                  className={`rounded px-2 py-1 text-xs transition-colors ${
+                    range === '7d'
+                      ? 'bg-blue-500 text-white'
+                      : 'hover:bg-zinc-50 dark:hover:bg-zinc-800'
+                  }`}
+                  onClick={() => onRangeChange('7d')}
+                >
+                  Week
+                </button>
+                <button
+                  className={`rounded px-2 py-1 text-xs transition-colors ${
+                    range === '1mo'
+                      ? 'bg-blue-500 text-white'
+                      : 'hover:bg-zinc-50 dark:hover:bg-zinc-800'
+                  }`}
+                  onClick={() => onRangeChange('1mo')}
+                >
+                  Month
+                </button>
+                <button
+                  className={`rounded px-2 py-1 text-xs transition-colors ${
+                    range === '1y'
+                      ? 'bg-blue-500 text-white'
+                      : 'hover:bg-zinc-50 dark:hover:bg-zinc-800'
+                  }`}
+                  onClick={() => onRangeChange('1y')}
+                >
+                  Year
+                </button>
+              </div>
+            )}
+            {onEditGraph && (
+              <button 
+                className="rounded border border-zinc-200 dark:border-zinc-700 px-2 py-1 text-xs hover:bg-zinc-50 dark:hover:bg-zinc-800" 
+                onClick={onEditGraph}
+              >
+                Edit Graph
+              </button>
+            )}
+          </div>
+        </div>
+        
+        <RadialEventChart
+          habits={habits}
+          points={points}
+          visibleHabitIds={visibleHabitIds}
+          actualSeriesByHabit={actualSeriesByHabit}
+          plannedSeriesByHabit={plannedSeriesByHabit}
+          minTs={minTs}
+          maxTs={maxTs}
+          onHover={onHover}
+        />
+      </div>
+    )
+  }
+
   return (
     <div className="space-y-3 w-full overflow-hidden">
       {/* Header with Range selector and Edit Graph button */}
@@ -637,6 +739,33 @@ export default function MultiEventChart({
           Habit Progress Timeline (Actual vs Planned)
         </h3>
         <div className="flex items-center gap-2 self-start sm:self-auto">
+          {/* Display Mode Toggle */}
+          {onDisplayModeChange && (
+            <div className="flex items-center gap-1 rounded border border-zinc-200 dark:border-zinc-700 p-0.5">
+              <button
+                className={`rounded px-2 py-1 text-xs transition-colors ${
+                  displayMode === 'linear'
+                    ? 'bg-blue-500 text-white'
+                    : 'hover:bg-zinc-50 dark:hover:bg-zinc-800'
+                }`}
+                onClick={() => onDisplayModeChange('linear')}
+                title="Linear timeline view"
+              >
+                📊
+              </button>
+              <button
+                className={`rounded px-2 py-1 text-xs transition-colors ${
+                  displayMode === 'radial'
+                    ? 'bg-blue-500 text-white'
+                    : 'hover:bg-zinc-50 dark:hover:bg-zinc-800'
+                }`}
+                onClick={() => onDisplayModeChange('radial')}
+                title="Radial timeline view"
+              >
+                ⭕
+              </button>
+            </div>
+          )}
           {/* Range selector buttons */}
           {onRangeChange && (
             <div className="flex items-center gap-1 rounded border border-zinc-200 dark:border-zinc-700 p-0.5">
@@ -674,7 +803,7 @@ export default function MultiEventChart({
           )}
           {onEditGraph && (
             <button 
-              className="rounded border px-2 py-1 text-xs hover:bg-zinc-50 dark:hover:bg-zinc-800" 
+              className="rounded border border-zinc-200 dark:border-zinc-700 px-2 py-1 text-xs hover:bg-zinc-50 dark:hover:bg-zinc-800" 
               onClick={onEditGraph}
             >
               Edit Graph
