@@ -5,6 +5,7 @@ import GoalMermaid from './Widget.GoalDiagram'
 import MultiEventChart from './Widget.MultiEventChart'
 import HeatmapWidget from './Widget.Heatmap'
 import type { Goal as SharedGoal, Habit, Activity } from '../types'
+import { useHandedness } from '../contexts/HandednessContext'
 
 type TimingType = 'Date' | 'Daily' | 'Weekly' | 'Monthly'
 type Timing = {
@@ -477,6 +478,7 @@ function LineChart({ points, height = 180 }: { points: Point[]; height?: number 
 }
 
 export default function StaticsSection({ habits, activities, goals }: { habits: Habit[]; activities: Activity[]; goals?: Goal[] }) {
+  const { isLeftHanded } = useHandedness();
   // Carousel (we'll add more stat pages later)
   const pages = React.useMemo(() => ([
     { id: 'counts', title: 'Counts vs Time' },
@@ -634,21 +636,21 @@ export default function StaticsSection({ habits, activities, goals }: { habits: 
         aria-label="Previous"
         title="Previous"
         onClick={() => setPageIndex((i) => (i - 1 + pages.length) % pages.length)}
-        className="absolute left-0 top-1/2 z-10 -translate-x-1/2 -translate-y-1/2 h-14 w-14 rounded-full border bg-white/40 shadow-sm backdrop-blur text-zinc-800 transition hover:bg-white/60 dark:border-slate-700 dark:bg-slate-900/35 dark:text-slate-100 dark:hover:bg-slate-900/55 opacity-60 hover:opacity-100"
+        className={`absolute ${isLeftHanded ? 'right-0 translate-x-1/2' : 'left-0 -translate-x-1/2'} top-1/2 z-10 -translate-y-1/2 h-14 w-14 rounded-full border bg-white/40 shadow-sm backdrop-blur text-zinc-800 transition hover:bg-white/60 dark:border-slate-700 dark:bg-slate-900/35 dark:text-slate-100 dark:hover:bg-slate-900/55 opacity-60 hover:opacity-100`}
       >
-        ←
+        {isLeftHanded ? '→' : '←'}
       </button>
       <button
         type="button"
         aria-label="Next"
         title="Next"
         onClick={() => setPageIndex((i) => (i + 1) % pages.length)}
-        className="absolute right-0 top-1/2 z-10 translate-x-1/2 -translate-y-1/2 h-14 w-14 rounded-full border bg-white/40 shadow-sm backdrop-blur text-zinc-800 transition hover:bg-white/60 dark:border-slate-700 dark:bg-slate-900/35 dark:text-slate-100 dark:hover:bg-slate-900/55 opacity-60 hover:opacity-100"
+        className={`absolute ${isLeftHanded ? 'left-0 -translate-x-1/2' : 'right-0 translate-x-1/2'} top-1/2 z-10 -translate-y-1/2 h-14 w-14 rounded-full border bg-white/40 shadow-sm backdrop-blur text-zinc-800 transition hover:bg-white/60 dark:border-slate-700 dark:bg-slate-900/35 dark:text-slate-100 dark:hover:bg-slate-900/55 opacity-60 hover:opacity-100`}
       >
-        →
+        {isLeftHanded ? '←' : '→'}
       </button>
 
-      <div className="flex items-start justify-between gap-3">
+      <div className={`flex items-start gap-3 ${isLeftHanded ? 'flex-row-reverse' : 'justify-between'}`}>
         <div>
           <h2 className="text-lg font-medium">Statics</h2>
           <div className="text-xs text-zinc-500">Stats & charts</div>
@@ -735,7 +737,7 @@ export default function StaticsSection({ habits, activities, goals }: { habits: 
               />
               
               {/* Edit Graph button for heatmap */}
-              <div className="mt-4 flex justify-end">
+              <div className={`mt-4 flex ${isLeftHanded ? 'justify-start' : 'justify-end'}`}>
                 <button 
                   className="rounded border px-3 py-2 text-xs hover:bg-zinc-50 dark:hover:bg-zinc-800" 
                   onClick={() => setEditGraphOpen(true)}
@@ -811,7 +813,7 @@ export default function StaticsSection({ habits, activities, goals }: { habits: 
               })}
             </div>
 
-            <div className="mt-4 flex justify-end gap-2">
+            <div className={`mt-4 flex gap-2 ${isLeftHanded ? 'justify-start' : 'justify-end'}`}>
               <button className="rounded border px-3 py-2" onClick={() => setEditGraphOpen(false)}>Done</button>
             </div>
           </div>
@@ -856,7 +858,7 @@ export default function StaticsSection({ habits, activities, goals }: { habits: 
               })}
             </div>
 
-            <div className="mt-4 flex justify-end gap-2">
+            <div className={`mt-4 flex gap-2 ${isLeftHanded ? 'justify-start' : 'justify-end'}`}>
               <button className="rounded border px-3 py-2" onClick={() => setEditGoalGraphOpen(false)}>Done</button>
             </div>
           </div>

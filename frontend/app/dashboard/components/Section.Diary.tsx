@@ -10,6 +10,7 @@ import rehypeSanitize, { defaultSchema } from 'rehype-sanitize'
 import api, { DiaryCard, DiaryTag } from '@/lib/api'
 import DiaryTagManagerModal from './Modal.TagManager'
 import DiaryModal from './Modal.Diary'
+import { useHandedness } from '../contexts/HandednessContext'
 
 type Goal = { id: string; name: string }
 type Habit = { id: string; name: string }
@@ -382,6 +383,7 @@ function arraysEqualAsSets(a: string[], b: string[]) {
 }
 
 export default function DiarySection({ goals, habits }: { goals: Goal[]; habits: Habit[] }) {
+  const { isLeftHanded } = useHandedness();
   const [cards, setCards] = React.useState<DiaryCard[]>([])
   const [tags, setTags] = React.useState<DiaryTag[]>([])
 
@@ -514,7 +516,7 @@ export default function DiarySection({ goals, habits }: { goals: Goal[]; habits:
     <section className="rounded bg-white p-4 shadow dark:bg-[#0b0b0b]">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <h2 className="text-lg font-medium">Diary</h2>
-        <div className="flex flex-wrap items-center justify-end gap-2">
+        <div className={`flex flex-wrap items-center gap-2 ${isLeftHanded ? 'justify-start' : 'justify-end'}`}>
           <input
             className="w-full sm:w-72 rounded border border-zinc-200 bg-white px-3 py-1.5 text-sm dark:border-slate-700 dark:bg-transparent"
             placeholder="Search text..."
@@ -543,7 +545,7 @@ export default function DiarySection({ goals, habits }: { goals: Goal[]; habits:
       ) : null}
 
       <div className="mt-4">
-        <div className="mb-2 flex items-center justify-between">
+        <div className={`mb-2 flex items-center ${isLeftHanded ? 'flex-row-reverse' : 'justify-between'}`}>
           <div className="text-sm text-zinc-600 dark:text-zinc-300">
             {loading ? 'Loading…' : `${cards.length} cards`}
           </div>
@@ -555,7 +557,7 @@ export default function DiarySection({ goals, habits }: { goals: Goal[]; habits:
         <div className="h-[520px] overflow-y-auto space-y-3 pr-1">
           {cards.map((c) => (
             <div key={c.id} className="rounded-lg border border-zinc-200 bg-white p-3 shadow-sm dark:border-white/10 dark:bg-[#0a0f16]">
-              <div className="flex items-start justify-between gap-3">
+              <div className={`flex items-start gap-3 ${isLeftHanded ? 'flex-row-reverse' : 'justify-between'}`}>
                 <div className="min-w-0 flex-1">
                   <div className="text-xs text-zinc-500">
                     {c.createdAt ? new Date(c.createdAt).toLocaleString() : ''}

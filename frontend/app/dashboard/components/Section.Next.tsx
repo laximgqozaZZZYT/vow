@@ -2,9 +2,11 @@ import { formatTime24, formatDateTime24 } from '../../../lib/format';
 import type { NextSectionProps, Habit } from '../types';
 import { useState } from 'react';
 import './HabitNameScroll.css';
+import { useHandedness } from '../contexts/HandednessContext';
 
 export default function NextSection({ habits, onHabitAction }: NextSectionProps) {
   const [inputValues, setInputValues] = useState<Record<string, string>>({});
+  const { isLeftHanded } = useHandedness();
   
   const now = new Date();
   const windowEnd = new Date(now.getTime() + 24 * 60 * 60 * 1000);
@@ -68,7 +70,7 @@ export default function NextSection({ habits, onHabitAction }: NextSectionProps)
   if (pick.length === 0) {
     return (
       <section className="rounded bg-white p-3 sm:p-4 shadow dark:bg-[#0b0b0b]">
-        <div className="flex justify-between items-start">
+        <div className={`flex items-start ${isLeftHanded ? 'justify-end' : 'justify-between'}`}>
           <h2 className="mb-3 text-base sm:text-lg font-medium">Next</h2>
         </div>
         <div className="text-sm text-zinc-500">No habits starting in the next 24 hours</div>
@@ -78,22 +80,34 @@ export default function NextSection({ habits, onHabitAction }: NextSectionProps)
 
   return (
     <section className="rounded bg-white p-3 sm:p-4 shadow dark:bg-[#0b0b0b]">
-      <div className="flex justify-between items-start">
+      <div className={`flex items-start ${isLeftHanded ? 'justify-end' : 'justify-between'}`}>
         <h2 className="mb-3 text-base sm:text-lg font-medium">Next</h2>
       </div>
       <ul className="flex flex-col">
         {pick.map((c, idx) => (
-          <li key={c.h.id} className={`flex items-center justify-between gap-2 sm:gap-3 py-2.5 sm:py-2 ${idx > 0 ? 'mt-2 border-t border-zinc-100 dark:border-zinc-800 pt-3' : ''}`}>
-            <div className="flex min-w-0 items-center gap-2 sm:gap-3 flex-1">
-              <div className="w-12 sm:w-16 shrink-0 text-xs text-zinc-500 tabular-nums">
-                {(() => {
-                  const d = c.start;
-                  const todayStr = new Date().toISOString().slice(0,10);
-                  if (d.toISOString().slice(0,10) === todayStr) return formatTime24(d, { hour: '2-digit', minute: '2-digit' });
-                  return formatDateTime24(d);
-                })()}
-              </div>
-              <div className="w-2 h-2 shrink-0 rounded-full bg-sky-500" />
+          <li key={c.h.id} className={`flex items-center gap-2 sm:gap-3 py-2.5 sm:py-2 ${isLeftHanded ? 'flex-row-reverse' : ''} ${idx > 0 ? 'mt-2 border-t border-zinc-100 dark:border-zinc-800 pt-3' : ''}`}>
+            <div className={`flex shrink-0 items-center gap-1.5 sm:gap-2 ${isLeftHanded ? 'flex-row-reverse' : ''}`}>
+              <button
+                title="Complete"
+                onClick={(e) => { e.stopPropagation(); handleCompleteWithAmount(c.h.id) }}
+                className="bg-green-600 hover:bg-green-700 active:bg-green-800 text-white rounded px-2 py-1 text-xs font-medium transition-colors min-w-[32px] min-h-[32px] flex items-center justify-center"
+              >
+                ✓
+              </button>
+              <span className={`text-xs text-zinc-500 hidden sm:inline w-16 truncate ${isLeftHanded ? 'text-right' : 'text-left'}`} title={(c.h as any)?.workloadUnit || 'units'}>
+                {(c.h as any)?.workloadUnit || 'units'}
+              </span>
+              <input
+                type="number"
+                min="0"
+                step="0.1"
+                value={getInputValue(c.h.id)}
+                onChange={(e) => setInputValue(c.h.id, e.target.value)}
+                className="w-10 sm:w-12 text-xs text-center bg-zinc-100 dark:bg-zinc-800 border-0 rounded px-1 sm:px-2 py-1 focus:ring-1 focus:ring-blue-500 outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                onClick={(e) => e.stopPropagation()}
+              />
+            </div>
+            <div className={`flex min-w-0 items-center gap-2 sm:gap-3 flex-1 ${isLeftHanded ? 'flex-row-reverse' : ''}`}>
               <div className="flex-1 min-w-0">
                 <div className="habit-name-scroll min-w-0 overflow-hidden">
                   <div className={`habit-name-text inline-block whitespace-nowrap text-sm ${c.h.completed ? 'line-through text-zinc-400' : 'text-zinc-800 dark:text-zinc-100'}`}>
@@ -106,27 +120,15 @@ export default function NextSection({ habits, onHabitAction }: NextSectionProps)
                   </div>
                 )}
               </div>
-            </div>
-            <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
-              <input
-                type="number"
-                min="0"
-                step="0.1"
-                value={getInputValue(c.h.id)}
-                onChange={(e) => setInputValue(c.h.id, e.target.value)}
-                className="w-10 sm:w-12 text-xs text-center bg-zinc-100 dark:bg-zinc-800 border-0 rounded px-1 sm:px-2 py-1 focus:ring-1 focus:ring-blue-500 outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-                onClick={(e) => e.stopPropagation()}
-              />
-              <span className="text-xs text-zinc-500 hidden sm:inline w-16 text-left truncate" title={(c.h as any)?.workloadUnit || 'units'}>
-                {(c.h as any)?.workloadUnit || 'units'}
-              </span>
-              <button
-                title="Complete"
-                onClick={(e) => { e.stopPropagation(); handleCompleteWithAmount(c.h.id) }}
-                className="bg-green-600 hover:bg-green-700 active:bg-green-800 text-white rounded px-2 py-1 text-xs font-medium transition-colors min-w-[32px] min-h-[32px] flex items-center justify-center"
-              >
-                ✓
-              </button>
+              <div className="w-2 h-2 shrink-0 rounded-full bg-sky-500" />
+              <div className="w-12 sm:w-16 shrink-0 text-xs text-zinc-500 tabular-nums">
+                {(() => {
+                  const d = c.start;
+                  const todayStr = new Date().toISOString().slice(0,10);
+                  if (d.toISOString().slice(0,10) === todayStr) return formatTime24(d, { hour: '2-digit', minute: '2-digit' });
+                  return formatDateTime24(d);
+                })()}
+              </div>
             </div>
           </li>
         ))}

@@ -1,5 +1,6 @@
 import { useMemo } from 'react';
 import type { ActivitySectionProps, Habit, Activity } from '../types';
+import { useHandedness } from '../contexts/HandednessContext';
 
 interface HabitProgress {
   habitId: string;
@@ -61,6 +62,7 @@ export default function ActivitySection({
   onDeleteActivity, 
   habits 
 }: ActivitySectionProps) {
+  const { isLeftHanded } = useHandedness();
   
   // 各Habitの日次進捗率を計算（JST 0:00-23:59のActivity集計ベース）
   const habitProgress = useMemo((): HabitProgress[] => {
@@ -95,7 +97,7 @@ export default function ActivitySection({
 
   return (
     <section className="rounded bg-white p-4 shadow dark:bg-[#0b0b0b] mt-4">
-      <h2 className="mb-3 text-lg font-medium">Daily Progress</h2>
+      <h2 className={`mb-3 text-lg font-medium ${isLeftHanded ? 'text-right' : ''}`}>Daily Progress</h2>
       <div className="">
         {/* Fixed-height scrollable container */}
         <div className="h-56 overflow-y-auto space-y-3 pr-2">
@@ -105,7 +107,7 @@ export default function ActivitySection({
           {habitProgress.map(progress => (
             <div key={progress.habitId} className="space-y-1">
               {/* Habit名と進捗率 */}
-              <div className="flex items-center justify-between">
+              <div className={`flex items-center ${isLeftHanded ? 'flex-row-reverse' : 'justify-between'}`}>
                 <div className={`text-sm font-medium ${
                   progress.completed ? 'line-through text-zinc-400' : 'text-zinc-800 dark:text-zinc-100'
                 }`}>
@@ -146,7 +148,7 @@ export default function ActivitySection({
         <div className="mt-2 h-40 overflow-y-auto space-y-2 pr-2 border-t border-zinc-200 dark:border-zinc-700 pt-2">
           {activities.length === 0 && <div className="text-xs text-zinc-500">No activity yet.</div>}
           {[...activities].sort((a,b) => (b.timestamp || '').localeCompare(a.timestamp || '')).slice(0, 10).map(act => (
-            <div key={act.id} className="flex items-center justify-between rounded px-2 py-1 hover:bg-zinc-100 dark:hover:bg-white/5 text-xs">
+            <div key={act.id} className={`flex items-center rounded px-2 py-1 hover:bg-zinc-100 dark:hover:bg-white/5 text-xs ${isLeftHanded ? 'flex-row-reverse' : 'justify-between'}`}>
               <div>
                 <div className="text-zinc-500">{act.timestamp ? new Date(act.timestamp).toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' }) : 'No timestamp'}</div>
                 <div className="text-zinc-700 dark:text-zinc-300">
@@ -154,7 +156,7 @@ export default function ActivitySection({
                   {act.kind === 'complete' && act.amount && ` (${act.amount})`}
                 </div>
               </div>
-              <div className="flex items-center gap-1">
+              <div className={`flex items-center gap-1 ${isLeftHanded ? 'flex-row-reverse' : ''}`}>
                 <button className="text-xs text-blue-600 hover:underline" onClick={() => onEditActivity(act.id)}>Edit</button>
                 <button className="text-xs text-red-600 hover:underline" onClick={() => onDeleteActivity(act.id)}>Delete</button>
               </div>

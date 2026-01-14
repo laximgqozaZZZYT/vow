@@ -1,5 +1,6 @@
 import GoalTree from './Widget.GoalTree';
 import type { DashboardSidebarProps, Goal, Habit, Activity } from '../types';
+import { useHandedness } from '../contexts/HandednessContext';
 
 interface DashboardSidebarExtendedProps extends DashboardSidebarProps {
   goals: Goal[];
@@ -40,7 +41,12 @@ export default function DashboardSidebar({
   onMindmapSelect,
   onMindmapDelete
 }: DashboardSidebarExtendedProps) {
+  const { isLeftHanded } = useHandedness();
+  
   if (!isVisible) return null;
+
+  const sidePosition = isLeftHanded ? 'right-0' : 'left-0';
+  const borderSide = isLeftHanded ? 'border-l' : 'border-r';
 
   return (
     <>
@@ -50,9 +56,9 @@ export default function DashboardSidebar({
         onClick={onClose}
       />
       
-      <aside className="fixed left-0 top-14 w-80 max-w-[85vw] h-[calc(100vh-3.5rem)] border-r border-zinc-200 bg-white dark:bg-[#071013] p-3 z-40 lg:w-80 overflow-y-auto overscroll-contain">
+      <aside className={`fixed ${sidePosition} top-14 w-80 max-w-[85vw] h-[calc(100vh-3.5rem)] ${borderSide} border-zinc-200 bg-white dark:bg-[#071013] p-3 z-40 lg:w-80 overflow-y-auto overscroll-contain`}>
         <div className="mb-3 flex items-center justify-between">
-          <div className="flex items-center gap-2">
+          <div className={`flex items-center gap-2 ${isLeftHanded ? 'flex-row-reverse' : ''}`}>
             <button onClick={onClose} className="text-sm text-zinc-500 lg:hidden min-w-[44px] min-h-[44px] flex items-center justify-center">✕</button>
           </div>
         </div>
@@ -120,13 +126,13 @@ export default function DashboardSidebar({
 
         <div className="mt-auto flex flex-col gap-2 pt-4">
           <button
-            className="rounded border px-3 py-2 text-sm"
+            className={`rounded border px-3 py-2 text-sm ${isLeftHanded ? 'text-left' : ''}`}
             onClick={onNewGoal}
           >
             + New Goal
           </button>
           <button
-            className="rounded bg-blue-600 px-3 py-2 text-sm text-white"
+            className={`rounded bg-blue-600 px-3 py-2 text-sm text-white ${isLeftHanded ? 'text-left' : ''}`}
             onClick={() => {
               const today = new Date().toISOString().slice(0, 10);
               onNewHabit({ date: today });
@@ -135,7 +141,7 @@ export default function DashboardSidebar({
             + New Habit
           </button>
           <button
-            className="rounded bg-green-600 px-3 py-2 text-sm text-white hover:bg-green-700"
+            className={`rounded bg-green-600 px-3 py-2 text-sm text-white hover:bg-green-700 ${isLeftHanded ? 'text-left' : ''}`}
             onClick={onNewMindmap}
           >
             + New Map

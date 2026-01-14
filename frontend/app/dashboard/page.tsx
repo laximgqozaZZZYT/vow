@@ -30,6 +30,7 @@ import { useModalManager } from './hooks/useModalManager';
 import type { CreateGoalPayload } from './types';
 
 import { useAuth } from './hooks/useAuth';
+import { HandednessProvider, useHandedness } from './contexts/HandednessContext';
 
 export default function DashboardPage() {
   const [showLeftPane, setShowLeftPane] = useState(false);
@@ -221,12 +222,163 @@ export default function DashboardPage() {
   }
 
   return (
-    <div className="flex min-h-screen bg-zinc-50 dark:bg-black text-black dark:text-zinc-50">
-      <DashboardHeader
-        onToggleSidebar={() => setShowLeftPane((s) => !s)}
-        showSidebar={showLeftPane}
-        onEditLayout={() => setEditLayoutOpen(true)}
+    <HandednessProvider>
+      <DashboardLayout
+        showLeftPane={showLeftPane}
+        setShowLeftPane={setShowLeftPane}
+        selectedGoal={selectedGoal}
+        setSelectedGoal={setSelectedGoal}
+        goals={goals}
+        setGoals={setGoals}
+        habits={habits}
+        setHabits={setHabits}
+        activities={activities}
+        setActivities={setActivities}
+        pageSections={pageSections}
+        setPageSections={setPageSections}
+        mindmaps={mindmaps}
+        setMindmaps={setMindmaps}
+        selectedMindmap={selectedMindmap}
+        setSelectedMindmap={setSelectedMindmap}
+        recurringRequest={recurringRequest}
+        setRecurringRequest={setRecurringRequest}
+        selectedHabitId={selectedHabitId}
+        setSelectedHabitId={setSelectedHabitId}
+        newHabitInitial={newHabitInitial}
+        setNewHabitInitial={setNewHabitInitial}
+        newHabitInitialType={newHabitInitialType}
+        setNewHabitInitialType={setNewHabitInitialType}
+        selectedHabit={selectedHabit}
+        handleEventChange={handleEventChange}
+        createHabit={createHabit}
+        recurringConfirmation={recurringConfirmation}
+        handleRecurringConfirmation={handleRecurringConfirmation}
+        cancelRecurringConfirmation={cancelRecurringConfirmation}
+        handleRecurringHabitRequest={handleRecurringHabitRequest}
+        openNewCategory={openNewCategory}
+        setOpenNewCategory={setOpenNewCategory}
+        openNewHabit={openNewHabit}
+        setOpenNewHabit={setOpenNewHabit}
+        openHabitModal={openHabitModal}
+        setOpenHabitModal={setOpenHabitModal}
+        editLayoutOpen={editLayoutOpen}
+        setEditLayoutOpen={setEditLayoutOpen}
+        openGoalModal={openGoalModal}
+        setOpenGoalModal={setOpenGoalModal}
+        editingGoalId={editingGoalId}
+        setEditingGoalId={setEditingGoalId}
+        openMindmap={openMindmap}
+        setOpenMindmap={setOpenMindmap}
+        starts={starts}
+        pausedLoads={pausedLoads}
+        openActivityModal={openActivityModal}
+        editingActivityId={editingActivityId}
+        handleComplete={handleComplete}
+        handleStart={handleStart}
+        handlePause={handlePause}
+        openEditActivity={openEditActivity}
+        propagateActivityChanges={propagateActivityChanges}
+        handleDeleteActivity={handleDeleteActivity}
+        setEditingActivityId={setEditingActivityId}
+        setOpenActivityModal={setOpenActivityModal}
+        goalsById={goalsById}
+        editingGoal={editingGoal}
+        createGoal={createGoal}
+        updateGoal={updateGoal}
+        deleteGoal={deleteGoal}
+        completeGoalCascade={completeGoalCascade}
+        setGoalParent={setGoalParent}
+        mergeGoals={mergeGoals}
+        collectGoalSubtreeIds={collectGoalSubtreeIds}
+        handleHabitAction={handleHabitAction}
+        handleMoveGoal={handleMoveGoal}
+        handleMoveHabit={handleMoveHabit}
       />
+    </HandednessProvider>
+  );
+}
+
+function DashboardLayout(props: any) {
+  const { isLeftHanded } = useHandedness();
+  const {
+    showLeftPane,
+    setShowLeftPane,
+    selectedGoal,
+    setSelectedGoal,
+    goals,
+    setGoals,
+    habits,
+    setHabits,
+    activities,
+    setActivities,
+    pageSections,
+    setPageSections,
+    mindmaps,
+    setMindmaps,
+    selectedMindmap,
+    setSelectedMindmap,
+    recurringRequest,
+    setRecurringRequest,
+    selectedHabitId,
+    setSelectedHabitId,
+    newHabitInitial,
+    setNewHabitInitial,
+    newHabitInitialType,
+    setNewHabitInitialType,
+    selectedHabit,
+    handleEventChange,
+    createHabit,
+    recurringConfirmation,
+    handleRecurringConfirmation,
+    cancelRecurringConfirmation,
+    handleRecurringHabitRequest,
+    openNewCategory,
+    setOpenNewCategory,
+    openNewHabit,
+    setOpenNewHabit,
+    openHabitModal,
+    setOpenHabitModal,
+    editLayoutOpen,
+    setEditLayoutOpen,
+    openGoalModal,
+    setOpenGoalModal,
+    editingGoalId,
+    setEditingGoalId,
+    openMindmap,
+    setOpenMindmap,
+    starts,
+    pausedLoads,
+    openActivityModal,
+    editingActivityId,
+    handleComplete,
+    handleStart,
+    handlePause,
+    openEditActivity,
+    propagateActivityChanges,
+    handleDeleteActivity,
+    setEditingActivityId,
+    setOpenActivityModal,
+    goalsById,
+    editingGoal,
+    createGoal,
+    updateGoal,
+    deleteGoal,
+    completeGoalCascade,
+    setGoalParent,
+    mergeGoals,
+    collectGoalSubtreeIds,
+    handleHabitAction,
+    handleMoveGoal,
+    handleMoveHabit,
+  } = props;
+
+  return (
+    <div className="flex min-h-screen bg-zinc-50 dark:bg-black text-black dark:text-zinc-50">
+        <DashboardHeader
+          onToggleSidebar={() => setShowLeftPane((s) => !s)}
+          showSidebar={showLeftPane}
+          onEditLayout={() => setEditLayoutOpen(true)}
+        />
 
       <DashboardSidebar
         isVisible={showLeftPane}
@@ -274,8 +426,8 @@ export default function DashboardPage() {
         onMoveHabit={handleMoveHabit}
       />
 
-  {/* Right pane */}
-  <main className={`flex-1 pt-20 p-4 sm:p-6 lg:p-8 ${showLeftPane ? 'lg:ml-80' : ''}`}>
+  {/* Main content pane */}
+  <main className={`flex-1 pt-20 p-4 sm:p-6 lg:p-8 ${showLeftPane ? (isLeftHanded ? 'lg:mr-80' : 'lg:ml-80') : ''}`}>
 
         <div className="mt-6 grid grid-cols-1 gap-4 max-w-full overflow-hidden">
           {pageSections.map(sec => (

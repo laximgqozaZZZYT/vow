@@ -3,6 +3,7 @@ import { useState, useEffect } from 'react';
 import { useAuth } from '../hooks/useAuth';
 import api from '../../../lib/api';
 import type { DashboardHeaderProps } from '../types';
+import { useHandedness } from '../contexts/HandednessContext';
 
 export default function DashboardHeader({ 
   onToggleSidebar, 
@@ -20,6 +21,7 @@ export default function DashboardHeader({
     migrationError,
     retryMigration
   } = useAuth();
+  const { handedness, setHandedness, isLeftHanded } = useHandedness();
   const [hasGuestData, setHasGuestData] = useState(false);
 
   // Check for guest data on component mount and migration status changes
@@ -67,8 +69,8 @@ export default function DashboardHeader({
 
   return (
     <header className="fixed inset-x-0 top-0 z-50 border-b border-zinc-200 bg-white/90 backdrop-blur dark:border-slate-700 dark:bg-[#071013]/90">
-      <div className="flex h-14 items-center justify-between px-2 sm:px-4">
-        <div className="flex items-center gap-2">
+      <div className={`flex h-14 items-center justify-between px-2 sm:px-4 ${isLeftHanded ? 'flex-row-reverse' : ''}`}>
+        <div className={`flex items-center gap-2 ${isLeftHanded ? 'flex-row-reverse' : ''}`}>
           <button
             onClick={onToggleSidebar}
             aria-label="Toggle menu"
@@ -76,10 +78,31 @@ export default function DashboardHeader({
           >
             ☰
           </button>
+          
+          {/* Handedness toggle button - next to hamburger menu */}
+          <button
+            onClick={() => setHandedness(handedness === 'left' ? 'right' : 'left')}
+            className="group relative rounded-lg border border-zinc-200 bg-white px-2 py-1 text-xs font-medium transition-all hover:border-blue-400 hover:bg-blue-50 dark:border-slate-700 dark:bg-transparent dark:hover:border-blue-500 dark:hover:bg-blue-950/20"
+            title={`Switch to ${handedness === 'left' ? 'right' : 'left'}-handed mode`}
+          >
+            <div className="flex items-center gap-1.5">
+              <div className="relative w-8 h-4 bg-zinc-200 rounded-full transition-colors group-hover:bg-blue-200 dark:bg-zinc-700 dark:group-hover:bg-blue-900">
+                <div 
+                  className={`absolute top-0.5 w-3 h-3 bg-blue-600 rounded-full transition-all duration-200 ${
+                    handedness === 'left' ? 'left-0.5' : 'left-4'
+                  }`}
+                />
+              </div>
+              <span className="hidden sm:inline text-zinc-600 dark:text-zinc-300">
+                {handedness === 'left' ? 'L' : 'R'}
+              </span>
+            </div>
+          </button>
+          
           <div className="text-base sm:text-lg font-bold tracking-wide">VOW</div>
         </div>
 
-        <div className="flex items-center gap-1 sm:gap-2">
+        <div className={`flex items-center gap-1 sm:gap-2 ${isLeftHanded ? 'flex-row-reverse' : ''}`}>
           {actorLabel && (
             <div className="hidden text-xs text-zinc-500 sm:block truncate max-w-24 lg:max-w-none">{actorLabel}</div>
           )}
