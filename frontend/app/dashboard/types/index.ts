@@ -4,6 +4,14 @@ export type SectionId = 'next' | 'activity' | 'calendar' | 'statics' | 'diary';
 export type ActivityKind = 'start' | 'complete' | 'skip' | 'pause';
 export type HabitAction = 'start' | 'complete' | 'pause';
 
+export interface Tag {
+  id: string;
+  name: string;
+  color?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface Goal {
   id: string;
   name: string;
@@ -11,6 +19,7 @@ export interface Goal {
   dueDate?: string | Date | null;
   parentId?: string | null;
   isCompleted?: boolean;
+  tags?: Tag[];
   createdAt: string;
   updatedAt: string;
 }
@@ -33,6 +42,7 @@ export interface Habit {
   repeat?: string;
   allDay?: boolean;
   notes?: string;
+  tags?: Tag[];
   createdAt: string;
   updatedAt: string;
 }

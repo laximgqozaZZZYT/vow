@@ -85,8 +85,13 @@ export class SupabaseDirectClient {
       'guest-habits', 
       'guest-activities',
       'guest-diary-cards',
-      'guest-diary-tags',
-      'guest-preferences'
+      'guest-preferences',
+      'guest-tags',
+      'guest-entity-tags',
+      'guest-habit-relations',
+      'guest-mindmaps',
+      'guest-mindmap-nodes',
+      'guest-mindmap-connections'
     ];
     
     guestKeys.forEach(key => {
@@ -1342,69 +1347,112 @@ export class SupabaseDirectClient {
     return { success: true };
   }
 
-  async getDiaryTags() {
+  // Diary Card Tags methods
+  async getDiaryCardTags(diaryCardId: string) {
+    return this.getEntityTags('diary_card', diaryCardId);
+  }
+
+  async addDiaryCardTag(diaryCardId: string, tagId: string) {
+    return this.addEntityTag('diary_card', diaryCardId, tagId);
+  }
+
+  async removeDiaryCardTag(diaryCardId: string, tagId: string) {
+    return this.removeEntityTag('diary_card', diaryCardId, tagId);
+  }
+
+  // Habit Tags methods
+  async getHabitTags(habitId: string) {
+    return this.getEntityTags('habit', habitId);
+  }
+
+  async addHabitTag(habitId: string, tagId: string) {
+    return this.addEntityTag('habit', habitId, tagId);
+  }
+
+  async removeHabitTag(habitId: string, tagId: string) {
+    return this.removeEntityTag('habit', habitId, tagId);
+  }
+
+  // Goal Tags methods
+  async getGoalTags(goalId: string) {
+    return this.getEntityTags('goal', goalId);
+  }
+
+  async addGoalTag(goalId: string, tagId: string) {
+    return this.addEntityTag('goal', goalId, tagId);
+  }
+
+  async removeGoalTag(goalId: string, tagId: string) {
+    return this.removeEntityTag('goal', goalId, tagId);
+  }
+
+  // 汎用的なエンティティタグメソッド
+  private async getEntityTags(entityType: string, entityId: string) {
     this.checkEnvironment();
     
     const { data: session } = await supabase.auth.getSession();
     
     if (!session?.session?.user) {
-      // ゲストユーザーの場合はローカルストレージから取得
-      const guestTags = JSON.parse(localStorage.getItem('guest-diary-tags') || '[]');
-      console.log('[getDiaryTags] Guest mode - loaded from localStorage:', guestTags.length, 'tags');
-      return guestTags;
+      const guestEntityTags = JSON.parse(localStorage.getItem('guest-entity-tags') || '[]');
+      const entityTagIds = guestEntityTags
+        .filter((et: any) => et.entityType === entityType && et.entityId === entityId)
+        .map((et: any) => et.tagId);
+      
+      const guestTags = JSON.parse(localStorage.getItem('guest-tags') || '[]');
+      return guestTags.filter((t: any) => entityTagIds.includes(t.id));
     }
     
-    // ログインユーザーの場合はSupabaseから取得
     const { data, error } = await supabase
-      .from('diary_tags')
-      .select('*')
+      .from('entity_tags')
+      .select('tag_id, tags(*)')
+      .eq('entity_type', entityType)
+      .eq('entity_id', entityId)
       .eq('owner_type', 'user')
-      .eq('owner_id', session.session.user.id)
-      .order('name', { ascending: true });
+      .eq('owner_id', session.session.user.id);
     
-    if (error) {
-      console.error('[getDiaryTags] Supabase query error:', error);
-      throw error;
-    }
+    if (error) throw error;
     
-    console.log('[getDiaryTags] Successfully loaded', data?.length || 0, 'tags from Supabase');
-    
-    return (data || []).map((tag: any) => ({
-      id: tag.id,
-      name: tag.name,
-      color: tag.color
+    return (data || []).map((et: any) => ({
+      id: et.tags.id,
+      name: et.tags.name,
+      color: et.tags.color,
+      createdAt: et.tags.created_at,
+      updatedAt: et.tags.updated_at
     }));
   }
 
-  async createDiaryTag(payload: any) {
+  private async addEntityTag(entityType: string, entityId: string, tagId: string) {
     this.checkEnvironment();
     
     const { data: session } = await supabase.auth.getSession();
     
     if (!session?.session?.user) {
-      // ゲストユーザーの場合はローカルストレージに保存
-      const tag = {
-        id: 'diary-tag-' + Date.now(),
-        name: payload.name || 'Untitled Tag',
-        color: payload.color || null
+      const now = new Date().toISOString();
+      const entityTag = {
+        id: `entity-tag-${entityType}-` + Date.now(),
+        entityType,
+        entityId,
+        tagId,
+        createdAt: now
       };
       
-      const existingTags = JSON.parse(localStorage.getItem('guest-diary-tags') || '[]');
-      existingTags.push(tag);
-      localStorage.setItem('guest-diary-tags', JSON.stringify(existingTags));
+      const existingEntityTags = JSON.parse(localStorage.getItem('guest-entity-tags') || '[]');
+      existingEntityTags.push(entityTag);
+      localStorage.setItem('guest-entity-tags', JSON.stringify(existingEntityTags));
       
-      console.log('[createDiaryTag] Guest tag created:', tag);
-      return tag;
+      return entityTag;
     }
     
-    // ログインユーザーの場合はSupabaseに保存
+    const now = new Date().toISOString();
     const { data, error } = await supabase
-      .from('diary_tags')
+      .from('entity_tags')
       .insert({
-        name: payload.name || 'Untitled Tag',
-        color: payload.color || null,
+        entity_type: entityType,
+        entity_id: entityId,
+        tag_id: tagId,
         owner_type: 'user',
-        owner_id: session.session.user.id
+        owner_id: session.session.user.id,
+        created_at: now
       })
       .select()
       .single();
@@ -1413,87 +1461,34 @@ export class SupabaseDirectClient {
     
     return {
       id: data.id,
-      name: data.name,
-      color: data.color
+      entityType: data.entity_type,
+      entityId: data.entity_id,
+      tagId: data.tag_id,
+      createdAt: data.created_at
     };
   }
 
-  async updateDiaryTag(id: string, payload: any) {
+  private async removeEntityTag(entityType: string, entityId: string, tagId: string) {
     this.checkEnvironment();
     
     const { data: session } = await supabase.auth.getSession();
     
     if (!session?.session?.user) {
-      // ゲストユーザーの場合はローカルストレージを更新
-      const guestTags = JSON.parse(localStorage.getItem('guest-diary-tags') || '[]');
-      const tagIndex = guestTags.findIndex((t: any) => t.id === id);
+      const guestEntityTags = JSON.parse(localStorage.getItem('guest-entity-tags') || '[]');
+      const filtered = guestEntityTags.filter((et: any) => 
+        !(et.entityType === entityType && et.entityId === entityId && et.tagId === tagId)
+      );
+      localStorage.setItem('guest-entity-tags', JSON.stringify(filtered));
       
-      if (tagIndex === -1) {
-        throw new Error(`Diary tag with id ${id} not found`);
-      }
-      
-      const updatedTag = { ...guestTags[tagIndex] };
-      
-      if (payload.name !== undefined) updatedTag.name = payload.name;
-      if (payload.color !== undefined) updatedTag.color = payload.color;
-      
-      guestTags[tagIndex] = updatedTag;
-      localStorage.setItem('guest-diary-tags', JSON.stringify(guestTags));
-      
-      console.log('[updateDiaryTag] Guest tag updated:', updatedTag);
-      return updatedTag;
-    }
-    
-    // ログインユーザーの場合はSupabaseを更新
-    const updateData: any = {};
-    
-    if (payload.name !== undefined) updateData.name = payload.name;
-    if (payload.color !== undefined) updateData.color = payload.color;
-    
-    const { data, error } = await supabase
-      .from('diary_tags')
-      .update(updateData)
-      .eq('id', id)
-      .eq('owner_type', 'user')
-      .eq('owner_id', session.session.user.id)
-      .select()
-      .single();
-    
-    if (error) throw error;
-    
-    return {
-      id: data.id,
-      name: data.name,
-      color: data.color
-    };
-  }
-
-  async deleteDiaryTag(id: string) {
-    this.checkEnvironment();
-    
-    const { data: session } = await supabase.auth.getSession();
-    
-    if (!session?.session?.user) {
-      // ゲストユーザーの場合はローカルストレージから削除
-      const guestTags = JSON.parse(localStorage.getItem('guest-diary-tags') || '[]');
-      const tagIndex = guestTags.findIndex((t: any) => t.id === id);
-      
-      if (tagIndex === -1) {
-        throw new Error(`Diary tag with id ${id} not found`);
-      }
-      
-      guestTags.splice(tagIndex, 1);
-      localStorage.setItem('guest-diary-tags', JSON.stringify(guestTags));
-      
-      console.log('[deleteDiaryTag] Guest tag deleted:', id);
       return { success: true };
     }
     
-    // ログインユーザーの場合はSupabaseから削除
     const { error } = await supabase
-      .from('diary_tags')
+      .from('entity_tags')
       .delete()
-      .eq('id', id)
+      .eq('entity_type', entityType)
+      .eq('entity_id', entityId)
+      .eq('tag_id', tagId)
       .eq('owner_type', 'user')
       .eq('owner_id', session.session.user.id);
     
@@ -2303,6 +2298,167 @@ export class SupabaseDirectClient {
     
     const { error } = await supabase
       .from('mindmap_connections')
+      .delete()
+      .eq('id', id)
+      .eq('owner_type', 'user')
+      .eq('owner_id', session.session.user.id);
+    
+    if (error) throw error;
+    return { success: true };
+  }
+
+  // Tags methods (for Habits and Goals)
+  async getTags() {
+    this.checkEnvironment();
+    
+    const { data: session } = await supabase.auth.getSession();
+    
+    if (!session?.session?.user) {
+      const guestTags = JSON.parse(localStorage.getItem('guest-tags') || '[]');
+      return guestTags;
+    }
+    
+    const { data, error } = await supabase
+      .from('tags')
+      .select('*')
+      .eq('owner_type', 'user')
+      .eq('owner_id', session.session.user.id)
+      .order('name', { ascending: true });
+    
+    if (error) throw error;
+    
+    return (data || []).map((tag: any) => ({
+      id: tag.id,
+      name: tag.name,
+      color: tag.color,
+      createdAt: tag.created_at,
+      updatedAt: tag.updated_at
+    }));
+  }
+
+  async createTag(payload: any) {
+    this.checkEnvironment();
+    
+    const { data: session } = await supabase.auth.getSession();
+    
+    if (!session?.session?.user) {
+      const now = new Date().toISOString();
+      const tag = {
+        id: 'tag-' + Date.now(),
+        name: payload.name,
+        color: payload.color || '#3b82f6',
+        createdAt: now,
+        updatedAt: now
+      };
+      
+      const existingTags = JSON.parse(localStorage.getItem('guest-tags') || '[]');
+      existingTags.push(tag);
+      localStorage.setItem('guest-tags', JSON.stringify(existingTags));
+      
+      return tag;
+    }
+    
+    const now = new Date().toISOString();
+    const { data, error } = await supabase
+      .from('tags')
+      .insert({
+        name: payload.name,
+        color: payload.color || '#3b82f6',
+        owner_type: 'user',
+        owner_id: session.session.user.id,
+        created_at: now,
+        updated_at: now
+      })
+      .select()
+      .single();
+    
+    if (error) throw error;
+    
+    return {
+      id: data.id,
+      name: data.name,
+      color: data.color,
+      createdAt: data.created_at,
+      updatedAt: data.updated_at
+    };
+  }
+
+  async updateTag(id: string, payload: any) {
+    this.checkEnvironment();
+    
+    const { data: session } = await supabase.auth.getSession();
+    
+    if (!session?.session?.user) {
+      const guestTags = JSON.parse(localStorage.getItem('guest-tags') || '[]');
+      const tagIndex = guestTags.findIndex((t: any) => t.id === id);
+      
+      if (tagIndex === -1) {
+        throw new Error(`Tag with id ${id} not found`);
+      }
+      
+      const now = new Date().toISOString();
+      const updatedTag = {
+        ...guestTags[tagIndex],
+        updatedAt: now
+      };
+      
+      if (payload.name !== undefined) updatedTag.name = payload.name;
+      if (payload.color !== undefined) updatedTag.color = payload.color;
+      
+      guestTags[tagIndex] = updatedTag;
+      localStorage.setItem('guest-tags', JSON.stringify(guestTags));
+      
+      return updatedTag;
+    }
+    
+    const updateData: any = {
+      updated_at: new Date().toISOString()
+    };
+    
+    if (payload.name !== undefined) updateData.name = payload.name;
+    if (payload.color !== undefined) updateData.color = payload.color;
+    
+    const { data, error } = await supabase
+      .from('tags')
+      .update(updateData)
+      .eq('id', id)
+      .eq('owner_type', 'user')
+      .eq('owner_id', session.session.user.id)
+      .select()
+      .single();
+    
+    if (error) throw error;
+    
+    return {
+      id: data.id,
+      name: data.name,
+      color: data.color,
+      createdAt: data.created_at,
+      updatedAt: data.updated_at
+    };
+  }
+
+  async deleteTag(id: string) {
+    this.checkEnvironment();
+    
+    const { data: session } = await supabase.auth.getSession();
+    
+    if (!session?.session?.user) {
+      const guestTags = JSON.parse(localStorage.getItem('guest-tags') || '[]');
+      const tagIndex = guestTags.findIndex((t: any) => t.id === id);
+      
+      if (tagIndex === -1) {
+        throw new Error(`Tag with id ${id} not found`);
+      }
+      
+      guestTags.splice(tagIndex, 1);
+      localStorage.setItem('guest-tags', JSON.stringify(guestTags));
+      
+      return { success: true };
+    }
+    
+    const { error } = await supabase
+      .from('tags')
       .delete()
       .eq('id', id)
       .eq('owner_type', 'user')

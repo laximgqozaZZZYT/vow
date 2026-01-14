@@ -409,12 +409,12 @@ export default function DiarySection({ goals, habits }: { goals: Goal[]; habits:
 
   const refreshTags = React.useCallback(async () => {
     try {
-      console.log('[Section.Diary] Starting to fetch diary tags...')
-      const t = await api.getDiaryTags()
+      console.log('[Section.Diary] Starting to fetch tags...')
+      const t = await api.getTags()
       console.log('[Section.Diary] Successfully fetched', t?.length || 0, 'tags')
       setTags(t)
     } catch (e: any) {
-      console.error('[Section.Diary] Error fetching diary tags:', e)
+      console.error('[Section.Diary] Error fetching tags:', e)
       throw e
     }
   }, [])
@@ -490,17 +490,17 @@ export default function DiarySection({ goals, habits }: { goals: Goal[]; habits:
   }
 
   const createTag = async (p: { name: string; color?: string | null }) => {
-    await api.createDiaryTag(p)
+    await api.createTag(p)
     await refreshTags()
   }
 
   const updateTag = async (id: string, p: { name?: string; color?: string | null }) => {
-    await api.updateDiaryTag(id, p)
+    await api.updateTag(id, p)
     await refreshTags()
   }
 
   const deleteTag = async (id: string) => {
-    await api.deleteDiaryTag(id)
+    await api.deleteTag(id)
     if (editing?.tagIds?.includes(id)) {
       setEditing(e => (e ? { ...e, tagIds: e.tagIds.filter(x => x !== id) } : e))
     }

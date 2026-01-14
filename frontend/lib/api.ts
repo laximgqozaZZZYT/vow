@@ -1,5 +1,8 @@
 // Supabase統合版API - バックエンドAPI直接使用
 
+// 共通Tag型をインポート
+import type { Tag } from '../app/dashboard/types';
+
 // 型定義をエクスポート
 export type DiaryCard = {
   id: string;
@@ -7,15 +10,9 @@ export type DiaryCard = {
   backMd: string;
   createdAt: string;
   updatedAt: string;
-  tags?: DiaryTag[];
+  tags?: Tag[];
   goals?: any[];
   habits?: any[];
-};
-
-export type DiaryTag = {
-  id: string;
-  name: string;
-  color?: string | null;
 };
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL?.replace(/\/+$/, '') || ''
@@ -219,20 +216,50 @@ async function request(path: string, opts: RequestInit = {}) {
       } else if (opts.method === 'DELETE') {
         return await supabaseDirectClient.deleteDiaryCard(id);
       }
-    } else if (path === '/diary/tags') {
+    } else if (path.startsWith('/diary/') && path.includes('/tags')) {
+      const diaryCardId = path.split('/')[2];
       if (opts.method === 'POST') {
         const payload = JSON.parse(opts.body as string);
-        return await supabaseDirectClient.createDiaryTag(payload);
+        return await supabaseDirectClient.addDiaryCardTag(diaryCardId, payload.tagId);
+      } else if (opts.method === 'DELETE') {
+        const tagId = path.split('/')[4];
+        return await supabaseDirectClient.removeDiaryCardTag(diaryCardId, tagId);
       }
-      return await supabaseDirectClient.getDiaryTags();
-    } else if (path.startsWith('/diary/tags/')) {
-      const id = path.split('/')[3];
+      return await supabaseDirectClient.getDiaryCardTags(diaryCardId);
+    } else if (path === '/tags') {
+      if (opts.method === 'POST') {
+        const payload = JSON.parse(opts.body as string);
+        return await supabaseDirectClient.createTag(payload);
+      }
+      return await supabaseDirectClient.getTags();
+    } else if (path.startsWith('/tags/')) {
+      const id = path.split('/')[2];
       if (opts.method === 'PATCH') {
         const payload = JSON.parse(opts.body as string);
-        return await supabaseDirectClient.updateDiaryTag(id, payload);
+        return await supabaseDirectClient.updateTag(id, payload);
       } else if (opts.method === 'DELETE') {
-        return await supabaseDirectClient.deleteDiaryTag(id);
+        return await supabaseDirectClient.deleteTag(id);
       }
+    } else if (path.startsWith('/habits/') && path.includes('/tags')) {
+      const habitId = path.split('/')[2];
+      if (opts.method === 'POST') {
+        const payload = JSON.parse(opts.body as string);
+        return await supabaseDirectClient.addHabitTag(habitId, payload.tagId);
+      } else if (opts.method === 'DELETE') {
+        const tagId = path.split('/')[4];
+        return await supabaseDirectClient.removeHabitTag(habitId, tagId);
+      }
+      return await supabaseDirectClient.getHabitTags(habitId);
+    } else if (path.startsWith('/goals/') && path.includes('/tags')) {
+      const goalId = path.split('/')[2];
+      if (opts.method === 'POST') {
+        const payload = JSON.parse(opts.body as string);
+        return await supabaseDirectClient.addGoalTag(goalId, payload.tagId);
+      } else if (opts.method === 'DELETE') {
+        const tagId = path.split('/')[4];
+        return await supabaseDirectClient.removeGoalTag(goalId, tagId);
+      }
+      return await supabaseDirectClient.getGoalTags(goalId);
     }
     
     throw new ApiError('Endpoint not implemented for direct Supabase client', path);
@@ -321,20 +348,60 @@ export async function deleteDiaryCard(id: string) {
   return await request(`/diary/${id}`, { method: 'DELETE' });
 }
 
-export async function getDiaryTags() {
-  return await request('/diary/tags');
+// Diary Card Tags API
+export async function getDiaryCardTags(diaryCardId: string) {
+  return await request(`/diary/${diaryCardId}/tags`);
 }
 
-export async function createDiaryTag(payload: any) {
-  return await request('/diary/tags', { method: 'POST', body: JSON.stringify(payload) });
+export async function addDiaryCardTag(diaryCardId: string, tagId: string) {
+  return await request(`/diary/${diaryCardId}/tags`, { method: 'POST', body: JSON.stringify({ tagId }) });
 }
 
-export async function updateDiaryTag(id: string, payload: any) {
-  return await request(`/diary/tags/${id}`, { method: 'PATCH', body: JSON.stringify(payload) });
+export async function removeDiaryCardTag(diaryCardId: string, tagId: string) {
+  return await request(`/diary/${diaryCardId}/tags/${tagId}`, { method: 'DELETE' });
 }
 
-export async function deleteDiaryTag(id: string) {
-  return await request(`/diary/tags/${id}`, { method: 'DELETE' });
+// Tags API (for Habits, Goals, and Diary Cards)
+export async function getTags() {
+  return await request('/tags');
+}
+
+export async function createTag(payload: any) {
+  return await request('/tags', { method: 'POST', body: JSON.stringify(payload) });
+}
+
+export async function updateTag(id: string, payload: any) {
+  return await request(`/tags/${id}`, { method: 'PATCH', body: JSON.stringify(payload) });
+}
+
+export async function deleteTag(id: string) {
+  return await request(`/tags/${id}`, { method: 'DELETE' });
+}
+
+// Habit Tags API
+export async function getHabitTags(habitId: string) {
+  return await request(`/habits/${habitId}/tags`);
+}
+
+export async function addHabitTag(habitId: string, tagId: string) {
+  return await request(`/habits/${habitId}/tags`, { method: 'POST', body: JSON.stringify({ tagId }) });
+}
+
+export async function removeHabitTag(habitId: string, tagId: string) {
+  return await request(`/habits/${habitId}/tags/${tagId}`, { method: 'DELETE' });
+}
+
+// Goal Tags API
+export async function getGoalTags(goalId: string) {
+  return await request(`/goals/${goalId}/tags`);
+}
+
+export async function addGoalTag(goalId: string, tagId: string) {
+  return await request(`/goals/${goalId}/tags`, { method: 'POST', body: JSON.stringify({ tagId }) });
+}
+
+export async function removeGoalTag(goalId: string, tagId: string) {
+  return await request(`/goals/${goalId}/tags/${tagId}`, { method: 'DELETE' });
 }
 
 // Mindmap API
@@ -419,10 +486,19 @@ const api = {
   createDiaryCard,
   updateDiaryCard,
   deleteDiaryCard,
-  getDiaryTags,
-  createDiaryTag,
-  updateDiaryTag,
-  deleteDiaryTag,
+  getDiaryCardTags,
+  addDiaryCardTag,
+  removeDiaryCardTag,
+  getTags,
+  createTag,
+  updateTag,
+  deleteTag,
+  getHabitTags,
+  addHabitTag,
+  removeHabitTag,
+  getGoalTags,
+  addGoalTag,
+  removeGoalTag,
   getMindmaps,
   createMindmap,
   updateMindmap,
