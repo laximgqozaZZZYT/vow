@@ -620,10 +620,27 @@ export default function CalendarWidget({
           slotMaxTime="24:00:00"
           selectable={true}
           selectMirror={true}
-          slotLabelFormat={{ hour: '2-digit', minute: '2-digit', hour12: false }}
+          slotLabelFormat={{ 
+            hour: '2-digit', 
+            minute: '2-digit', 
+            hour12: false,
+            ...(navSelection === 'month' ? { month: 'short', day: 'numeric' } : {})
+          }}
           eventTimeFormat={{ hour: '2-digit', minute: '2-digit', hour12: false }}
-          dayHeaderFormat={window.innerWidth < 768 ? { weekday: 'short' } : { weekday: 'long' }}
-          slotLabelInterval={window.innerWidth < 768 ? '02:00:00' : '01:00:00'}
+          dayHeaderFormat={
+            navSelection === 'month' 
+              ? { weekday: 'narrow' }
+              : window.innerWidth < 768 
+                ? { weekday: 'short', month: 'numeric', day: 'numeric' } 
+                : { weekday: 'long', month: 'long', day: 'numeric' }
+          }
+          slotLabelInterval={
+            navSelection === 'today' || navSelection === 'tomorrow'
+              ? (window.innerWidth < 768 ? '02:00:00' : '01:00:00')
+              : navSelection === 'week'
+                ? '03:00:00'
+                : '06:00:00'
+          }
           select={(selectionInfo: any) => {
           // Handle mobile event moving
           if (isMobile && touchMoveMode) {

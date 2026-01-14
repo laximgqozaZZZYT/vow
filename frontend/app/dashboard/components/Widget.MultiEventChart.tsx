@@ -474,6 +474,7 @@ export default function MultiEventChart({
   range,
   timeWindow,
   onEditGraph,
+  onRangeChange,
 }: {
   habits: Habit[]
   points: EventPoint[]
@@ -482,6 +483,7 @@ export default function MultiEventChart({
   range: RangeKey
   timeWindow?: { fromTs: number; untilTs: number }
   onEditGraph?: () => void
+  onRangeChange?: (range: RangeKey) => void
 }) {
   // Tooltip state
   const [tooltip, setTooltip] = React.useState<{
@@ -534,10 +536,11 @@ export default function MultiEventChart({
   // Responsive chart dimensions - smaller for mobile
   const isMobile = typeof window !== 'undefined' && window.innerWidth <= 768
   const width = isMobile ? 600 : 860
-  const height = isMobile ? 180 : 220
+  const height = isMobile ? 200 : 250  // Increased to accommodate x-axis labels
   const padding = isMobile ? 20 : 30
+  const paddingBottom = isMobile ? 35 : 45  // Extra space for x-axis labels
   const innerW = width - padding * 2
-  const innerH = height - padding * 2
+  const innerH = height - padding - paddingBottom
 
   const habitIds = React.useMemo(() => {
     // Use the user's selection, not only "habits that have points".
@@ -628,27 +631,112 @@ export default function MultiEventChart({
 
   return (
     <div className="space-y-3 w-full overflow-hidden">
-      {/* Header with Edit Graph button */}
+      {/* Header with Range selector and Edit Graph button */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
         <h3 className="text-sm font-medium text-zinc-600 dark:text-zinc-300">
           Habit Progress Timeline (Actual vs Planned)
         </h3>
-        {onEditGraph && (
-          <button 
-            className="rounded border px-2 py-1 text-xs hover:bg-zinc-50 dark:hover:bg-zinc-800 self-start sm:self-auto" 
-            onClick={onEditGraph}
-          >
-            Edit Graph
-          </button>
-        )}
+        <div className="flex items-center gap-2 self-start sm:self-auto">
+          {/* Range selector buttons */}
+          {onRangeChange && (
+            <div className="flex items-center gap-1 rounded border border-zinc-200 dark:border-zinc-700 p-0.5">
+              <button
+                className={`rounded px-2 py-1 text-xs transition-colors ${
+                  range === '7d'
+                    ? 'bg-blue-500 text-white'
+                    : 'hover:bg-zinc-50 dark:hover:bg-zinc-800'
+                }`}
+                onClick={() => onRangeChange('7d')}
+              >
+                Week
+              </button>
+              <button
+                className={`rounded px-2 py-1 text-xs transition-colors ${
+                  range === '1mo'
+                    ? 'bg-blue-500 text-white'
+                    : 'hover:bg-zinc-50 dark:hover:bg-zinc-800'
+                }`}
+                onClick={() => onRangeChange('1mo')}
+              >
+                Month
+              </button>
+              <button
+                className={`rounded px-2 py-1 text-xs transition-colors ${
+                  range === '1y'
+                    ? 'bg-blue-500 text-white'
+                    : 'hover:bg-zinc-50 dark:hover:bg-zinc-800'
+                }`}
+                onClick={() => onRangeChange('1y')}
+              >
+                Year
+              </button>
+            </div>
+          )}
+          {onEditGraph && (
+            <button 
+              className="rounded border px-2 py-1 text-xs hover:bg-zinc-50 dark:hover:bg-zinc-800" 
+              onClick={onEditGraph}
+            >
+              Edit Graph
+            </button>
+          )}
+        </div>
       </div>
       
       {/* Chart */}
       <div className="w-full overflow-x-auto">
         <div className="min-w-[400px] sm:min-w-[600px]">
           <svg viewBox={`0 0 ${width} ${height}`} className="w-full h-auto" preserveAspectRatio="xMidYMid meet">
-          <line x1={padding} y1={height - padding} x2={width - padding} y2={height - padding} stroke="currentColor" opacity={0.25} />
-          <line x1={padding} y1={padding} x2={padding} y2={height - padding} stroke="currentColor" opacity={0.25} />
+          <line x1={padding} y1={height - paddingBottom} x2={width - padding} y2={height - paddingBottom} stroke="currentColor" opacity={0.25} />
+          <line x1={padding} y1={padding} x2={padding} y2={height - paddingBottom} stroke="currentColor" opacity={0.25} />
+
+      {/* x-axis date labels */}
+      {(() => {
+        const ticks: Array<{ ts: number; label: string }> = []
+        const rangeMs = maxTs - minTs
+        
+        // Determine appropriate tick interval based on range
+        let tickCount = 5
+        if (range === '7d') tickCount = 7
+        else if (range === '1mo') tickCount = 6
+        else if (range === '1y') tickCount = 12
+        
+        for (let i = 0; i <= tickCount; i++) {
+          const ts = minTs + (rangeMs * i) / tickCount
+          const d = new Date(ts)
+          const label = `${String(d.getMonth() + 1).padStart(2, '0')}/${String(d.getDate()).padStart(2, '0')}`
+          ticks.push({ ts, label })
+        }
+        
+        return ticks.map((tick, idx) => {
+          const x = xOf(tick.ts)
+          const y = height - paddingBottom
+          return (
+            <g key={`tick-${idx}`}>
+              {/* Tick mark */}
+              <line 
+                x1={x} 
+                y1={y} 
+                x2={x} 
+                y2={y + 5} 
+                stroke="currentColor" 
+                opacity={0.25} 
+              />
+              {/* Date label */}
+              <text
+                x={x}
+                y={y + 15}
+                textAnchor="middle"
+                fontSize="10"
+                fill="currentColor"
+                opacity={0.6}
+              >
+                {tick.label}
+              </text>
+            </g>
+          )
+        })
+      })()}
 
       {/* y-axis numeric labels removed by request */}
 

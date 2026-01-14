@@ -1,9 +1,6 @@
 "use client"
 
 import React from 'react'
-import { Popover } from '@headlessui/react'
-import { DayPicker } from 'react-day-picker'
-import 'react-day-picker/dist/style.css'
 import GoalMermaid from './Widget.GoalDiagram'
 import MultiEventChart from './Widget.MultiEventChart'
 import HeatmapWidget from './Widget.Heatmap'
@@ -58,79 +55,8 @@ function safePct(n: number, d: number) {
   return Math.max(0, Math.min(1, n / d))
 }
 
-function toLocalDateValue(ts: number) {
-  const d = new Date(ts)
-  const pad = (n: number) => String(n).padStart(2, '0')
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
-}
-
-function toLocalTimeValue(ts: number) {
-  const d = new Date(ts)
-  const pad = (n: number) => String(n).padStart(2, '0')
-  // For <input type="time">: HH:mm (24h)
-  return `${pad(d.getHours())}:${pad(d.getMinutes())}`
-}
-
-function toTimeMinutes(v: string): number | null {
-  const m = String(v).trim().match(/^([01]?\d|2[0-3]):([0-5]\d)$/)
-  if (!m) return null
-  const hh = Number(m[1])
-  const mm = Number(m[2])
-  return hh * 60 + mm
-}
-
-function combineLocalDateTimeToTs(dateYmd: string, timeHm: string) {
-  // date: YYYY-MM-DD, time: HH:mm
-  const dm = String(dateYmd).trim().match(/^(\d{4})-(\d{2})-(\d{2})$/)
-  const tmin = toTimeMinutes(timeHm)
-  if (!dm || tmin === null) return 0
-  const y = Number(dm[1])
-  const mo = Number(dm[2]) - 1
-  const da = Number(dm[3])
-  const hh = Math.floor(tmin / 60)
-  const mm = tmin % 60
-  const d = new Date(y, mo, da, hh, mm, 0, 0) // local
-  const ts = d.getTime()
-  return Number.isFinite(ts) ? ts : 0
-}
-
-function rangeLabel(k: RangeKey) {
-  if (k === 'auto') return 'Auto'
-  if (k === '24h') return '24h'
-  if (k === '7d') return '7d'
-  if (k === '1mo') return '1mo'
-  if (k === '1y') return '1y'
-  return 'Auto'
-}
-
 function isoDay(ts: string) {
   try { return new Date(ts).toISOString().slice(0, 10) } catch { return '' }
-}
-
-// build a list of time options (15-minute increments) with HH:mm labels
-function buildTimeOptions() {
-  const opts: { label: string; value: string }[] = []
-  for (let h = 0; h < 24; h++) {
-    for (let m = 0; m < 60; m += 15) {
-      const label = `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`
-      opts.push({ label, value: label })
-    }
-  }
-  return opts
-}
-
-function parseYmd(s?: string | null) {
-  if (!s) return undefined
-  const parts = String(s).split('-').map(x => Number(x))
-  if (parts.length >= 3 && !Number.isNaN(parts[0]) && !Number.isNaN(parts[1]) && !Number.isNaN(parts[2])) {
-    return new Date(parts[0], parts[1] - 1, parts[2])
-  }
-  const d = new Date(s)
-  return Number.isFinite(d.getTime()) ? d : undefined
-}
-
-function formatLocalDate(d: Date) {
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 }
 
 function buildDailyCountSeries(activities: Activity[], habitId: string): Point[] {
@@ -560,15 +486,17 @@ export default function StaticsSection({ habits, activities, goals }: { habits: 
   ] as const), [])
   const [pageIndex, setPageIndex] = React.useState(0)
 
-  // Graph controls
-  const [range, setRange] = React.useState<RangeKey>('auto')
+  // Graph controls - allow range selection
+  const [range, setRange] = React.useState<RangeKey>('7d')
   const [editGraphOpen, setEditGraphOpen] = React.useState(false)
   const [editGoalGraphOpen, setEditGoalGraphOpen] = React.useState(false)
 
-  const [{ fromTs, untilTs }, setCustomWindow] = React.useState(() => {
-    const w = computeCustomTodayWindow()
-    return { fromTs: w.from, untilTs: w.until }
-  })
+  // Compute window based on selected range
+  const { fromTs, untilTs } = React.useMemo(() => {
+    const now = Date.now()
+    const w = computeRangeWindow(range, now)
+    return { fromTs: w.fromTs, untilTs: w.untilTs }
+  }, [range])
 
   // For now default to showing all habits; later we'll allow narrowing via Edit Graph.
   const [visibleHabitIds, setVisibleHabitIds] = React.useState<string[]>(() => habits.map(h => h.id))
@@ -729,134 +657,7 @@ export default function StaticsSection({ habits, activities, goals }: { habits: 
 
       {/* Controls (apply to current page) */}
       <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
-        <div className="flex flex-wrap items-center gap-2">
-          <div className="text-xs text-zinc-500">Range</div>
-          {(['auto', '24h', '7d', '1mo', '1y'] as RangeKey[]).map((k) => (
-            <button
-              key={k}
-              className={`rounded border px-2 py-1 text-xs ${range === k ? 'bg-zinc-100 dark:bg-slate-800' : ''}`}
-              onClick={() => {
-                setRange(k)
-                const now = Date.now()
-                const w = computeRangeWindow(k, now)
-                setCustomWindow({ fromTs: w.fromTs, untilTs: w.untilTs })
-              }}
-            >
-              {rangeLabel(k)}
-            </button>
-          ))}
-
-          <div className="ml-2 flex flex-col sm:flex-row items-start sm:items-center gap-2">
-            <div className="text-xs text-zinc-500">from</div>
-            <Popover className="relative">
-              <Popover.Button className="w-full sm:w-[140px] rounded border px-3 py-2 bg-white text-black dark:bg-slate-800 dark:text-slate-100 text-xs text-left">
-                {toLocalDateValue(fromTs)}
-              </Popover.Button>
-              <Popover.Panel className="absolute z-50 mt-2 left-0">
-                <div className="rounded bg-white p-4 shadow text-black dark:bg-slate-800 dark:text-slate-100 max-w-full">
-                  <DayPicker
-                    mode="single"
-                    selected={parseYmd(toLocalDateValue(fromTs))}
-                    onSelect={(d) => {
-                      if (!d) return
-                      const nextDate = formatLocalDate(d)
-                      const nextTs = combineLocalDateTimeToTs(nextDate, toLocalTimeValue(fromTs))
-                      setCustomWindow({ fromTs: nextTs, untilTs })
-                    }}
-                  />
-                </div>
-              </Popover.Panel>
-            </Popover>
-
-            <Popover className="relative">
-              {({ close }) => (
-                <>
-                  <Popover.Button className="w-full sm:w-[86px] rounded border px-3 py-2 bg-white text-black dark:bg-slate-800 dark:text-slate-100 text-xs font-mono text-left">
-                    {toLocalTimeValue(fromTs)}
-                  </Popover.Button>
-                  <Popover.Panel className="absolute z-50 mt-2 left-0 w-40">
-                    <div className="rounded bg-white p-2 shadow text-black dark:bg-slate-800 dark:text-slate-100">
-                      <div className="max-h-56 overflow-auto">
-                        {buildTimeOptions().map((t) => {
-                          const selected = t.value === toLocalTimeValue(fromTs)
-                          return (
-                            <button
-                              key={t.value}
-                              className={`w-full text-left px-2 py-1 rounded text-xs font-mono ${selected ? 'bg-sky-600 text-white' : 'hover:bg-gray-100 dark:hover:bg-slate-700'}`}
-                              onClick={() => {
-                                const nextTs = combineLocalDateTimeToTs(toLocalDateValue(fromTs), t.value)
-                                setCustomWindow({ fromTs: nextTs, untilTs })
-                                close()
-                              }}
-                            >
-                              {t.label}
-                            </button>
-                          )
-                        })}
-                      </div>
-                    </div>
-                  </Popover.Panel>
-                </>
-              )}
-            </Popover>
-          </div>
-        </div>
-        
-        {/* Until controls on a separate line */}
-        <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2">
-          <div className="text-xs text-zinc-500">until</div>
-          <Popover className="relative">
-            <Popover.Button className="w-full sm:w-[140px] rounded border px-3 py-2 bg-white text-black dark:bg-slate-800 dark:text-slate-100 text-xs text-left">
-              {toLocalDateValue(untilTs)}
-            </Popover.Button>
-            <Popover.Panel className="absolute z-50 mt-2 left-0">
-              <div className="rounded bg-white p-4 shadow text-black dark:bg-slate-800 dark:text-slate-100 max-w-full">
-                <DayPicker
-                  mode="single"
-                  selected={parseYmd(toLocalDateValue(untilTs))}
-                  onSelect={(d) => {
-                    if (!d) return
-                    const nextDate = formatLocalDate(d)
-                    const nextTs = combineLocalDateTimeToTs(nextDate, toLocalTimeValue(untilTs))
-                    setCustomWindow({ fromTs, untilTs: nextTs })
-                  }}
-                />
-              </div>
-            </Popover.Panel>
-          </Popover>
-
-          <Popover className="relative">
-            {({ close }) => (
-              <>
-                <Popover.Button className="w-full sm:w-[86px] rounded border px-3 py-2 bg-white text-black dark:bg-slate-800 dark:text-slate-100 text-xs font-mono text-left">
-                  {toLocalTimeValue(untilTs)}
-                </Popover.Button>
-                <Popover.Panel className="absolute z-50 mt-2 left-0 w-40">
-                  <div className="rounded bg-white p-2 shadow text-black dark:bg-slate-800 dark:text-slate-100">
-                    <div className="max-h-56 overflow-auto">
-                      {buildTimeOptions().map((t) => {
-                        const selected = t.value === toLocalTimeValue(untilTs)
-                        return (
-                          <button
-                            key={t.value}
-                            className={`w-full text-left px-2 py-1 rounded text-xs font-mono ${selected ? 'bg-sky-600 text-white' : 'hover:bg-gray-100 dark:hover:bg-slate-700'}`}
-                            onClick={() => {
-                              const nextTs = combineLocalDateTimeToTs(toLocalDateValue(untilTs), t.value)
-                              setCustomWindow({ fromTs, untilTs: nextTs })
-                              close()
-                            }}
-                          >
-                            {t.label}
-                          </button>
-                        )
-                      })}
-                    </div>
-                  </div>
-                </Popover.Panel>
-              </>
-            )}
-          </Popover>
-        </div>
+        {/* Range, from, until controls removed - fixed to today's range */}
       </div>
 
       {/* Responsive height page viewport */}
@@ -966,7 +767,8 @@ export default function StaticsSection({ habits, activities, goals }: { habits: 
                   onHover={() => {}} 
                   range={range} 
                   timeWindow={activeWindow}
-                  onEditGraph={() => setEditGraphOpen(true)} 
+                  onEditGraph={() => setEditGraphOpen(true)}
+                  onRangeChange={setRange}
                 />
               </div>
             )}
