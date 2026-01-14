@@ -1,0 +1,11 @@
+-- Add preset tags for Habit and Goal
+-- This migration is intentionally empty because preset tags should be created
+-- per-user when they first use the application, not at the database level.
+-- 
+-- Preset tag creation is handled in the frontend application code when:
+-- 1. A user first logs in
+-- 2. The tags list is empty
+-- 3. The application automatically creates 'Habit' and 'Goal' tags
+--
+-- This approach ensures each user gets their own preset tags without
+-- requiring database-level user context during migration.
