@@ -355,6 +355,7 @@ export class SupabaseDirectClient {
       notes: h.notes,
       workloadUnit: h.workload_unit,
       workloadTotal: h.workload_total,
+      workloadTotalEnd: h.workload_total_end,
       workloadPerCount: h.workload_per_count,
       completed: h.completed,
       lastCompletedAt: h.last_completed_at,
@@ -397,6 +398,7 @@ export class SupabaseDirectClient {
         notes: payload.notes,
         workloadUnit: payload.workloadUnit,
         workloadTotal: payload.workloadTotal,
+        workloadTotalEnd: payload.workloadTotalEnd,
         workloadPerCount: payload.workloadPerCount || 1,
         completed: false,
         createdAt: now,
@@ -437,6 +439,7 @@ export class SupabaseDirectClient {
       notes: payload.notes,
       workload_unit: payload.workloadUnit,
       workload_total: payload.workloadTotal,
+      workload_total_end: payload.workloadTotalEnd,
       workload_per_count: payload.workloadPerCount || 1,
       completed: false,
       owner_type: 'user',
@@ -479,6 +482,7 @@ export class SupabaseDirectClient {
       notes: data.notes,
       workloadUnit: data.workload_unit,
       workloadTotal: data.workload_total,
+      workloadTotalEnd: data.workload_total_end,
       workloadPerCount: data.workload_per_count,
       completed: data.completed,
       lastCompletedAt: data.last_completed_at,
@@ -596,6 +600,7 @@ export class SupabaseDirectClient {
       if (payload.notes !== undefined) updatedHabit.notes = payload.notes;
       if (payload.workloadUnit !== undefined) updatedHabit.workloadUnit = payload.workloadUnit;
       if (payload.workloadTotal !== undefined) updatedHabit.workloadTotal = payload.workloadTotal;
+      if (payload.workloadTotalEnd !== undefined) updatedHabit.workloadTotalEnd = payload.workloadTotalEnd;
       if (payload.workloadPerCount !== undefined) updatedHabit.workloadPerCount = payload.workloadPerCount;
       
       // Update the habit in the array
@@ -716,6 +721,7 @@ export class SupabaseDirectClient {
     if (payload.notes !== undefined) updateData.notes = payload.notes;
     if (payload.workloadUnit !== undefined) updateData.workload_unit = payload.workloadUnit;
     if (payload.workloadTotal !== undefined) updateData.workload_total = payload.workloadTotal;
+    if (payload.workloadTotalEnd !== undefined) updateData.workload_total_end = payload.workloadTotalEnd;
     if (payload.workloadPerCount !== undefined) updateData.workload_per_count = payload.workloadPerCount;
     
     console.log('[updateHabit] Supabase update data:', updateData);
@@ -731,6 +737,9 @@ export class SupabaseDirectClient {
     
     if (error) {
       console.error('[updateHabit] Supabase error:', error);
+      console.error('[updateHabit] Error details:', JSON.stringify(error, null, 2));
+      console.error('[updateHabit] Error message:', error.message);
+      console.error('[updateHabit] Error code:', error.code);
       throw error;
     }
     
@@ -756,6 +765,7 @@ export class SupabaseDirectClient {
       notes: data.notes,
       workloadUnit: data.workload_unit,
       workloadTotal: data.workload_total,
+      workloadTotalEnd: data.workload_total_end,
       workloadPerCount: data.workload_per_count,
       completed: data.completed,
       lastCompletedAt: data.last_completed_at,

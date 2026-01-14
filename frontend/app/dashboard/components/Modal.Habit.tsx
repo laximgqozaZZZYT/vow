@@ -51,7 +51,7 @@ type Timing = {
 
 type Habit = { id: string; goalId: string; name: string; active: boolean; type: "do" | "avoid"; count: number; must?: number; duration?: number; reminders?: ({ kind: 'absolute'; time: string; weekdays: string[] } | { kind: 'relative'; minutesBefore: number })[]; dueDate?: string; time?: string; endTime?: string; repeat?: string; allDay?: boolean; notes?: string; createdAt: string; updatedAt: string; workloadUnit?: string; workloadTotal?: number; workloadTotalEnd?: number; workloadPerCount?: number }
 
-type CreateHabitPayload = { name: string; goalId?: string; type: "do" | "avoid"; duration?: number; reminders?: any[]; dueDate?: string; time?: string; endTime?: string; repeat?: string; timings?: any[]; allDay?: boolean; notes?: string; workloadUnit?: string; workloadTotal?: number; workloadPerCount?: number }
+type CreateHabitPayload = { name: string; goalId?: string; type: "do" | "avoid"; duration?: number; reminders?: any[]; dueDate?: string; time?: string; endTime?: string; repeat?: string; timings?: any[]; allDay?: boolean; notes?: string; workloadUnit?: string; workloadTotal?: number; workloadTotalEnd?: number; workloadPerCount?: number }
 
 export function HabitModal({ open, onClose, habit, onUpdate, onDelete, onCreate, initial, categories: goals }: { open: boolean; onClose: () => void; habit: Habit | null; onUpdate?: (h: Habit) => void; onDelete?: (id: string) => void; onCreate?: (payload: CreateHabitPayload) => void; initial?: { date?: string; time?: string; endTime?: string; type?: "do" | "avoid"; goalId?: string }; categories?: { id: string; name: string }[] }) {
     const [name, setName] = React.useState<string>(habit?.name ?? "")
@@ -270,6 +270,7 @@ export function HabitModal({ open, onClose, habit, onUpdate, onDelete, onCreate,
                 // workload fields
                 ...(workloadUnit ? { workloadUnit } as any : {}),
                 ...(workloadTotal ? { workloadTotal: Number(workloadTotal) } as any : {}),
+                ...(workloadTotalEnd ? { workloadTotalEnd: Number(workloadTotalEnd) } as any : {}),
                 ...(Number(workloadPerCount) || 1 ? { workloadPerCount: Number(workloadPerCount) || 1 } as any : {}),
                 // Always include timings and outdates (even if empty)
                 timings: timings as any,
@@ -314,6 +315,7 @@ export function HabitModal({ open, onClose, habit, onUpdate, onDelete, onCreate,
                 allDay,
                 workloadUnit: workloadUnit || undefined,
                 workloadTotal: workloadTotal ? Number(workloadTotal) : undefined,
+                workloadTotalEnd: workloadTotalEnd ? Number(workloadTotalEnd) : undefined,
                 workloadPerCount: Number(workloadPerCount) || 1,
                 notes: notes.trim() || undefined,
             };
