@@ -648,22 +648,14 @@ export default function MultiEventChart({
             {onDisplayModeChange && (
               <div className="flex items-center gap-1 rounded border border-zinc-200 dark:border-zinc-700 p-0.5">
                 <button
-                  className={`rounded px-2 py-1 text-xs transition-colors ${
-                    displayMode === 'linear'
-                      ? 'bg-blue-500 text-white'
-                      : 'hover:bg-zinc-50 dark:hover:bg-zinc-800'
-                  }`}
+                  className="rounded px-2 py-1 text-xs transition-colors hover:bg-zinc-50 dark:hover:bg-zinc-800"
                   onClick={() => onDisplayModeChange('linear')}
                   title="Linear timeline view"
                 >
                   📊
                 </button>
                 <button
-                  className={`rounded px-2 py-1 text-xs transition-colors ${
-                    displayMode === 'radial'
-                      ? 'bg-blue-500 text-white'
-                      : 'hover:bg-zinc-50 dark:hover:bg-zinc-800'
-                  }`}
+                  className="rounded px-2 py-1 text-xs transition-colors bg-blue-500 text-white"
                   onClick={() => onDisplayModeChange('radial')}
                   title="Radial timeline view"
                 >
