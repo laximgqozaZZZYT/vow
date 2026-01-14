@@ -1,6 +1,7 @@
 import { formatTime24, formatDateTime24 } from '../../../lib/format';
 import type { NextSectionProps, Habit } from '../types';
 import { useState } from 'react';
+import './HabitNameScroll.css';
 
 export default function NextSection({ habits, onHabitAction }: NextSectionProps) {
   const [inputValues, setInputValues] = useState<Record<string, string>>({});
@@ -66,9 +67,9 @@ export default function NextSection({ habits, onHabitAction }: NextSectionProps)
 
   if (pick.length === 0) {
     return (
-      <section className="rounded bg-white p-4 shadow dark:bg-[#0b0b0b]">
+      <section className="rounded bg-white p-3 sm:p-4 shadow dark:bg-[#0b0b0b]">
         <div className="flex justify-between items-start">
-          <h2 className="mb-3 text-lg font-medium">Next</h2>
+          <h2 className="mb-3 text-base sm:text-lg font-medium">Next</h2>
         </div>
         <div className="text-sm text-zinc-500">No habits starting in the next 24 hours</div>
       </section>
@@ -76,13 +77,13 @@ export default function NextSection({ habits, onHabitAction }: NextSectionProps)
   }
 
   return (
-    <section className="rounded bg-white p-4 shadow dark:bg-[#0b0b0b]">
+    <section className="rounded bg-white p-3 sm:p-4 shadow dark:bg-[#0b0b0b]">
       <div className="flex justify-between items-start">
-        <h2 className="mb-3 text-lg font-medium">Next</h2>
+        <h2 className="mb-3 text-base sm:text-lg font-medium">Next</h2>
       </div>
       <ul className="flex flex-col">
         {pick.map((c, idx) => (
-          <li key={c.h.id} className={`flex items-center justify-between py-2 ${idx > 0 ? 'mt-2 border-t border-zinc-100 dark:border-zinc-800 pt-3' : ''}`}>
+          <li key={c.h.id} className={`flex items-center justify-between gap-2 sm:gap-3 py-2.5 sm:py-2 ${idx > 0 ? 'mt-2 border-t border-zinc-100 dark:border-zinc-800 pt-3' : ''}`}>
             <div className="flex min-w-0 items-center gap-2 sm:gap-3 flex-1">
               <div className="w-12 sm:w-16 shrink-0 text-xs text-zinc-500 tabular-nums">
                 {(() => {
@@ -94,33 +95,35 @@ export default function NextSection({ habits, onHabitAction }: NextSectionProps)
               </div>
               <div className="w-2 h-2 shrink-0 rounded-full bg-sky-500" />
               <div className="flex-1 min-w-0">
-                <div className={`truncate text-sm ${c.h.completed ? 'line-through text-zinc-400' : 'text-zinc-800 dark:text-zinc-100'}`}>
-                  {c.h.name}
+                <div className="habit-name-scroll min-w-0 overflow-hidden">
+                  <div className={`habit-name-text inline-block whitespace-nowrap text-sm ${c.h.completed ? 'line-through text-zinc-400' : 'text-zinc-800 dark:text-zinc-100'}`}>
+                    {c.h.name}
+                  </div>
                 </div>
                 {(c.h as any)?.workloadUnit && (
-                  <div className="text-xs text-zinc-500 mt-0.5">
+                  <div className="text-xs text-zinc-500 mt-0.5 truncate">
                     Target: {(c.h as any)?.workloadPerCount || 1} {(c.h as any)?.workloadUnit}
                   </div>
                 )}
               </div>
             </div>
-            <div className="flex shrink-0 items-center gap-2">
+            <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
               <input
                 type="number"
                 min="0"
                 step="0.1"
                 value={getInputValue(c.h.id)}
                 onChange={(e) => setInputValue(c.h.id, e.target.value)}
-                className="w-12 text-xs text-center bg-zinc-100 dark:bg-zinc-800 border-0 rounded px-2 py-1 focus:ring-1 focus:ring-blue-500 outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                className="w-10 sm:w-12 text-xs text-center bg-zinc-100 dark:bg-zinc-800 border-0 rounded px-1 sm:px-2 py-1 focus:ring-1 focus:ring-blue-500 outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                 onClick={(e) => e.stopPropagation()}
               />
-              <span className="text-xs text-zinc-500">
+              <span className="text-xs text-zinc-500 hidden sm:inline w-16 text-left truncate" title={(c.h as any)?.workloadUnit || 'units'}>
                 {(c.h as any)?.workloadUnit || 'units'}
               </span>
               <button
                 title="Complete"
                 onClick={(e) => { e.stopPropagation(); handleCompleteWithAmount(c.h.id) }}
-                className="bg-green-600 hover:bg-green-700 text-white rounded px-2 py-1 text-xs font-medium transition-colors"
+                className="bg-green-600 hover:bg-green-700 active:bg-green-800 text-white rounded px-2 py-1 text-xs font-medium transition-colors min-w-[32px] min-h-[32px] flex items-center justify-center"
               >
                 ✓
               </button>

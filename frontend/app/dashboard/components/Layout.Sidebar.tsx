@@ -50,15 +50,15 @@ export default function DashboardSidebar({
         onClick={onClose}
       />
       
-      <aside className="fixed left-0 top-14 w-80 max-w-[85vw] h-[calc(100vh-3.5rem)] border-r border-zinc-200 bg-white dark:bg-[#071013] p-3 z-40 lg:w-80">
+      <aside className="fixed left-0 top-14 w-80 max-w-[85vw] h-[calc(100vh-3.5rem)] border-r border-zinc-200 bg-white dark:bg-[#071013] p-3 z-40 lg:w-80 overflow-y-auto overscroll-contain">
         <div className="mb-3 flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <button onClick={onClose} className="text-sm text-zinc-500 lg:hidden">✕</button>
+            <button onClick={onClose} className="text-sm text-zinc-500 lg:hidden min-w-[44px] min-h-[44px] flex items-center justify-center">✕</button>
           </div>
         </div>
 
         {/* ドラッグ&ドロップのヘルプテキスト */}
-        <div className="mb-4 p-2 bg-blue-50 dark:bg-blue-900/20 rounded text-xs text-blue-700 dark:text-blue-300">
+        <div className="mb-4 p-2 bg-blue-50 dark:bg-blue-900/20 rounded text-xs text-blue-700 dark:text-blue-300 leading-relaxed">
           💡 ドラッグ&ドロップでGoal・Habitを移動できます
           <br />
           📱 スマホ: 長押し→スライドで移動

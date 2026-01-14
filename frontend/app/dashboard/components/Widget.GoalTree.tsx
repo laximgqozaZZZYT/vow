@@ -2,6 +2,7 @@ import { useState, useMemo } from 'react';
 import type { Goal, Habit, Activity } from '../types';
 import { useDragAndDrop } from '../hooks/useDragAndDrop';
 import './DragAndDrop.css';
+import './HabitNameScroll.css';
 
 // JST日付範囲でのActivity集計関数（Section.Activity.tsxと同じ）
 function calculateDailyWorkload(habitId: string, activities: Activity[]): number {
@@ -143,23 +144,23 @@ function GoalNode({
   };
 
   const renderHabitActions = (h: Habit) => (
-    <div className="flex items-center gap-2">
+    <div className="flex items-center gap-1.5 shrink-0">
       <input
         type="number"
         min="0"
         step="0.1"
         value={getInputValue(h.id)}
         onChange={(e) => setInputValue(h.id, e.target.value)}
-        className="w-8 text-xs text-center bg-zinc-100 dark:bg-zinc-800 border-0 rounded px-1 py-0.5 focus:ring-1 focus:ring-blue-500 outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+        className="w-10 sm:w-12 text-xs text-center bg-zinc-100 dark:bg-zinc-800 border-0 rounded px-1 py-1 sm:py-0.5 focus:ring-1 focus:ring-blue-500 outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
         onClick={(e) => e.stopPropagation()}
       />
-      <span className="text-xs text-zinc-500">
+      <span className="text-xs text-zinc-500 hidden sm:inline w-16 text-left truncate" title={(h as any)?.workloadUnit || 'units'}>
         {(h as any)?.workloadUnit || 'units'}
       </span>
       <button
         title="Complete"
         onClick={(e) => { e.stopPropagation(); handleCompleteWithAmount(h.id) }}
-        className="bg-green-600 hover:bg-green-700 text-white rounded px-1.5 py-0.5 text-xs font-medium transition-colors"
+        className="bg-green-600 hover:bg-green-700 active:bg-green-800 text-white rounded px-2 py-1 text-xs font-medium transition-colors min-w-[32px] min-h-[32px] flex items-center justify-center"
       >
         ✓
       </button>
@@ -219,7 +220,7 @@ function GoalNode({
                   <div
                     key={h.id}
                     onClick={() => { onGoalSelect(goal.id); onHabitEdit(h.id); }}
-                    className={`flex items-center justify-between rounded px-2 py-1 text-sm draggable ${
+                    className={`flex items-center justify-between gap-2 rounded px-2 py-1.5 text-sm draggable ${
                       (isHabitCompletedToday(h, activities) || goalCompleted || !h.active) ? 'line-through text-zinc-400' : 'text-zinc-700 dark:text-zinc-200'
                     } hover:bg-zinc-100 dark:hover:bg-white/5 cursor-pointer ${
                       isDraggedHabit ? 'dragging' : ''
@@ -231,12 +232,14 @@ function GoalNode({
                     onTouchMove={onTouchMove}
                     onTouchEnd={onTouchEnd}
                   >
-                    <div className="flex items-center gap-2 truncate flex-1">
-                      <span>📄</span>
+                    <div className="flex items-center gap-2 min-w-0 flex-1">
+                      <span className="shrink-0">📄</span>
                       <div className="flex flex-col min-w-0 flex-1">
-                        <span className="truncate">{h.name}</span>
+                        <div className="habit-name-scroll min-w-0 overflow-hidden">
+                          <span className="habit-name-text inline-block whitespace-nowrap">{h.name}</span>
+                        </div>
                         {(h as any)?.workloadUnit && (
-                          <span className="text-xs text-zinc-500">
+                          <span className="text-xs text-zinc-500 truncate">
                             Target: {(h as any)?.workloadPerCount || 1} {(h as any)?.workloadUnit}
                           </span>
                         )}
@@ -256,7 +259,7 @@ function GoalNode({
                   <div
                     key={h.id}
                     onClick={() => { onGoalSelect(goal.id); onHabitEdit(h.id); }}
-                    className={`flex items-center justify-between rounded px-2 py-1 text-sm draggable ${
+                    className={`flex items-center justify-between gap-2 rounded px-2 py-1.5 text-sm draggable ${
                       (isHabitCompletedToday(h, activities) || goalCompleted || !h.active) ? 'line-through text-zinc-400' : 'text-zinc-700 dark:text-zinc-200'
                     } hover:bg-zinc-100 dark:hover:bg-white/5 cursor-pointer ${
                       isDraggedHabit ? 'dragging' : ''
@@ -268,12 +271,14 @@ function GoalNode({
                     onTouchMove={onTouchMove}
                     onTouchEnd={onTouchEnd}
                   >
-                    <div className="flex items-center gap-2 truncate flex-1">
-                      <span>📄</span>
+                    <div className="flex items-center gap-2 min-w-0 flex-1">
+                      <span className="shrink-0">📄</span>
                       <div className="flex flex-col min-w-0 flex-1">
-                        <span className="truncate">{h.name}</span>
+                        <div className="habit-name-scroll min-w-0 overflow-hidden">
+                          <span className="habit-name-text inline-block whitespace-nowrap">{h.name}</span>
+                        </div>
                         {(h as any)?.workloadUnit && (
-                          <span className="text-xs text-zinc-500">
+                          <span className="text-xs text-zinc-500 truncate">
                             Target: {(h as any)?.workloadPerCount || 1} {(h as any)?.workloadUnit}
                           </span>
                         )}

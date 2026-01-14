@@ -1,0 +1,60 @@
+/* Habit名のスクロールアニメーション */
+.habit-name-scroll {
+  position: relative;
+  overflow: hidden;
+}
+
+.habit-name-text {
+  display: inline-block;
+  white-space: nowrap;
+  transition: transform 0.3s ease-out;
+}
+
+/* デスクトップ: ホバー時にスクロール */
+@media (hover: hover) and (pointer: fine) {
+  .habit-name-scroll:hover .habit-name-text {
+    animation: scroll-text-left 8s linear infinite;
+  }
+  
+  /* テキストが親要素より長い場合のみアニメーション */
+  .habit-name-scroll:not(.text-fits):hover .habit-name-text {
+    animation: scroll-text-left 8s linear infinite;
+  }
+  
+  .habit-name-scroll.text-fits:hover .habit-name-text {
+    animation: none;
+  }
+}
+
+/* スマホ: タップ時にスクロール（active状態） */
+@media (hover: none) and (pointer: coarse) {
+  .habit-name-scroll:active .habit-name-text {
+    animation: scroll-text-left 8s linear 1;
+  }
+  
+  .habit-name-scroll.text-fits:active .habit-name-text {
+    animation: none;
+  }
+}
+
+@keyframes scroll-text-left {
+  0% {
+    transform: translateX(0);
+  }
+  10% {
+    transform: translateX(0);
+  }
+  90% {
+    transform: translateX(calc(-100% + 100px));
+  }
+  100% {
+    transform: translateX(calc(-100% + 100px));
+  }
+}
+
+/* スマホでのタッチ操作の改善 */
+@media (max-width: 640px) {
+  .habit-name-scroll {
+    -webkit-tap-highlight-color: transparent;
+  }
+}
