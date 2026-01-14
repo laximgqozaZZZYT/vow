@@ -184,7 +184,7 @@ export default function DashboardPage() {
   async function handleMoveGoal(goalId: string, newParentId: string | null) {
     try {
       const updatedGoal = await api.updateGoal(goalId, { parentId: newParentId });
-      setGoals(prev => prev.map(g => g.id === goalId ? updatedGoal : g));
+      setGoals((prev: any[]) => prev.map(g => g.id === goalId ? updatedGoal : g));
       
       // 成功フィードバック（簡単な方法）
       console.log('Goal moved successfully');
@@ -197,7 +197,7 @@ export default function DashboardPage() {
   async function handleMoveHabit(habitId: string, newGoalId: string) {
     try {
       const updatedHabit = await api.updateHabit(habitId, { goalId: newGoalId });
-      setHabits(prev => prev.map(h => h.id === habitId ? updatedHabit : h));
+      setHabits((prev: any[]) => prev.map(h => h.id === habitId ? updatedHabit : h));
       
       // 成功フィードバック
       console.log('Habit moved successfully');
@@ -375,7 +375,7 @@ function DashboardLayout(props: any) {
   return (
     <div className="flex min-h-screen bg-zinc-50 dark:bg-black text-black dark:text-zinc-50">
         <DashboardHeader
-          onToggleSidebar={() => setShowLeftPane((s) => !s)}
+          onToggleSidebar={() => setShowLeftPane((s: boolean) => !s)}
           showSidebar={showLeftPane}
           onEditLayout={() => setEditLayoutOpen(true)}
         />
@@ -402,7 +402,7 @@ function DashboardLayout(props: any) {
         onMindmapDelete={async (mindmapId) => {
           try {
             await api.deleteMindmap(mindmapId);
-            setMindmaps(prev => prev.filter(m => m.id !== mindmapId));
+            setMindmaps((prev: any[]) => prev.filter(m => m.id !== mindmapId));
             console.log('Mindmap deleted successfully');
           } catch (error) {
             console.error('Failed to delete mindmap:', error);
@@ -430,7 +430,7 @@ function DashboardLayout(props: any) {
   <main className={`flex-1 pt-20 p-4 sm:p-6 lg:p-8 ${showLeftPane ? (isLeftHanded ? 'lg:mr-80' : 'lg:ml-80') : ''}`}>
 
         <div className="mt-6 grid grid-cols-1 gap-4 max-w-full overflow-hidden">
-          {pageSections.map(sec => (
+          {pageSections.map((sec: string) => (
             sec === 'next' ? (
               <NextSection 
                 key="next" 
@@ -486,8 +486,8 @@ function DashboardLayout(props: any) {
           setPageSections(s);
           try { await (api as any).setLayout?.(s); } catch (e) { console.error('Failed to persist layout', e); }
         }}
-        onAdd={(id: any) => setPageSections(ps => ps.includes(id) ? ps : [...ps, id])}
-        onDelete={(id: any) => setPageSections(ps => ps.filter(x => x !== id))}
+        onAdd={(id: any) => setPageSections((ps: any[]) => ps.includes(id) ? ps : [...ps, id])}
+        onDelete={(id: any) => setPageSections((ps: any[]) => ps.filter(x => x !== id))}
       />
 
       <GoalModal
@@ -508,7 +508,7 @@ function DashboardLayout(props: any) {
         onUpdate={async (updated) => {
           try { 
             const u = await api.updateHabit(updated.id, updated); 
-            setHabits((s) => s.map(h => h.id === updated.id ? u : h)); 
+            setHabits((s: any[]) => s.map(h => h.id === updated.id ? u : h)); 
           } catch(e) { 
             console.error(e); 
           }
@@ -516,7 +516,7 @@ function DashboardLayout(props: any) {
         onDelete={async (id) => { 
           try { 
             await api.deleteHabit(id); 
-            setHabits((s) => s.filter(h => h.id !== id)); 
+            setHabits((s: any[]) => s.filter(h => h.id !== id)); 
           } catch(e) { 
             console.error(e); 
           } 
@@ -538,7 +538,7 @@ function DashboardLayout(props: any) {
       <ActivityModal
         open={openActivityModal}
         onClose={() => { setOpenActivityModal(false); setEditingActivityId(null); }}
-        initial={activities.find(a => a.id === editingActivityId) as any ?? null}
+        initial={activities.find((a: any) => a.id === editingActivityId) as any ?? null}
         onSave={(updated) => {
           propagateActivityChanges(updated as any);
           setOpenActivityModal(false);
@@ -577,7 +577,7 @@ function DashboardLayout(props: any) {
                   nodes: mindmapData.nodes,
                   edges: mindmapData.edges
                 });
-                setMindmaps(prev => prev.map(m => m.id === mindmapData.id ? updatedMindmap : m));
+                setMindmaps((prev: any[]) => prev.map(m => m.id === mindmapData.id ? updatedMindmap : m));
                 console.log('[Dashboard] Mindmap updated successfully:', updatedMindmap);
               } else {
                 // Create new mindmap
@@ -587,7 +587,7 @@ function DashboardLayout(props: any) {
                   nodes: mindmapData.nodes,
                   edges: mindmapData.edges
                 });
-                setMindmaps(prev => [...prev, newMindmap]);
+                setMindmaps((prev: any[]) => [...prev, newMindmap]);
                 setSelectedMindmap(newMindmap);
                 console.log('[Dashboard] Mindmap created successfully:', newMindmap);
               }
@@ -612,7 +612,7 @@ function DashboardLayout(props: any) {
                 priority: data.priority,
                 frequency: data.frequency
               });
-              setHabits(prev => [...prev, newHabit]);
+              setHabits((prev: any[]) => [...prev, newHabit]);
               console.log('Habit created from mindmap:', newHabit);
             } catch (error) {
               console.error('Failed to create habit from mindmap:', error);
@@ -628,7 +628,7 @@ function DashboardLayout(props: any) {
                 priority: data.priority,
                 targetDate: data.targetDate
               });
-              setGoals(prev => [...prev, newGoal]);
+              setGoals((prev: any[]) => [...prev, newGoal]);
               console.log('Goal created from mindmap:', newGoal);
             } catch (error) {
               console.error('Failed to create goal from mindmap:', error);
