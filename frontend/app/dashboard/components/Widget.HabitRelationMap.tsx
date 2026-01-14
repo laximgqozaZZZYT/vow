@@ -661,6 +661,9 @@ function HabitRelationMapFlow({ habits, goals, onClose, embedded = false }: Habi
     return (
       <div className="h-full w-full flex flex-col bg-white dark:bg-slate-900 rounded-lg overflow-hidden">
         <div className="px-3 py-2 bg-slate-50 dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700">
+          <div className="mb-2">
+            <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">Goal & Habit Relation Map</h3>
+          </div>
           <div className="flex flex-wrap gap-3 text-xs">
             <div className="flex items-center gap-1.5">
               <div className="w-6 h-0.5 bg-purple-600" style={{ height: '2px' }}></div>
@@ -677,7 +680,53 @@ function HabitRelationMapFlow({ habits, goals, onClose, embedded = false }: Habi
           </div>
         </div>
 
-        <div className="flex-1">
+        <div className="flex-1 relative">
+          <style>{`
+            .react-flow__controls {
+              transform: scale(0.7);
+              transform-origin: bottom left;
+            }
+            .react-flow__controls button {
+              width: 24px !important;
+              height: 24px !important;
+              min-width: 24px !important;
+              min-height: 24px !important;
+            }
+            .react-flow__controls button svg {
+              max-width: 14px !important;
+              max-height: 14px !important;
+            }
+            @media (min-width: 640px) {
+              .react-flow__controls {
+                transform: scale(0.85);
+              }
+              .react-flow__controls button {
+                width: 28px !important;
+                height: 28px !important;
+                min-width: 28px !important;
+                min-height: 28px !important;
+              }
+              .react-flow__controls button svg {
+                max-width: 16px !important;
+                max-height: 16px !important;
+              }
+            }
+            @media (min-width: 768px) {
+              .react-flow__controls {
+                transform: scale(1);
+              }
+              .react-flow__controls button {
+                width: 32px !important;
+                height: 32px !important;
+                min-width: 32px !important;
+                min-height: 32px !important;
+              }
+              .react-flow__controls button svg {
+                max-width: 18px !important;
+                max-height: 18px !important;
+              }
+            }
+          `}</style>
           <ReactFlow
             nodes={flowNodes}
             edges={flowEdges}

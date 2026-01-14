@@ -490,6 +490,38 @@ export default function StaticsSection({ habits, activities, goals }: { habits: 
   ] as const), [])
   const [pageIndex, setPageIndex] = React.useState(0)
 
+  // スワイプ操作用のstate
+  const [touchStart, setTouchStart] = React.useState<number | null>(null)
+  const [touchEnd, setTouchEnd] = React.useState<number | null>(null)
+
+  // スワイプの最小距離（ピクセル）
+  const minSwipeDistance = 50
+
+  const onTouchStart = (e: React.TouchEvent) => {
+    setTouchEnd(null)
+    setTouchStart(e.targetTouches[0].clientX)
+  }
+
+  const onTouchMove = (e: React.TouchEvent) => {
+    setTouchEnd(e.targetTouches[0].clientX)
+  }
+
+  const onTouchEnd = () => {
+    if (!touchStart || !touchEnd) return
+    
+    const distance = touchStart - touchEnd
+    const isLeftSwipe = distance > minSwipeDistance
+    const isRightSwipe = distance < -minSwipeDistance
+
+    if (isLeftSwipe) {
+      // 左スワイプ = 次のページ
+      setPageIndex((i) => (i + 1) % pages.length)
+    } else if (isRightSwipe) {
+      // 右スワイプ = 前のページ
+      setPageIndex((i) => (i - 1 + pages.length) % pages.length)
+    }
+  }
+
   // Graph controls - allow range selection
   const [range, setRange] = React.useState<RangeKey>('7d')
   const [displayMode, setDisplayMode] = React.useState<'linear' | 'radial'>('linear')
@@ -666,7 +698,12 @@ export default function StaticsSection({ habits, activities, goals }: { habits: 
       </div>
 
       {/* Responsive height page viewport */}
-      <div className="mt-4 rounded border border-zinc-100 dark:border-slate-800 h-[520px] sm:h-[400px] md:h-[520px] overflow-hidden">
+      <div 
+        className="mt-4 rounded border border-zinc-100 dark:border-slate-800 h-[520px] sm:h-[400px] md:h-[520px] overflow-hidden"
+        onTouchStart={onTouchStart}
+        onTouchMove={onTouchMove}
+        onTouchEnd={onTouchEnd}
+      >
         <div className="h-full overflow-auto p-3">
           {activePage === 'relations' ? (
             <div className="min-w-0 h-full -m-3">
