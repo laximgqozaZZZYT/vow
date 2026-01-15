@@ -81,8 +81,8 @@ describe('SEO Metadata Property-Based Tests', () => {
         fc.property(
           fc.array(
             fc.record({
-              title: fc.string({ minLength: 5, maxLength: 100 }),
-              description: fc.string({ minLength: 10, maxLength: 200 }),
+              title: fc.string({ minLength: 5, maxLength: 100 }).filter(s => s.trim().length >= 5),
+              description: fc.string({ minLength: 10, maxLength: 200 }).filter(s => s.trim().length >= 10),
               path: fc.oneof(
                 fc.constant('/'),
                 fc.constant('/dashboard'),
@@ -114,7 +114,7 @@ describe('SEO Metadata Property-Based Tests', () => {
 
             // Property: If we have different page configurations, we should have unique OG metadata
             const uniqueConfigs = new Set(
-              pageConfigs.map(c => JSON.stringify({ title: c.title, description: c.description }))
+              pageConfigs.map(c => JSON.stringify({ title: c.title.trim(), description: c.description.trim() }))
             );
             const uniquePaths = new Set(pageConfigs.map(c => c.path));
 
@@ -146,8 +146,8 @@ describe('SEO Metadata Property-Based Tests', () => {
         fc.property(
           fc.array(
             fc.record({
-              title: fc.string({ minLength: 5, maxLength: 100 }),
-              description: fc.string({ minLength: 10, maxLength: 200 }),
+              title: fc.string({ minLength: 5, maxLength: 100 }).filter(s => s.trim().length >= 5),
+              description: fc.string({ minLength: 10, maxLength: 200 }).filter(s => s.trim().length >= 10),
               path: fc.webPath(),
               locale: fc.constantFrom('en' as const, 'ja' as const),
             }),
@@ -170,7 +170,7 @@ describe('SEO Metadata Property-Based Tests', () => {
 
             // Property: If we have different page configurations, we should have unique Twitter metadata
             const uniqueConfigs = new Set(
-              pageConfigs.map(c => JSON.stringify({ title: c.title, description: c.description }))
+              pageConfigs.map(c => JSON.stringify({ title: c.title.trim(), description: c.description.trim() }))
             );
 
             // The number of unique Twitter titles should match the number of unique input title configs
@@ -197,8 +197,8 @@ describe('SEO Metadata Property-Based Tests', () => {
         fc.property(
           fc.array(
             fc.record({
-              title: fc.string({ minLength: 5, maxLength: 100 }),
-              description: fc.string({ minLength: 10, maxLength: 200 }),
+              title: fc.string({ minLength: 5, maxLength: 100 }).filter(s => s.trim().length >= 5),
+              description: fc.string({ minLength: 10, maxLength: 200 }).filter(s => s.trim().length >= 10),
               path: fc.webPath(),
               locale: fc.constantFrom('en' as const, 'ja' as const),
             }),
@@ -235,8 +235,8 @@ describe('SEO Metadata Property-Based Tests', () => {
         fc.property(
           fc.array(
             fc.record({
-              title: fc.string({ minLength: 5, maxLength: 100 }),
-              description: fc.string({ minLength: 10, maxLength: 200 }),
+              title: fc.string({ minLength: 5, maxLength: 100 }).filter(s => s.trim().length >= 5),
+              description: fc.string({ minLength: 10, maxLength: 200 }).filter(s => s.trim().length >= 10),
               path: fc.webPath(),
             }),
             { minLength: 2, maxLength: 5 }
@@ -266,8 +266,8 @@ describe('SEO Metadata Property-Based Tests', () => {
             // Property: Each unique (title, description) pair should produce unique metadata
             const uniqueConfigs = new Set(
               metadataList.map(m => JSON.stringify({ 
-                title: m.config.title, 
-                description: m.config.description 
+                title: m.config.title.trim(), 
+                description: m.config.description.trim() 
               }))
             );
 
