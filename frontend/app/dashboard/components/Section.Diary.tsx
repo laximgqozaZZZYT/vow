@@ -11,7 +11,7 @@ import api, { DiaryCard } from '@/lib/api'
 import DiaryTagManagerModal from './Modal.TagManager'
 import DiaryModal from './Modal.Diary'
 import { useHandedness } from '../contexts/HandednessContext'
-import type { Tag } from '../types'
+import type { Tag } from '@/app/dashboard/types'
 
 type Goal = { id: string; name: string }
 type Habit = { id: string; name: string }
