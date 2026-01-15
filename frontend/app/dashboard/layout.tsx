@@ -2,9 +2,10 @@ import type { Metadata } from "next";
 import { createPageMetadata } from "../../lib/seo.metadata";
 
 export const metadata: Metadata = createPageMetadata({
-  title: "Dashboard - Track Your Habits & Goals",
-  description: "Monitor your progress, manage your habits, and achieve your goals with VOW's intuitive dashboard. View statistics, calendar, and activity tracking.",
+  title: "ダッシュボード - VOW",
+  description: "習慣の進捗を確認し、目標を管理。カレンダービュー、統計グラフ、マインドマップで視覚的にタスクを管理。",
   path: "/dashboard",
+  locale: "ja",
   noIndex: true, // ダッシュボードは個人的なページなので検索エンジンにインデックスしない
 });
 

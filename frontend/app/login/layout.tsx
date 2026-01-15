@@ -2,9 +2,10 @@ import type { Metadata } from "next";
 import { createPageMetadata } from "../../lib/seo.metadata";
 
 export const metadata: Metadata = createPageMetadata({
-  title: "Login - Access Your VOW Account",
-  description: "Sign in to your VOW account to sync your habits and goals across devices. Login with Google or GitHub for secure access.",
+  title: "ログイン - VOW",
+  description: "VOWにログインして、習慣と目標を管理。ゲストモードでも利用可能。データはクラウドに安全に保存されます。",
   path: "/login",
+  locale: "ja",
   noIndex: true, // ログインページは検索エンジンにインデックスしない
 });
 
