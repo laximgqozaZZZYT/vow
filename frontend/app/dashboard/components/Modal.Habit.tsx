@@ -7,6 +7,7 @@ import { DayPicker } from "react-day-picker"
 import "react-day-picker/dist/style.css"
 import TagSelector from './Widget.TagSelector'
 import { useLocalStorage } from '../hooks/useLocalStorage'
+import { useLocale } from '../../contexts/LocaleContext'
 
 // Helper: format a Date to local YYYY-MM-DD (avoid toISOString which uses UTC)
 function formatLocalDate(d: Date) {
@@ -106,6 +107,9 @@ function CollapsibleSection({
 }
 
 export function HabitModal({ open, onClose, habit, onUpdate, onDelete, onCreate, initial, categories: goals, tags, onTagsChange }: { open: boolean; onClose: () => void; habit: Habit | null; onUpdate?: (h: Habit) => void; onDelete?: (id: string) => void; onCreate?: (payload: CreateHabitPayload) => void; initial?: { date?: string; time?: string; endTime?: string; type?: "do" | "avoid"; goalId?: string }; categories?: { id: string; name: string }[]; tags?: any[]; onTagsChange?: (habitId: string, tagIds: string[]) => Promise<void> }) {
+    // Locale
+    const { t } = useLocale()
+    
     // View mode state with localStorage persistence
     const { value: viewMode, setValue: setViewMode } = useLocalStorage<ViewMode>('habitModalViewMode', { defaultValue: 'normal' })
     
@@ -432,7 +436,7 @@ export function HabitModal({ open, onClose, habit, onUpdate, onDelete, onCreate,
         <div className="fixed inset-0 z-50 flex items-start justify-center pt-4 sm:pt-12 bg-black/30 p-4">
             <div className="w-full max-w-[720px] rounded bg-white px-4 pt-4 pb-0 shadow-lg text-black dark:bg-[#0f1724] dark:text-slate-100 flex flex-col max-h-[95vh] sm:max-h-[90vh]">
                 <div className="flex items-center justify-between">
-                    <h2 className="text-xl sm:text-2xl font-semibold">Habit</h2>
+                    <h2 className="text-xl sm:text-2xl font-semibold">{t('habit.title')}</h2>
                     <div className="flex items-center gap-2">
                         {/* Toggle button with icons */}
                         <div className="flex items-center rounded-lg bg-slate-100 dark:bg-slate-800 p-1">
@@ -450,7 +454,7 @@ export function HabitModal({ open, onClose, habit, onUpdate, onDelete, onCreate,
                                 <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                                     <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" />
                                 </svg>
-                                <span className="hidden sm:inline">通常</span>
+                                <span className="hidden sm:inline">{t('habit.view.normal')}</span>
                             </button>
                             <button 
                                 onClick={() => setViewMode('detail')}
@@ -466,7 +470,7 @@ export function HabitModal({ open, onClose, habit, onUpdate, onDelete, onCreate,
                                 <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                                     <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 10h16M4 14h16M4 18h16" />
                                 </svg>
-                                <span className="hidden sm:inline">詳細</span>
+                                <span className="hidden sm:inline">{t('habit.view.detail')}</span>
                             </button>
                         </div>
                         <button onClick={onClose} className="text-slate-500 text-lg sm:text-xl p-2 min-w-[44px] min-h-[44px] flex items-center justify-center">✕</button>
@@ -491,8 +495,8 @@ export function HabitModal({ open, onClose, habit, onUpdate, onDelete, onCreate,
 
                 <div className="mt-4 flex flex-col lg:flex-row gap-4 habit-scroll-area overflow-auto flex-1 pr-2 modal-scroll-gap">
                     <div className="flex-1">
-                        <h3 className="text-base sm:text-lg font-medium mb-3 text-slate-100">Name</h3>
-                        <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Add title" className="w-full rounded border px-3 py-3 bg-white text-black dark:bg-slate-800 dark:text-slate-100 text-base" />
+                        <h3 className="text-base sm:text-lg font-medium mb-3 text-slate-100">{t('habit.name')}</h3>
+                        <input value={name} onChange={(e) => setName(e.target.value)} placeholder={t('habit.name.placeholder')} className="w-full rounded border px-3 py-3 bg-white text-black dark:bg-slate-800 dark:text-slate-100 text-base" />
 
                         <div className="mt-8">
                             {/* Workload section - hidden in Normal View unless expanded */}
@@ -1090,9 +1094,9 @@ export function HabitModal({ open, onClose, habit, onUpdate, onDelete, onCreate,
                 </div>
 
                 <div className="flex flex-col sm:flex-row gap-3 p-4 border-t border-slate-200 dark:border-slate-700">
-                    <button onClick={handleSave} className="rounded bg-blue-600 px-6 py-3 text-white text-base font-medium min-h-[44px]">Save</button>
-                    <button onClick={onClose} className="px-6 py-3 dark:bg-slate-800 dark:text-slate-100 text-black border rounded text-base font-medium min-h-[44px]">Cancel</button>
-                    {habit && <button onClick={handleDelete} className="sm:ml-auto text-base text-red-600 px-6 py-3 font-medium min-h-[44px]">Delete</button>}
+                    <button onClick={handleSave} className="rounded bg-blue-600 px-6 py-3 text-white text-base font-medium min-h-[44px]">{t('habit.button.save')}</button>
+                    <button onClick={onClose} className="px-6 py-3 dark:bg-slate-800 dark:text-slate-100 text-black border rounded text-base font-medium min-h-[44px]">{t('habit.button.cancel')}</button>
+                    {habit && <button onClick={handleDelete} className="sm:ml-auto text-base text-red-600 px-6 py-3 font-medium min-h-[44px]">{t('habit.button.delete')}</button>}
                 </div>
             </div>
         </div>

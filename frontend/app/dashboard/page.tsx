@@ -32,6 +32,7 @@ import type { CreateGoalPayload } from './types';
 
 import { useAuth } from './hooks/useAuth';
 import { HandednessProvider, useHandedness } from './contexts/HandednessContext';
+import { LocaleProvider } from '../contexts/LocaleContext';
 
 export default function DashboardPage() {
   const [showLeftPane, setShowLeftPane] = useState(false);
@@ -353,20 +354,21 @@ export default function DashboardPage() {
   }
 
   return (
-    <HandednessProvider>
-      <DashboardLayout
-        showLeftPane={showLeftPane}
-        setShowLeftPane={setShowLeftPane}
-        selectedGoal={selectedGoal}
-        setSelectedGoal={setSelectedGoal}
-        goals={goals}
-        setGoals={setGoals}
-        habits={habits}
-        setHabits={setHabits}
-        activities={activities}
-        setActivities={setActivities}
-        pageSections={pageSections}
-        setPageSections={setPageSections}
+    <LocaleProvider>
+      <HandednessProvider>
+        <DashboardLayout
+          showLeftPane={showLeftPane}
+          setShowLeftPane={setShowLeftPane}
+          selectedGoal={selectedGoal}
+          setSelectedGoal={setSelectedGoal}
+          goals={goals}
+          setGoals={setGoals}
+          habits={habits}
+          setHabits={setHabits}
+          activities={activities}
+          setActivities={setActivities}
+          pageSections={pageSections}
+          setPageSections={setPageSections}
         mindmaps={mindmaps}
         setMindmaps={setMindmaps}
         selectedMindmap={selectedMindmap}
@@ -435,6 +437,7 @@ export default function DashboardPage() {
         handleMoveHabit={handleMoveHabit}
       />
     </HandednessProvider>
+    </LocaleProvider>
   );
 }
 

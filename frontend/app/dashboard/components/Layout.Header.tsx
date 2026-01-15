@@ -4,6 +4,7 @@ import { useAuth } from '../hooks/useAuth';
 import api from '../../../lib/api';
 import type { DashboardHeaderProps } from '../types';
 import { useHandedness } from '../contexts/HandednessContext';
+import { useLocale } from '../../contexts/LocaleContext';
 
 export default function DashboardHeader({ 
   onToggleSidebar, 
@@ -22,6 +23,7 @@ export default function DashboardHeader({
     retryMigration
   } = useAuth();
   const { handedness, setHandedness, isLeftHanded } = useHandedness();
+  const { locale, setLocale } = useLocale();
   const [hasGuestData, setHasGuestData] = useState(false);
 
   // Check for guest data on component mount and migration status changes
@@ -103,6 +105,36 @@ export default function DashboardHeader({
         </div>
 
         <div className={`flex items-center gap-1 sm:gap-2 ${isLeftHanded ? 'flex-row-reverse' : ''}`}>
+          {/* Locale switcher */}
+          <div className="flex items-center rounded-lg bg-slate-100 dark:bg-slate-800 p-1">
+            <button 
+              onClick={() => setLocale('en')}
+              className={`px-2 py-1 text-xs rounded-md transition-all min-w-[32px] min-h-[32px] flex items-center justify-center ${
+                locale === 'en' 
+                  ? 'bg-white dark:bg-slate-700 shadow-sm text-slate-900 dark:text-slate-100 font-medium' 
+                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
+              }`}
+              title="English"
+              aria-label="Switch to English"
+              aria-pressed={locale === 'en'}
+            >
+              EN
+            </button>
+            <button 
+              onClick={() => setLocale('ja')}
+              className={`px-2 py-1 text-xs rounded-md transition-all min-w-[32px] min-h-[32px] flex items-center justify-center ${
+                locale === 'ja' 
+                  ? 'bg-white dark:bg-slate-700 shadow-sm text-slate-900 dark:text-slate-100 font-medium' 
+                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
+              }`}
+              title="日本語"
+              aria-label="Switch to Japanese"
+              aria-pressed={locale === 'ja'}
+            >
+              JA
+            </button>
+          </div>
+          
           {actorLabel && (
             <div className="hidden text-xs text-zinc-500 sm:block truncate max-w-24 lg:max-w-none">{actorLabel}</div>
           )}
