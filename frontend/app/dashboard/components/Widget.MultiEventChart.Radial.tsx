@@ -108,7 +108,8 @@ export default function RadialEventChart({
   const centerX = size / 2
   const centerY = size / 2
   const innerRadius = size * 0.1   // 中心の空白
-  const outerRadius = size * 0.42  // 外側の半径
+  const outerRadius = size * 0.35  // 外側の半径（ラベル用のスペースを確保）
+  const labelRingRadius = size * 0.42  // ラベルリングの半径
   
   const habitIds = visibleHabitIds.filter(id => habits.find(h => h.id === id))
   const habitCount = habitIds.length
@@ -233,6 +234,80 @@ export default function RadialEventChart({
             opacity={0.25}
           />
 
+          {/* 外側のラベルリング */}
+          <circle
+            cx={centerX}
+            cy={centerY}
+            r={labelRingRadius}
+            fill="none"
+            stroke="currentColor"
+            strokeWidth={0.5}
+            opacity={0.15}
+          />
+
+          {/* 習慣名を外側のリング上に配置（円環に沿って） */}
+          <defs>
+            {habitIds.map((habitId, habitIndex) => {
+              const habitCount = habitIds.length
+              const anglePerHabit = habitCount > 0 ? 360 / habitCount : 360
+              const sectorStartAngle = habitIndex * anglePerHabit
+              const sectorEndAngle = (habitIndex + 1) * anglePerHabit
+              
+              // 各セクターの弧を定義
+              const startPos = polarToCartesian(centerX, centerY, labelRingRadius, sectorStartAngle)
+              const endPos = polarToCartesian(centerX, centerY, labelRingRadius, sectorEndAngle)
+              const largeArcFlag = anglePerHabit > 180 ? 1 : 0
+              
+              // 下半分は逆方向に描画（テキストが上下反転しないように）
+              const midAngle = (sectorStartAngle + sectorEndAngle) / 2
+              const isBottomHalf = midAngle > 90 && midAngle < 270
+              
+              let pathD
+              if (isBottomHalf) {
+                // 下半分：終点から始点へ（反時計回り）
+                pathD = `M ${endPos.x} ${endPos.y} A ${labelRingRadius} ${labelRingRadius} 0 ${largeArcFlag} 0 ${startPos.x} ${startPos.y}`
+              } else {
+                // 上半分：始点から終点へ（時計回り）
+                pathD = `M ${startPos.x} ${startPos.y} A ${labelRingRadius} ${labelRingRadius} 0 ${largeArcFlag} 1 ${endPos.x} ${endPos.y}`
+              }
+              
+              return (
+                <path
+                  key={`textPath-${habitId}`}
+                  id={`textPath-radial-${habitId}`}
+                  d={pathD}
+                  fill="none"
+                />
+              )
+            })}
+          </defs>
+          
+          {habitIds.map((habitId, habitIndex) => {
+            const habit = habits.find(h => h.id === habitId)
+            if (!habit) return null
+
+            const color = palette(habitIndex)
+            const habitName = habit.name.length > 15 ? habit.name.slice(0, 15) + '...' : habit.name
+
+            return (
+              <text
+                key={`label-${habitId}`}
+                fontSize={isMobile ? 9 : 11}
+                fill={color}
+                fontWeight="600"
+                className="pointer-events-none"
+              >
+                <textPath
+                  href={`#textPath-radial-${habitId}`}
+                  startOffset="50%"
+                  textAnchor="middle"
+                >
+                  {habitName}
+                </textPath>
+              </text>
+            )
+          })}
+
           {/* 中心のラベル */}
           <text
             x={centerX}
@@ -272,26 +347,6 @@ export default function RadialEventChart({
                   strokeWidth={0.5}
                   opacity={0.2}
                 />
-
-                {/* 習慣名ラベル */}
-                {(() => {
-                  const labelRadius = outerRadius * 1.15
-                  const labelPos = polarToCartesian(centerX, centerY, labelRadius, midAngle)
-                  return (
-                    <text
-                      x={labelPos.x}
-                      y={labelPos.y}
-                      textAnchor="middle"
-                      dominantBaseline="middle"
-                      fontSize={isMobile ? 10 : 12}
-                      fill={color}
-                      fontWeight="500"
-                      className="pointer-events-none"
-                    >
-                      {habit.name.length > 12 ? habit.name.slice(0, 12) + '...' : habit.name}
-                    </text>
-                  )
-                })()}
 
                 {/* 進捗率の目盛り線（セクター内） */}
                 {[0.25, 0.5, 0.75, 1].map((progressRatio) => {
