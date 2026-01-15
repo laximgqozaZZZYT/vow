@@ -6,6 +6,7 @@ import { Popover } from "@headlessui/react"
 import { DayPicker } from "react-day-picker"
 import "react-day-picker/dist/style.css"
 import TagSelector from './Widget.TagSelector'
+import { useLocalStorage } from '../hooks/useLocalStorage'
 
 // Helper: format a Date to local YYYY-MM-DD (avoid toISOString which uses UTC)
 function formatLocalDate(d: Date) {
@@ -50,11 +51,73 @@ type Timing = {
     cron?: string
 }
 
+type ViewMode = 'normal' | 'detail'
+
+type ExpandedSections = {
+    workload: boolean
+    outdates: boolean
+    type: boolean
+    goal: boolean
+    relatedHabits: boolean
+}
+
 type Habit = { id: string; goalId: string; name: string; active: boolean; type: "do" | "avoid"; count: number; must?: number; duration?: number; reminders?: ({ kind: 'absolute'; time: string; weekdays: string[] } | { kind: 'relative'; minutesBefore: number })[]; dueDate?: string; time?: string; endTime?: string; repeat?: string; allDay?: boolean; notes?: string; createdAt: string; updatedAt: string; workloadUnit?: string; workloadTotal?: number; workloadTotalEnd?: number; workloadPerCount?: number }
 
 type CreateHabitPayload = { name: string; goalId?: string; type: "do" | "avoid"; duration?: number; reminders?: any[]; dueDate?: string; time?: string; endTime?: string; repeat?: string; timings?: any[]; allDay?: boolean; notes?: string; workloadUnit?: string; workloadTotal?: number; workloadTotalEnd?: number; workloadPerCount?: number }
 
+// CollapsibleSection component for Normal View
+function CollapsibleSection({ 
+    title, 
+    isExpanded, 
+    onToggle, 
+    children 
+}: { 
+    title: string
+    isExpanded: boolean
+    onToggle: () => void
+    children: React.ReactNode 
+}) {
+    return (
+        <div className="mt-4">
+            <button
+                onClick={onToggle}
+                className="flex items-center gap-2 text-sm text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 transition-colors py-2 min-h-[44px]"
+                aria-expanded={isExpanded}
+                aria-label={isExpanded ? `Collapse ${title}` : `Expand ${title}`}
+            >
+                <svg 
+                    xmlns="http://www.w3.org/2000/svg" 
+                    className={`h-4 w-4 transition-transform ${isExpanded ? 'rotate-90' : ''}`}
+                    fill="none" 
+                    viewBox="0 0 24 24" 
+                    stroke="currentColor"
+                >
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                </svg>
+                <span className="font-medium">{title}</span>
+            </button>
+            {isExpanded && (
+                <div className="mt-2 animate-fadeIn">
+                    {children}
+                </div>
+            )}
+        </div>
+    )
+}
+
 export function HabitModal({ open, onClose, habit, onUpdate, onDelete, onCreate, initial, categories: goals, tags, onTagsChange }: { open: boolean; onClose: () => void; habit: Habit | null; onUpdate?: (h: Habit) => void; onDelete?: (id: string) => void; onCreate?: (payload: CreateHabitPayload) => void; initial?: { date?: string; time?: string; endTime?: string; type?: "do" | "avoid"; goalId?: string }; categories?: { id: string; name: string }[]; tags?: any[]; onTagsChange?: (habitId: string, tagIds: string[]) => Promise<void> }) {
+    // View mode state with localStorage persistence
+    const { value: viewMode, setValue: setViewMode } = useLocalStorage<ViewMode>('habitModalViewMode', { defaultValue: 'normal' })
+    
+    // Expanded sections state (session-only, not persisted)
+    const [expandedSections, setExpandedSections] = React.useState<ExpandedSections>({
+        workload: false,
+        outdates: false,
+        type: false,
+        goal: false,
+        relatedHabits: false
+    })
+    
     const [name, setName] = React.useState<string>(habit?.name ?? "")
     const [notes, setNotes] = React.useState<string>(habit?.notes ?? "")
     const [dueDate, setDueDate] = React.useState<Date | undefined>(habit?.dueDate ? new Date(habit.dueDate) : undefined)
@@ -93,6 +156,19 @@ export function HabitModal({ open, onClose, habit, onUpdate, onDelete, onCreate,
 
     // Tags state
     const [selectedTagIds, setSelectedTagIds] = React.useState<string[]>([])
+
+    // Toggle view mode
+    const toggleViewMode = React.useCallback(() => {
+        setViewMode(viewMode === 'normal' ? 'detail' : 'normal')
+    }, [viewMode, setViewMode])
+
+    // Toggle individual section expansion
+    const toggleSection = React.useCallback((section: keyof ExpandedSections) => {
+        setExpandedSections(prev => ({
+            ...prev,
+            [section]: !prev[section]
+        }))
+    }, [])
 
     async function loadAllHabits() {
         try {
@@ -357,7 +433,44 @@ export function HabitModal({ open, onClose, habit, onUpdate, onDelete, onCreate,
             <div className="w-full max-w-[720px] rounded bg-white px-4 pt-4 pb-0 shadow-lg text-black dark:bg-[#0f1724] dark:text-slate-100 flex flex-col max-h-[95vh] sm:max-h-[90vh]">
                 <div className="flex items-center justify-between">
                     <h2 className="text-xl sm:text-2xl font-semibold">Habit</h2>
-                    <button onClick={onClose} className="text-slate-500 text-lg sm:text-xl p-2 min-w-[44px] min-h-[44px] flex items-center justify-center">✕</button>
+                    <div className="flex items-center gap-2">
+                        {/* Toggle button with icons */}
+                        <div className="flex items-center rounded-lg bg-slate-100 dark:bg-slate-800 p-1">
+                            <button 
+                                onClick={() => setViewMode('normal')}
+                                className={`px-3 py-2 text-sm rounded-md transition-all min-w-[44px] min-h-[44px] flex items-center justify-center gap-2 ${
+                                    viewMode === 'normal' 
+                                        ? 'bg-white dark:bg-slate-700 shadow-sm text-slate-900 dark:text-slate-100' 
+                                        : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
+                                }`}
+                                title="Normal View (show essential fields only)"
+                                aria-label="Normal View"
+                                aria-pressed={viewMode === 'normal'}
+                            >
+                                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" />
+                                </svg>
+                                <span className="hidden sm:inline">通常</span>
+                            </button>
+                            <button 
+                                onClick={() => setViewMode('detail')}
+                                className={`px-3 py-2 text-sm rounded-md transition-all min-w-[44px] min-h-[44px] flex items-center justify-center gap-2 ${
+                                    viewMode === 'detail' 
+                                        ? 'bg-white dark:bg-slate-700 shadow-sm text-slate-900 dark:text-slate-100' 
+                                        : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
+                                }`}
+                                title="Detail View (show all fields)"
+                                aria-label="Detail View"
+                                aria-pressed={viewMode === 'detail'}
+                            >
+                                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 10h16M4 14h16M4 18h16" />
+                                </svg>
+                                <span className="hidden sm:inline">詳細</span>
+                            </button>
+                        </div>
+                        <button onClick={onClose} className="text-slate-500 text-lg sm:text-xl p-2 min-w-[44px] min-h-[44px] flex items-center justify-center">✕</button>
+                    </div>
                 </div>
 
                 {/* Scrollable content area with modern scrollbar */}
@@ -367,6 +480,13 @@ export function HabitModal({ open, onClose, habit, onUpdate, onDelete, onCreate,
                     .habit-scroll-area::-webkit-scrollbar-track { background: transparent; }
                     .habit-scroll-area::-webkit-scrollbar-thumb { background: rgba(148,163,184,.6); border-radius: 9999px; border: 2px solid transparent; background-clip: padding-box; }
                     .habit-scroll-area::-webkit-scrollbar-thumb:hover { background: rgba(148,163,184,.85); }
+                    @keyframes fadeIn {
+                        from { opacity: 0; transform: translateY(-10px); }
+                        to { opacity: 1; transform: translateY(0); }
+                    }
+                    .animate-fadeIn {
+                        animation: fadeIn 0.2s ease-in-out;
+                    }
                 `}</style>
 
                 <div className="mt-4 flex flex-col lg:flex-row gap-4 habit-scroll-area overflow-auto flex-1 pr-2 modal-scroll-gap">
@@ -375,7 +495,8 @@ export function HabitModal({ open, onClose, habit, onUpdate, onDelete, onCreate,
                         <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Add title" className="w-full rounded border px-3 py-3 bg-white text-black dark:bg-slate-800 dark:text-slate-100 text-base" />
 
                         <div className="mt-8">
-                            {/* Workload section (moved) */}
+                            {/* Workload section - hidden in Normal View unless expanded */}
+                            {viewMode === 'detail' ? (
                             <div className="mt-4">
                                 <h3 className="text-lg font-medium text-slate-100">Workload</h3>
                                 {estimatedDaysToTotalEnd !== null ? (
@@ -406,6 +527,44 @@ export function HabitModal({ open, onClose, habit, onUpdate, onDelete, onCreate,
                                     </div>
                                 </div>
                             </div>
+                            ) : (
+                            <CollapsibleSection
+                                title="Workload"
+                                isExpanded={expandedSections.workload}
+                                onToggle={() => toggleSection('workload')}
+                            >
+                                <div>
+                                    <h3 className="text-lg font-medium text-slate-100">Workload</h3>
+                                    {estimatedDaysToTotalEnd !== null ? (
+                                            <div className="text-sm text-slate-400 mb-2">Estimated days to reach Load Total(End): <span className="font-semibold text-slate-200">{estimatedDaysToTotalEnd}</span> days</div>
+                                    ) : null}
+                                    <div className="mt-4 grid grid-cols-1 sm:grid-cols-3 gap-4 items-center">
+                                        <div>
+                                            <div className="text-sm text-slate-400 mb-2">Unit</div>
+                                            <input value={workloadUnit} onChange={(e) => setWorkloadUnit(e.target.value)} placeholder="e.g. hrs, pages" className="w-full rounded border px-3 py-3 bg-white text-black dark:bg-slate-800 dark:text-slate-100 text-base" />
+                                        </div>
+                                        <div>
+                                            <div className="text-sm text-slate-400 mb-2">Load per Count</div>
+                                            <input type="number" min={1} value={workloadPerCount} onChange={(e) => setWorkloadPerCount(e.target.value)} className="w-full rounded border px-3 py-3 bg-white text-black dark:bg-slate-800 dark:text-slate-100 text-base [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" />
+                                        </div>
+                                        <div>
+                                            <div className="text-sm text-slate-400 mb-2">Load Total(Day)</div>
+                                            <input type="number" min={0} value={workloadTotal} onChange={(e) => setWorkloadTotal(e.target.value)} className="w-full rounded border px-3 py-3 bg-white text-black dark:bg-slate-800 dark:text-slate-100 text-base [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" />
+                                        </div>
+                                    </div>
+
+                                    <div className="mt-4 grid grid-cols-1 sm:grid-cols-3 gap-4 items-center">
+                                        <div className="col-span-1">
+                                            <div className="text-sm text-slate-400 mb-2">Load Total(End) (optional)</div>
+                                            <input type="number" min={0} value={workloadTotalEnd} onChange={(e) => setWorkloadTotalEnd(e.target.value)} className="w-full rounded border px-3 py-3 bg-white text-black dark:bg-slate-800 dark:text-slate-100 text-base [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" />
+                                        </div>
+                                        <div className="col-span-2 text-base text-slate-500">
+                                            Based on Load Total(Day), we estimate how many days it takes to reach Load Total(End).
+                                        </div>
+                                    </div>
+                                </div>
+                            </CollapsibleSection>
+                            )}
                                 <div className="mt-6">
                                     <h3 className="text-lg font-medium">Timings</h3>
                                     <div className="mt-4 space-y-4">
@@ -526,7 +685,8 @@ export function HabitModal({ open, onClose, habit, onUpdate, onDelete, onCreate,
                                 </div>
                             
 
-                            {/* Outdates (collapsible) - Habit modal placement: show directly under Timings */}
+                            {/* Outdates (collapsible) - hidden in Normal View unless expanded */}
+                            {viewMode === 'detail' ? (
                             <div className="mt-4">
                                 <div className="flex items-center justify-between">
                                     <h3 className="text-lg font-medium">Outdates (exclude periods)</h3>
@@ -662,11 +822,25 @@ export function HabitModal({ open, onClose, habit, onUpdate, onDelete, onCreate,
                                     </div>
                                 )}
                             </div>
+                            ) : (
+                            <CollapsibleSection
+                                title="Outdates (exclude periods)"
+                                isExpanded={expandedSections.outdates}
+                                onToggle={() => toggleSection('outdates')}
+                            >
+                                <div>
+                                    <p className="text-sm text-slate-500 mb-2">Expand to configure exclude periods</p>
+                                </div>
+                            </CollapsibleSection>
+                            )}
 
                             {/* workload moved above */}
                         </div>
 
                         <div className="mt-8">
+                            {/* Type section - hidden in Normal View unless expanded */}
+                            {viewMode === 'detail' ? (
+                            <>
                             <h3 className="text-lg font-medium">Type</h3>
                             <div className="mt-4 flex flex-col gap-4">
                                 <div className="flex gap-6">
@@ -695,6 +869,50 @@ export function HabitModal({ open, onClose, habit, onUpdate, onDelete, onCreate,
                                     </label>
                                 </div>
                                 <div className="text-sm text-zinc-500 mt-2">Good = show on calendar. Bad = track but hide from calendar.</div>
+                            </div>
+                            </>
+                            ) : (
+                            <CollapsibleSection
+                                title="Type"
+                                isExpanded={expandedSections.type}
+                                onToggle={() => toggleSection('type')}
+                            >
+                                <div>
+                                    <h3 className="text-lg font-medium">Type</h3>
+                                    <div className="mt-4 flex flex-col gap-4">
+                                        <div className="flex gap-6">
+                                            <label className="inline-flex items-center gap-3">
+                                                <input
+                                                    type="radio"
+                                                    name="habit-type"
+                                                    value="do"
+                                                    checked={type === 'do'}
+                                                    onChange={() => setType('do')}
+                                                    className="form-radio w-5 h-5"
+                                                />
+                                                <span className="text-base">Good</span>
+                                            </label>
+
+                                            <label className="inline-flex items-center gap-3">
+                                                <input
+                                                    type="radio"
+                                                    name="habit-type"
+                                                    value="avoid"
+                                                    checked={type === 'avoid'}
+                                                    onChange={() => setType('avoid')}
+                                                    className="form-radio w-5 h-5"
+                                                />
+                                                <span className="text-base">Bad</span>
+                                            </label>
+                                        </div>
+                                        <div className="text-sm text-zinc-500 mt-2">Good = show on calendar. Bad = track but hide from calendar.</div>
+                                    </div>
+                                </div>
+                            </CollapsibleSection>
+                            )}
+                            
+                            {/* Goal section - hidden in Normal View unless expanded */}
+                            {viewMode === 'detail' ? (
                                 <div className="mt-6">
                                     <h3 className="text-lg font-medium mb-3">Goal</h3>
                                     <select value={goalId} onChange={(e) => setGoalId(e.target.value)} className="w-full rounded border px-3 py-3 bg-white text-black dark:bg-slate-800 dark:text-slate-100 text-base">
@@ -703,13 +921,30 @@ export function HabitModal({ open, onClose, habit, onUpdate, onDelete, onCreate,
                                         ))}
                                     </select>
                                 </div>
+                            ) : (
+                            <CollapsibleSection
+                                title="Goal"
+                                isExpanded={expandedSections.goal}
+                                onToggle={() => toggleSection('goal')}
+                            >
+                                <div>
+                                    <h3 className="text-lg font-medium mb-3">Goal</h3>
+                                    <select value={goalId} onChange={(e) => setGoalId(e.target.value)} className="w-full rounded border px-3 py-3 bg-white text-black dark:bg-slate-800 dark:text-slate-100 text-base">
+                                        {(goals ?? []).map((c) => (
+                                            <option key={c.id} value={c.id}>{c.name}</option>
+                                        ))}
+                                    </select>
+                                </div>
+                            </CollapsibleSection>
+                            )}
 
+                                {/* Description - always visible */}
                                 <div className="mt-6">
                                     <h3 className="text-lg font-medium">Description</h3>
                                     <textarea value={notes} onChange={(e) => setNotes(e.target.value)} className="mt-3 w-full rounded border px-3 py-3 bg-white text-black dark:bg-slate-800 dark:text-slate-100 text-base min-h-[100px]" placeholder="Add description" />
                                 </div>
 
-                                {/* Tags */}
+                                {/* Tags - always visible */}
                                 {tags && tags.length > 0 && (
                                     <div className="mt-6">
                                         <h3 className="text-lg font-medium">Tags</h3>
@@ -741,7 +976,8 @@ export function HabitModal({ open, onClose, habit, onUpdate, onDelete, onCreate,
                                     </div>
                                 )}
                                 
-                                {/* Related Habits */}
+                                {/* Related Habits - hidden in Normal View unless expanded */}
+                                {viewMode === 'detail' ? (
                                 <div className="mt-4">
                                     <h3 className="text-lg font-medium">Related Habits</h3>
                                     <div className="mt-2 space-y-2">
@@ -791,7 +1027,63 @@ export function HabitModal({ open, onClose, habit, onUpdate, onDelete, onCreate,
                                         {!habit && <div className="text-xs text-zinc-500">Save the habit first to add relations.</div>}
                                     </div>
                                 </div>
-                            </div>
+                                ) : (
+                                <CollapsibleSection
+                                    title="Related Habits"
+                                    isExpanded={expandedSections.relatedHabits}
+                                    onToggle={() => toggleSection('relatedHabits')}
+                                >
+                                    <div>
+                                        <h3 className="text-lg font-medium">Related Habits</h3>
+                                        <div className="mt-2 space-y-2">
+                                            {loadingRelations && <div className="text-xs text-zinc-500">Loading...</div>}
+                                            {!loadingRelations && relations.length === 0 && <div className="text-xs text-zinc-500">No related habits.</div>}
+                                            {relations.map((r) => {
+                                                const other = allHabits.find(h => h.id === r.relatedHabitId) || { name: r.relatedHabitId }
+                                                return (
+                                                    <div key={r.id} className="flex items-center justify-between rounded px-2 py-2 border">
+                                                        <div className="text-sm"><span className="font-medium">{other.name}</span> <span className="text-xs text-zinc-500">({r.relation})</span></div>
+                                                        <div>
+                                                            <button type="button" onClick={() => handleDeleteRelation(r.id)} className="p-2 text-red-600 min-w-[44px] min-h-[44px] flex items-center justify-center" aria-label="Delete relation" title="Delete relation">
+                                                                <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" viewBox="0 0 20 20" fill="currentColor">
+                                                                    <path fillRule="evenodd" d="M6 2a1 1 0 011-1h6a1 1 0 011 1v1h3a1 1 0 110 2h-1v11a2 2 0 01-2 2H6a2 2 0 01-2-2V5H3a1 1 0 110-2h3V2zm2 5a1 1 0 10-2 0v7a1 1 0 102 0V7zm4 0a1 1 0 10-2 0v7a1 1 0 102 0V7z" clipRule="evenodd" />
+                                                                </svg>
+                                                            </button>
+                                                        </div>
+                                                    </div>
+                                                )
+                                            })}
+
+                                            <div className="flex gap-2 items-center">
+                                                <select value={selectedRelatedHabitId} onChange={(e) => setSelectedRelatedHabitId(e.target.value)} className="rounded border px-2 py-1 bg-white text-black dark:bg-slate-800 dark:text-slate-100 flex-1">
+                                                    <option value="">Select habit...</option>
+                                                    {allHabits.filter(h => h.id !== habit?.id).map(h => (
+                                                        <option key={h.id} value={h.id}>{h.name}</option>
+                                                    ))}
+                                                </select>
+                                                <select value={selectedRelationType} onChange={(e) => setSelectedRelationType(e.target.value as any)} className="rounded border px-2 py-1 bg-white text-black dark:bg-slate-800 dark:text-slate-100">
+                                                    <option value="main">Main</option>
+                                                    <option value="sub">Sub</option>
+                                                    <option value="next">Next</option>
+                                                </select>
+                                                <button
+                                                    type="button"
+                                                    onClick={handleAddRelation}
+                                                    disabled={!habit}
+                                                    className="rounded bg-slate-100 p-2 disabled:opacity-50 min-w-[44px] min-h-[44px] flex items-center justify-center"
+                                                    aria-label="Add relation"
+                                                    title="Add relation"
+                                                >
+                                                    <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-slate-700" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                                        <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+                                                    </svg>
+                                                </button>
+                                            </div>
+                                            {!habit && <div className="text-xs text-zinc-500">Save the habit first to add relations.</div>}
+                                        </div>
+                                    </div>
+                                </CollapsibleSection>
+                                )}
                         </div>
                     </div>
 
