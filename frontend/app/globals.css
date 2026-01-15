@@ -302,14 +302,37 @@ body {
   z-index: 9999;
 }
 
-/* Improve focus visibility for keyboard users */
-:focus {
-  outline: 3px solid rgba(96,165,250,0.9);
+/* Improve focus visibility for keyboard users - Design System */
+:focus-visible {
+  outline: 2px solid hsl(var(--color-primary));
+  outline-offset: 2px;
+  border-radius: var(--radius-sm);
+}
+
+/* Remove default focus outline for mouse users */
+:focus:not(:focus-visible) {
+  outline: none;
+}
+
+/* Enhanced focus ring for interactive elements */
+button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+textarea:focus-visible,
+select:focus-visible,
+[role="button"]:focus-visible {
+  outline: 2px solid hsl(var(--color-primary));
   outline-offset: 2px;
 }
 
-:focus:not(:focus-visible) {
-  outline: none;
+/* Focus ring utility class */
+.focus-ring {
+  transition: outline 0.15s ease-in-out;
+}
+
+.focus-ring:focus-visible {
+  outline: 2px solid hsl(var(--color-primary));
+  outline-offset: 2px;
 }
 
 /* Simple tooltip fallback using title attribute (improved styling) */

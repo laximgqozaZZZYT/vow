@@ -444,8 +444,8 @@ export function HabitModal({ open, onClose, habit, onUpdate, onDelete, onCreate,
                                 onClick={() => setViewMode('normal')}
                                 className={`px-3 py-2 text-sm rounded-md transition-all min-w-[44px] min-h-[44px] flex items-center justify-center gap-2 ${
                                     viewMode === 'normal' 
-                                        ? 'bg-white dark:bg-slate-700 shadow-sm text-slate-900 dark:text-slate-100' 
-                                        : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
+                                        ? 'bg-card shadow-sm border border-border' 
+                                        : 'text-muted-foreground hover:text-foreground'
                                 }`}
                                 title="Normal View (show essential fields only)"
                                 aria-label="Normal View"
@@ -460,8 +460,8 @@ export function HabitModal({ open, onClose, habit, onUpdate, onDelete, onCreate,
                                 onClick={() => setViewMode('detail')}
                                 className={`px-3 py-2 text-sm rounded-md transition-all min-w-[44px] min-h-[44px] flex items-center justify-center gap-2 ${
                                     viewMode === 'detail' 
-                                        ? 'bg-white dark:bg-slate-700 shadow-sm text-slate-900 dark:text-slate-100' 
-                                        : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
+                                        ? 'bg-card shadow-sm border border-border' 
+                                        : 'text-muted-foreground hover:text-foreground'
                                 }`}
                                 title="Detail View (show all fields)"
                                 aria-label="Detail View"

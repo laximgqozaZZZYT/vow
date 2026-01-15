@@ -91,14 +91,14 @@ export default function TagSelector({
           }}
           onFocus={() => setIsOpen(true)}
           placeholder={placeholder}
-          className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+          className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
         />
 
         {/* Dropdown */}
         {isOpen && filteredTags.length > 0 && (
           <div
             ref={dropdownRef}
-            className="absolute z-10 w-full mt-1 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg shadow-lg max-h-60 overflow-y-auto"
+            className="absolute z-10 w-full mt-1 rounded-lg border border-border bg-card shadow-lg max-h-60 overflow-y-auto"
           >
             {filteredTags.map(tag => (
               <button
@@ -120,7 +120,7 @@ export default function TagSelector({
         {isOpen && searchQuery && filteredTags.length === 0 && (
           <div
             ref={dropdownRef}
-            className="absolute z-10 w-full mt-1 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg shadow-lg p-3 text-center text-gray-500 dark:text-gray-400 text-sm"
+            className="absolute z-10 w-full mt-1 rounded-lg border border-border bg-card shadow-lg p-3 text-center text-muted-foreground text-sm"
           >
             No matching tags found
           </div>

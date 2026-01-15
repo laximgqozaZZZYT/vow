@@ -90,22 +90,22 @@ export function GoalModal({ open, onClose, goal, onUpdate, onDelete, onCreate, o
 
                 <div className="space-y-3">
                     <div>
-                        <label className="block text-sm">Name</label>
-                        <input value={name} onChange={(e) => setName(e.target.value)} className="w-full rounded border px-3 py-2 bg-white text-black dark:bg-slate-800 dark:text-slate-100" placeholder="Goal name" />
+                        <label className="block text-sm font-medium mb-1">Name</label>
+                        <input value={name} onChange={(e) => setName(e.target.value)} className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:cursor-not-allowed disabled:opacity-50" placeholder="Goal name" />
                     </div>
 
                     <div>
-                        <label className="block text-sm">Details</label>
-                        <textarea value={details} onChange={(e) => setDetails(e.target.value)} className="w-full rounded border px-3 py-2 bg-white text-black dark:bg-slate-800 dark:text-slate-100" placeholder="Optional details" />
+                        <label className="block text-sm font-medium mb-1">Details</label>
+                        <textarea value={details} onChange={(e) => setDetails(e.target.value)} className="flex min-h-[100px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:cursor-not-allowed disabled:opacity-50" placeholder="Optional details" />
                     </div>
 
                     <div>
-                        <label className="block text-sm">Due date</label>
+                        <label className="block text-sm font-medium mb-1">Due date</label>
                         <div className="mt-1">
                             <Popover className="relative">
-                                <Popover.Button className="w-full text-left rounded border px-3 py-2 bg-white text-black dark:bg-slate-800 dark:text-slate-100">{dueDate ? dueDate.toDateString() : "Select date"}</Popover.Button>
+                                <Popover.Button className="flex h-10 w-full items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">{dueDate ? dueDate.toDateString() : "Select date"}</Popover.Button>
                                 <Popover.Panel className="absolute z-10 mt-2 left-0 w-[min(520px,90vw)]">
-                                    <div className="rounded bg-white p-4 shadow max-w-full text-black dark:bg-slate-800 dark:text-slate-100">
+                                    <div className="rounded-lg border border-border bg-card p-4 shadow-lg max-w-full">
                                         <DayPicker mode="single" selected={dueDate} onSelect={(d) => setDueDate(d ?? undefined)} />
                                     </div>
                                 </Popover.Panel>
@@ -114,8 +114,8 @@ export function GoalModal({ open, onClose, goal, onUpdate, onDelete, onCreate, o
                     </div>
 
                     <div>
-                        <label className="block text-sm">Parent goal (optional)</label>
-                        <select value={parentId ?? ''} onChange={(e) => setParentId(e.target.value || null)} className="w-full rounded border px-3 py-2 mt-1 bg-white text-black dark:bg-slate-800 dark:text-slate-100">
+                        <label className="block text-sm font-medium mb-1">Parent goal (optional)</label>
+                        <select value={parentId ?? ''} onChange={(e) => setParentId(e.target.value || null)} className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">
                             <option value="">(no parent)</option>
                             {goals?.map(g => (
                                 <option key={g.id} value={g.id}>{g.name}</option>
@@ -153,14 +153,14 @@ export function GoalModal({ open, onClose, goal, onUpdate, onDelete, onCreate, o
                         </div>
                     )}
 
-                    <div className="mt-4 flex justify-between items-center">
-                        <div>
-                            <button className="px-4 py-2" onClick={onClose}>Cancel</button>
-                            <button className="ml-2 rounded bg-blue-600 px-4 py-2 text-white" onClick={handleSave}>Save</button>
-                            {goal && <button className="ml-2 rounded bg-emerald-600 px-4 py-2 text-white" onClick={handleComplete}>Completed</button>}
+                    <div className="mt-6 flex justify-between items-center">
+                        <div className="flex gap-2">
+                            <button className="inline-flex items-center justify-center rounded-md px-4 py-2 text-sm font-medium transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary" onClick={onClose}>Cancel</button>
+                            <button className="inline-flex items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary" onClick={handleSave}>Save</button>
+                            {goal && <button className="inline-flex items-center justify-center rounded-md bg-success px-4 py-2 text-sm font-medium text-success-foreground transition-colors hover:bg-success/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary" onClick={handleComplete}>Completed</button>}
                         </div>
                         <div>
-                            {goal && <button className="text-red-600 text-sm" onClick={handleDelete}>Delete goal</button>}
+                            {goal && <button className="inline-flex items-center justify-center rounded-md px-3 py-2 text-sm font-medium text-destructive transition-colors hover:bg-destructive/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary" onClick={handleDelete}>Delete goal</button>}
                         </div>
                     </div>
                 </div>

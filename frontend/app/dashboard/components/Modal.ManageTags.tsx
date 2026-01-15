@@ -84,34 +84,34 @@ export default function ManageTagsModal({
   ];
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={onClose}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-sm" onClick={onClose}>
       <div 
-        className="bg-white dark:bg-gray-800 rounded-lg shadow-xl w-full max-w-2xl max-h-[80vh] overflow-hidden flex flex-col"
+        className="rounded-lg border border-border bg-card text-card-foreground shadow-lg w-full max-w-2xl max-h-[80vh] overflow-hidden flex flex-col"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="flex items-center justify-between p-4 border-b border-gray-200 dark:border-gray-700">
-          <h2 className="text-xl font-semibold text-gray-900 dark:text-white">Manage Tags</h2>
+        <div className="flex items-center justify-between p-6 border-b border-border">
+          <h2 className="text-xl font-semibold">Manage Tags</h2>
           <button
             onClick={onClose}
-            className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 text-2xl leading-none"
+            className="inline-flex items-center justify-center rounded-md w-8 h-8 text-muted-foreground hover:bg-accent hover:text-accent-foreground transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
           >
             ×
           </button>
         </div>
 
         {/* Content */}
-        <div className="flex-1 overflow-y-auto p-4">
+        <div className="flex-1 overflow-y-auto p-6">
           {/* Create New Tag - Always visible */}
           <div className="mb-6">
-            <div className="border border-gray-300 dark:border-gray-600 rounded-lg p-4 bg-gray-50 dark:bg-gray-900">
+            <div className="rounded-lg border border-border bg-muted p-4">
               <div className="flex flex-col gap-3">
                 <input
                   type="text"
                   value={newTagName}
                   onChange={(e) => setNewTagName(e.target.value)}
                   placeholder="Tag name"
-                  className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
+                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
                   onKeyDown={(e) => {
                     if (e.key === 'Enter' && newTagName.trim()) {
                       handleCreateTag();
@@ -120,14 +120,14 @@ export default function ManageTagsModal({
                 />
                 
                 <div>
-                  <label className="block text-sm text-gray-600 dark:text-gray-400 mb-2">Color</label>
+                  <label className="block text-sm font-medium text-muted-foreground mb-2">Color</label>
                   <div className="flex flex-wrap gap-2">
                     {predefinedColors.map((color) => (
                       <button
                         key={color}
                         onClick={() => setNewTagColor(color)}
-                        className={`w-8 h-8 rounded-full border-2 ${
-                          newTagColor === color ? 'border-gray-900 dark:border-white' : 'border-transparent'
+                        className={`w-8 h-8 rounded-full border-2 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${
+                          newTagColor === color ? 'border-primary' : 'border-transparent'
                         }`}
                         style={{ backgroundColor: color }}
                         title={color}
@@ -139,7 +139,7 @@ export default function ManageTagsModal({
                 <button
                   onClick={handleCreateTag}
                   disabled={!newTagName.trim()}
-                  className="w-full py-2 px-4 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="inline-flex items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   Create
                 </button>
@@ -149,19 +149,19 @@ export default function ManageTagsModal({
 
           {/* Existing Tags */}
           <div className="space-y-2">
-            <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+            <h3 className="text-sm font-medium text-muted-foreground mb-3">
               Existing Tags ({tags.length})
             </h3>
             
             {tags.length === 0 ? (
-              <p className="text-gray-500 dark:text-gray-400 text-sm text-center py-8">
+              <p className="text-muted-foreground text-sm text-center py-8">
                 No tags yet. Create your first tag above!
               </p>
             ) : (
               tags.map((tag) => (
                 <div
                   key={tag.id}
-                  className="flex items-center gap-3 p-3 border border-gray-200 dark:border-gray-700 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-900"
+                  className="flex items-center gap-3 p-3 rounded-lg border border-border hover:bg-accent transition-colors"
                 >
                   {editingTag?.id === tag.id ? (
                     <>
@@ -175,18 +175,18 @@ export default function ManageTagsModal({
                         type="text"
                         value={editingTag.name}
                         onChange={(e) => setEditingTag({ ...editingTag, name: e.target.value })}
-                        className="flex-1 px-2 py-1 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
+                        className="flex-1 flex h-9 rounded-md border border-input bg-background px-3 py-1 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
                         autoFocus
                       />
                       <button
                         onClick={() => handleUpdateTag(tag.id, { name: editingTag.name, color: editingTag.color })}
-                        className="px-3 py-1 bg-blue-600 text-white rounded text-sm hover:bg-blue-700"
+                        className="inline-flex items-center justify-center rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
                       >
                         Save
                       </button>
                       <button
                         onClick={() => setEditingTag(null)}
-                        className="px-3 py-1 border border-gray-300 dark:border-gray-600 rounded text-sm hover:bg-gray-100 dark:hover:bg-gray-700"
+                        className="inline-flex items-center justify-center rounded-md border border-input px-3 py-1.5 text-sm font-medium transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
                       >
                         Cancel
                       </button>
@@ -197,16 +197,16 @@ export default function ManageTagsModal({
                         className="w-8 h-8 rounded flex-shrink-0"
                         style={{ backgroundColor: tag.color || '#3b82f6' }}
                       />
-                      <span className="flex-1 text-gray-900 dark:text-white">{tag.name}</span>
+                      <span className="flex-1">{tag.name}</span>
                       <button
                         onClick={() => setEditingTag(tag)}
-                        className="px-3 py-1 text-sm text-blue-600 dark:text-blue-400 hover:underline"
+                        className="px-3 py-1.5 text-sm text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary rounded"
                       >
                         Edit
                       </button>
                       <button
                         onClick={() => handleDeleteTag(tag.id, tag.name)}
-                        className="px-3 py-1 text-sm text-red-600 dark:text-red-400 hover:underline"
+                        className="px-3 py-1.5 text-sm text-destructive hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary rounded"
                       >
                         Delete
                       </button>
@@ -219,10 +219,10 @@ export default function ManageTagsModal({
         </div>
 
         {/* Footer */}
-        <div className="p-4 border-t border-gray-200 dark:border-gray-700 flex justify-end">
+        <div className="p-4 border-t border-border flex justify-end">
           <button
             onClick={onClose}
-            className="py-2 px-6 bg-gray-600 text-white rounded hover:bg-gray-700"
+            className="inline-flex items-center justify-center rounded-md bg-secondary px-6 py-2 text-sm font-medium text-secondary-foreground transition-colors hover:bg-secondary/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
           >
             Close
           </button>
