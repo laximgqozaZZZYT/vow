@@ -3,6 +3,23 @@
  * Feature: guest-user-habit-goal-support
  */
 
+// Mock api.me() function BEFORE any imports
+jest.mock('../lib/api', () => ({
+  me: jest.fn()
+}));
+
+// Mock supabase client
+jest.mock('../lib/supabaseClient', () => ({
+  supabase: {
+    auth: {
+      getSession: jest.fn().mockResolvedValue({ data: { session: null } }),
+      onAuthStateChange: jest.fn().mockReturnValue({ 
+        data: { subscription: { unsubscribe: jest.fn() } } 
+      })
+    }
+  }
+}));
+
 // Mock localStorage for testing
 const mockLocalStorage = (() => {
   let store: Record<string, string> = {};
@@ -18,26 +35,12 @@ Object.defineProperty(window, 'localStorage', {
   value: mockLocalStorage
 });
 
-// Mock api.me() function
-const mockApiMe = jest.fn();
-jest.mock('../lib/api', () => ({
-  me: mockApiMe
-}));
-
-// Mock supabase client
-jest.mock('../lib/supabaseClient', () => ({
-  supabase: {
-    auth: {
-      getSession: jest.fn().mockResolvedValue({ data: { session: null } }),
-      onAuthStateChange: jest.fn().mockReturnValue({ 
-        data: { subscription: { unsubscribe: jest.fn() } } 
-      })
-    }
-  }
-}));
-
 import { renderHook, waitFor } from '@testing-library/react';
 import { useAuth } from '../app/dashboard/hooks/useAuth';
+import api from '../lib/api';
+
+// Get the mocked function after import
+const mockApiMe = api.me as jest.MockedFunction<typeof api.me>;
 
 // Mock useRouter
 const mockPush = jest.fn();

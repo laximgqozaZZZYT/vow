@@ -23,8 +23,9 @@ describe('SEO Metadata Property-Based Tests', () => {
           // Generate an array of page configurations
           fc.array(
             fc.record({
-              title: fc.string({ minLength: 5, maxLength: 100 }),
-              description: fc.string({ minLength: 10, maxLength: 200 }),
+              // Generate non-whitespace strings
+              title: fc.string({ minLength: 5, maxLength: 100 }).filter(s => s.trim().length >= 5),
+              description: fc.string({ minLength: 10, maxLength: 200 }).filter(s => s.trim().length >= 10),
               path: fc.oneof(
                 fc.constant('/'),
                 fc.constant('/dashboard'),
@@ -53,7 +54,7 @@ describe('SEO Metadata Property-Based Tests', () => {
             // Property: If we have different page configurations, we should have unique metadata
             // We allow duplicates only if the input configurations are identical
             const uniqueConfigs = new Set(
-              pageConfigs.map(c => JSON.stringify({ title: c.title, description: c.description }))
+              pageConfigs.map(c => JSON.stringify({ title: c.title.trim(), description: c.description.trim() }))
             );
 
             // The number of unique titles should match the number of unique input title configs

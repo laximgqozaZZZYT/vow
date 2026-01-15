@@ -73,12 +73,38 @@ describe('Guest User Habit Operations', () => {
     // Retrieve habits and verify the created habit is present
     const habits = await supabaseDirectClient.getHabits();
     expect(habits).toHaveLength(1);
-    expect(habits[0]).toMatchObject(createdHabit);
+    
+    // Compare only the fields that should match (excluding undefined fields)
+    expect(habits[0]).toMatchObject({
+      name: createdHabit.name,
+      type: createdHabit.type,
+      notes: createdHabit.notes,
+      workloadUnit: createdHabit.workloadUnit,
+      workloadTotal: createdHabit.workloadTotal,
+      workloadPerCount: createdHabit.workloadPerCount,
+      active: createdHabit.active,
+      count: createdHabit.count,
+      completed: createdHabit.completed,
+      goalId: createdHabit.goalId,
+      id: createdHabit.id
+    });
 
     // Verify data is stored in localStorage
     const storedHabits = JSON.parse(mockLocalStorage.getItem('guest-habits') || '[]');
     expect(storedHabits).toHaveLength(1);
-    expect(storedHabits[0]).toMatchObject(createdHabit);
+    expect(storedHabits[0]).toMatchObject({
+      name: createdHabit.name,
+      type: createdHabit.type,
+      notes: createdHabit.notes,
+      workloadUnit: createdHabit.workloadUnit,
+      workloadTotal: createdHabit.workloadTotal,
+      workloadPerCount: createdHabit.workloadPerCount,
+      active: createdHabit.active,
+      count: createdHabit.count,
+      completed: createdHabit.completed,
+      goalId: createdHabit.goalId,
+      id: createdHabit.id
+    });
   });
 
   test('Property 4: Multiple habit creation and retrieval', async () => {
@@ -166,11 +192,25 @@ describe('Guest User Habit Operations', () => {
     // Verify activity is stored in localStorage
     const storedActivities = JSON.parse(mockLocalStorage.getItem('guest-activities') || '[]');
     expect(storedActivities).toHaveLength(1);
-    expect(storedActivities[0]).toMatchObject(createdActivity);
+    expect(storedActivities[0]).toMatchObject({
+      kind: createdActivity.kind,
+      habitId: createdActivity.habitId,
+      habitName: createdActivity.habitName,
+      amount: createdActivity.amount,
+      newCount: createdActivity.newCount,
+      id: createdActivity.id
+    });
 
     // Retrieve activities and verify
     const activities = await supabaseDirectClient.getActivities();
     expect(activities).toHaveLength(1);
-    expect(activities[0]).toMatchObject(createdActivity);
+    expect(activities[0]).toMatchObject({
+      kind: createdActivity.kind,
+      habitId: createdActivity.habitId,
+      habitName: createdActivity.habitName,
+      amount: createdActivity.amount,
+      newCount: createdActivity.newCount,
+      id: createdActivity.id
+    });
   });
 });

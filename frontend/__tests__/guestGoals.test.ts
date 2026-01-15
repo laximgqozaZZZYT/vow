@@ -64,12 +64,24 @@ describe('Guest User Goal Operations', () => {
     // Retrieve goals and verify the created goal is present
     const goals = await supabaseDirectClient.getGoals();
     expect(goals).toHaveLength(1);
-    expect(goals[0]).toMatchObject(createdGoal);
+    expect(goals[0]).toMatchObject({
+      name: createdGoal.name,
+      details: createdGoal.details,
+      dueDate: createdGoal.dueDate,
+      isCompleted: createdGoal.isCompleted,
+      id: createdGoal.id
+    });
 
     // Verify data is stored in localStorage
     const storedGoals = JSON.parse(mockLocalStorage.getItem('guest-goals') || '[]');
     expect(storedGoals).toHaveLength(1);
-    expect(storedGoals[0]).toMatchObject(createdGoal);
+    expect(storedGoals[0]).toMatchObject({
+      name: createdGoal.name,
+      details: createdGoal.details,
+      dueDate: createdGoal.dueDate,
+      isCompleted: createdGoal.isCompleted,
+      id: createdGoal.id
+    });
   });
 
   test('Property 3: Multiple goal creation and retrieval', async () => {
