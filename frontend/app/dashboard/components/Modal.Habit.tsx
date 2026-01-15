@@ -496,7 +496,7 @@ export function HabitModal({ open, onClose, habit, onUpdate, onDelete, onCreate,
                 <div className="mt-4 flex flex-col lg:flex-row gap-4 habit-scroll-area overflow-auto flex-1 pr-2 modal-scroll-gap">
                     <div className="flex-1">
                         <h3 className="text-base sm:text-lg font-medium mb-3 text-slate-100">{t('habit.name')}</h3>
-                        <input value={name} onChange={(e) => setName(e.target.value)} placeholder={t('habit.name.placeholder')} className="w-full rounded border px-3 py-3 bg-white text-black dark:bg-slate-800 dark:text-slate-100 text-base" />
+                        <input value={name} onChange={(e) => setName(e.target.value)} placeholder={t('habit.name.placeholder')} className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:cursor-not-allowed disabled:opacity-50" />
 
                         <div className="mt-8">
                             {/* Workload section - hidden in Normal View unless expanded */}
@@ -509,22 +509,22 @@ export function HabitModal({ open, onClose, habit, onUpdate, onDelete, onCreate,
                                 <div className="mt-4 grid grid-cols-1 sm:grid-cols-3 gap-4 items-center">
                                     <div>
                                         <div className="text-sm text-slate-400 mb-2">Unit</div>
-                                        <input value={workloadUnit} onChange={(e) => setWorkloadUnit(e.target.value)} placeholder="e.g. hrs, pages" className="w-full rounded border px-3 py-3 bg-white text-black dark:bg-slate-800 dark:text-slate-100 text-base" />
+                                        <input value={workloadUnit} onChange={(e) => setWorkloadUnit(e.target.value)} placeholder="e.g. hrs, pages" className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:cursor-not-allowed disabled:opacity-50" />
                                     </div>
                                     <div>
                                         <div className="text-sm text-slate-400 mb-2">Load per Count</div>
-                                        <input type="number" min={1} value={workloadPerCount} onChange={(e) => setWorkloadPerCount(e.target.value)} className="w-full rounded border px-3 py-3 bg-white text-black dark:bg-slate-800 dark:text-slate-100 text-base [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" />
+                                        <input type="number" min={1} value={workloadPerCount} onChange={(e) => setWorkloadPerCount(e.target.value)} className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:cursor-not-allowed disabled:opacity-50 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" />
                                     </div>
                                     <div>
                                         <div className="text-sm text-slate-400 mb-2">Load Total(Day)</div>
-                                        <input type="number" min={0} value={workloadTotal} onChange={(e) => setWorkloadTotal(e.target.value)} className="w-full rounded border px-3 py-3 bg-white text-black dark:bg-slate-800 dark:text-slate-100 text-base [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" />
+                                        <input type="number" min={0} value={workloadTotal} onChange={(e) => setWorkloadTotal(e.target.value)} className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:cursor-not-allowed disabled:opacity-50 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" />
                                     </div>
                                 </div>
 
                                 <div className="mt-4 grid grid-cols-1 sm:grid-cols-3 gap-4 items-center">
                                     <div className="col-span-1">
                                         <div className="text-sm text-slate-400 mb-2">Load Total(End) (optional)</div>
-                                        <input type="number" min={0} value={workloadTotalEnd} onChange={(e) => setWorkloadTotalEnd(e.target.value)} className="w-full rounded border px-3 py-3 bg-white text-black dark:bg-slate-800 dark:text-slate-100 text-base [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" />
+                                        <input type="number" min={0} value={workloadTotalEnd} onChange={(e) => setWorkloadTotalEnd(e.target.value)} className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:cursor-not-allowed disabled:opacity-50 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" />
                                     </div>
                                     <div className="col-span-2 text-base text-slate-500">
                                         Based on Load Total(Day), we estimate how many days it takes to reach Load Total(End).
@@ -545,22 +545,22 @@ export function HabitModal({ open, onClose, habit, onUpdate, onDelete, onCreate,
                                     <div className="mt-4 grid grid-cols-1 sm:grid-cols-3 gap-4 items-center">
                                         <div>
                                             <div className="text-sm text-slate-400 mb-2">Unit</div>
-                                            <input value={workloadUnit} onChange={(e) => setWorkloadUnit(e.target.value)} placeholder="e.g. hrs, pages" className="w-full rounded border px-3 py-3 bg-white text-black dark:bg-slate-800 dark:text-slate-100 text-base" />
+                                            <input value={workloadUnit} onChange={(e) => setWorkloadUnit(e.target.value)} placeholder="e.g. hrs, pages" className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:cursor-not-allowed disabled:opacity-50" />
                                         </div>
                                         <div>
                                             <div className="text-sm text-slate-400 mb-2">Load per Count</div>
-                                            <input type="number" min={1} value={workloadPerCount} onChange={(e) => setWorkloadPerCount(e.target.value)} className="w-full rounded border px-3 py-3 bg-white text-black dark:bg-slate-800 dark:text-slate-100 text-base [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" />
+                                            <input type="number" min={1} value={workloadPerCount} onChange={(e) => setWorkloadPerCount(e.target.value)} className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:cursor-not-allowed disabled:opacity-50 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" />
                                         </div>
                                         <div>
                                             <div className="text-sm text-slate-400 mb-2">Load Total(Day)</div>
-                                            <input type="number" min={0} value={workloadTotal} onChange={(e) => setWorkloadTotal(e.target.value)} className="w-full rounded border px-3 py-3 bg-white text-black dark:bg-slate-800 dark:text-slate-100 text-base [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" />
+                                            <input type="number" min={0} value={workloadTotal} onChange={(e) => setWorkloadTotal(e.target.value)} className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:cursor-not-allowed disabled:opacity-50 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" />
                                         </div>
                                     </div>
 
                                     <div className="mt-4 grid grid-cols-1 sm:grid-cols-3 gap-4 items-center">
                                         <div className="col-span-1">
                                             <div className="text-sm text-slate-400 mb-2">Load Total(End) (optional)</div>
-                                            <input type="number" min={0} value={workloadTotalEnd} onChange={(e) => setWorkloadTotalEnd(e.target.value)} className="w-full rounded border px-3 py-3 bg-white text-black dark:bg-slate-800 dark:text-slate-100 text-base [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" />
+                                            <input type="number" min={0} value={workloadTotalEnd} onChange={(e) => setWorkloadTotalEnd(e.target.value)} className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:cursor-not-allowed disabled:opacity-50 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" />
                                         </div>
                                         <div className="col-span-2 text-base text-slate-500">
                                             Based on Load Total(Day), we estimate how many days it takes to reach Load Total(End).
@@ -945,7 +945,7 @@ export function HabitModal({ open, onClose, habit, onUpdate, onDelete, onCreate,
                                 {/* Description - always visible */}
                                 <div className="mt-6">
                                     <h3 className="text-lg font-medium">Description</h3>
-                                    <textarea value={notes} onChange={(e) => setNotes(e.target.value)} className="mt-3 w-full rounded border px-3 py-3 bg-white text-black dark:bg-slate-800 dark:text-slate-100 text-base min-h-[100px]" placeholder="Add description" />
+                                    <textarea value={notes} onChange={(e) => setNotes(e.target.value)} className="flex min-h-[100px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:cursor-not-allowed disabled:opacity-50" placeholder="Add description" />
                                 </div>
 
                                 {/* Tags - always visible */}

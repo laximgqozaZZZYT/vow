@@ -69,19 +69,19 @@ export default function NextSection({ habits, onHabitAction }: NextSectionProps)
 
   if (pick.length === 0) {
     return (
-      <section className="rounded bg-white p-3 sm:p-4 shadow dark:bg-[#0b0b0b]">
+      <section className="rounded-lg border border-border bg-card text-card-foreground shadow-sm p-4 sm:p-6">
         <div className={`flex items-start ${isLeftHanded ? 'justify-end' : 'justify-between'}`}>
-          <h2 className="mb-3 text-base sm:text-lg font-medium">Next</h2>
+          <h2 className="mb-3 text-lg font-semibold">Next</h2>
         </div>
-        <div className="text-sm text-zinc-500">No habits starting in the next 24 hours</div>
+        <div className="text-sm text-muted-foreground">No habits starting in the next 24 hours</div>
       </section>
     );
   }
 
   return (
-    <section className="rounded bg-white p-3 sm:p-4 shadow dark:bg-[#0b0b0b]">
+    <section className="rounded-lg border border-border bg-card text-card-foreground shadow-sm p-4 sm:p-6">
       <div className={`flex items-start ${isLeftHanded ? 'justify-end' : 'justify-between'}`}>
-        <h2 className="mb-3 text-base sm:text-lg font-medium">Next</h2>
+        <h2 className="mb-3 text-lg font-semibold">Next</h2>
       </div>
       <ul className="flex flex-col">
         {pick.map((c, idx) => (

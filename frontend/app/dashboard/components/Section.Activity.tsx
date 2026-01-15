@@ -96,8 +96,8 @@ export default function ActivitySection({
   }, [habits, activities]); // activitiesも依存関係に追加
 
   return (
-    <section className="rounded bg-white p-4 shadow dark:bg-[#0b0b0b] mt-4">
-      <h2 className={`mb-3 text-lg font-medium ${isLeftHanded ? 'text-right' : ''}`}>Daily Progress</h2>
+    <section className="rounded-lg border border-border bg-card text-card-foreground shadow-sm p-4 sm:p-6 mt-4">
+      <h2 className={`mb-3 text-lg font-semibold ${isLeftHanded ? 'text-right' : ''}`}>Daily Progress</h2>
       <div className="">
         {/* Fixed-height scrollable container */}
         <div className="h-56 overflow-y-auto space-y-3 pr-2">

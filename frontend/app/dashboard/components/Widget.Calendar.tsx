@@ -525,8 +525,8 @@ export default function CalendarWidget({
   }, [habits, goals]);
 
   return (
-    <section className="mt-6 rounded bg-white p-4 shadow dark:bg-[#0b0b0b] w-full overflow-hidden">
-      <h2 className="mb-3 text-lg font-medium">Calendar</h2>
+    <section className="mt-6 rounded-lg border border-border bg-card text-card-foreground shadow-sm p-4 sm:p-6 w-full overflow-hidden">
+      <h2 className="mb-3 text-lg font-semibold">Calendar</h2>
       <div className="mb-3 flex flex-wrap items-center gap-2">
         {(['today','tomorrow','week','month'] as const).map((b) => (
           <button
