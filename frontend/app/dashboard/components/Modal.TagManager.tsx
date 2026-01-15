@@ -1,7 +1,7 @@
 "use client"
 
 import React from 'react'
-import type { Tag } from '@/app/dashboard/types'
+import type { Tag } from '../types'
 
 type Goal = { id: string; name: string }
 type Habit = { id: string; name: string }
