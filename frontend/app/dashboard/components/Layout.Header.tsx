@@ -175,9 +175,13 @@ export default function DashboardHeader({
           {isAuthed && !isGuest ? (
             <button
               onClick={handleLogout}
-              className="inline-flex items-center justify-center rounded-md bg-destructive text-destructive-foreground px-2 sm:px-3 py-1 sm:py-1.5 text-xs sm:text-sm font-medium transition-colors hover:bg-destructive/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-destructive"
+              className="inline-flex items-center justify-center rounded-md bg-destructive text-destructive-foreground w-9 h-9 transition-colors hover:bg-destructive/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-destructive"
+              title="Logout"
+              aria-label="Logout"
             >
-              Logout
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+              </svg>
             </button>
           ) : (
             <Link
