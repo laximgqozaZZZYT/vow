@@ -81,26 +81,6 @@ export default function DashboardHeader({
             ☰
           </button>
           
-          {/* Handedness toggle button - next to hamburger menu */}
-          <button
-            onClick={() => setHandedness(handedness === 'left' ? 'right' : 'left')}
-            className="group relative inline-flex items-center justify-center rounded-lg border border-border bg-card px-2 py-1 text-xs font-medium transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
-            title={`Switch to ${handedness === 'left' ? 'right' : 'left'}-handed mode`}
-          >
-            <div className="flex items-center gap-1.5">
-              <div className="relative w-8 h-4 bg-zinc-200 rounded-full transition-colors group-hover:bg-blue-200 dark:bg-zinc-700 dark:group-hover:bg-blue-900">
-                <div 
-                  className={`absolute top-0.5 w-3 h-3 bg-blue-600 rounded-full transition-all duration-200 ${
-                    handedness === 'left' ? 'left-0.5' : 'left-4'
-                  }`}
-                />
-              </div>
-              <span className="hidden sm:inline text-zinc-600 dark:text-zinc-300">
-                {handedness === 'left' ? 'L' : 'R'}
-              </span>
-            </div>
-          </button>
-          
           <div className="text-base sm:text-lg font-bold tracking-wide">VOW</div>
         </div>
 

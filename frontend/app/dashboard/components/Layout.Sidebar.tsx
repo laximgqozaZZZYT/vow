@@ -43,7 +43,7 @@ export default function DashboardSidebar({
   onMindmapSelect,
   onMindmapDelete
 }: DashboardSidebarExtendedProps) {
-  const { isLeftHanded } = useHandedness();
+  const { isLeftHanded, handedness, setHandedness } = useHandedness();
   
   if (!isVisible) return null;
 
@@ -59,18 +59,33 @@ export default function DashboardSidebar({
       />
       
       <aside className={`fixed ${sidePosition} top-14 w-80 max-w-[85vw] h-[calc(100vh-3.5rem)] ${borderSide} border-border bg-card z-40 lg:w-80 flex flex-col`}>
-        <div className="flex-shrink-0 p-3 pb-0">
+        <div className="flex-shrink-0 p-3">
           <div className="mb-3 flex items-center justify-between">
             <div className={`flex items-center gap-2 ${isLeftHanded ? 'flex-row-reverse' : ''}`}>
               <button onClick={onClose} className="inline-flex items-center justify-center text-sm text-muted-foreground transition-colors hover:text-foreground lg:hidden min-w-[44px] min-h-[44px]">✕</button>
             </div>
           </div>
 
-          {/* ドラッグ&ドロップのヘルプテキスト */}
-          <div className="mb-4 p-2 bg-blue-50 dark:bg-blue-900/20 rounded text-xs text-blue-700 dark:text-blue-300 leading-relaxed">
-            💡 ドラッグ&ドロップでGoal・Habitを移動できます
-            <br />
-            📱 スマホ: 長押し→スライドで移動
+          {/* Handedness toggle - at the top of sidebar */}
+          <div className="mb-4 p-3 rounded-lg border border-border bg-muted">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-sm font-medium">Panel Position</span>
+            </div>
+            <button
+              onClick={() => setHandedness(handedness === 'left' ? 'right' : 'left')}
+              className="group relative inline-flex items-center justify-center w-full rounded-lg border border-border bg-background px-3 py-2 text-sm font-medium transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+            >
+              <div className="flex items-center gap-2 w-full justify-between">
+                <span className="text-muted-foreground">{isLeftHanded ? 'Left' : 'Right'}</span>
+                <div className="relative w-10 h-5 bg-zinc-200 rounded-full transition-colors group-hover:bg-blue-200 dark:bg-zinc-700 dark:group-hover:bg-blue-900">
+                  <div 
+                    className={`absolute top-0.5 w-4 h-4 bg-blue-600 rounded-full transition-all duration-200 ${
+                      isLeftHanded ? 'left-0.5' : 'left-5'
+                    }`}
+                  />
+                </div>
+              </div>
+            </button>
           </div>
         </div>
 
