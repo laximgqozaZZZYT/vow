@@ -1,7 +1,7 @@
 // Supabase統合版API - バックエンドAPI直接使用
 
 // 共通Tag型をインポート
-import type { Tag } from '../app/dashboard/types';
+import type { Tag } from '../app/dashboard/types/index';
 
 // 型定義をエクスポート
 export type DiaryCard = {

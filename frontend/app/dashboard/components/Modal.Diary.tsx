@@ -7,7 +7,7 @@ import remarkGfm from 'remark-gfm'
 import remarkBreaks from 'remark-breaks'
 import rehypeRaw from 'rehype-raw'
 import rehypeSanitize, { defaultSchema } from 'rehype-sanitize'
-import type { Tag } from '../types'
+import type { Tag } from '../types/index'
 
 type Goal = { id: string; name: string }
 type Habit = { id: string; name: string }

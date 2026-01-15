@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import type { Tag } from '../types';
+import type { Tag } from '../types/index';
 
 interface ManageTagsModalProps {
   isOpen: boolean;
@@ -23,7 +23,6 @@ export default function ManageTagsModal({
   const [editingTag, setEditingTag] = React.useState<Tag | null>(null);
   const [newTagName, setNewTagName] = React.useState('');
   const [newTagColor, setNewTagColor] = React.useState('#3b82f6');
-  const [isCreating, setIsCreating] = React.useState(false);
 
   if (!isOpen) return null;
 
@@ -34,7 +33,6 @@ export default function ManageTagsModal({
       await onCreateTag({ name: newTagName.trim(), color: newTagColor });
       setNewTagName('');
       setNewTagColor('#3b82f6');
-      setIsCreating(false);
     } catch (error) {
       console.error('Failed to create tag:', error);
       alert('Failed to create tag');
@@ -104,66 +102,49 @@ export default function ManageTagsModal({
 
         {/* Content */}
         <div className="flex-1 overflow-y-auto p-4">
-              {/* Create New Tag */}
-              <div className="mb-6">
-            {!isCreating ? (
-              <button
-                onClick={() => setIsCreating(true)}
-                className="w-full py-2 px-4 border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-lg text-gray-600 dark:text-gray-400 hover:border-blue-500 hover:text-blue-500 dark:hover:border-blue-400 dark:hover:text-blue-400 transition-colors"
-              >
-                + Create New Tag
-              </button>
-            ) : (
-              <div className="border border-gray-300 dark:border-gray-600 rounded-lg p-4 bg-gray-50 dark:bg-gray-900">
-                <div className="flex flex-col gap-3">
-                  <input
-                    type="text"
-                    value={newTagName}
-                    onChange={(e) => setNewTagName(e.target.value)}
-                    placeholder="Tag name"
-                    className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
-                    autoFocus
-                  />
-                  
-                  <div>
-                    <label className="block text-sm text-gray-600 dark:text-gray-400 mb-2">Color</label>
-                    <div className="flex flex-wrap gap-2">
-                      {predefinedColors.map((color) => (
-                        <button
-                          key={color}
-                          onClick={() => setNewTagColor(color)}
-                          className={`w-8 h-8 rounded-full border-2 ${
-                            newTagColor === color ? 'border-gray-900 dark:border-white' : 'border-transparent'
-                          }`}
-                          style={{ backgroundColor: color }}
-                          title={color}
-                        />
-                      ))}
-                    </div>
-                  </div>
-
-                  <div className="flex gap-2">
-                    <button
-                      onClick={handleCreateTag}
-                      disabled={!newTagName.trim()}
-                      className="flex-1 py-2 px-4 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                      Create
-                    </button>
-                    <button
-                      onClick={() => {
-                        setIsCreating(false);
-                        setNewTagName('');
-                        setNewTagColor('#3b82f6');
-                      }}
-                      className="py-2 px-4 border border-gray-300 dark:border-gray-600 rounded hover:bg-gray-100 dark:hover:bg-gray-700"
-                    >
-                      Cancel
-                    </button>
+          {/* Create New Tag - Always visible */}
+          <div className="mb-6">
+            <div className="border border-gray-300 dark:border-gray-600 rounded-lg p-4 bg-gray-50 dark:bg-gray-900">
+              <div className="flex flex-col gap-3">
+                <input
+                  type="text"
+                  value={newTagName}
+                  onChange={(e) => setNewTagName(e.target.value)}
+                  placeholder="Tag name"
+                  className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && newTagName.trim()) {
+                      handleCreateTag();
+                    }
+                  }}
+                />
+                
+                <div>
+                  <label className="block text-sm text-gray-600 dark:text-gray-400 mb-2">Color</label>
+                  <div className="flex flex-wrap gap-2">
+                    {predefinedColors.map((color) => (
+                      <button
+                        key={color}
+                        onClick={() => setNewTagColor(color)}
+                        className={`w-8 h-8 rounded-full border-2 ${
+                          newTagColor === color ? 'border-gray-900 dark:border-white' : 'border-transparent'
+                        }`}
+                        style={{ backgroundColor: color }}
+                        title={color}
+                      />
+                    ))}
                   </div>
                 </div>
+
+                <button
+                  onClick={handleCreateTag}
+                  disabled={!newTagName.trim()}
+                  className="w-full py-2 px-4 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Create
+                </button>
               </div>
-            )}
+            </div>
           </div>
 
           {/* Existing Tags */}
