@@ -113,6 +113,16 @@ async function request(path: string, opts: RequestInit = {}) {
         return await supabaseDirectClient.createGoal(payload);
       }
       return await supabaseDirectClient.getGoals();
+    } else if (path.startsWith('/goals/') && path.includes('/tags')) {
+      const goalId = path.split('/')[2];
+      if (opts.method === 'POST') {
+        const payload = JSON.parse(opts.body as string);
+        return await supabaseDirectClient.addGoalTag(goalId, payload.tagId);
+      } else if (opts.method === 'DELETE') {
+        const tagId = path.split('/')[4];
+        return await supabaseDirectClient.removeGoalTag(goalId, tagId);
+      }
+      return await supabaseDirectClient.getGoalTags(goalId);
     } else if (path.startsWith('/goals/')) {
       const id = path.split('/')[2];
       if (opts.method === 'PATCH') {
@@ -127,6 +137,16 @@ async function request(path: string, opts: RequestInit = {}) {
         return await supabaseDirectClient.createHabit(payload);
       }
       return await supabaseDirectClient.getHabits();
+    } else if (path.startsWith('/habits/') && path.includes('/tags')) {
+      const habitId = path.split('/')[2];
+      if (opts.method === 'POST') {
+        const payload = JSON.parse(opts.body as string);
+        return await supabaseDirectClient.addHabitTag(habitId, payload.tagId);
+      } else if (opts.method === 'DELETE') {
+        const tagId = path.split('/')[4];
+        return await supabaseDirectClient.removeHabitTag(habitId, tagId);
+      }
+      return await supabaseDirectClient.getHabitTags(habitId);
     } else if (path.startsWith('/habits/')) {
       const id = path.split('/')[2];
       if (opts.method === 'PATCH') {
@@ -208,14 +228,6 @@ async function request(path: string, opts: RequestInit = {}) {
         return await supabaseDirectClient.createDiaryCard(payload);
       }
       return await supabaseDirectClient.getDiaryCards();
-    } else if (path.startsWith('/diary/') && !path.includes('/tags')) {
-      const id = path.split('/')[2];
-      if (opts.method === 'PATCH') {
-        const payload = JSON.parse(opts.body as string);
-        return await supabaseDirectClient.updateDiaryCard(id, payload);
-      } else if (opts.method === 'DELETE') {
-        return await supabaseDirectClient.deleteDiaryCard(id);
-      }
     } else if (path.startsWith('/diary/') && path.includes('/tags')) {
       const diaryCardId = path.split('/')[2];
       if (opts.method === 'POST') {
@@ -226,6 +238,14 @@ async function request(path: string, opts: RequestInit = {}) {
         return await supabaseDirectClient.removeDiaryCardTag(diaryCardId, tagId);
       }
       return await supabaseDirectClient.getDiaryCardTags(diaryCardId);
+    } else if (path.startsWith('/diary/')) {
+      const id = path.split('/')[2];
+      if (opts.method === 'PATCH') {
+        const payload = JSON.parse(opts.body as string);
+        return await supabaseDirectClient.updateDiaryCard(id, payload);
+      } else if (opts.method === 'DELETE') {
+        return await supabaseDirectClient.deleteDiaryCard(id);
+      }
     } else if (path === '/tags') {
       if (opts.method === 'POST') {
         const payload = JSON.parse(opts.body as string);
