@@ -70,8 +70,8 @@ export default function DashboardHeader({
   };
 
   return (
-    <header className="fixed inset-x-0 top-0 z-50 border-b border-zinc-200 bg-white/90 backdrop-blur dark:border-slate-700 dark:bg-[#071013]/90">
-      <div className={`flex h-14 items-center justify-between px-2 sm:px-4 ${isLeftHanded ? 'flex-row-reverse' : ''}`}>
+    <header className="fixed inset-x-0 top-0 z-50 border-b border-border bg-background/90 backdrop-blur">
+      <div className={`flex h-14 items-center justify-between px-4 sm:px-6 ${isLeftHanded ? 'flex-row-reverse' : ''}`}>
         <div className={`flex items-center gap-2 ${isLeftHanded ? 'flex-row-reverse' : ''}`}>
           <button
             onClick={onToggleSidebar}

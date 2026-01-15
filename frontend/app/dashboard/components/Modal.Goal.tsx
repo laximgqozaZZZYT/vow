@@ -84,8 +84,8 @@ export function GoalModal({ open, onClose, goal, onUpdate, onDelete, onCreate, o
     }
 
     return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-            <div className="w-full max-w-md rounded bg-white p-6 shadow-lg text-black dark:bg-slate-900 dark:text-slate-100">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-sm">
+            <div className="w-full max-w-md rounded-lg border border-border bg-card p-6 shadow-lg text-card-foreground">
                 <h3 className="mb-4 text-lg font-semibold">{goal ? 'Edit Goal' : 'New Goal'}</h3>
 
                 <div className="space-y-3">

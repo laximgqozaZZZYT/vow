@@ -76,8 +76,8 @@ export default function ActivityModal({ open, onClose, initial, onSave }: { open
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center pt-12 bg-black/30">
-      <div className="w-full max-w-lg rounded bg-white px-4 pt-4 pb-0 shadow-lg text-black dark:bg-[#0f1724] dark:text-slate-100 flex flex-col">
+    <div className="fixed inset-0 z-50 flex items-start justify-center pt-12 bg-background/80 backdrop-blur-sm">
+      <div className="w-full max-w-lg rounded-lg border border-border bg-card px-4 pt-4 pb-0 shadow-lg text-card-foreground flex flex-col">
         <div className="flex items-center justify-between">
           <h3 className="text-2xl font-semibold">Activity</h3>
           <button onClick={onClose} className="text-slate-500">✕</button>

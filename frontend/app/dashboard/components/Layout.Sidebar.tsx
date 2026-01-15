@@ -54,11 +54,11 @@ export default function DashboardSidebar({
     <>
       {/* Mobile overlay */}
       <div 
-        className="fixed inset-0 bg-black/50 z-30 lg:hidden"
+        className="fixed inset-0 bg-background/80 backdrop-blur-sm z-30 lg:hidden"
         onClick={onClose}
       />
       
-      <aside className={`fixed ${sidePosition} top-14 w-80 max-w-[85vw] h-[calc(100vh-3.5rem)] ${borderSide} border-zinc-200 bg-white dark:bg-[#071013] z-40 lg:w-80 flex flex-col`}>
+      <aside className={`fixed ${sidePosition} top-14 w-80 max-w-[85vw] h-[calc(100vh-3.5rem)] ${borderSide} border-border bg-card z-40 lg:w-80 flex flex-col`}>
         <div className="flex-shrink-0 p-3 pb-0">
           <div className="mb-3 flex items-center justify-between">
             <div className={`flex items-center gap-2 ${isLeftHanded ? 'flex-row-reverse' : ''}`}>

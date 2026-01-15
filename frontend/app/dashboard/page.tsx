@@ -525,7 +525,7 @@ function DashboardLayout(props: any) {
   } = props;
 
   return (
-    <div className="flex min-h-screen bg-zinc-50 dark:bg-black text-black dark:text-zinc-50">
+    <div className="flex min-h-screen bg-background text-foreground">
         <DashboardHeader
           onToggleSidebar={() => setShowLeftPane((s: boolean) => !s)}
           showSidebar={showLeftPane}
@@ -580,9 +580,9 @@ function DashboardLayout(props: any) {
       />
 
   {/* Main content pane */}
-  <main className={`flex-1 pt-20 p-4 sm:p-6 lg:p-8 ${showLeftPane ? (isLeftHanded ? 'lg:mr-80' : 'lg:ml-80') : ''}`}>
+  <main className={`flex-1 pt-20 p-6 lg:p-8 ${showLeftPane ? (isLeftHanded ? 'lg:mr-80' : 'lg:ml-80') : ''}`}>
 
-        <div className="mt-6 grid grid-cols-1 gap-4 max-w-full overflow-hidden">
+        <div className="mt-6 grid grid-cols-1 gap-6 max-w-full overflow-hidden">
           {pageSections.map((sec: string) => (
             sec === 'next' ? (
               <NextSection 

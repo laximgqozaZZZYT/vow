@@ -433,8 +433,8 @@ export function HabitModal({ open, onClose, habit, onUpdate, onDelete, onCreate,
     }
 
     return (
-        <div className="fixed inset-0 z-50 flex items-start justify-center pt-4 sm:pt-12 bg-black/30 p-4">
-            <div className="w-full max-w-[720px] rounded bg-white px-4 pt-4 pb-0 shadow-lg text-black dark:bg-[#0f1724] dark:text-slate-100 flex flex-col max-h-[95vh] sm:max-h-[90vh]">
+        <div className="fixed inset-0 z-50 flex items-start justify-center pt-4 sm:pt-12 bg-background/80 backdrop-blur-sm p-4">
+            <div className="w-full max-w-[720px] rounded-lg border border-border bg-card px-4 pt-4 pb-0 shadow-lg text-card-foreground flex flex-col max-h-[95vh] sm:max-h-[90vh]">
                 <div className="flex items-center justify-between">
                     <h2 className="text-xl sm:text-2xl font-semibold">{t('habit.title')}</h2>
                     <div className="flex items-center gap-2">
