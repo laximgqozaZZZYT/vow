@@ -1582,19 +1582,19 @@ function MindmapFlow({ onClose, onRegisterAsHabit, onRegisterAsGoal, goals = [],
             <div className="flex justify-end gap-3">
               <button
                 onClick={handleCancelClose}
-                className="px-4 py-2 text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200"
+                className="inline-flex items-center justify-center rounded-md px-4 py-2 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
               >
                 {t('cancel')}
               </button>
               <button
                 onClick={handleCloseWithoutSaving}
-                className="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700"
+                className="inline-flex items-center justify-center rounded-md bg-destructive text-destructive-foreground px-4 py-2 text-sm font-medium transition-colors hover:bg-destructive/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-destructive"
               >
                 {t('dont_save')}
               </button>
               <button
                 onClick={handleSaveAndClose}
-                className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700"
+                className="inline-flex items-center justify-center rounded-md bg-success text-success-foreground px-4 py-2 text-sm font-medium transition-colors hover:bg-success/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-success"
               >
                 {t('save_and_close')}
               </button>
@@ -1639,7 +1639,7 @@ function MindmapFlow({ onClose, onRegisterAsHabit, onRegisterAsGoal, goals = [],
           <hr className="my-1 border-gray-600" />
           <button
             onClick={handleDeleteNode}
-            className="w-full px-4 py-2 text-left text-sm text-red-400 hover:bg-red-900/30 hover:text-red-300 flex items-center gap-2 transition-colors"
+            className="w-full px-4 py-2 text-left text-sm text-destructive hover:bg-destructive/10 hover:text-destructive flex items-center gap-2 transition-colors"
           >
             <span>🗑️</span>
             {selectedNodes.some(node => node.id === contextMenu.id) && selectedNodes.length > 1

@@ -76,7 +76,7 @@ export default function DashboardHeader({
           <button
             onClick={onToggleSidebar}
             aria-label="Toggle menu"
-            className="rounded px-2 py-1 text-xl sm:text-2xl leading-none hover:bg-zinc-100 dark:hover:bg-white/10"
+            className="inline-flex items-center justify-center rounded-md px-2 py-1 text-xl sm:text-2xl leading-none transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
           >
             ☰
           </button>
@@ -84,7 +84,7 @@ export default function DashboardHeader({
           {/* Handedness toggle button - next to hamburger menu */}
           <button
             onClick={() => setHandedness(handedness === 'left' ? 'right' : 'left')}
-            className="group relative rounded-lg border border-zinc-200 bg-white px-2 py-1 text-xs font-medium transition-all hover:border-blue-400 hover:bg-blue-50 dark:border-slate-700 dark:bg-transparent dark:hover:border-blue-500 dark:hover:bg-blue-950/20"
+            className="group relative inline-flex items-center justify-center rounded-lg border border-border bg-card px-2 py-1 text-xs font-medium transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
             title={`Switch to ${handedness === 'left' ? 'right' : 'left'}-handed mode`}
           >
             <div className="flex items-center gap-1.5">
@@ -106,13 +106,13 @@ export default function DashboardHeader({
 
         <div className={`flex items-center gap-1 sm:gap-2 ${isLeftHanded ? 'flex-row-reverse' : ''}`}>
           {/* Locale switcher */}
-          <div className="flex items-center rounded-lg bg-slate-100 dark:bg-slate-800 p-1">
+          <div className="flex items-center rounded-lg bg-muted p-1">
             <button 
               onClick={() => setLocale('en')}
-              className={`px-2 py-1 text-xs rounded-md transition-all min-w-[32px] min-h-[32px] flex items-center justify-center ${
+              className={`inline-flex items-center justify-center px-2 py-1 text-xs rounded-md transition-colors min-w-[32px] min-h-[32px] ${
                 locale === 'en' 
-                  ? 'bg-white dark:bg-slate-700 shadow-sm text-slate-900 dark:text-slate-100 font-medium' 
-                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
+                  ? 'bg-background shadow-sm text-foreground font-medium' 
+                  : 'text-muted-foreground hover:text-foreground hover:bg-accent'
               }`}
               title="English"
               aria-label="Switch to English"
@@ -122,10 +122,10 @@ export default function DashboardHeader({
             </button>
             <button 
               onClick={() => setLocale('ja')}
-              className={`px-2 py-1 text-xs rounded-md transition-all min-w-[32px] min-h-[32px] flex items-center justify-center ${
+              className={`inline-flex items-center justify-center px-2 py-1 text-xs rounded-md transition-colors min-w-[32px] min-h-[32px] ${
                 locale === 'ja' 
-                  ? 'bg-white dark:bg-slate-700 shadow-sm text-slate-900 dark:text-slate-100 font-medium' 
-                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
+                  ? 'bg-background shadow-sm text-foreground font-medium' 
+                  : 'text-muted-foreground hover:text-foreground hover:bg-accent'
               }`}
               title="日本語"
               aria-label="Switch to Japanese"
@@ -163,7 +163,7 @@ export default function DashboardHeader({
               <span className="mr-1 sm:mr-2">Migration failed.</span>
               <button 
                 onClick={retryMigration}
-                className="underline hover:no-underline"
+                className="inline-flex items-center justify-center underline hover:no-underline transition-colors"
               >
                 Retry
               </button>
@@ -186,7 +186,7 @@ export default function DashboardHeader({
           {isAuthed && !isGuest && hasGuestData && migrationStatus === 'idle' && (
             <button
               onClick={handleClearGuestData}
-              className="rounded border border-blue-200 bg-blue-50 px-2 sm:px-3 py-1 sm:py-1.5 text-xs sm:text-sm text-blue-700 hover:bg-blue-100 disabled:opacity-50 dark:border-blue-900/40 dark:bg-blue-950/20 dark:text-blue-200 dark:hover:bg-blue-950/35"
+              className="inline-flex items-center justify-center rounded-md border border-input bg-background px-2 sm:px-3 py-1 sm:py-1.5 text-xs sm:text-sm font-medium transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:pointer-events-none disabled:opacity-50"
             >
               <span className="hidden sm:inline">Migrate Guest Data</span>
               <span className="sm:hidden">Migrate</span>
@@ -195,21 +195,21 @@ export default function DashboardHeader({
           {isAuthed && !isGuest ? (
             <button
               onClick={handleLogout}
-              className="rounded border border-red-200 bg-red-50 px-2 sm:px-3 py-1 sm:py-1.5 text-xs sm:text-sm text-red-700 hover:bg-red-100 dark:border-red-900/40 dark:bg-red-950/20 dark:text-red-200 dark:hover:bg-red-950/35"
+              className="inline-flex items-center justify-center rounded-md bg-destructive text-destructive-foreground px-2 sm:px-3 py-1 sm:py-1.5 text-xs sm:text-sm font-medium transition-colors hover:bg-destructive/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-destructive"
             >
               Logout
             </button>
           ) : (
             <Link
               href="/login"
-              className="rounded border border-zinc-200 bg-white px-2 sm:px-3 py-1 sm:py-1.5 text-xs sm:text-sm text-zinc-700 hover:bg-zinc-50 dark:border-slate-700 dark:bg-transparent dark:text-zinc-100 dark:hover:bg-white/10"
+              className="inline-flex items-center justify-center rounded-md border border-input bg-background px-2 sm:px-3 py-1 sm:py-1.5 text-xs sm:text-sm font-medium transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
             >
               Login
             </Link>
           )}
           <button
             onClick={onEditLayout}
-            className="rounded border border-zinc-200 bg-white px-2 sm:px-3 py-1 sm:py-1.5 text-xs sm:text-sm font-medium text-zinc-800 hover:bg-zinc-50 dark:border-slate-700 dark:bg-transparent dark:text-white dark:hover:bg-white/10"
+            className="inline-flex items-center justify-center rounded-md bg-primary text-primary-foreground px-2 sm:px-3 py-1 sm:py-1.5 text-xs sm:text-sm font-medium transition-colors hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
           >
             <span className="hidden sm:inline">Editor Layout</span>
             <span className="sm:hidden">Edit</span>

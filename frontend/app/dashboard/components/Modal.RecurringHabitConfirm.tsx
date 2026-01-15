@@ -51,7 +51,7 @@ export default function RecurringHabitConfirmModal({
         <div className="flex flex-col gap-3">
           <button
             onClick={() => onConfirm('updateTiming')}
-            className="w-full px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors"
+            className="inline-flex flex-col items-start justify-center w-full rounded-md bg-primary text-primary-foreground px-4 py-2 text-sm font-medium transition-colors hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
           >
             すべての繰り返しを変更
             <div className="text-xs opacity-80 mt-1">
@@ -61,7 +61,7 @@ export default function RecurringHabitConfirmModal({
           
           <button
             onClick={() => onConfirm('createException')}
-            className="w-full px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 transition-colors"
+            className="inline-flex flex-col items-start justify-center w-full rounded-md bg-success text-success-foreground px-4 py-2 text-sm font-medium transition-colors hover:bg-success/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-success"
           >
             この日のみ変更
             <div className="text-xs opacity-80 mt-1">
@@ -71,7 +71,7 @@ export default function RecurringHabitConfirmModal({
           
           <button
             onClick={onCancel}
-            className="w-full px-4 py-2 bg-gray-500 text-white rounded hover:bg-gray-600 transition-colors"
+            className="inline-flex items-center justify-center w-full rounded-md bg-secondary text-secondary-foreground px-4 py-2 text-sm font-medium transition-colors hover:bg-secondary/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-secondary"
           >
             キャンセル
           </button>
