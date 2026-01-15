@@ -3,6 +3,7 @@ import { useRouter } from 'next/navigation';
 import api from '../../../lib/api';
 import { supabase } from '../../../lib/supabaseClient';
 import { GuestDataMigration, type GuestDataMigrationResult } from '../../../lib/guest-data-migration';
+import { debug } from '../../../lib/debug';
 import type { AuthContext } from '../types';
 
 export function useAuth(): AuthContext {
@@ -40,7 +41,7 @@ export function useAuth(): AuthContext {
     migrationInProgressRef.current = true;
     
     try {
-      console.log('[auth] Starting guest data migration for user:', userId);
+      debug.log('[auth] Starting guest data migration for user:', userId);
       
       const result = await GuestDataMigration.migrateGuestDataToSupabase(userId);
       
@@ -49,7 +50,7 @@ export function useAuth(): AuthContext {
         setMigrationResult(result);
         const successMessage = `Successfully migrated ${result.migratedGoals} goals, ${result.migratedHabits} habits, and ${result.migratedActivities} activities`;
         setAuthError(successMessage);
-        console.log('[auth] Migration completed successfully:', result);
+        debug.log('[auth] Migration completed successfully:', result);
         
         // Dispatch event to trigger data reload
         window.dispatchEvent(new CustomEvent('guestDataMigrated'));
@@ -64,7 +65,7 @@ export function useAuth(): AuthContext {
         setMigrationStatus('error');
         setMigrationError(result.errors.join(', '));
         setAuthError(`Migration completed with errors: ${result.errors.join(', ')}`);
-        console.warn('[auth] Migration completed with errors:', result);
+        debug.warn('[auth] Migration completed with errors:', result);
       }
     } catch (error) {
       setMigrationStatus('error');
@@ -80,7 +81,7 @@ export function useAuth(): AuthContext {
   // Retry migration function
   const retryMigration = async () => {
     if (migrationStatus === 'error' && isAuthed && !isGuest) {
-      console.log('[auth] Retrying guest data migration');
+      debug.log('[auth] Retrying guest data migration');
       const userId = await getUserIdFromSession();
       if (userId) {
         await performMigration(userId);
@@ -105,7 +106,7 @@ export function useAuth(): AuthContext {
             hasSupabaseSession = !!accessToken;
             sessionUserId = session?.user?.id || null;
             
-            console.log('[auth] Supabase session check:', { hasSession: hasSupabaseSession, userId: sessionUserId });
+            debug.log('[auth] Supabase session check:', { hasSession: hasSupabaseSession, userId: sessionUserId });
             
             // APIライブラリにトークンを設定（互換性のため）
             ;(api as any).setBearerToken?.(accessToken);
@@ -116,33 +117,33 @@ export function useAuth(): AuthContext {
 
         // バックエンドの認証状態も確認
         try {
-          console.log('[auth] Calling api.me()...');
+          debug.log('[auth] Calling api.me()...');
           const me = await api.me();
-          console.log('[dashboard] me() result:', me);
+          debug.log('[dashboard] me() result:', me);
           const a = (me as any)?.actor;
-          console.log('[auth] Actor extracted:', a);
+          debug.log('[auth] Actor extracted:', a);
           
           if (a?.type === 'user') {
-            console.log('[auth] User actor detected');
+            debug.log('[auth] User actor detected');
             setActorLabel(`user:${a.id}`);
             setIsAuthed(true);
             setIsGuest(false);
             
             // Check for guest data migration immediately after detecting authenticated user
             if (sessionUserId && GuestDataMigration.hasGuestData() && migrationStatus === 'idle') {
-              console.log('[auth] Initial load: Guest data found for authenticated user, starting migration');
+              debug.log('[auth] Initial load: Guest data found for authenticated user, starting migration');
               await performMigration(sessionUserId);
             }
           } else if (a?.type === 'guest') {
-            console.log('[auth] Guest actor detected');
+            debug.log('[auth] Guest actor detected');
             setActorLabel(`guest:${a.id}`);
             // ゲストユーザーも認証済みとして扱い、ローカル機能を有効化
-            console.log('[auth] Guest user detected, enabling local features');
-            console.log('[auth] Setting isAuthed to true for guest user');
+            debug.log('[auth] Guest user detected, enabling local features');
+            debug.log('[auth] Setting isAuthed to true for guest user');
             setIsAuthed(true);
             setIsGuest(true);
           } else {
-            console.log('[auth] No valid actor found');
+            debug.log('[auth] No valid actor found');
             setActorLabel('');
             setIsAuthed(false);
             setIsGuest(false);
@@ -156,17 +157,17 @@ export function useAuth(): AuthContext {
           });
           // Supabaseセッションがある場合は認証済みとして扱う
           if (hasSupabaseSession) {
-            console.log('[auth] Fallback: Using Supabase session for auth');
+            debug.log('[auth] Fallback: Using Supabase session for auth');
             setIsAuthed(true);
             setIsGuest(false);
             
             // Check for guest data migration in fallback case too
             if (sessionUserId && GuestDataMigration.hasGuestData() && migrationStatus === 'idle') {
-              console.log('[auth] Fallback: Guest data found for authenticated user, starting migration');
+              debug.log('[auth] Fallback: Guest data found for authenticated user, starting migration');
               await performMigration(sessionUserId);
             }
           } else {
-            console.log('[auth] No fallback available, setting isAuthed to false');
+            debug.log('[auth] No fallback available, setting isAuthed to false');
             setIsAuthed(false);
           }
         }
@@ -180,7 +181,7 @@ export function useAuth(): AuthContext {
   // ゲストから認証ユーザーへの変化を監視してゲストデータを移行
   useEffect(() => {
     const handleGuestToUserTransition = async () => {
-      console.log('[auth] Transition check:', { 
+      debug.log('[auth] Transition check:', { 
         previousIsGuest: previousIsGuestRef.current, 
         currentIsGuest: isGuest, 
         isAuthed, 
@@ -190,20 +191,20 @@ export function useAuth(): AuthContext {
       
       // Trigger migration when transitioning from guest to authenticated user
       if (!isGuest && isAuthed && !migrationInProgressRef.current && migrationStatus === 'idle') {
-        console.log('[auth] Authenticated user detected, checking for guest data migration');
+        debug.log('[auth] Authenticated user detected, checking for guest data migration');
         
         const userId = await getUserIdFromSession();
         if (!userId) {
-          console.warn('[auth] No user ID available for migration');
+          debug.warn('[auth] No user ID available for migration');
           return;
         }
         
         // Check if guest data exists
         if (GuestDataMigration.hasGuestData()) {
-          console.log('[auth] Guest data found, starting migration');
+          debug.log('[auth] Guest data found, starting migration');
           await performMigration(userId);
         } else {
-          console.log('[auth] No guest data to migrate');
+          debug.log('[auth] No guest data to migrate');
         }
       }
       
@@ -222,14 +223,14 @@ export function useAuth(): AuthContext {
       const { supabase } = await import('../../../lib/supabaseClient');
       if (!supabase) return;
       
-      console.log('[auth] Setting up Supabase auth listener');
+      debug.log('[auth] Setting up Supabase auth listener');
       
       const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event: any, session: any) => {
         const token = session?.access_token ?? null;
         const userId = session?.user?.id ?? null;
         const wasGuest = isGuest;
         
-        console.log('[auth] Auth state change:', { event, hasToken: !!token, userId, wasGuest });
+        debug.log('[auth] Auth state change:', { event, hasToken: !!token, userId, wasGuest });
         
         setIsAuthed(!!token);
         
@@ -239,7 +240,7 @@ export function useAuth(): AuthContext {
           
           // Check for guest data migration on auth state change
           if (userId && GuestDataMigration.hasGuestData() && migrationStatus === 'idle' && !migrationInProgressRef.current) {
-            console.log('[auth] Auth state change: Guest data found for authenticated user, starting migration');
+            debug.log('[auth] Auth state change: Guest data found for authenticated user, starting migration');
             await performMigration(userId);
           }
         }
@@ -263,7 +264,7 @@ export function useAuth(): AuthContext {
     try {
       // 本番環境のみSupabaseログアウトを無効化（CORS回避）
       if (process.env.NODE_ENV === 'production') {
-        console.log('[auth] Supabase logout disabled in production to avoid CORS issues');
+        debug.log('[auth] Supabase logout disabled in production to avoid CORS issues');
       } else if (supabase) {
         await supabase.auth.signOut()
       }

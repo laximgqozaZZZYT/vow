@@ -1,4 +1,5 @@
 import React, { useState, useCallback, useRef } from "react"
+import { debug } from '../../../lib/debug'
 import ReactFlow, {
   Node,
   addEdge,
@@ -340,7 +341,7 @@ function MindmapNode({ id, data, selected }: NodeProps<CustomNodeData>) {
       
       if (currentConnectionMode.isActive) {
         // 結線モードが有効な場合は結線処理を実行
-        console.log(`Connection mode active: connecting node ${currentConnectionMode.sourceNodeId} to ${id}`);
+        debug.log(`Connection mode active: connecting node ${currentConnectionMode.sourceNodeId} to ${id}`);
         const connectionEvent = new CustomEvent('executeConnection', {
           detail: { targetNodeId: id }
         });
@@ -375,7 +376,7 @@ function MindmapNode({ id, data, selected }: NodeProps<CustomNodeData>) {
     window.dispatchEvent(event);
     
     // ログ出力
-    console.log(`Mobile connection started from node ${id}, handle ${position}`);
+    debug.log(`Mobile connection started from node ${id}, handle ${position}`);
   }, [isMobile, id]);
 
   // マウスリーブ処理
@@ -864,7 +865,7 @@ function MindmapFlow({ onClose, onRegisterAsHabit, onRegisterAsGoal, goals = [],
       const customEvent = event as CustomEvent;
       const { targetNodeId } = customEvent.detail;
       if (connectionMode.isActive) {
-        console.log(`Executing connection: ${connectionMode.sourceNodeId} -> ${targetNodeId}`);
+        debug.log(`Executing connection: ${connectionMode.sourceNodeId} -> ${targetNodeId}`);
         handleMobileNodeTap(targetNodeId);
       }
     };
@@ -927,7 +928,7 @@ function MindmapFlow({ onClose, onRegisterAsHabit, onRegisterAsGoal, goals = [],
           sourceHandleId: null
         });
         // 結線モード開始のログを追加
-        console.log(`Connection mode activated for node: ${nodeId}`);
+        debug.log(`Connection mode activated for node: ${nodeId}`);
         break;
       case 'habit':
         addLog(`Mobile habit registration for node: "${node.data.label}"`);
@@ -1727,7 +1728,7 @@ function MindmapFlow({ onClose, onRegisterAsHabit, onRegisterAsGoal, goals = [],
                     sourceHandleId: null
                   });
                   addLog('Mobile connection mode cancelled');
-                  console.log('Connection mode cancelled');
+                  debug.log('Connection mode cancelled');
                 }}
                 className="px-6 py-2 bg-white/20 text-white rounded-lg font-medium border border-white/30 hover:bg-white/30 transition-colors"
               >

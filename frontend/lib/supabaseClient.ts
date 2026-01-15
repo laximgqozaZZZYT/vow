@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js'
+import { debug } from './debug'
 
 const url = process.env.NEXT_PUBLIC_SUPABASE_URL
 const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
@@ -8,11 +9,11 @@ export const supabase = (() => {
   if (typeof window === 'undefined') return null as any
   
   if (!url || !anonKey) {
-    console.warn('[supabase] Missing environment variables');
+    debug.warn('[supabase] Missing environment variables');
     return null as any;
   }
   
-  console.log('[supabase] Initializing full Supabase client for integrated architecture');
+  debug.log('[supabase] Initializing full Supabase client for integrated architecture');
   
   // 完全なSupabaseクライアント（制限なし）
   const client = createClient(url, anonKey, {

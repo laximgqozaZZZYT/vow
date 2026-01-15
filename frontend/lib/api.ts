@@ -2,6 +2,7 @@
 
 // 共通Tag型をインポート
 import type { Tag } from '../app/dashboard/types/index';
+import { debug } from './debug';
 
 // 型定義をエクスポート
 export type DiaryCard = {
@@ -19,24 +20,24 @@ const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL?.replace(/\/+$/, '') |
 const USE_EDGE_FUNCTIONS = process.env.NEXT_PUBLIC_USE_EDGE_FUNCTIONS === 'true'
 
 // 強制的にデバッグ情報を表示 - TIMESTAMP: 2026-01-09-14:30
-console.log('=== FORCE DEBUG V3 - TIMESTAMP 2026-01-09-14:30 ===');
-console.log('Raw NEXT_PUBLIC_USE_EDGE_FUNCTIONS:', process.env.NEXT_PUBLIC_USE_EDGE_FUNCTIONS);
-console.log('Parsed USE_EDGE_FUNCTIONS:', USE_EDGE_FUNCTIONS);
-console.log('Type of USE_EDGE_FUNCTIONS:', typeof USE_EDGE_FUNCTIONS);
-console.log('🔍 CACHE_CLEARED_V3 - TIMESTAMP 2026-01-09-14:30'); // キャッシュクリア確認用
-console.log('=== END FORCE DEBUG ===');
+debug.log('=== FORCE DEBUG V3 - TIMESTAMP 2026-01-09-14:30 ===');
+debug.log('Raw NEXT_PUBLIC_USE_EDGE_FUNCTIONS:', process.env.NEXT_PUBLIC_USE_EDGE_FUNCTIONS);
+debug.log('Parsed USE_EDGE_FUNCTIONS:', USE_EDGE_FUNCTIONS);
+debug.log('Type of USE_EDGE_FUNCTIONS:', typeof USE_EDGE_FUNCTIONS);
+debug.log('🔍 CACHE_CLEARED_V3 - TIMESTAMP 2026-01-09-14:30'); // キャッシュクリア確認用
+debug.log('=== END FORCE DEBUG ===');
 
 // デバッグ用ログ
 if (typeof window !== 'undefined') {
-  console.log('=== API Configuration Debug (Supabase Integrated) ===');
-  console.log('SUPABASE_URL:', SUPABASE_URL);
-  console.log('USE_EDGE_FUNCTIONS:', USE_EDGE_FUNCTIONS);
+  debug.log('=== API Configuration Debug (Supabase Integrated) ===');
+  debug.log('SUPABASE_URL:', SUPABASE_URL);
+  debug.log('USE_EDGE_FUNCTIONS:', USE_EDGE_FUNCTIONS);
   
   const apiChoice = USE_EDGE_FUNCTIONS ? 'Supabase Edge Functions' : 'Supabase Client Direct';
-  console.log('🚀 Using:', apiChoice);
-  console.log('Environment variables check:');
-  console.log('- NEXT_PUBLIC_SUPABASE_URL:', process.env.NEXT_PUBLIC_SUPABASE_URL ? 'SET' : 'MISSING');
-  console.log('- NEXT_PUBLIC_USE_EDGE_FUNCTIONS:', process.env.NEXT_PUBLIC_USE_EDGE_FUNCTIONS);
+  debug.log('🚀 Using:', apiChoice);
+  debug.log('Environment variables check:');
+  debug.log('- NEXT_PUBLIC_SUPABASE_URL:', process.env.NEXT_PUBLIC_SUPABASE_URL ? 'SET' : 'MISSING');
+  debug.log('- NEXT_PUBLIC_USE_EDGE_FUNCTIONS:', process.env.NEXT_PUBLIC_USE_EDGE_FUNCTIONS);
 }
 
 class ApiError extends Error {
@@ -60,12 +61,12 @@ function safeJsonParse(text: string): any {
 
 // Supabase統合版のリクエスト処理
 async function request(path: string, opts: RequestInit = {}) {
-  console.log('=== REQUEST DEBUG ===');
-  console.log('Path:', path);
-  console.log('Method:', opts.method || 'GET');
-  console.log('USE_EDGE_FUNCTIONS:', USE_EDGE_FUNCTIONS);
-  console.log('Will use:', USE_EDGE_FUNCTIONS ? 'Edge Functions' : 'Direct Client');
-  console.log('=== END REQUEST DEBUG ===');
+  debug.log('=== REQUEST DEBUG ===');
+  debug.log('Path:', path);
+  debug.log('Method:', opts.method || 'GET');
+  debug.log('USE_EDGE_FUNCTIONS:', USE_EDGE_FUNCTIONS);
+  debug.log('Will use:', USE_EDGE_FUNCTIONS ? 'Edge Functions' : 'Direct Client');
+  debug.log('=== END REQUEST DEBUG ===');
   
   if (USE_EDGE_FUNCTIONS) {
     // Edge Functions使用

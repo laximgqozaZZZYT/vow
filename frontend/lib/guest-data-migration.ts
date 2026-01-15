@@ -1,4 +1,5 @@
 import { supabase } from './supabaseClient';
+import { debug } from './debug';
 
 export interface GuestDataMigrationResult {
   success: boolean;
@@ -26,11 +27,11 @@ export class GuestDataMigration {
       return result;
     }
 
-    console.log('[Migration] Starting guest data migration for user:', userId);
+    debug.log('[Migration] Starting guest data migration for user:', userId);
     
     // Supabaseセッション確認
     const { data: { session } } = await supabase.auth.getSession();
-    console.log('[Migration] Supabase session check:', { 
+    debug.log('[Migration] Supabase session check:', { 
       hasSession: !!session?.session, 
       userId: session?.session?.user?.id,
       targetUserId: userId 
@@ -38,28 +39,28 @@ export class GuestDataMigration {
 
     try {
       // 1. Goals移行（IDマッピングを取得）
-      console.log('[Migration] Step 1: Migrating goals...');
+      debug.log('[Migration] Step 1: Migrating goals...');
       const goalIdMapping = await this.migrateGoals(userId, result);
-      console.log('[Migration] Goals migration completed. Mapping:', goalIdMapping);
+      debug.log('[Migration] Goals migration completed. Mapping:', goalIdMapping);
       
       // 2. Habits移行（goalId参照を更新）
-      console.log('[Migration] Step 2: Migrating habits...');
+      debug.log('[Migration] Step 2: Migrating habits...');
       await this.migrateHabits(userId, goalIdMapping, result);
-      console.log('[Migration] Habits migration completed');
+      debug.log('[Migration] Habits migration completed');
       
       // 3. Activities移行
-      console.log('[Migration] Step 3: Migrating activities...');
+      debug.log('[Migration] Step 3: Migrating activities...');
       await this.migrateActivities(userId, result);
-      console.log('[Migration] Activities migration completed');
+      debug.log('[Migration] Activities migration completed');
 
       // 4. 移行成功時のクリーンアップ（エラーがない場合のみ）
       if (result.errors.length === 0) {
-        console.log('[Migration] All migrations successful, clearing guest data');
+        debug.log('[Migration] All migrations successful, clearing guest data');
         this.clearGuestData();
         result.success = true;
-        console.log('[Migration] Migration completed successfully:', result);
+        debug.log('[Migration] Migration completed successfully:', result);
       } else {
-        console.warn('[Migration] Migration completed with errors, guest data preserved:', result);
+        debug.warn('[Migration] Migration completed with errors, guest data preserved:', result);
         // 部分的な失敗の場合、ゲストデータは保持する
       }
 
@@ -79,11 +80,11 @@ export class GuestDataMigration {
     const goalIdMapping = new Map<string, string>(); // ゲストID → Supabase ID
     
     if (guestGoals.length === 0) {
-      console.log('[Migration] No guest goals to migrate');
+      debug.log('[Migration] No guest goals to migrate');
       return goalIdMapping;
     }
 
-    console.log('[Migration] Migrating', guestGoals.length, 'goals');
+    debug.log('[Migration] Migrating', guestGoals.length, 'goals');
 
     for (const goal of guestGoals) {
       try {
@@ -103,7 +104,7 @@ export class GuestDataMigration {
         }
 
         if (existingGoals && existingGoals.length > 0) {
-          console.log('[Migration] Goal already exists, skipping:', goal.name);
+          debug.log('[Migration] Goal already exists, skipping:', goal.name);
           // 既存のゴールIDをマッピングに追加
           goalIdMapping.set(goal.id, existingGoals[0].id);
           continue;
@@ -132,10 +133,10 @@ export class GuestDataMigration {
         } else {
           result.migratedGoals++;
           goalIdMapping.set(goal.id, data.id); // ゲストID → Supabase IDのマッピング
-          console.log('[Migration] Goal migrated:', goal.name, goal.id, '→', data.id);
+          debug.log('[Migration] Goal migrated:', goal.name, goal.id, '→', data.id);
           
           // 挿入されたデータを確認
-          console.log('[Migration] Inserted goal data:', data);
+          debug.log('[Migration] Inserted goal data:', data);
         }
       } catch (error) {
         console.error('[Migration] Goal migration exception:', error);
@@ -153,11 +154,11 @@ export class GuestDataMigration {
     const guestHabits = JSON.parse(localStorage.getItem('guest-habits') || '[]');
     
     if (guestHabits.length === 0) {
-      console.log('[Migration] No guest habits to migrate');
+      debug.log('[Migration] No guest habits to migrate');
       return;
     }
 
-    console.log('[Migration] Migrating', guestHabits.length, 'habits');
+    debug.log('[Migration] Migrating', guestHabits.length, 'habits');
 
     // デフォルトゴールを取得または作成
     const defaultGoalId = await this.getOrCreateDefaultGoal(userId);
@@ -180,7 +181,7 @@ export class GuestDataMigration {
         }
 
         if (existingHabits && existingHabits.length > 0) {
-          console.log('[Migration] Habit already exists, skipping:', habit.name);
+          debug.log('[Migration] Habit already exists, skipping:', habit.name);
           continue;
         }
 
@@ -188,9 +189,9 @@ export class GuestDataMigration {
         let targetGoalId = defaultGoalId;
         if (habit.goalId && goalIdMapping.has(habit.goalId)) {
           targetGoalId = goalIdMapping.get(habit.goalId)!;
-          console.log('[Migration] Updated habit goalId:', habit.goalId, '→', targetGoalId);
+          debug.log('[Migration] Updated habit goalId:', habit.goalId, '→', targetGoalId);
         } else if (habit.goalId) {
-          console.log('[Migration] Guest goalId not found in mapping, using default:', habit.goalId);
+          debug.log('[Migration] Guest goalId not found in mapping, using default:', habit.goalId);
         }
 
         const now = new Date().toISOString();
@@ -229,7 +230,7 @@ export class GuestDataMigration {
           result.errors.push(`Habit "${habit.name}": ${error.message}`);
         } else {
           result.migratedHabits++;
-          console.log('[Migration] Habit migrated:', habit.name, '→', data.id, 'goalId:', targetGoalId);
+          debug.log('[Migration] Habit migrated:', habit.name, '→', data.id, 'goalId:', targetGoalId);
         }
       } catch (error) {
         console.error('[Migration] Habit migration exception:', error);
@@ -245,11 +246,11 @@ export class GuestDataMigration {
     const guestActivities = JSON.parse(localStorage.getItem('guest-activities') || '[]');
     
     if (guestActivities.length === 0) {
-      console.log('[Migration] No guest activities to migrate');
+      debug.log('[Migration] No guest activities to migrate');
       return;
     }
 
-    console.log('[Migration] Migrating', guestActivities.length, 'activities');
+    debug.log('[Migration] Migrating', guestActivities.length, 'activities');
 
     for (const activity of guestActivities) {
       try {
@@ -270,7 +271,7 @@ export class GuestDataMigration {
         }
 
         if (existingActivities && existingActivities.length > 0) {
-          console.log('[Migration] Activity already exists, skipping:', activity.habitName, activity.timestamp);
+          debug.log('[Migration] Activity already exists, skipping:', activity.habitName, activity.timestamp);
           continue;
         }
 
@@ -296,7 +297,7 @@ export class GuestDataMigration {
           result.errors.push(`Activity "${activity.habitName}": ${error.message}`);
         } else {
           result.migratedActivities++;
-          console.log('[Migration] Activity migrated:', activity.habitName, activity.timestamp, '→', data.id);
+          debug.log('[Migration] Activity migrated:', activity.habitName, activity.timestamp, '→', data.id);
         }
       } catch (error) {
         console.error('[Migration] Activity migration exception:', error);
@@ -324,12 +325,12 @@ export class GuestDataMigration {
     }
 
     if (existingGoals && existingGoals.length > 0) {
-      console.log('[Migration] Using existing default goal:', existingGoals[0].id);
+      debug.log('[Migration] Using existing default goal:', existingGoals[0].id);
       return existingGoals[0].id;
     }
 
     // デフォルトゴールを作成
-    console.log('[Migration] Creating new default goal');
+    debug.log('[Migration] Creating new default goal');
     const now = new Date().toISOString();
     const { data: newGoal, error: createError } = await supabase!
       .from('goals')
@@ -350,7 +351,7 @@ export class GuestDataMigration {
       throw createError;
     }
 
-    console.log('[Migration] Created new default goal:', newGoal.id);
+    debug.log('[Migration] Created new default goal:', newGoal.id);
     return newGoal.id;
   }
 
@@ -358,7 +359,7 @@ export class GuestDataMigration {
    * ゲストデータをLocalStorageから削除
    */
   private static clearGuestData() {
-    console.log('[Migration] Clearing guest data from localStorage');
+    debug.log('[Migration] Clearing guest data from localStorage');
     localStorage.removeItem('guest-goals');
     localStorage.removeItem('guest-habits');
     localStorage.removeItem('guest-activities');

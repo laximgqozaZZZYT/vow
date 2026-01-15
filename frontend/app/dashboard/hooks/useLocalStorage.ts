@@ -7,6 +7,7 @@
  */
 
 import { useState, useEffect, useCallback } from 'react';
+import { debug } from '../../../lib/debug';
 
 /**
  * Options for localStorage hook
@@ -90,7 +91,7 @@ export function useLocalStorage<T>(
       // Handle complex objects
       return serializer.parse(item);
     } catch (error) {
-      console.warn(`[useLocalStorage] Error reading localStorage key "${key}":`, error);
+      debug.warn(`[useLocalStorage] Error reading localStorage key "${key}":`, error);
       return defaultValue as T;
     }
   });
@@ -129,7 +130,7 @@ export function useLocalStorage<T>(
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to read from localStorage';
       setError(errorMessage);
-      console.warn(`[useLocalStorage] Error initializing key "${key}":`, err);
+      debug.warn(`[useLocalStorage] Error initializing key "${key}":`, err);
     } finally {
       setLoading(false);
     }
@@ -162,7 +163,7 @@ export function useLocalStorage<T>(
         } catch (err) {
           const errorMessage = err instanceof Error ? err.message : 'Failed to parse storage event';
           setError(errorMessage);
-          console.warn(`[useLocalStorage] Error parsing storage event for key "${key}":`, err);
+          debug.warn(`[useLocalStorage] Error parsing storage event for key "${key}":`, err);
         }
       } else if (e.key === key && e.newValue === null) {
         setStoredValue(defaultValue as T);
@@ -203,7 +204,7 @@ export function useLocalStorage<T>(
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to write to localStorage';
       setError(errorMessage);
-      console.warn(`[useLocalStorage] Error setting localStorage key "${key}":`, err);
+      debug.warn(`[useLocalStorage] Error setting localStorage key "${key}":`, err);
     }
   }, [key, storedValue, serializer]);
 
@@ -222,7 +223,7 @@ export function useLocalStorage<T>(
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to remove from localStorage';
       setError(errorMessage);
-      console.warn(`[useLocalStorage] Error removing localStorage key "${key}":`, err);
+      debug.warn(`[useLocalStorage] Error removing localStorage key "${key}":`, err);
     }
   }, [key, defaultValue]);
 
@@ -293,7 +294,7 @@ export const localStorageUtils = {
     try {
       return window.localStorage.getItem(key);
     } catch (error) {
-      console.warn(`[localStorageUtils] Error getting item "${key}":`, error);
+      debug.warn(`[localStorageUtils] Error getting item "${key}":`, error);
       return null;
     }
   },
@@ -308,7 +309,7 @@ export const localStorageUtils = {
       window.localStorage.setItem(key, value);
       return true;
     } catch (error) {
-      console.warn(`[localStorageUtils] Error setting item "${key}":`, error);
+      debug.warn(`[localStorageUtils] Error setting item "${key}":`, error);
       return false;
     }
   },
@@ -323,7 +324,7 @@ export const localStorageUtils = {
       window.localStorage.removeItem(key);
       return true;
     } catch (error) {
-      console.warn(`[localStorageUtils] Error removing item "${key}":`, error);
+      debug.warn(`[localStorageUtils] Error removing item "${key}":`, error);
       return false;
     }
   },

@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import api from '../../../lib/api';
+import { debug } from '../../../lib/debug';
 import type { Goal, Habit, Activity, SectionId } from '../types';
 
 export function useDataManager() {
@@ -21,14 +22,14 @@ export function useDataManager() {
     const jstTime = new Date(now.toLocaleString("en-US", {timeZone: "Asia/Tokyo"}));
     const today = jstTime.toISOString().split('T')[0]; // YYYY-MM-DD format in JST
     
-    console.log('[useDataManager] Current JST time:', jstTime.toISOString(), 'Today:', today, 'Last reset:', lastResetDate);
+    debug.log('[useDataManager] Current JST time:', jstTime.toISOString(), 'Today:', today, 'Last reset:', lastResetDate);
     
     if (lastResetDate === today) {
-      console.log('[useDataManager] Already reset today, skipping');
+      debug.log('[useDataManager] Already reset today, skipping');
       return; // Already reset today
     }
     
-    console.log('[useDataManager] Performing daily reset for JST date:', today);
+    debug.log('[useDataManager] Performing daily reset for JST date:', today);
     
     setHabits(prevHabits => {
       const updatedHabits = prevHabits.map(habit => {
@@ -42,7 +43,7 @@ export function useDataManager() {
         const shouldReset = isDaily || hasDaily;
         
         if (shouldReset && (habit.completed || (habit.count && habit.count > 0))) {
-          console.log('[useDataManager] Resetting habit:', habit.name, {
+          debug.log('[useDataManager] Resetting habit:', habit.name, {
             repeat: habit.repeat,
             dueDate: habit.dueDate,
             timings: (habit as any).timings,
@@ -62,7 +63,7 @@ export function useDataManager() {
         return habit;
       });
       
-      console.log('[useDataManager] Reset completed, updated habits count:', updatedHabits.filter(h => h.count === 0).length);
+      debug.log('[useDataManager] Reset completed, updated habits count:', updatedHabits.filter(h => h.count === 0).length);
       return updatedHabits;
     });
     
@@ -71,7 +72,7 @@ export function useDataManager() {
     // Store last reset date in localStorage
     try {
       localStorage.setItem('lastHabitResetDate', today);
-      console.log('[useDataManager] Stored reset date in localStorage:', today);
+      debug.log('[useDataManager] Stored reset date in localStorage:', today);
     } catch (e) {
       console.error('Failed to store reset date:', e);
     }
@@ -84,7 +85,7 @@ export function useDataManager() {
     // Load last reset date from localStorage
     try {
       const storedResetDate = localStorage.getItem('lastHabitResetDate');
-      console.log('[useDataManager] Loaded stored reset date:', storedResetDate);
+      debug.log('[useDataManager] Loaded stored reset date:', storedResetDate);
       if (storedResetDate) {
         setLastResetDate(storedResetDate);
       }
@@ -93,12 +94,12 @@ export function useDataManager() {
     }
     
     // Perform initial reset check immediately
-    console.log('[useDataManager] Performing initial reset check');
+    debug.log('[useDataManager] Performing initial reset check');
     resetDailyHabits();
     
     // Set up interval to check for daily reset every 1 minute for debugging
     const interval = setInterval(() => {
-      console.log('[useDataManager] Periodic reset check');
+      debug.log('[useDataManager] Periodic reset check');
       resetDailyHabits();
     }, 1 * 60 * 1000); // Check every 1 minute for debugging
     
@@ -109,24 +110,24 @@ export function useDataManager() {
   const loadData = async () => {
     try {
       setIsLoading(true);
-      console.log('[dashboard] Loading goals...');
+      debug.log('[dashboard] Loading goals...');
       const gs = await api.getGoals();
-      console.log('[dashboard] Goals loaded:', gs);
+      debug.log('[dashboard] Goals loaded:', gs);
       setGoals(gs || []);
       
-      console.log('[dashboard] Loading habits...');
+      debug.log('[dashboard] Loading habits...');
       const hs = await api.getHabits();
-      console.log('[dashboard] Habits loaded:', hs);
+      debug.log('[dashboard] Habits loaded:', hs);
       setHabits(hs || []);
       
-      console.log('[dashboard] Loading activities...');
+      debug.log('[dashboard] Loading activities...');
       const acts = await api.getActivities();
-      console.log('[dashboard] Activities loaded:', acts);
+      debug.log('[dashboard] Activities loaded:', acts);
       setActivities(acts || []);
       
-      console.log('[dashboard] Loading layout...');
+      debug.log('[dashboard] Loading layout...');
       const layout = await api.getLayout();
-      console.log('[dashboard] Layout loaded:', layout);
+      debug.log('[dashboard] Layout loaded:', layout);
       if (layout && Array.isArray(layout.sections)) {
         setPageSections(layout.sections as any);
       }
@@ -145,7 +146,7 @@ export function useDataManager() {
   // Listen for guest data migration completion
   useEffect(() => {
     const handleMigrationComplete = () => {
-      console.log('[dashboard] Guest data migration completed, reloading data');
+      debug.log('[dashboard] Guest data migration completed, reloading data');
       loadData();
     };
 
@@ -172,9 +173,9 @@ export function useDataManager() {
 
   // Manual reset function for debugging
   const manualReset = () => {
-    console.log('[useDataManager] Manual reset triggered');
-    console.log('[useDataManager] Current localStorage lastHabitResetDate:', localStorage.getItem('lastHabitResetDate'));
-    console.log('[useDataManager] Current habits before reset:', habits.map(h => ({ name: h.name, count: h.count, completed: h.completed })));
+    debug.log('[useDataManager] Manual reset triggered');
+    debug.log('[useDataManager] Current localStorage lastHabitResetDate:', localStorage.getItem('lastHabitResetDate'));
+    debug.log('[useDataManager] Current habits before reset:', habits.map(h => ({ name: h.name, count: h.count, completed: h.completed })));
     setLastResetDate(''); // Force reset by clearing last reset date
     resetDailyHabits();
   };

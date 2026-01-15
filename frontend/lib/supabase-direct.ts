@@ -1,4 +1,5 @@
 import { supabase } from './supabaseClient';
+import { debug } from './debug';
 
 // Supabase direct client - 本番環境では完全に無効化
 export class SupabaseDirectClient {
@@ -98,23 +99,23 @@ export class SupabaseDirectClient {
       localStorage.removeItem(key);
     });
     
-    console.log('[clearGuestData] Cleared all guest data from localStorage');
+    debug.log('[clearGuestData] Cleared all guest data from localStorage');
   }
 
   async getGoals() {
     this.checkEnvironment();
     
     const { data: session } = await supabase.auth.getSession();
-    console.log('[getGoals] Session check:', { hasSession: !!session?.session, userId: session?.session?.user?.id });
+    debug.log('[getGoals] Session check:', { hasSession: !!session?.session, userId: session?.session?.user?.id });
     
     if (!session?.session?.user) {
       // ゲストユーザーの場合はローカルストレージから取得
       const guestGoals = JSON.parse(localStorage.getItem('guest-goals') || '[]');
-      console.log('[getGoals] Guest mode - loaded from localStorage:', guestGoals.length, 'goals');
+      debug.log('[getGoals] Guest mode - loaded from localStorage:', guestGoals.length, 'goals');
       return guestGoals;
     }
     
-    console.log('[getGoals] Authenticated mode - querying Supabase for user:', session.session.user.id);
+    debug.log('[getGoals] Authenticated mode - querying Supabase for user:', session.session.user.id);
     
     const { data, error } = await supabase
       .from('goals')
@@ -128,8 +129,8 @@ export class SupabaseDirectClient {
       throw error;
     }
     
-    console.log('[getGoals] Successfully loaded', data?.length || 0, 'goals from Supabase');
-    console.log('[getGoals] Raw goals data:', data);
+    debug.log('[getGoals] Successfully loaded', data?.length || 0, 'goals from Supabase');
+    debug.log('[getGoals] Raw goals data:', data);
     
     // Convert snake_case to camelCase for frontend compatibility
     const goals = (data || []).map((g: any) => ({
@@ -143,7 +144,7 @@ export class SupabaseDirectClient {
       updatedAt: g.updated_at
     }));
     
-    console.log('[getGoals] Converted goals data:', goals);
+    debug.log('[getGoals] Converted goals data:', goals);
     return goals;
   }
 
@@ -238,7 +239,7 @@ export class SupabaseDirectClient {
       guestGoals[goalIndex] = updatedGoal;
       localStorage.setItem('guest-goals', JSON.stringify(guestGoals));
       
-      console.log('[updateGoal] Guest goal updated:', updatedGoal);
+      debug.log('[updateGoal] Guest goal updated:', updatedGoal);
       return updatedGoal;
     }
     
@@ -294,7 +295,7 @@ export class SupabaseDirectClient {
       guestGoals.splice(goalIndex, 1);
       localStorage.setItem('guest-goals', JSON.stringify(guestGoals));
       
-      console.log('[deleteGoal] Guest goal deleted:', id);
+      debug.log('[deleteGoal] Guest goal deleted:', id);
       return { success: true };
     }
     
@@ -314,16 +315,16 @@ export class SupabaseDirectClient {
     if (!supabase) throw new Error('Supabase not configured');
     
     const { data: session } = await supabase.auth.getSession();
-    console.log('[getHabits] Session check:', { hasSession: !!session?.session, userId: session?.session?.user?.id });
+    debug.log('[getHabits] Session check:', { hasSession: !!session?.session, userId: session?.session?.user?.id });
     
     if (!session?.session?.user) {
       // ゲストユーザーの場合はローカルストレージから取得
       const guestHabits = JSON.parse(localStorage.getItem('guest-habits') || '[]');
-      console.log('[getHabits] Guest mode - loaded from localStorage:', guestHabits.length, 'habits');
+      debug.log('[getHabits] Guest mode - loaded from localStorage:', guestHabits.length, 'habits');
       return guestHabits;
     }
     
-    console.log('[getHabits] Authenticated mode - querying Supabase for user:', session.session.user.id);
+    debug.log('[getHabits] Authenticated mode - querying Supabase for user:', session.session.user.id);
     
     const { data, error } = await supabase
       .from('habits')
@@ -337,7 +338,7 @@ export class SupabaseDirectClient {
       throw error;
     }
     
-    console.log('[getHabits] Successfully loaded', data?.length || 0, 'habits from Supabase');
+    debug.log('[getHabits] Successfully loaded', data?.length || 0, 'habits from Supabase');
     
     // Convert snake_case to camelCase
     const habits = (data || []).map((h: any) => ({
@@ -368,21 +369,21 @@ export class SupabaseDirectClient {
       updatedAt: h.updated_at
     }));
     
-    console.log('[getHabits] Converted habits data:', habits);
+    debug.log('[getHabits] Converted habits data:', habits);
     return habits;
   }
 
   async createHabit(payload: any) {
     if (!supabase) throw new Error('Supabase not configured');
     
-    console.log('[createHabit] Starting habit creation:', payload);
+    debug.log('[createHabit] Starting habit creation:', payload);
     
     const { data: session } = await supabase.auth.getSession();
-    console.log('[createHabit] Session check:', session?.session?.user ? 'Authenticated' : 'Not authenticated');
+    debug.log('[createHabit] Session check:', session?.session?.user ? 'Authenticated' : 'Not authenticated');
     
     // ゲストユーザーの場合はローカルストレージに保存
     if (!session?.session?.user) {
-      console.log('[createHabit] Guest user - saving to localStorage');
+      debug.log('[createHabit] Guest user - saving to localStorage');
       const now = new Date().toISOString();
       const habit = {
         id: 'habit-' + Date.now(),
@@ -414,14 +415,14 @@ export class SupabaseDirectClient {
       existingHabits.push(habit);
       localStorage.setItem('guest-habits', JSON.stringify(existingHabits));
       
-      console.log('[createHabit] Guest habit saved:', habit);
+      debug.log('[createHabit] Guest habit saved:', habit);
       return habit;
     }
     
     // goalIdが指定されていない場合、デフォルトゴールを作成または取得
     let goalId = payload.goalId;
     if (!goalId) {
-      console.log('[createHabit] No goalId provided, creating/finding default goal');
+      debug.log('[createHabit] No goalId provided, creating/finding default goal');
       goalId = await this.getOrCreateDefaultGoal(session.session.user.id);
     }
     
@@ -453,7 +454,7 @@ export class SupabaseDirectClient {
       updated_at: now
     };
     
-    console.log('[createHabit] Insert data:', insertData);
+    debug.log('[createHabit] Insert data:', insertData);
     
     const { data, error } = await supabase
       .from('habits')
@@ -466,7 +467,7 @@ export class SupabaseDirectClient {
       throw error;
     }
     
-    console.log('[createHabit] Success:', data);
+    debug.log('[createHabit] Success:', data);
     
     return {
       id: data.id,
@@ -499,8 +500,8 @@ export class SupabaseDirectClient {
   async updateHabit(id: string, payload: any) {
     this.checkEnvironment();
     
-    console.log('[updateHabit] Starting update for habit:', id);
-    console.log('[updateHabit] Payload:', payload);
+    debug.log('[updateHabit] Starting update for habit:', id);
+    debug.log('[updateHabit] Payload:', payload);
     
     const { data: session } = await supabase.auth.getSession();
     
@@ -521,7 +522,7 @@ export class SupabaseDirectClient {
       
       // Handle timingIndex for selective timing entry updates
       if (typeof payload.timingIndex === 'number') {
-        console.log('[updateHabit] Guest: Processing timingIndex update:', payload.timingIndex);
+        debug.log('[updateHabit] Guest: Processing timingIndex update:', payload.timingIndex);
         
         const currentTimings = Array.isArray(updatedHabit.timings) ? updatedHabit.timings : [];
         
@@ -553,7 +554,7 @@ export class SupabaseDirectClient {
         updatedTimings[payload.timingIndex] = preservedTiming;
         updatedHabit.timings = updatedTimings;
         
-        console.log('[updateHabit] Guest: Updated specific timing entry:', preservedTiming);
+        debug.log('[updateHabit] Guest: Updated specific timing entry:', preservedTiming);
       } else {
         // Standard field updates (backward compatibility)
         if (payload.dueDate !== undefined) {
@@ -612,7 +613,7 @@ export class SupabaseDirectClient {
       guestHabits[habitIndex] = updatedHabit;
       localStorage.setItem('guest-habits', JSON.stringify(guestHabits));
       
-      console.log('[updateHabit] Guest habit updated:', updatedHabit);
+      debug.log('[updateHabit] Guest habit updated:', updatedHabit);
       return updatedHabit;
     }
     
@@ -641,7 +642,7 @@ export class SupabaseDirectClient {
     
     // Handle timingIndex for selective timing entry updates
     if (typeof payload.timingIndex === 'number') {
-      console.log('[updateHabit] Supabase: Processing timingIndex update:', payload.timingIndex);
+      debug.log('[updateHabit] Supabase: Processing timingIndex update:', payload.timingIndex);
       
       const currentTimings = Array.isArray(currentHabit.timings) ? currentHabit.timings : [];
       
@@ -673,8 +674,8 @@ export class SupabaseDirectClient {
       updatedTimings[payload.timingIndex] = preservedTiming;
       updateData.timings = updatedTimings;
       
-      console.log('[updateHabit] Supabase: Updated specific timing entry:', preservedTiming);
-      console.log('[updateHabit] Supabase: Full updated timings array:', updatedTimings);
+      debug.log('[updateHabit] Supabase: Updated specific timing entry:', preservedTiming);
+      debug.log('[updateHabit] Supabase: Full updated timings array:', updatedTimings);
     } else {
       // Standard field updates (backward compatibility)
       if (payload.dueDate !== undefined) {
@@ -729,7 +730,7 @@ export class SupabaseDirectClient {
     if (payload.workloadTotalEnd !== undefined) updateData.workload_total_end = payload.workloadTotalEnd;
     if (payload.workloadPerCount !== undefined) updateData.workload_per_count = payload.workloadPerCount;
     
-    console.log('[updateHabit] Supabase update data:', updateData);
+    debug.log('[updateHabit] Supabase update data:', updateData);
     
     const { data, error } = await supabase
       .from('habits')
@@ -748,7 +749,7 @@ export class SupabaseDirectClient {
       throw error;
     }
     
-    console.log('[updateHabit] Supabase response:', data);
+    debug.log('[updateHabit] Supabase response:', data);
     
     const result = {
       id: data.id,
@@ -778,7 +779,7 @@ export class SupabaseDirectClient {
       updatedAt: data.updated_at
     };
     
-    console.log('[updateHabit] Final result:', result);
+    debug.log('[updateHabit] Final result:', result);
     return result;
   }
 
@@ -800,7 +801,7 @@ export class SupabaseDirectClient {
       guestHabits.splice(habitIndex, 1);
       localStorage.setItem('guest-habits', JSON.stringify(guestHabits));
       
-      console.log('[deleteHabit] Guest habit deleted:', id);
+      debug.log('[deleteHabit] Guest habit deleted:', id);
       return { success: true };
     }
     
@@ -923,21 +924,21 @@ export class SupabaseDirectClient {
   }
 
   async getActivities() {
-    console.log('[getActivities] Starting to load activities');
+    debug.log('[getActivities] Starting to load activities');
     if (!supabase) throw new Error('Supabase not configured');
     
     const { data: session } = await supabase.auth.getSession();
-    console.log('[getActivities] Session check:', { hasSession: !!session?.session, userId: session?.session?.user?.id });
+    debug.log('[getActivities] Session check:', { hasSession: !!session?.session, userId: session?.session?.user?.id });
     
     if (!session?.session?.user) {
       // ゲストユーザーの場合はローカルストレージから取得
       const guestActivities = JSON.parse(localStorage.getItem('guest-activities') || '[]');
-      console.log('[getActivities] Guest mode - loaded from localStorage:', guestActivities.length, 'activities');
-      console.log('[getActivities] Guest activities:', guestActivities);
+      debug.log('[getActivities] Guest mode - loaded from localStorage:', guestActivities.length, 'activities');
+      debug.log('[getActivities] Guest activities:', guestActivities);
       return guestActivities;
     }
     
-    console.log('[getActivities] Authenticated mode - querying Supabase for user:', session.session.user.id);
+    debug.log('[getActivities] Authenticated mode - querying Supabase for user:', session.session.user.id);
     
     const { data, error } = await supabase
       .from('activities')
@@ -951,8 +952,8 @@ export class SupabaseDirectClient {
       throw error;
     }
     
-    console.log('[getActivities] Successfully loaded', data?.length || 0, 'activities from Supabase');
-    console.log('[getActivities] Supabase activities:', data);
+    debug.log('[getActivities] Successfully loaded', data?.length || 0, 'activities from Supabase');
+    debug.log('[getActivities] Supabase activities:', data);
     
     const activities = (data || []).map((a: any) => ({
       id: a.id,
@@ -967,7 +968,7 @@ export class SupabaseDirectClient {
       memo: a.memo
     }));
     
-    console.log('[getActivities] Converted activities:', activities);
+    debug.log('[getActivities] Converted activities:', activities);
     return activities;
   }
 
@@ -1062,7 +1063,7 @@ export class SupabaseDirectClient {
       guestActivities[activityIndex] = updatedActivity;
       localStorage.setItem('guest-activities', JSON.stringify(guestActivities));
       
-      console.log('[updateActivity] Guest activity updated:', updatedActivity);
+      debug.log('[updateActivity] Guest activity updated:', updatedActivity);
       return updatedActivity;
     }
     
@@ -1106,17 +1107,17 @@ export class SupabaseDirectClient {
   }
 
   async deleteActivity(id: string) {
-    console.log('[deleteActivity] Starting deletion for activity:', id);
+    debug.log('[deleteActivity] Starting deletion for activity:', id);
     this.checkEnvironment();
     
     const { data: session } = await supabase.auth.getSession();
-    console.log('[deleteActivity] Session check:', { hasSession: !!session?.session, userId: session?.session?.user?.id });
+    debug.log('[deleteActivity] Session check:', { hasSession: !!session?.session, userId: session?.session?.user?.id });
     
     if (!session?.session?.user) {
-      console.log('[deleteActivity] Guest user - deleting from localStorage');
+      debug.log('[deleteActivity] Guest user - deleting from localStorage');
       // ゲストユーザーの場合はローカルストレージから削除
       const guestActivities = JSON.parse(localStorage.getItem('guest-activities') || '[]');
-      console.log('[deleteActivity] Current guest activities:', guestActivities.length);
+      debug.log('[deleteActivity] Current guest activities:', guestActivities.length);
       
       const activityIndex = guestActivities.findIndex((a: any) => a.id === id);
       
@@ -1125,17 +1126,17 @@ export class SupabaseDirectClient {
         throw new Error(`Activity with id ${id} not found`);
       }
       
-      console.log('[deleteActivity] Found guest activity at index:', activityIndex);
+      debug.log('[deleteActivity] Found guest activity at index:', activityIndex);
       
       // Remove the activity from the array
       guestActivities.splice(activityIndex, 1);
       localStorage.setItem('guest-activities', JSON.stringify(guestActivities));
       
-      console.log('[deleteActivity] Guest activity deleted. Remaining activities:', guestActivities.length);
+      debug.log('[deleteActivity] Guest activity deleted. Remaining activities:', guestActivities.length);
       return { success: true };
     }
     
-    console.log('[deleteActivity] Authenticated user - deleting from Supabase');
+    debug.log('[deleteActivity] Authenticated user - deleting from Supabase');
     // ログインユーザーの場合はSupabaseから削除
     const { error } = await supabase
       .from('activities')
@@ -1149,7 +1150,7 @@ export class SupabaseDirectClient {
       throw error;
     }
     
-    console.log('[deleteActivity] Successfully deleted from Supabase:', id);
+    debug.log('[deleteActivity] Successfully deleted from Supabase:', id);
     return { success: true };
   }
 
@@ -1158,16 +1159,16 @@ export class SupabaseDirectClient {
     this.checkEnvironment();
     
     const { data: session } = await supabase.auth.getSession();
-    console.log('[getDiaryCards] Session check:', { hasSession: !!session?.session, userId: session?.session?.user?.id });
+    debug.log('[getDiaryCards] Session check:', { hasSession: !!session?.session, userId: session?.session?.user?.id });
     
     if (!session?.session?.user) {
       // ゲストユーザーの場合はローカルストレージから取得
       const guestDiaryCards = JSON.parse(localStorage.getItem('guest-diary-cards') || '[]');
-      console.log('[getDiaryCards] Guest mode - loaded from localStorage:', guestDiaryCards.length, 'cards');
+      debug.log('[getDiaryCards] Guest mode - loaded from localStorage:', guestDiaryCards.length, 'cards');
       return guestDiaryCards;
     }
     
-    console.log('[getDiaryCards] Authenticated mode - querying Supabase for user:', session.session.user.id);
+    debug.log('[getDiaryCards] Authenticated mode - querying Supabase for user:', session.session.user.id);
     
     // ログインユーザーの場合はSupabaseから取得（シンプル版）
     const { data, error } = await supabase
@@ -1182,8 +1183,8 @@ export class SupabaseDirectClient {
       throw error;
     }
     
-    console.log('[getDiaryCards] Successfully loaded', data?.length || 0, 'cards from Supabase');
-    console.log('[getDiaryCards] Raw data:', data);
+    debug.log('[getDiaryCards] Successfully loaded', data?.length || 0, 'cards from Supabase');
+    debug.log('[getDiaryCards] Raw data:', data);
     
     return (data || []).map((card: any) => ({
       id: card.id,
@@ -1220,7 +1221,7 @@ export class SupabaseDirectClient {
       existingCards.unshift(card); // 最新を先頭に
       localStorage.setItem('guest-diary-cards', JSON.stringify(existingCards));
       
-      console.log('[createDiaryCard] Guest card created:', card);
+      debug.log('[createDiaryCard] Guest card created:', card);
       return card;
     }
     
@@ -1279,7 +1280,7 @@ export class SupabaseDirectClient {
       guestCards[cardIndex] = updatedCard;
       localStorage.setItem('guest-diary-cards', JSON.stringify(guestCards));
       
-      console.log('[updateDiaryCard] Guest card updated:', updatedCard);
+      debug.log('[updateDiaryCard] Guest card updated:', updatedCard);
       return updatedCard;
     }
     
@@ -1331,7 +1332,7 @@ export class SupabaseDirectClient {
       guestCards.splice(cardIndex, 1);
       localStorage.setItem('guest-diary-cards', JSON.stringify(guestCards));
       
-      console.log('[deleteDiaryCard] Guest card deleted:', id);
+      debug.log('[deleteDiaryCard] Guest card deleted:', id);
       return { success: true };
     }
     
@@ -1528,7 +1529,7 @@ export class SupabaseDirectClient {
   private async getOrCreateDefaultGoal(userId: string): Promise<string> {
     if (!supabase) throw new Error('Supabase not configured');
     
-    console.log('[getOrCreateDefaultGoal] Looking for default goal for user:', userId);
+    debug.log('[getOrCreateDefaultGoal] Looking for default goal for user:', userId);
     
     // 既存のデフォルトゴールを検索
     const { data: existingGoals, error: searchError } = await supabase
@@ -1545,12 +1546,12 @@ export class SupabaseDirectClient {
     }
     
     if (existingGoals && existingGoals.length > 0) {
-      console.log('[getOrCreateDefaultGoal] Found existing default goal:', existingGoals[0].id);
+      debug.log('[getOrCreateDefaultGoal] Found existing default goal:', existingGoals[0].id);
       return existingGoals[0].id;
     }
     
     // デフォルトゴールを作成
-    console.log('[getOrCreateDefaultGoal] Creating new default goal');
+    debug.log('[getOrCreateDefaultGoal] Creating new default goal');
     const now = new Date().toISOString();
     const { data: newGoal, error: createError } = await supabase
       .from('goals')
@@ -1571,7 +1572,7 @@ export class SupabaseDirectClient {
       throw createError;
     }
     
-    console.log('[getOrCreateDefaultGoal] Created new default goal:', newGoal.id);
+    debug.log('[getOrCreateDefaultGoal] Created new default goal:', newGoal.id);
     return newGoal.id;
   }
 
@@ -1580,16 +1581,16 @@ export class SupabaseDirectClient {
     this.checkEnvironment();
     
     const { data: session } = await supabase.auth.getSession();
-    console.log('[getMindmaps] Session check:', { hasSession: !!session?.session, userId: session?.session?.user?.id });
+    debug.log('[getMindmaps] Session check:', { hasSession: !!session?.session, userId: session?.session?.user?.id });
     
     if (!session?.session?.user) {
       // ゲストユーザーの場合はローカルストレージから取得
       const guestMindmaps = JSON.parse(localStorage.getItem('guest-mindmaps') || '[]');
-      console.log('[getMindmaps] Guest mode - loaded from localStorage:', guestMindmaps.length, 'mindmaps');
+      debug.log('[getMindmaps] Guest mode - loaded from localStorage:', guestMindmaps.length, 'mindmaps');
       return guestMindmaps;
     }
     
-    console.log('[getMindmaps] Authenticated mode - querying Supabase for user:', session.session.user.id);
+    debug.log('[getMindmaps] Authenticated mode - querying Supabase for user:', session.session.user.id);
     
     const { data, error } = await supabase
       .from('mindmaps')
@@ -1603,17 +1604,17 @@ export class SupabaseDirectClient {
       throw error;
     }
     
-    console.log('[getMindmaps] Successfully loaded', data?.length || 0, 'mindmaps from Supabase');
+    debug.log('[getMindmaps] Successfully loaded', data?.length || 0, 'mindmaps from Supabase');
     
     // 各MindMapのノードとエッジも取得
     const mindmapsWithData = await Promise.all((data || []).map(async (m: any) => {
-      console.log(`[getMindmaps] Loading nodes and edges for mindmap ${m.id}`);
+      debug.log(`[getMindmaps] Loading nodes and edges for mindmap ${m.id}`);
       const nodes = await this.getMindmapNodes(m.id);
       const connections = await this.getMindmapConnections(m.id);
       
-      console.log(`[getMindmaps] Mindmap ${m.id} - nodes:`, nodes.length, 'connections:', connections.length);
-      console.log(`[getMindmaps] Mindmap ${m.id} - node data:`, nodes);
-      console.log(`[getMindmaps] Mindmap ${m.id} - connection data:`, connections);
+      debug.log(`[getMindmaps] Mindmap ${m.id} - nodes:`, nodes.length, 'connections:', connections.length);
+      debug.log(`[getMindmaps] Mindmap ${m.id} - node data:`, nodes);
+      debug.log(`[getMindmaps] Mindmap ${m.id} - connection data:`, connections);
       
       return {
         id: m.id,
@@ -1626,7 +1627,7 @@ export class SupabaseDirectClient {
       };
     }));
     
-    console.log('[getMindmaps] Final mindmaps with data:', mindmapsWithData);
+    debug.log('[getMindmaps] Final mindmaps with data:', mindmapsWithData);
     return mindmapsWithData;
   }
 
@@ -1819,7 +1820,7 @@ export class SupabaseDirectClient {
   private async saveMindmapNodesAndEdges(mindmapId: string, nodes: any[], edges: any[], userId: string) {
     const now = new Date().toISOString();
     
-    console.log('[saveMindmapNodesAndEdges] Starting save process:', {
+    debug.log('[saveMindmapNodesAndEdges] Starting save process:', {
       mindmapId,
       nodeCount: nodes.length,
       edgeCount: edges.length,
@@ -1828,7 +1829,7 @@ export class SupabaseDirectClient {
     
     try {
       // 既存のノードとエッジを削除
-      console.log('[saveMindmapNodesAndEdges] Deleting existing nodes...');
+      debug.log('[saveMindmapNodesAndEdges] Deleting existing nodes...');
       const { error: deleteNodesError } = await supabase
         .from('mindmap_nodes')
         .delete()
@@ -1841,7 +1842,7 @@ export class SupabaseDirectClient {
         throw deleteNodesError;
       }
         
-      console.log('[saveMindmapNodesAndEdges] Deleting existing connections...');
+      debug.log('[saveMindmapNodesAndEdges] Deleting existing connections...');
       const { error: deleteConnectionsError } = await supabase
         .from('mindmap_connections')
         .delete()
@@ -1856,7 +1857,7 @@ export class SupabaseDirectClient {
       
       // 新しいノードを挿入
       if (nodes.length > 0) {
-        console.log('[saveMindmapNodesAndEdges] Inserting nodes:', nodes);
+        debug.log('[saveMindmapNodesAndEdges] Inserting nodes:', nodes);
         const nodeData = nodes.map(node => ({
           id: node.id,
           mindmap_id: mindmapId,
@@ -1872,7 +1873,7 @@ export class SupabaseDirectClient {
           updated_at: now
         }));
         
-        console.log('[saveMindmapNodesAndEdges] Node data to insert:', nodeData);
+        debug.log('[saveMindmapNodesAndEdges] Node data to insert:', nodeData);
         
         const { error: nodesError } = await supabase
           .from('mindmap_nodes')
@@ -1888,12 +1889,12 @@ export class SupabaseDirectClient {
           throw nodesError;
         }
         
-        console.log('[saveMindmapNodesAndEdges] Nodes saved successfully');
+        debug.log('[saveMindmapNodesAndEdges] Nodes saved successfully');
       }
       
       // 新しいエッジを挿入
       if (edges.length > 0) {
-        console.log('[saveMindmapNodesAndEdges] Inserting edges:', edges);
+        debug.log('[saveMindmapNodesAndEdges] Inserting edges:', edges);
         
         // スキーマに合わせてカラム名を修正
         const edgeData = edges.map(edge => ({
@@ -1907,7 +1908,7 @@ export class SupabaseDirectClient {
           updated_at: now
         }));
         
-        console.log('[saveMindmapNodesAndEdges] Edge data to insert:', edgeData);
+        debug.log('[saveMindmapNodesAndEdges] Edge data to insert:', edgeData);
         
         const { error: edgesError } = await supabase
           .from('mindmap_connections')
@@ -1923,10 +1924,10 @@ export class SupabaseDirectClient {
           throw edgesError;
         }
         
-        console.log('[saveMindmapNodesAndEdges] Edges saved successfully');
+        debug.log('[saveMindmapNodesAndEdges] Edges saved successfully');
       }
       
-      console.log('[saveMindmapNodesAndEdges] Save process completed successfully');
+      debug.log('[saveMindmapNodesAndEdges] Save process completed successfully');
     } catch (error) {
       console.error('[saveMindmapNodesAndEdges] Save process failed:', {
         message: error instanceof Error ? error.message : 'Unknown error',

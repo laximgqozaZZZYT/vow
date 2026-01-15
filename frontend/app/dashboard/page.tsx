@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import type { Metadata } from "next";
 import ActivityModal from './components/Modal.Activity';
 import api from '../../lib/api';
+import { debug } from '../../lib/debug';
 import { HabitModal } from "./components/Modal.Habit";
 import { GoalModal } from "./components/Modal.Goal";
 import WidgetMindmap from "./components/Widget.Mindmap";
@@ -54,7 +55,7 @@ export default function DashboardPage() {
           if (userId) {
             const { GuestDataMigration } = await import('../../lib/guest-data-migration');
             if (GuestDataMigration.hasGuestData()) {
-              console.log('[dashboard] Page load: Guest data detected, triggering migration');
+              debug.log('[dashboard] Page load: Guest data detected, triggering migration');
               // Force a page reload to trigger migration
               window.location.reload();
             }
@@ -120,7 +121,7 @@ export default function DashboardPage() {
         
         // If no tags exist, create preset tags
         if (tagList.length === 0) {
-          console.log('[Dashboard] No tags found, creating preset tags...');
+          debug.log('[Dashboard] No tags found, creating preset tags...');
           
           // Create 'Habit' tag
           await api.createTag({ name: 'Habit', color: '#3b82f6' });
@@ -131,7 +132,7 @@ export default function DashboardPage() {
           // Reload tags
           const updatedTagList = await api.getTags();
           setTags(updatedTagList);
-          console.log('[Dashboard] Preset tags created successfully');
+          debug.log('[Dashboard] Preset tags created successfully');
         } else {
           setTags(tagList);
         }
@@ -226,7 +227,7 @@ export default function DashboardPage() {
       setGoals((prev: any[]) => prev.map(g => g.id === goalId ? updatedGoal : g));
       
       // 成功フィードバック（簡単な方法）
-      console.log('Goal moved successfully');
+      debug.log('Goal moved successfully');
     } catch (error) {
       console.error('Failed to move goal:', error);
       // エラーフィードバック - 実際のアプリではトーストやアラートを表示
@@ -239,7 +240,7 @@ export default function DashboardPage() {
       setHabits((prev: any[]) => prev.map(h => h.id === habitId ? updatedHabit : h));
       
       // 成功フィードバック
-      console.log('Habit moved successfully');
+      debug.log('Habit moved successfully');
     } catch (error) {
       console.error('Failed to move habit:', error);
       // エラーフィードバック
@@ -548,7 +549,7 @@ function DashboardLayout(props: any) {
         mindmaps={mindmaps}
         selectedMindmap={selectedMindmap}
         onMindmapSelect={(mindmap) => {
-          console.log('[Dashboard] Selected mindmap:', mindmap);
+          debug.log('[Dashboard] Selected mindmap:', mindmap);
           setSelectedMindmap(mindmap);
           setOpenMindmap(true);
         }}
@@ -556,7 +557,7 @@ function DashboardLayout(props: any) {
           try {
             await api.deleteMindmap(mindmapId);
             setMindmaps((prev: any[]) => prev.filter(m => m.id !== mindmapId));
-            console.log('Mindmap deleted successfully');
+            debug.log('Mindmap deleted successfully');
           } catch (error) {
             console.error('Failed to delete mindmap:', error);
           }
@@ -742,21 +743,21 @@ function DashboardLayout(props: any) {
           mindmap={selectedMindmap}
           onSave={async (mindmapData) => {
             try {
-              console.log('[Dashboard] Saving mindmap:', mindmapData);
+              debug.log('[Dashboard] Saving mindmap:', mindmapData);
               
               if (mindmapData.id) {
                 // Update existing mindmap
-                console.log('[Dashboard] Updating existing mindmap:', mindmapData.id);
+                debug.log('[Dashboard] Updating existing mindmap:', mindmapData.id);
                 const updatedMindmap = await api.updateMindmap(mindmapData.id, {
                   name: mindmapData.name,
                   nodes: mindmapData.nodes,
                   edges: mindmapData.edges
                 });
                 setMindmaps((prev: any[]) => prev.map(m => m.id === mindmapData.id ? updatedMindmap : m));
-                console.log('[Dashboard] Mindmap updated successfully:', updatedMindmap);
+                debug.log('[Dashboard] Mindmap updated successfully:', updatedMindmap);
               } else {
                 // Create new mindmap
-                console.log('[Dashboard] Creating new mindmap');
+                debug.log('[Dashboard] Creating new mindmap');
                 const newMindmap = await api.createMindmap({
                   name: mindmapData.name,
                   nodes: mindmapData.nodes,
@@ -764,7 +765,7 @@ function DashboardLayout(props: any) {
                 });
                 setMindmaps((prev: any[]) => [...prev, newMindmap]);
                 setSelectedMindmap(newMindmap);
-                console.log('[Dashboard] Mindmap created successfully:', newMindmap);
+                debug.log('[Dashboard] Mindmap created successfully:', newMindmap);
               }
             } catch (error) {
               console.error('[Dashboard] Failed to save mindmap:', {
@@ -788,7 +789,7 @@ function DashboardLayout(props: any) {
                 frequency: data.frequency
               });
               setHabits((prev: any[]) => [...prev, newHabit]);
-              console.log('Habit created from mindmap:', newHabit);
+              debug.log('Habit created from mindmap:', newHabit);
             } catch (error) {
               console.error('Failed to create habit from mindmap:', error);
             }
@@ -804,7 +805,7 @@ function DashboardLayout(props: any) {
                 targetDate: data.targetDate
               });
               setGoals((prev: any[]) => [...prev, newGoal]);
-              console.log('Goal created from mindmap:', newGoal);
+              debug.log('Goal created from mindmap:', newGoal);
             } catch (error) {
               console.error('Failed to create goal from mindmap:', error);
             }

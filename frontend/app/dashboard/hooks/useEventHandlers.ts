@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import api from '../../../lib/api';
+import { debug } from '../../../lib/debug';
 import type { Goal, Habit, Activity, HabitInitial, RecurringRequest, CreateHabitPayload } from '../types';
 
 interface UseEventHandlersProps {
@@ -65,7 +66,7 @@ export function useEventHandlers({ habits, setHabits, goals, activities, setActi
     
     const timingIndex = typeof updated.timingIndex === 'number' ? updated.timingIndex : undefined;
 
-    console.log('[EventHandlers] handleEventChange called:', { 
+    debug.log('[EventHandlers] handleEventChange called:', { 
       habitId, 
       startIso, 
       endIso, 
@@ -79,11 +80,11 @@ export function useEventHandlers({ habits, setHabits, goals, activities, setActi
 
     const prev = habits.find(h => h.id === habitId);
     if (!prev) {
-      console.log('[EventHandlers] Habit not found:', habitId);
+      debug.log('[EventHandlers] Habit not found:', habitId);
       return;
     }
 
-    console.log('[EventHandlers] Found habit:', {
+    debug.log('[EventHandlers] Found habit:', {
       id: prev.id,
       name: prev.name,
       dueDate: prev.dueDate,
@@ -103,11 +104,11 @@ export function useEventHandlers({ habits, setHabits, goals, activities, setActi
     // Include timingIndex if specified - backend will handle timings update
     if (typeof timingIndex === 'number') {
       payload.timingIndex = timingIndex;
-      console.log('[EventHandlers] Including timingIndex in payload:', timingIndex);
+      debug.log('[EventHandlers] Including timingIndex in payload:', timingIndex);
     }
 
-    console.log('[EventHandlers] Final update payload before API call:', payload);
-    console.log('[EventHandlers] Payload types:', {
+    debug.log('[EventHandlers] Final update payload before API call:', payload);
+    debug.log('[EventHandlers] Payload types:', {
       dueDate: typeof payload.dueDate,
       time: typeof payload.time,
       endTime: typeof payload.endTime,
@@ -131,7 +132,7 @@ export function useEventHandlers({ habits, setHabits, goals, activities, setActi
       // Update timings if timingIndex is specified
       if (typeof timingIndex === 'number') {
         const timings = Array.isArray((h as any).timings) ? (h as any).timings : [];
-        console.log('[EventHandlers] Current timings for optimistic update:', timings);
+        debug.log('[EventHandlers] Current timings for optimistic update:', timings);
         
         if (timings[timingIndex]) {
           const updatedTimings = [...timings];
@@ -145,27 +146,27 @@ export function useEventHandlers({ habits, setHabits, goals, activities, setActi
           updatedTimings[timingIndex] = timing;
           next.timings = updatedTimings;
           
-          console.log('[EventHandlers] Optimistically updated timings:', updatedTimings);
+          debug.log('[EventHandlers] Optimistically updated timings:', updatedTimings);
         } else {
-          console.warn('[EventHandlers] Timing index out of bounds for optimistic update:', timingIndex, 'in', timings);
+          debug.warn('[EventHandlers] Timing index out of bounds for optimistic update:', timingIndex, 'in', timings);
         }
       }
 
-      console.log('[EventHandlers] Optimistic update result:', next);
+      debug.log('[EventHandlers] Optimistic update result:', next);
       return next;
     }));
 
     // Persist to backend
     try {
-      console.log('[EventHandlers] Sending API request to update habit...');
+      debug.log('[EventHandlers] Sending API request to update habit...');
       const saved = await api.updateHabit(habitId, payload);
-      console.log('[EventHandlers] API response received successfully:', saved);
-      console.log('[EventHandlers] API response timings:', (saved as any).timings);
+      debug.log('[EventHandlers] API response received successfully:', saved);
+      debug.log('[EventHandlers] API response timings:', (saved as any).timings);
       
       // Always use the API response to ensure consistency
       setHabits((s) => s.map(h => {
         if (h.id === habitId) {
-          console.log('[EventHandlers] Updating habit state with API response');
+          debug.log('[EventHandlers] Updating habit state with API response');
           return saved;
         }
         return h;
@@ -186,11 +187,11 @@ export function useEventHandlers({ habits, setHabits, goals, activities, setActi
     try {
       if (action === 'updateTiming') {
         // Update the timing pattern itself
-        console.log('[EventHandlers] Updating timing pattern for recurring habit');
+        debug.log('[EventHandlers] Updating timing pattern for recurring habit');
         await handleEventChange(habitId, updated);
       } else {
         // Create exception for this specific date
-        console.log('[EventHandlers] Creating exception for specific date');
+        debug.log('[EventHandlers] Creating exception for specific date');
         
         const habit = habits.find(h => h.id === habitId);
         if (!habit) return;
@@ -223,7 +224,7 @@ export function useEventHandlers({ habits, setHabits, goals, activities, setActi
           outdates: newOutdate ? [...currentOutdates, newOutdate] : currentOutdates
         };
 
-        console.log('[EventHandlers] Creating exception with payload:', payload);
+        debug.log('[EventHandlers] Creating exception with payload:', payload);
         const saved = await api.updateHabit(habitId, payload);
         setHabits((s) => s.map(h => h.id === habitId ? saved : h));
       }
@@ -239,13 +240,13 @@ export function useEventHandlers({ habits, setHabits, goals, activities, setActi
   }
 
   async function createHabit(payload: CreateHabitPayload) {
-    console.log('[useEventHandlers] createHabit called with payload:', payload);
+    debug.log('[useEventHandlers] createHabit called with payload:', payload);
     try {
-      console.log('[useEventHandlers] Calling api.createHabit...');
+      debug.log('[useEventHandlers] Calling api.createHabit...');
       const h = await api.createHabit(payload);
-      console.log('[useEventHandlers] api.createHabit success:', h);
+      debug.log('[useEventHandlers] api.createHabit success:', h);
       setHabits((s) => [...s, h]);
-      console.log('[useEventHandlers] Habit added to state');
+      debug.log('[useEventHandlers] Habit added to state');
     } catch (e) { 
       console.error('[useEventHandlers] createHabit error:', e);
       console.error('[useEventHandlers] Error details:', {

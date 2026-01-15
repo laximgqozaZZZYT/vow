@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useMemo, useRef, useEffect } from "react";
+import { debug } from '../../../lib/debug';
 import type { Goal, Habit } from '../types';
 
 interface CalendarWidgetProps {
@@ -46,7 +47,7 @@ export default function CalendarWidget({
     const g = (goals ?? []).find((x) => x.id === goalId);
     
     if (!g?.dueDate) {
-      console.log('[Calendar] getGoalDueDate: No dueDate found', { goalId, goal: g });
+      debug.log('[Calendar] getGoalDueDate: No dueDate found', { goalId, goal: g });
       return undefined;
     }
     
@@ -71,7 +72,7 @@ export default function CalendarWidget({
     
     // Safe logging - check if result is a valid Date before calling toISOString
     const parsedDateStr = result && !isNaN(result.getTime()) ? result.toISOString().slice(0, 10) : 'Invalid Date';
-    console.log('[Calendar] getGoalDueDate:', { 
+    debug.log('[Calendar] getGoalDueDate:', { 
       goalId, 
       goal: g, 
       dueDate: g?.dueDate, 
@@ -117,7 +118,7 @@ export default function CalendarWidget({
     const days = Math.ceil((finalHorizon.getTime() - baseDay.getTime()) / (24 * 3600 * 1000));
     const result = Math.max(1, days + 1);
     
-    console.log('[Calendar] computeExpandDays:', { 
+    debug.log('[Calendar] computeExpandDays:', { 
       originalBase: base.toISOString().slice(0, 10),
       actualBase: baseDay.toISOString().slice(0, 10), 
       goalDue: goalDue?.toISOString().slice(0, 10), 

@@ -8,6 +8,7 @@ import remarkBreaks from 'remark-breaks'
 import rehypeRaw from 'rehype-raw'
 import rehypeSanitize, { defaultSchema } from 'rehype-sanitize'
 import api, { DiaryCard } from '@/lib/api'
+import { debug } from '@/lib/debug'
 import DiaryTagManagerModal from './Modal.TagManager'
 import DiaryModal from './Modal.Diary'
 import { useHandedness } from '../contexts/HandednessContext'
@@ -80,7 +81,7 @@ function MermaidBlock({ code }: { code: string }) {
             try {
               await mm.run({ nodes: [mermaidDiv] })
             } catch (e) {
-              console.warn('Mermaid run method failed, trying legacy render:', e)
+              debug.warn('Mermaid run method failed, trying legacy render:', e)
               // Fallback to legacy render
               await new Promise<void>((resolve, reject) => {
                 const renderTimeout = setTimeout(() => reject(new Error('Render timeout')), 5000)
@@ -418,9 +419,9 @@ export default function DiarySection({
 
   const refreshTags = React.useCallback(async () => {
     try {
-      console.log('[Section.Diary] Starting to fetch tags...')
+      debug.log('[Section.Diary] Starting to fetch tags...')
       const t = await api.getTags()
-      console.log('[Section.Diary] Successfully fetched', t?.length || 0, 'tags')
+      debug.log('[Section.Diary] Successfully fetched', t?.length || 0, 'tags')
       setTags(t)
     } catch (e: any) {
       console.error('[Section.Diary] Error fetching tags:', e)
@@ -431,9 +432,9 @@ export default function DiarySection({
   const refreshCards = React.useCallback(async () => {
     setLoading(true)
     try {
-      console.log('[Section.Diary] Starting to fetch diary cards...')
+      debug.log('[Section.Diary] Starting to fetch diary cards...')
       const c = await api.getDiaryCards()
-      console.log('[Section.Diary] Successfully fetched', c?.length || 0, 'cards')
+      debug.log('[Section.Diary] Successfully fetched', c?.length || 0, 'cards')
       setCards(c)
       setError(null)
     } catch (e: any) {

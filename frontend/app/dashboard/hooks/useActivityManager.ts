@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import api from '../../../lib/api';
+import { debug } from '../../../lib/debug';
 import type { Activity, Habit } from '../types';
 
 interface UseActivityManagerProps {
@@ -42,7 +43,7 @@ export function useActivityManager({
     // 重複実行防止
     const actionKey = `complete-${habitId}`;
     if (processingActions.has(actionKey)) {
-      console.log('[handleComplete] Already processing, skipping:', habitId);
+      debug.log('[handleComplete] Already processing, skipping:', habitId);
       return;
     }
     
@@ -53,7 +54,7 @@ export function useActivityManager({
       const habit = habits.find(h => h.id === habitId);
       if (!habit) return;
       
-      console.log('[handleComplete] Before completion:', {
+      debug.log('[handleComplete] Before completion:', {
         habitId,
         habitName: habit.name,
         currentCount: habit.count,
@@ -76,7 +77,7 @@ export function useActivityManager({
         const newCount = prev + increment;
         const total = (habit as any).workloadTotal ?? habit.must ?? 0;
 
-        console.log('[handleComplete] Start->Complete flow:', {
+        debug.log('[handleComplete] Start->Complete flow:', {
           increment,
           prev,
           newCount,
@@ -140,7 +141,7 @@ export function useActivityManager({
       const newCount = prev + increment;
       const total = (habit as any).workloadTotal ?? habit.must ?? 0;
 
-      console.log('[handleComplete] Standalone complete flow:', {
+      debug.log('[handleComplete] Standalone complete flow:', {
         increment,
         prev,
         newCount,
@@ -192,7 +193,7 @@ export function useActivityManager({
     // 重複実行防止
     const actionKey = `start-${habitId}`;
     if (processingActions.has(actionKey)) {
-      console.log('[handleStart] Already processing, skipping:', habitId);
+      debug.log('[handleStart] Already processing, skipping:', habitId);
       return;
     }
     
@@ -264,7 +265,7 @@ export function useActivityManager({
     // 重複実行防止
     const actionKey = `pause-${habitId}`;
     if (processingActions.has(actionKey)) {
-      console.log('[handlePause] Already processing, skipping:', habitId);
+      debug.log('[handlePause] Already processing, skipping:', habitId);
       return;
     }
     
@@ -356,7 +357,7 @@ export function useActivityManager({
         .filter(a => a.habitId === updated.habitId)
         .sort((a, b) => (a.timestamp || '').localeCompare(b.timestamp || ''));
       
-      console.log('[propagateActivityChanges] Recalculating counts for habit activities:', {
+      debug.log('[propagateActivityChanges] Recalculating counts for habit activities:', {
         habitId: updated.habitId,
         activities: habitActivities.map(a => ({ 
           id: a.id, 
@@ -396,7 +397,7 @@ export function useActivityManager({
       
       // Update the habit's stored count to the final running count
       if (habitActivities.length > 0) {
-        console.log('[propagateActivityChanges] Updating habit count:', {
+        debug.log('[propagateActivityChanges] Updating habit count:', {
           habitId: updated.habitId,
           finalCount: runningCount,
           activities: habitActivities.map(x => ({ kind: x.kind, amount: x.amount, newCount: copy.find(c => c.id === x.id)?.newCount }))
@@ -407,7 +408,7 @@ export function useActivityManager({
           const total = (h as any).workloadTotal ?? h.must ?? 0;
           const completed = total > 0 ? (runningCount >= total) : true;
           
-          console.log('[propagateActivityChanges] Habit update:', {
+          debug.log('[propagateActivityChanges] Habit update:', {
             habitName: h.name,
             oldCount: h.count,
             newCount: runningCount,

@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useAnimationCapture } from '../utils/animationCapture';
+import { debug } from '../../../lib/debug';
 import type { AnimationSequence } from '../utils/animationCapture';
 
 interface AnimationCaptureControlProps {
@@ -29,7 +30,7 @@ export default function AnimationCaptureControl({ className = '' }: AnimationCap
   const handleStartCapture = () => {
     const captureId = startCapture('Dashboard Demo');
     setIsRecording(true);
-    console.log('[AnimationCaptureControl] Started capture:', captureId);
+    debug.log('[AnimationCaptureControl] Started capture:', captureId);
   };
 
   const handleStopCapture = () => {
@@ -37,7 +38,7 @@ export default function AnimationCaptureControl({ className = '' }: AnimationCap
     setIsRecording(false);
     if (sequence) {
       setSequences(prev => [...prev, sequence]);
-      console.log('[AnimationCaptureControl] Stopped capture, sequence:', sequence);
+      debug.log('[AnimationCaptureControl] Stopped capture, sequence:', sequence);
     }
   };
 

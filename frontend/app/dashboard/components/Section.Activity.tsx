@@ -1,4 +1,5 @@
 import { useMemo } from 'react';
+import { debug } from '../../../lib/debug';
 import type { ActivitySectionProps, Habit, Activity } from '../types';
 import { useHandedness } from '../contexts/HandednessContext';
 
@@ -24,7 +25,7 @@ function calculateDailyWorkload(habitId: string, activities: Activity[]): number
   const todayEndJST = new Date(jstTime);
   todayEndJST.setHours(23, 59, 59, 999);
   
-  console.log('[calculateDailyWorkload] JST range:', {
+  debug.log('[calculateDailyWorkload] JST range:', {
     habitId,
     todayStartJST: todayStartJST.toISOString(),
     todayEndJST: todayEndJST.toISOString(),
@@ -41,18 +42,18 @@ function calculateDailyWorkload(habitId: string, activities: Activity[]): number
     return activityJST >= todayStartJST && activityJST <= todayEndJST;
   });
   
-  console.log('[calculateDailyWorkload] Today activities for habit:', habitId, todayActivities);
+  debug.log('[calculateDailyWorkload] Today activities for habit:', habitId, todayActivities);
   
   // completeタイプのActivityのamount合計を計算
   const totalWorkload = todayActivities
     .filter(activity => activity.kind === 'complete')
     .reduce((sum, activity) => {
       const amount = activity.amount || 1; // デフォルト値は1
-      console.log('[calculateDailyWorkload] Adding amount:', amount, 'from activity:', activity.id);
+      debug.log('[calculateDailyWorkload] Adding amount:', amount, 'from activity:', activity.id);
       return sum + amount;
     }, 0);
   
-  console.log('[calculateDailyWorkload] Total workload for habit:', habitId, 'is:', totalWorkload);
+  debug.log('[calculateDailyWorkload] Total workload for habit:', habitId, 'is:', totalWorkload);
   return totalWorkload;
 }
 

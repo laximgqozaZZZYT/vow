@@ -2,6 +2,7 @@
 
 import React from "react"
 import { supabaseDirectClient } from '../../../lib/supabase-direct'
+import { debug } from '../../../lib/debug'
 import { Popover } from "@headlessui/react"
 import { DayPicker } from "react-day-picker"
 import "react-day-picker/dist/style.css"
@@ -349,9 +350,9 @@ export function HabitModal({ open, onClose, habit, onUpdate, onDelete, onCreate,
     if (!open) return null
 
     function handleSave() {
-        console.log('[HabitModal] handleSave called');
-        console.log('[HabitModal] Current timings state:', timings);
-        console.log('[HabitModal] Current outdates state:', outdates);
+        debug.log('[HabitModal] handleSave called');
+        debug.log('[HabitModal] Current timings state:', timings);
+        debug.log('[HabitModal] Current outdates state:', outdates);
         
         if (habit) {
             const updated: Habit = {
@@ -377,7 +378,7 @@ export function HabitModal({ open, onClose, habit, onUpdate, onDelete, onCreate,
                 updatedAt: new Date().toISOString(),
             };
 
-            console.log('[HabitModal] Updated habit object:', updated);
+            debug.log('[HabitModal] Updated habit object:', updated);
 
             // recompute completed using workloadTotal/must and current count
             const totalVal = (updated as any).workloadTotal ?? (updated as any).must ?? 0;
@@ -399,7 +400,7 @@ export function HabitModal({ open, onClose, habit, onUpdate, onDelete, onCreate,
                     start: time ?? undefined,
                     end: endTime ?? undefined
                 }];
-                console.log('[HabitModal] Generated default timing for empty timings array:', finalTimings);
+                debug.log('[HabitModal] Generated default timing for empty timings array:', finalTimings);
             }
             
             const payload: CreateHabitPayload = {
@@ -418,7 +419,7 @@ export function HabitModal({ open, onClose, habit, onUpdate, onDelete, onCreate,
                 notes: notes.trim() || undefined,
             };
             
-            console.log('[HabitModal] Create payload:', payload);
+            debug.log('[HabitModal] Create payload:', payload);
             
             const resolvedGoalId = goalId ?? (goals && goals.length ? goals[0].id : undefined)
             if (resolvedGoalId) payload.goalId = resolvedGoalId

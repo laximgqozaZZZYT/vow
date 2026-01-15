@@ -21,6 +21,8 @@ const customJestConfig = {
     'app/**/layout.tsx',
     'app/**/page.tsx',
   ],
+  // Suppress console output in CI
+  silent: process.env.CI === 'true',
 }
 
 // createJestConfig is exported this way to ensure that next/jest can load the Next.js config which is async

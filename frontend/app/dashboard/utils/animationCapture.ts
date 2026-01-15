@@ -3,6 +3,8 @@
  * Captures user interactions on dashboard for mini-animation generation
  */
 
+import { debug } from '../../../lib/debug';
+
 export interface AnimationStep {
   id: string;
   timestamp: number;
@@ -34,7 +36,7 @@ class AnimationCaptureManager {
     this.currentSequence = [];
     this.sequenceStartTime = Date.now();
     
-    console.log(`[AnimationCapture] Started capturing: ${sequenceName} (${this.captureId})`);
+    debug.log(`[AnimationCapture] Started capturing: ${sequenceName} (${this.captureId})`);
     return this.captureId;
   }
 
@@ -52,7 +54,7 @@ class AnimationCaptureManager {
       createdAt: Date.now()
     };
 
-    console.log(`[AnimationCapture] Stopped capturing. Sequence:`, sequence);
+    debug.log(`[AnimationCapture] Stopped capturing. Sequence:`, sequence);
     
     // Store in localStorage for later use
     this.saveSequence(sequence);
@@ -83,7 +85,7 @@ class AnimationCaptureManager {
     };
 
     this.currentSequence.push(step);
-    console.log(`[AnimationCapture] Captured habit action:`, step);
+    debug.log(`[AnimationCapture] Captured habit action:`, step);
   }
 
   captureGoalAction(goalId: string, action: 'create' | 'update' | 'complete' | 'delete', element: HTMLElement, data?: Record<string, any>) {
@@ -109,7 +111,7 @@ class AnimationCaptureManager {
     };
 
     this.currentSequence.push(step);
-    console.log(`[AnimationCapture] Captured goal action:`, step);
+    debug.log(`[AnimationCapture] Captured goal action:`, step);
   }
 
   captureCalendarAction(action: 'eventClick' | 'slotSelect' | 'eventChange', element: HTMLElement, data?: Record<string, any>) {
@@ -133,7 +135,7 @@ class AnimationCaptureManager {
     };
 
     this.currentSequence.push(step);
-    console.log(`[AnimationCapture] Captured calendar action:`, step);
+    debug.log(`[AnimationCapture] Captured calendar action:`, step);
   }
 
   private getElementSelector(element: HTMLElement): string {
