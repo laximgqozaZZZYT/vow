@@ -1,8 +1,0 @@
-User-agent: *
-Allow: /
-Disallow: /dashboard
-Disallow: /login
-Disallow: /test-auth
-Disallow: /api/
-
-Sitemap: https://vow-app.vercel.app/sitemap.xml
