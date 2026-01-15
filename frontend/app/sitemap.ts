@@ -3,15 +3,32 @@ import { APP_CONFIG } from '../lib/seo.metadata';
 
 export default function sitemap(): MetadataRoute.Sitemap {
   const baseUrl = APP_CONFIG.url;
-  
+  const currentDate = new Date();
+
   return [
     {
       url: baseUrl,
-      lastModified: new Date(),
-      changeFrequency: 'monthly',
-      priority: 1,
+      lastModified: currentDate,
+      changeFrequency: 'weekly',
+      priority: 1.0,
+      alternates: {
+        languages: {
+          en: `${baseUrl}/`,
+          ja: `${baseUrl}/ja`,
+        },
+      },
     },
-    // 他の公開ページがあれば追加
-    // プライベートページ（dashboard, login, test-auth）は含めない
+    {
+      url: `${baseUrl}/login`,
+      lastModified: currentDate,
+      changeFrequency: 'monthly',
+      priority: 0.8,
+      alternates: {
+        languages: {
+          en: `${baseUrl}/login`,
+          ja: `${baseUrl}/ja/login`,
+        },
+      },
+    },
   ];
 }

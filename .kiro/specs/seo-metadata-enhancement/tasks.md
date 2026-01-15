@@ -85,7 +85,7 @@
   - sitemap.xmlの場所を指定
   - _Requirements: 7.1, 7.2, 7.3, 7.7_
 
-- [ ] 9. sitemap.xmlの動的生成
+- [x] 9. sitemap.xmlの動的生成
   - `app/sitemap.ts`を作成または更新
   - 全ての公開ページのURLを含める
   - 各URLの最終更新日とchangeFrequencyを設定
