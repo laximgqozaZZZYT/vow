@@ -581,8 +581,7 @@ function DashboardLayout(props: any) {
 
   {/* Main content pane */}
   <main className={`flex-1 pt-20 p-6 lg:p-8 ${showLeftPane ? (isLeftHanded ? 'lg:mr-80' : 'lg:ml-80') : ''}`}>
-
-        <div className="mt-6 grid grid-cols-1 gap-6 max-w-full overflow-hidden">
+        <div className="grid grid-cols-1 gap-6 max-w-full overflow-hidden">
           {pageSections.map((sec: string) => (
             sec === 'next' ? (
               <NextSection 
