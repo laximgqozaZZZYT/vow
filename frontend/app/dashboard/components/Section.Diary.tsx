@@ -429,13 +429,25 @@ export default function DiarySection({
     }
   }, [])
 
-  const refreshCards = React.useCallback(async () => {
+  const refreshCards = React.useCallback(async (searchQuery?: string) => {
     setLoading(true)
     try {
       debug.log('[Section.Diary] Starting to fetch diary cards...')
       const c = await api.getDiaryCards()
       debug.log('[Section.Diary] Successfully fetched', c?.length || 0, 'cards')
-      setCards(c)
+      
+      // Filter cards based on search query
+      let filteredCards = c
+      if (searchQuery && searchQuery.trim()) {
+        const lowerQuery = searchQuery.toLowerCase()
+        filteredCards = c.filter((card: DiaryCard) => {
+          const frontText = (card.frontMd || '').toLowerCase()
+          const backText = (card.backMd || '').toLowerCase()
+          return frontText.includes(lowerQuery) || backText.includes(lowerQuery)
+        })
+      }
+      
+      setCards(filteredCards)
       setError(null)
     } catch (e: any) {
       console.error('[Section.Diary] Error fetching diary cards:', e)
@@ -455,8 +467,8 @@ export default function DiarySection({
   }, [refreshTags])
 
   React.useEffect(() => {
-    refreshCards()
-  }, [refreshCards])
+    refreshCards(query)
+  }, [refreshCards, query])
 
   const toggle = (list: string[], id: string) => (list.includes(id) ? list.filter(x => x !== id) : [...list, id])
 
@@ -491,12 +503,12 @@ export default function DiarySection({
         habitIds: payload.habitIds,
       })
     }
-    await refreshCards()
+    await refreshCards(query)
   }
 
   const deleteCard = async (id: string) => {
     await api.deleteDiaryCard(id)
-    await refreshCards()
+    await refreshCards(query)
   }
 
   const createTag = async (p: { name: string; color?: string | null }) => {
@@ -515,11 +527,7 @@ export default function DiarySection({
       setEditing(e => (e ? { ...e, tagIds: e.tagIds.filter(x => x !== id) } : e))
     }
     await refreshTags()
-    await refreshCards()
-  }
-
-  const clearFilters = () => {
-    setQuery('')
+    await refreshCards(query)
   }
 
   return (
@@ -533,26 +541,12 @@ export default function DiarySection({
             value={query}
             onChange={(e) => setQuery(e.target.value)}
           />
-          <button className="rounded border px-3 py-1.5 text-sm" onClick={refreshCards} disabled={loading}>
-            Search
-          </button>
-          <button 
-            className="rounded border px-3 py-1.5 text-sm" 
-            onClick={() => {
-              if (onManageTags) {
-                onManageTags();
-              } else {
-                setTagManagerOpen(true);
-              }
-            }}
+          <button
+            onClick={openNew}
+            className="bg-blue-600 hover:bg-blue-700 text-white rounded-full w-8 h-8 flex items-center justify-center text-xl font-bold transition-colors"
+            title="Add Diary Card"
           >
-            Manage Tags
-          </button>
-          <button className="rounded border px-3 py-1.5 text-sm" onClick={clearFilters}>
-            Clear filters
-          </button>
-          <button className="rounded bg-blue-600 px-3 py-1.5 text-sm text-white" onClick={openNew}>
-            + New
+            +
           </button>
         </div>
       </div>
@@ -568,9 +562,6 @@ export default function DiarySection({
           <div className="text-sm text-zinc-600 dark:text-zinc-300">
             {loading ? 'Loading…' : `${cards.length} cards`}
           </div>
-          <button className="rounded border px-3 py-1 text-sm" onClick={refreshCards} disabled={loading}>
-            Refresh
-          </button>
         </div>
 
         <div className="h-[520px] overflow-y-auto space-y-3 pr-1">
