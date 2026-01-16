@@ -7,12 +7,14 @@ import api from '../../lib/api';
 import { debug } from '../../lib/debug';
 import { HabitModal } from "./components/Modal.Habit";
 import { GoalModal } from "./components/Modal.Goal";
+import { StickyModal } from "./components/Modal.Sticky";
 import WidgetMindmap from "./components/Widget.Mindmap";
 import EditLayoutModal from './components/Modal.LayoutEditor';
 import RecurringHabitConfirmModal from './components/Modal.RecurringHabitConfirm';
 import ManageTagsModal from './components/Modal.ManageTags';
 import StaticsSection from './components/Section.Statistics';
 import DiarySection from './components/Section.Diary';
+import StickiesSection from './components/Section.Stickies';
 
 // Extracted components
 import DashboardHeader from './components/Layout.Header';
@@ -73,6 +75,7 @@ export default function DashboardPage() {
   const { goals, setGoals, habits, setHabits, activities, setActivities, pageSections, setPageSections, isClient, isLoading, manualReset } = useDataManager();
   const [mindmaps, setMindmaps] = useState<any[]>([]);
   const [selectedMindmap, setSelectedMindmap] = useState<any>(null);
+  const [stickies, setStickies] = useState<any[]>([]);
   const { 
     recurringRequest, 
     setRecurringRequest, 
@@ -108,6 +111,10 @@ export default function DashboardPage() {
 
   // Mindmap state
   const [openMindmap, setOpenMindmap] = useState(false);
+
+  // Sticky'n state
+  const [openStickyModal, setOpenStickyModal] = useState(false);
+  const [editingStickyId, setEditingStickyId] = useState<string | null>(null);
 
   // Tags state
   const [tags, setTags] = useState<any[]>([]);
@@ -159,6 +166,22 @@ export default function DashboardPage() {
 
     if (isClient && !isLoading) {
       loadMindmaps();
+    }
+  }, [isClient, isLoading]);
+
+  // Load stickies on component mount
+  useEffect(() => {
+    const loadStickies = async () => {
+      try {
+        const stickyList = await api.getStickies();
+        setStickies(stickyList);
+      } catch (error) {
+        console.error('Failed to load stickies:', error);
+      }
+    };
+
+    if (isClient && !isLoading) {
+      loadStickies();
     }
   }, [isClient, isLoading]);
 
@@ -287,6 +310,83 @@ export default function DashboardPage() {
     }
   };
 
+  // Sticky'n ハンドラー
+  const handleStickyCreate = async () => {
+    try {
+      const newSticky = await api.createSticky({ name: 'New Sticky\'n', displayOrder: stickies.length });
+      setStickies(prev => [...prev, newSticky]);
+      // 編集モーダルは開かない - 付箋を貼り付けるイメージ
+    } catch (error) {
+      console.error('Failed to create sticky:', error);
+    }
+  };
+
+  const handleStickyEdit = (stickyId: string) => {
+    setEditingStickyId(stickyId);
+    setOpenStickyModal(true);
+  };
+
+  const handleStickyUpdate = async (updated: any) => {
+    try {
+      const updatedSticky = await api.updateSticky(updated.id, updated);
+      setStickies(prev => prev.map(s => s.id === updated.id ? updatedSticky : s));
+    } catch (error) {
+      console.error('Failed to update sticky:', error);
+      throw error;
+    }
+  };
+
+  const handleStickyComplete = async (stickyId: string) => {
+    try {
+      const sticky = stickies.find(s => s.id === stickyId);
+      if (!sticky) return;
+      
+      const updatedSticky = await api.updateSticky(stickyId, { completed: !sticky.completed });
+      setStickies(prev => prev.map(s => s.id === stickyId ? updatedSticky : s));
+    } catch (error) {
+      console.error('Failed to complete sticky:', error);
+    }
+  };
+
+  const handleStickyDelete = async (stickyId: string) => {
+    try {
+      await api.deleteSticky(stickyId);
+      setStickies(prev => prev.filter(s => s.id !== stickyId));
+    } catch (error) {
+      console.error('Failed to delete sticky:', error);
+    }
+  };
+
+  const handleStickyNameChange = async (stickyId: string, name: string) => {
+    try {
+      const updatedSticky = await api.updateSticky(stickyId, { name });
+      setStickies(prev => prev.map(s => s.id === stickyId ? updatedSticky : s));
+    } catch (error) {
+      console.error('Failed to update sticky name:', error);
+    }
+  };
+
+  const handleStickyTagsChange = async (stickyId: string, tagIds: string[]) => {
+    try {
+      const currentTags = await api.getStickyTags(stickyId);
+      const currentTagIds = currentTags.map((t: any) => t.id);
+
+      const toAdd = tagIds.filter(id => !currentTagIds.includes(id));
+      const toRemove = currentTagIds.filter((id: string) => !tagIds.includes(id));
+
+      for (const tagId of toAdd) {
+        await api.addStickyTag(stickyId, tagId);
+      }
+
+      for (const tagId of toRemove) {
+        await api.removeStickyTag(stickyId, tagId);
+      }
+    } catch (error) {
+      console.error('Failed to update sticky tags:', error);
+      throw error;
+    }
+  };
+
   // Habit/Goal タグ変更ハンドラー
   const handleHabitTagsChange = async (habitId: string, tagIds: string[]) => {
     try {
@@ -374,6 +474,19 @@ export default function DashboardPage() {
         setMindmaps={setMindmaps}
         selectedMindmap={selectedMindmap}
         setSelectedMindmap={setSelectedMindmap}
+        stickies={stickies}
+        setStickies={setStickies}
+        openStickyModal={openStickyModal}
+        setOpenStickyModal={setOpenStickyModal}
+        editingStickyId={editingStickyId}
+        setEditingStickyId={setEditingStickyId}
+        handleStickyCreate={handleStickyCreate}
+        handleStickyEdit={handleStickyEdit}
+        handleStickyUpdate={handleStickyUpdate}
+        handleStickyComplete={handleStickyComplete}
+        handleStickyDelete={handleStickyDelete}
+        handleStickyNameChange={handleStickyNameChange}
+        handleStickyTagsChange={handleStickyTagsChange}
         recurringRequest={recurringRequest}
         setRecurringRequest={setRecurringRequest}
         selectedHabitId={selectedHabitId}
@@ -461,6 +574,19 @@ function DashboardLayout(props: any) {
     setMindmaps,
     selectedMindmap,
     setSelectedMindmap,
+    stickies,
+    setStickies,
+    openStickyModal,
+    setOpenStickyModal,
+    editingStickyId,
+    setEditingStickyId,
+    handleStickyCreate,
+    handleStickyEdit,
+    handleStickyUpdate,
+    handleStickyComplete,
+    handleStickyDelete,
+    handleStickyNameChange,
+    handleStickyTagsChange,
     recurringRequest,
     setRecurringRequest,
     selectedHabitId,
@@ -622,6 +748,16 @@ function DashboardLayout(props: any) {
                 habits={habits as any}
                 onManageTags={() => setOpenManageTags(true)}
               />
+            ) : sec === 'stickies' ? (
+              <StickiesSection
+                key="stickies"
+                stickies={stickies}
+                onStickyCreate={handleStickyCreate}
+                onStickyEdit={handleStickyEdit}
+                onStickyComplete={handleStickyComplete}
+                onStickyDelete={handleStickyDelete}
+                onStickyNameChange={handleStickyNameChange}
+              />
             ) : null
           ))}
         </div>
@@ -644,7 +780,12 @@ function DashboardLayout(props: any) {
         sections={pageSections}
         onChange={async (s: any) => {
           setPageSections(s);
-          try { await (api as any).setLayout?.(s); } catch (e) { console.error('Failed to persist layout', e); }
+          try { 
+            await api.saveLayout(s); 
+            debug.log('[Dashboard] Layout saved:', s);
+          } catch (e) { 
+            console.error('Failed to persist layout', e); 
+          }
         }}
         onAdd={(id: any) => setPageSections((ps: any[]) => ps.includes(id) ? ps : [...ps, id])}
         onDelete={(id: any) => setPageSections((ps: any[]) => ps.filter(x => x !== id))}
@@ -812,6 +953,23 @@ function DashboardLayout(props: any) {
           }}
         />
       )}
+
+      {/* Sticky Modal */}
+      <StickyModal
+        open={openStickyModal}
+        onClose={() => {
+          setOpenStickyModal(false);
+          setEditingStickyId(null);
+        }}
+        sticky={editingStickyId ? stickies.find((s: any) => s.id === editingStickyId) || null : null}
+        onCreate={handleStickyUpdate}
+        onUpdate={handleStickyUpdate}
+        onDelete={handleStickyDelete}
+        goals={goals}
+        habits={habits}
+        tags={tags}
+        onTagsChange={handleStickyTagsChange}
+      />
     </div>
   );
 }

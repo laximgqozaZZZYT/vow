@@ -3,13 +3,13 @@
 import { useState, useEffect } from 'react';
 import api from '../../../lib/api';
 import { debug } from '../../../lib/debug';
-import type { Goal, Habit, Activity, SectionId } from '../types';
+import type { Goal, Habit, Activity, SectionId } from '../types/index';
 
 export function useDataManager() {
   const [goals, setGoals] = useState<Goal[]>([]);
   const [habits, setHabits] = useState<Habit[]>([]);
   const [activities, setActivities] = useState<Activity[]>([]);
-  const [pageSections, setPageSections] = useState<SectionId[]>(['next','activity','calendar','statics','diary']);
+  const [pageSections, setPageSections] = useState<SectionId[]>(['next','activity','calendar','statics','stickies']);
   const [isClient, setIsClient] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [lastResetDate, setLastResetDate] = useState<string>('');
@@ -128,8 +128,17 @@ export function useDataManager() {
       debug.log('[dashboard] Loading layout...');
       const layout = await api.getLayout();
       debug.log('[dashboard] Layout loaded:', layout);
-      if (layout && Array.isArray(layout.sections)) {
+      if (layout && Array.isArray(layout.sections) && layout.sections.length > 0) {
+        debug.log('[dashboard] Using layout from API:', layout.sections);
         setPageSections(layout.sections as any);
+      } else {
+        debug.log('[dashboard] No layout from API, using default');
+        // デフォルト値を保存
+        try {
+          await api.saveLayout(['next','activity','calendar','statics','stickies']);
+        } catch (e) {
+          console.error('Failed to save default layout', e);
+        }
       }
     } catch (e) {
       console.error('Failed to load data', e);
@@ -156,20 +165,10 @@ export function useDataManager() {
     };
   }, []);
 
-  // Hydration safety: only read localStorage after mount
+  // Hydration safety: only set client flag after mount
   useEffect(() => {
     setIsClient(true);
-    try {
-      const raw = window.localStorage.getItem('pageSections');
-      if (raw) setPageSections(JSON.parse(raw) as SectionId[]);
-    } catch {}
   }, []);
-
-  useEffect(() => { 
-    try { 
-      window.localStorage.setItem('pageSections', JSON.stringify(pageSections)); 
-    } catch(e){} 
-  }, [pageSections]);
 
   // Manual reset function for debugging
   const manualReset = () => {

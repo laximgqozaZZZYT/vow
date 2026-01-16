@@ -92,7 +92,11 @@ export class SupabaseDirectClient {
       'guest-habit-relations',
       'guest-mindmaps',
       'guest-mindmap-nodes',
-      'guest-mindmap-connections'
+      'guest-mindmap-connections',
+      'guest-stickies',
+      'guest-sticky-tags',
+      'guest-sticky-goals',
+      'guest-sticky-habits'
     ];
     
     guestKeys.forEach(key => {
@@ -1519,9 +1523,93 @@ export class SupabaseDirectClient {
     };
   }
 
-  // Placeholder methods for compatibility
-  async getLayout() { return { sections: ['next', 'activity', 'calendar', 'statics', 'diary'] }; }
-  async setLayout(sections: any[]) { return { sections }; }
+  // Layout management
+  async getLayout() {
+    this.checkEnvironment();
+    
+    const { data: session } = await supabase.auth.getSession();
+    
+    if (!session?.session?.user) {
+      // Guest user - use localStorage
+      const guestLayout = localStorage.getItem('guest-layout');
+      if (guestLayout) {
+        try {
+          return JSON.parse(guestLayout);
+        } catch (e) {
+          console.error('Failed to parse guest layout:', e);
+        }
+      }
+      return { sections: ['next', 'activity', 'calendar', 'statics', 'stickies'] };
+    }
+    
+    // Authenticated user - use preferences table
+    const { data, error } = await supabase
+      .from('preferences')
+      .select('value')
+      .eq('key', 'page_sections')
+      .eq('owner_type', 'user')
+      .eq('owner_id', session.session.user.id)
+      .single();
+    
+    if (error) {
+      if (error.code === 'PGRST116') {
+        // No layout saved yet, return default
+        return { sections: ['next', 'activity', 'calendar', 'statics', 'stickies'] };
+      }
+      throw error;
+    }
+    
+    return { sections: data.value };
+  }
+
+  async setLayout(sections: any[]) {
+    this.checkEnvironment();
+    
+    const { data: session } = await supabase.auth.getSession();
+    
+    if (!session?.session?.user) {
+      // Guest user - use localStorage
+      localStorage.setItem('guest-layout', JSON.stringify({ sections }));
+      return { sections };
+    }
+    
+    // Authenticated user - use preferences table
+    const { data: existing } = await supabase
+      .from('preferences')
+      .select('id')
+      .eq('key', 'page_sections')
+      .eq('owner_type', 'user')
+      .eq('owner_id', session.session.user.id)
+      .single();
+    
+    if (existing) {
+      // Update existing preference
+      const { error } = await supabase
+        .from('preferences')
+        .update({
+          value: sections,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', existing.id);
+      
+      if (error) throw error;
+    } else {
+      // Create new preference
+      const { error } = await supabase
+        .from('preferences')
+        .insert({
+          key: 'page_sections',
+          value: sections,
+          owner_type: 'user',
+          owner_id: session.session.user.id
+        });
+      
+      if (error) throw error;
+    }
+    
+    return { sections };
+  }
+
   async getPrefs() { return {}; }
   async setPref(key: string, value: any) { return { [key]: value }; }
 
@@ -2462,6 +2550,530 @@ export class SupabaseDirectClient {
       .from('tags')
       .delete()
       .eq('id', id)
+      .eq('owner_type', 'user')
+      .eq('owner_id', session.session.user.id);
+    
+    if (error) throw error;
+    return { success: true };
+  }
+
+  // Sticky'n operations
+  async getStickies() {
+    this.checkEnvironment();
+    
+    const { data: session } = await supabase.auth.getSession();
+    
+    if (!session?.session?.user) {
+      const guestStickies = JSON.parse(localStorage.getItem('guest-stickies') || '[]');
+      return guestStickies;
+    }
+    
+    const { data, error } = await supabase
+      .from('stickies')
+      .select('*')
+      .eq('owner_type', 'user')
+      .eq('owner_id', session.session.user.id)
+      .order('display_order', { ascending: true })
+      .order('created_at', { ascending: false });
+    
+    if (error) throw error;
+    
+    return (data || []).map((s: any) => ({
+      id: s.id,
+      name: s.name,
+      description: s.description,
+      completed: s.completed,
+      completedAt: s.completed_at,
+      displayOrder: s.display_order,
+      createdAt: s.created_at,
+      updatedAt: s.updated_at
+    }));
+  }
+
+  async createSticky(payload: any) {
+    this.checkEnvironment();
+    
+    const { data: session } = await supabase.auth.getSession();
+    
+    if (!session?.session?.user) {
+      const guestStickies = JSON.parse(localStorage.getItem('guest-stickies') || '[]');
+      const now = new Date().toISOString();
+      const newSticky = {
+        id: `s${Date.now()}`,
+        name: payload.name || '',
+        description: payload.description || '',
+        completed: false,
+        completedAt: null,
+        displayOrder: payload.displayOrder ?? guestStickies.length,
+        createdAt: now,
+        updatedAt: now
+      };
+      
+      guestStickies.push(newSticky);
+      localStorage.setItem('guest-stickies', JSON.stringify(guestStickies));
+      
+      return newSticky;
+    }
+    
+    const { data, error } = await supabase
+      .from('stickies')
+      .insert({
+        name: payload.name || '',
+        description: payload.description || '',
+        completed: false,
+        display_order: payload.displayOrder ?? 0,
+        owner_type: 'user',
+        owner_id: session.session.user.id
+      })
+      .select()
+      .single();
+    
+    if (error) throw error;
+    
+    return {
+      id: data.id,
+      name: data.name,
+      description: data.description,
+      completed: data.completed,
+      completedAt: data.completed_at,
+      displayOrder: data.display_order,
+      createdAt: data.created_at,
+      updatedAt: data.updated_at
+    };
+  }
+
+  async updateSticky(id: string, payload: any) {
+    this.checkEnvironment();
+    
+    const { data: session } = await supabase.auth.getSession();
+    
+    if (!session?.session?.user) {
+      const guestStickies = JSON.parse(localStorage.getItem('guest-stickies') || '[]');
+      const stickyIndex = guestStickies.findIndex((s: any) => s.id === id);
+      
+      if (stickyIndex === -1) {
+        throw new Error(`Sticky with id ${id} not found`);
+      }
+      
+      const now = new Date().toISOString();
+      const updatedSticky = {
+        ...guestStickies[stickyIndex],
+        updatedAt: now
+      };
+      
+      if (payload.name !== undefined) updatedSticky.name = payload.name;
+      if (payload.description !== undefined) updatedSticky.description = payload.description;
+      if (payload.completed !== undefined) {
+        updatedSticky.completed = payload.completed;
+        updatedSticky.completedAt = payload.completed ? now : null;
+      }
+      if (payload.displayOrder !== undefined) updatedSticky.displayOrder = payload.displayOrder;
+      
+      guestStickies[stickyIndex] = updatedSticky;
+      localStorage.setItem('guest-stickies', JSON.stringify(guestStickies));
+      
+      return updatedSticky;
+    }
+    
+    const updateData: any = {
+      updated_at: new Date().toISOString()
+    };
+    
+    if (payload.name !== undefined) updateData.name = payload.name;
+    if (payload.description !== undefined) updateData.description = payload.description;
+    if (payload.completed !== undefined) {
+      updateData.completed = payload.completed;
+      updateData.completed_at = payload.completed ? new Date().toISOString() : null;
+    }
+    if (payload.displayOrder !== undefined) updateData.display_order = payload.displayOrder;
+    
+    const { data, error } = await supabase
+      .from('stickies')
+      .update(updateData)
+      .eq('id', id)
+      .eq('owner_type', 'user')
+      .eq('owner_id', session.session.user.id)
+      .select()
+      .single();
+    
+    if (error) throw error;
+    
+    return {
+      id: data.id,
+      name: data.name,
+      description: data.description,
+      completed: data.completed,
+      completedAt: data.completed_at,
+      displayOrder: data.display_order,
+      createdAt: data.created_at,
+      updatedAt: data.updated_at
+    };
+  }
+
+  async deleteSticky(id: string) {
+    this.checkEnvironment();
+    
+    const { data: session } = await supabase.auth.getSession();
+    
+    if (!session?.session?.user) {
+      const guestStickies = JSON.parse(localStorage.getItem('guest-stickies') || '[]');
+      const stickyIndex = guestStickies.findIndex((s: any) => s.id === id);
+      
+      if (stickyIndex === -1) {
+        throw new Error(`Sticky with id ${id} not found`);
+      }
+      
+      guestStickies.splice(stickyIndex, 1);
+      localStorage.setItem('guest-stickies', JSON.stringify(guestStickies));
+      
+      return { success: true };
+    }
+    
+    const { error } = await supabase
+      .from('stickies')
+      .delete()
+      .eq('id', id)
+      .eq('owner_type', 'user')
+      .eq('owner_id', session.session.user.id);
+    
+    if (error) throw error;
+    return { success: true };
+  }
+
+  // Sticky Tags operations
+  async getStickyTags(stickyId: string) {
+    this.checkEnvironment();
+    
+    const { data: session } = await supabase.auth.getSession();
+    
+    if (!session?.session?.user) {
+      const guestStickyTags = JSON.parse(localStorage.getItem('guest-sticky-tags') || '[]');
+      const guestTags = JSON.parse(localStorage.getItem('guest-tags') || '[]');
+      
+      const stickyTagIds = guestStickyTags
+        .filter((st: any) => st.stickyId === stickyId)
+        .map((st: any) => st.tagId);
+      
+      return guestTags.filter((t: any) => stickyTagIds.includes(t.id));
+    }
+    
+    const { data, error } = await supabase
+      .from('sticky_tags')
+      .select('tag_id')
+      .eq('sticky_id', stickyId)
+      .eq('owner_type', 'user')
+      .eq('owner_id', session.session.user.id);
+    
+    if (error) throw error;
+    
+    const tagIds = (data || []).map((st: any) => st.tag_id);
+    
+    if (tagIds.length === 0) return [];
+    
+    const { data: tags, error: tagsError } = await supabase
+      .from('tags')
+      .select('*')
+      .in('id', tagIds)
+      .eq('owner_type', 'user')
+      .eq('owner_id', session.session.user.id);
+    
+    if (tagsError) throw tagsError;
+    
+    return (tags || []).map((t: any) => ({
+      id: t.id,
+      name: t.name,
+      color: t.color,
+      createdAt: t.created_at,
+      updatedAt: t.updated_at
+    }));
+  }
+
+  async addStickyTag(stickyId: string, tagId: string) {
+    this.checkEnvironment();
+    
+    const { data: session } = await supabase.auth.getSession();
+    
+    if (!session?.session?.user) {
+      const guestStickyTags = JSON.parse(localStorage.getItem('guest-sticky-tags') || '[]');
+      const now = new Date().toISOString();
+      
+      const exists = guestStickyTags.some((st: any) => st.stickyId === stickyId && st.tagId === tagId);
+      if (exists) return { success: true };
+      
+      guestStickyTags.push({
+        id: `st${Date.now()}`,
+        stickyId,
+        tagId,
+        createdAt: now
+      });
+      
+      localStorage.setItem('guest-sticky-tags', JSON.stringify(guestStickyTags));
+      return { success: true };
+    }
+    
+    const { error } = await supabase
+      .from('sticky_tags')
+      .insert({
+        sticky_id: stickyId,
+        tag_id: tagId,
+        owner_type: 'user',
+        owner_id: session.session.user.id
+      });
+    
+    if (error && !error.message.includes('duplicate')) throw error;
+    return { success: true };
+  }
+
+  async removeStickyTag(stickyId: string, tagId: string) {
+    this.checkEnvironment();
+    
+    const { data: session } = await supabase.auth.getSession();
+    
+    if (!session?.session?.user) {
+      const guestStickyTags = JSON.parse(localStorage.getItem('guest-sticky-tags') || '[]');
+      const filtered = guestStickyTags.filter((st: any) => !(st.stickyId === stickyId && st.tagId === tagId));
+      localStorage.setItem('guest-sticky-tags', JSON.stringify(filtered));
+      return { success: true };
+    }
+    
+    const { error } = await supabase
+      .from('sticky_tags')
+      .delete()
+      .eq('sticky_id', stickyId)
+      .eq('tag_id', tagId)
+      .eq('owner_type', 'user')
+      .eq('owner_id', session.session.user.id);
+    
+    if (error) throw error;
+    return { success: true };
+  }
+
+  // Sticky Goals operations
+  async getStickyGoals(stickyId: string) {
+    this.checkEnvironment();
+    
+    const { data: session } = await supabase.auth.getSession();
+    
+    if (!session?.session?.user) {
+      const guestStickyGoals = JSON.parse(localStorage.getItem('guest-sticky-goals') || '[]');
+      const guestGoals = JSON.parse(localStorage.getItem('guest-goals') || '[]');
+      
+      const stickyGoalIds = guestStickyGoals
+        .filter((sg: any) => sg.stickyId === stickyId)
+        .map((sg: any) => sg.goalId);
+      
+      return guestGoals.filter((g: any) => stickyGoalIds.includes(g.id));
+    }
+    
+    const { data, error } = await supabase
+      .from('sticky_goals')
+      .select('goal_id')
+      .eq('sticky_id', stickyId)
+      .eq('owner_type', 'user')
+      .eq('owner_id', session.session.user.id);
+    
+    if (error) throw error;
+    
+    const goalIds = (data || []).map((sg: any) => sg.goal_id);
+    
+    if (goalIds.length === 0) return [];
+    
+    const { data: goals, error: goalsError } = await supabase
+      .from('goals')
+      .select('*')
+      .in('id', goalIds)
+      .eq('owner_type', 'user')
+      .eq('owner_id', session.session.user.id);
+    
+    if (goalsError) throw goalsError;
+    
+    return (goals || []).map((g: any) => ({
+      id: g.id,
+      name: g.name,
+      details: g.details,
+      dueDate: g.due_date,
+      parentId: g.parent_id,
+      isCompleted: g.is_completed,
+      createdAt: g.created_at,
+      updatedAt: g.updated_at
+    }));
+  }
+
+  async addStickyGoal(stickyId: string, goalId: string) {
+    this.checkEnvironment();
+    
+    const { data: session } = await supabase.auth.getSession();
+    
+    if (!session?.session?.user) {
+      const guestStickyGoals = JSON.parse(localStorage.getItem('guest-sticky-goals') || '[]');
+      const now = new Date().toISOString();
+      
+      const exists = guestStickyGoals.some((sg: any) => sg.stickyId === stickyId && sg.goalId === goalId);
+      if (exists) return { success: true };
+      
+      guestStickyGoals.push({
+        id: `sg${Date.now()}`,
+        stickyId,
+        goalId,
+        createdAt: now
+      });
+      
+      localStorage.setItem('guest-sticky-goals', JSON.stringify(guestStickyGoals));
+      return { success: true };
+    }
+    
+    const { error } = await supabase
+      .from('sticky_goals')
+      .insert({
+        sticky_id: stickyId,
+        goal_id: goalId,
+        owner_type: 'user',
+        owner_id: session.session.user.id
+      });
+    
+    if (error && !error.message.includes('duplicate')) throw error;
+    return { success: true };
+  }
+
+  async removeStickyGoal(stickyId: string, goalId: string) {
+    this.checkEnvironment();
+    
+    const { data: session } = await supabase.auth.getSession();
+    
+    if (!session?.session?.user) {
+      const guestStickyGoals = JSON.parse(localStorage.getItem('guest-sticky-goals') || '[]');
+      const filtered = guestStickyGoals.filter((sg: any) => !(sg.stickyId === stickyId && sg.goalId === goalId));
+      localStorage.setItem('guest-sticky-goals', JSON.stringify(filtered));
+      return { success: true };
+    }
+    
+    const { error } = await supabase
+      .from('sticky_goals')
+      .delete()
+      .eq('sticky_id', stickyId)
+      .eq('goal_id', goalId)
+      .eq('owner_type', 'user')
+      .eq('owner_id', session.session.user.id);
+    
+    if (error) throw error;
+    return { success: true };
+  }
+
+  // Sticky Habits operations
+  async getStickyHabits(stickyId: string) {
+    this.checkEnvironment();
+    
+    const { data: session } = await supabase.auth.getSession();
+    
+    if (!session?.session?.user) {
+      const guestStickyHabits = JSON.parse(localStorage.getItem('guest-sticky-habits') || '[]');
+      const guestHabits = JSON.parse(localStorage.getItem('guest-habits') || '[]');
+      
+      const stickyHabitIds = guestStickyHabits
+        .filter((sh: any) => sh.stickyId === stickyId)
+        .map((sh: any) => sh.habitId);
+      
+      return guestHabits.filter((h: any) => stickyHabitIds.includes(h.id));
+    }
+    
+    const { data, error } = await supabase
+      .from('sticky_habits')
+      .select('habit_id')
+      .eq('sticky_id', stickyId)
+      .eq('owner_type', 'user')
+      .eq('owner_id', session.session.user.id);
+    
+    if (error) throw error;
+    
+    const habitIds = (data || []).map((sh: any) => sh.habit_id);
+    
+    if (habitIds.length === 0) return [];
+    
+    const { data: habits, error: habitsError } = await supabase
+      .from('habits')
+      .select('*')
+      .in('id', habitIds)
+      .eq('owner_type', 'user')
+      .eq('owner_id', session.session.user.id);
+    
+    if (habitsError) throw habitsError;
+    
+    return (habits || []).map((h: any) => ({
+      id: h.id,
+      goalId: h.goal_id,
+      name: h.name,
+      active: h.active,
+      type: h.type,
+      count: h.count,
+      must: h.must,
+      completed: h.completed,
+      lastCompletedAt: h.last_completed_at,
+      duration: h.duration,
+      reminders: h.reminders,
+      dueDate: h.due_date,
+      time: h.time,
+      endTime: h.end_time,
+      repeat: h.repeat,
+      allDay: h.all_day,
+      notes: h.notes,
+      createdAt: h.created_at,
+      updatedAt: h.updated_at
+    }));
+  }
+
+  async addStickyHabit(stickyId: string, habitId: string) {
+    this.checkEnvironment();
+    
+    const { data: session } = await supabase.auth.getSession();
+    
+    if (!session?.session?.user) {
+      const guestStickyHabits = JSON.parse(localStorage.getItem('guest-sticky-habits') || '[]');
+      const now = new Date().toISOString();
+      
+      const exists = guestStickyHabits.some((sh: any) => sh.stickyId === stickyId && sh.habitId === habitId);
+      if (exists) return { success: true };
+      
+      guestStickyHabits.push({
+        id: `sh${Date.now()}`,
+        stickyId,
+        habitId,
+        createdAt: now
+      });
+      
+      localStorage.setItem('guest-sticky-habits', JSON.stringify(guestStickyHabits));
+      return { success: true };
+    }
+    
+    const { error } = await supabase
+      .from('sticky_habits')
+      .insert({
+        sticky_id: stickyId,
+        habit_id: habitId,
+        owner_type: 'user',
+        owner_id: session.session.user.id
+      });
+    
+    if (error && !error.message.includes('duplicate')) throw error;
+    return { success: true };
+  }
+
+  async removeStickyHabit(stickyId: string, habitId: string) {
+    this.checkEnvironment();
+    
+    const { data: session } = await supabase.auth.getSession();
+    
+    if (!session?.session?.user) {
+      const guestStickyHabits = JSON.parse(localStorage.getItem('guest-sticky-habits') || '[]');
+      const filtered = guestStickyHabits.filter((sh: any) => !(sh.stickyId === stickyId && sh.habitId === habitId));
+      localStorage.setItem('guest-sticky-habits', JSON.stringify(filtered));
+      return { success: true };
+    }
+    
+    const { error } = await supabase
+      .from('sticky_habits')
+      .delete()
+      .eq('sticky_id', stickyId)
+      .eq('habit_id', habitId)
       .eq('owner_type', 'user')
       .eq('owner_id', session.session.user.id);
     

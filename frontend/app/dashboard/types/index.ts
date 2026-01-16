@@ -1,6 +1,6 @@
 // Shared type definitions for dashboard components
 
-export type SectionId = 'next' | 'activity' | 'calendar' | 'statics' | 'diary';
+export type SectionId = 'next' | 'activity' | 'calendar' | 'statics' | 'diary' | 'stickies';
 export type ActivityKind = 'start' | 'complete' | 'skip' | 'pause';
 export type HabitAction = 'start' | 'complete' | 'pause';
 
@@ -31,8 +31,8 @@ export interface Habit {
   active: boolean;
   type: "do" | "avoid";
   count: number;
-  must?: number;
-  completed?: boolean;
+  must: number;
+  completed: boolean;
   lastCompletedAt?: string;
   duration?: number;
   reminders?: ({ kind: 'absolute'; time: string; weekdays: string[] } | { kind: 'relative'; minutesBefore: number })[];
@@ -43,6 +43,10 @@ export interface Habit {
   allDay?: boolean;
   notes?: string;
   tags?: Tag[];
+  workloadUnit?: string;
+  workloadTotal?: number;
+  workloadPerCount?: number;
+  timings?: any[];
   createdAt: string;
   updatedAt: string;
 }
@@ -104,6 +108,14 @@ export interface CreateHabitPayload {
 }
 
 // Context interfaces
+export interface GuestDataMigrationResult {
+  success: boolean;
+  migratedGoals: number;
+  migratedHabits: number;
+  migratedActivities: number;
+  errors: string[];
+}
+
 export interface AuthContext {
   user: any; // TODO: implement proper user type
   signOut: () => Promise<void>;
@@ -112,6 +124,10 @@ export interface AuthContext {
   authError: string | null;
   handleLogout: () => Promise<void>;
   isGuest: boolean; // ゲストユーザーかどうかを示すフラグ
+  migrationStatus: 'idle' | 'checking' | 'migrating' | 'success' | 'error';
+  migrationResult: GuestDataMigrationResult | null;
+  migrationError: string | null;
+  retryMigration: () => Promise<void>;
 }
 
 // Component prop interfaces
@@ -140,13 +156,14 @@ export interface GoalTreeProps {
 
 export interface NextSectionProps {
   habits: Habit[];
-  onHabitAction: (habitId: string, action: HabitAction) => void;
+  onHabitAction: (habitId: string, action: HabitAction, amount?: number) => void;
 }
 
 export interface ActivitySectionProps {
   activities: Activity[];
   onEditActivity: (activityId: string) => void;
   onDeleteActivity: (activityId: string) => void;
+  habits: Habit[];
 }
 
 export interface CalendarSectionProps {
@@ -208,4 +225,33 @@ export interface CreateMindmapNodePayload {
 export interface CreateMindmapConnectionPayload {
   fromNodeId: string;
   toNodeId: string;
+}
+
+// Sticky'n interfaces
+export interface Sticky {
+  id: string;
+  name: string;
+  description?: string;
+  completed: boolean;
+  completedAt?: string;
+  displayOrder: number;
+  tags?: Tag[];
+  goals?: Goal[];
+  habits?: Habit[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CreateStickyPayload {
+  name: string;
+  description?: string;
+  displayOrder?: number;
+}
+
+export interface StickySectionProps {
+  stickies: Sticky[];
+  onStickyCreate: () => void;
+  onStickyEdit: (stickyId: string) => void;
+  onStickyComplete: (stickyId: string) => void;
+  onStickyDelete: (stickyId: string) => void;
 }

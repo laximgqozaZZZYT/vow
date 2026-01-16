@@ -3,7 +3,7 @@
 import React from 'react'
 import { useLocale } from '../../contexts/LocaleContext'
 
-type SectionId = 'next' | 'activity' | 'calendar' | 'statics' | 'diary'
+type SectionId = 'next' | 'activity' | 'calendar' | 'statics' | 'diary' | 'stickies'
 
 export default function EditLayoutModal({ open, onClose, sections, onChange, onAdd, onDelete }: { open: boolean; onClose: () => void; sections: SectionId[]; onChange: (s: SectionId[]) => void; onAdd: (id: SectionId) => void; onDelete: (id: SectionId) => void }) {
   const [local, setLocal] = React.useState<SectionId[]>(sections || [])
@@ -30,6 +30,7 @@ export default function EditLayoutModal({ open, onClose, sections, onChange, onA
     { id: 'calendar', label: 'Calendar' },
     { id: 'statics', label: 'Statics' },
     { id: 'diary', label: 'Diary' },
+    { id: 'stickies', label: 'Sticky\'n' },
   ]
 
   return (

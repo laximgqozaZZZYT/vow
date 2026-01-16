@@ -281,6 +281,50 @@ async function request(path: string, opts: RequestInit = {}) {
         return await supabaseDirectClient.removeGoalTag(goalId, tagId);
       }
       return await supabaseDirectClient.getGoalTags(goalId);
+    } else if (path === '/stickies') {
+      if (opts.method === 'POST') {
+        const payload = JSON.parse(opts.body as string);
+        return await supabaseDirectClient.createSticky(payload);
+      }
+      return await supabaseDirectClient.getStickies();
+    } else if (path.startsWith('/stickies/') && path.includes('/tags')) {
+      const stickyId = path.split('/')[2];
+      if (opts.method === 'POST') {
+        const payload = JSON.parse(opts.body as string);
+        return await supabaseDirectClient.addStickyTag(stickyId, payload.tagId);
+      } else if (opts.method === 'DELETE') {
+        const tagId = path.split('/')[4];
+        return await supabaseDirectClient.removeStickyTag(stickyId, tagId);
+      }
+      return await supabaseDirectClient.getStickyTags(stickyId);
+    } else if (path.startsWith('/stickies/') && path.includes('/goals')) {
+      const stickyId = path.split('/')[2];
+      if (opts.method === 'POST') {
+        const payload = JSON.parse(opts.body as string);
+        return await supabaseDirectClient.addStickyGoal(stickyId, payload.goalId);
+      } else if (opts.method === 'DELETE') {
+        const goalId = path.split('/')[4];
+        return await supabaseDirectClient.removeStickyGoal(stickyId, goalId);
+      }
+      return await supabaseDirectClient.getStickyGoals(stickyId);
+    } else if (path.startsWith('/stickies/') && path.includes('/habits')) {
+      const stickyId = path.split('/')[2];
+      if (opts.method === 'POST') {
+        const payload = JSON.parse(opts.body as string);
+        return await supabaseDirectClient.addStickyHabit(stickyId, payload.habitId);
+      } else if (opts.method === 'DELETE') {
+        const habitId = path.split('/')[4];
+        return await supabaseDirectClient.removeStickyHabit(stickyId, habitId);
+      }
+      return await supabaseDirectClient.getStickyHabits(stickyId);
+    } else if (path.startsWith('/stickies/')) {
+      const id = path.split('/')[2];
+      if (opts.method === 'PATCH') {
+        const payload = JSON.parse(opts.body as string);
+        return await supabaseDirectClient.updateSticky(id, payload);
+      } else if (opts.method === 'DELETE') {
+        return await supabaseDirectClient.deleteSticky(id);
+      }
     }
     
     throw new ApiError('Endpoint not implemented for direct Supabase client', path);
@@ -425,6 +469,62 @@ export async function removeGoalTag(goalId: string, tagId: string) {
   return await request(`/goals/${goalId}/tags/${tagId}`, { method: 'DELETE' });
 }
 
+// Sticky'n API
+export async function getStickies() {
+  return await request('/stickies');
+}
+
+export async function createSticky(payload: any) {
+  return await request('/stickies', { method: 'POST', body: JSON.stringify(payload) });
+}
+
+export async function updateSticky(id: string, payload: any) {
+  return await request(`/stickies/${id}`, { method: 'PATCH', body: JSON.stringify(payload) });
+}
+
+export async function deleteSticky(id: string) {
+  return await request(`/stickies/${id}`, { method: 'DELETE' });
+}
+
+// Sticky Tags API
+export async function getStickyTags(stickyId: string) {
+  return await request(`/stickies/${stickyId}/tags`);
+}
+
+export async function addStickyTag(stickyId: string, tagId: string) {
+  return await request(`/stickies/${stickyId}/tags`, { method: 'POST', body: JSON.stringify({ tagId }) });
+}
+
+export async function removeStickyTag(stickyId: string, tagId: string) {
+  return await request(`/stickies/${stickyId}/tags/${tagId}`, { method: 'DELETE' });
+}
+
+// Sticky Goals API
+export async function getStickyGoals(stickyId: string) {
+  return await request(`/stickies/${stickyId}/goals`);
+}
+
+export async function addStickyGoal(stickyId: string, goalId: string) {
+  return await request(`/stickies/${stickyId}/goals`, { method: 'POST', body: JSON.stringify({ goalId }) });
+}
+
+export async function removeStickyGoal(stickyId: string, goalId: string) {
+  return await request(`/stickies/${stickyId}/goals/${goalId}`, { method: 'DELETE' });
+}
+
+// Sticky Habits API
+export async function getStickyHabits(stickyId: string) {
+  return await request(`/stickies/${stickyId}/habits`);
+}
+
+export async function addStickyHabit(stickyId: string, habitId: string) {
+  return await request(`/stickies/${stickyId}/habits`, { method: 'POST', body: JSON.stringify({ habitId }) });
+}
+
+export async function removeStickyHabit(stickyId: string, habitId: string) {
+  return await request(`/stickies/${stickyId}/habits/${habitId}`, { method: 'DELETE' });
+}
+
 // Mindmap API
 export async function getMindmaps() {
   return await request('/mindmaps');
@@ -520,6 +620,19 @@ const api = {
   getGoalTags,
   addGoalTag,
   removeGoalTag,
+  getStickies,
+  createSticky,
+  updateSticky,
+  deleteSticky,
+  getStickyTags,
+  addStickyTag,
+  removeStickyTag,
+  getStickyGoals,
+  addStickyGoal,
+  removeStickyGoal,
+  getStickyHabits,
+  addStickyHabit,
+  removeStickyHabit,
   getMindmaps,
   createMindmap,
   updateMindmap,

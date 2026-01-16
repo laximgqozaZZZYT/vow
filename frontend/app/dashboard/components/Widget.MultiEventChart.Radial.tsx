@@ -287,24 +287,65 @@ export default function RadialEventChart({
             if (!habit) return null
 
             const color = palette(habitIndex)
-            const habitName = habit.name.length > 15 ? habit.name.slice(0, 15) + '...' : habit.name
+            
+            // 長い名前を分割（スマホでは短く、デスクトップでは長く）
+            const maxLength = isMobile ? 6 : 12
+            let habitName = habit.name
+            let lines: string[] = []
+            
+            if (habitName.length > maxLength) {
+              // 文字数で強制的に分割
+              for (let i = 0; i < habitName.length; i += maxLength) {
+                const line = habitName.slice(i, i + maxLength)
+                lines.push(line)
+                if (lines.length >= 2) break // 最大2行
+              }
+              // 2行目が長すぎる場合は省略
+              if (lines.length === 2 && lines[1].length > maxLength) {
+                lines[1] = lines[1].slice(0, maxLength - 1) + '..'
+              }
+            } else {
+              lines = [habitName]
+            }
+
+            // 各習慣のセクター角度範囲を計算
+            const habitCount = habitIds.length
+            const anglePerHabit = habitCount > 0 ? 360 / habitCount : 360
+            const sectorStartAngle = habitIndex * anglePerHabit
+            const sectorEndAngle = (habitIndex + 1) * anglePerHabit
+            const midAngle = (sectorStartAngle + sectorEndAngle) / 2
+            const isBottomHalf = midAngle > 90 && midAngle < 270
 
             return (
-              <text
-                key={`label-${habitId}`}
-                fontSize={isMobile ? 9 : 11}
-                fill={color}
-                fontWeight="600"
-                className="pointer-events-none"
-              >
-                <textPath
-                  href={`#textPath-radial-${habitId}`}
-                  startOffset="50%"
-                  textAnchor="middle"
-                >
-                  {habitName}
-                </textPath>
-              </text>
+              <g key={`label-${habitId}`}>
+                {lines.map((line, lineIndex) => {
+                  // 複数行の場合、上下にオフセット
+                  const totalLines = lines.length
+                  const lineSpacing = isMobile ? 11 : 13
+                  const totalHeight = (totalLines - 1) * lineSpacing
+                  const yOffset = (lineIndex * lineSpacing) - (totalHeight / 2)
+                  
+                  return (
+                    <text
+                      key={`label-${habitId}-line-${lineIndex}`}
+                      fontSize={isMobile ? 10 : 11}
+                      fill={color}
+                      fontWeight="600"
+                      className="pointer-events-none"
+                    >
+                      <textPath
+                        href={`#textPath-radial-${habitId}`}
+                        startOffset="50%"
+                        textAnchor="middle"
+                      >
+                        <tspan dy={yOffset}>
+                          {line}
+                        </tspan>
+                      </textPath>
+                    </text>
+                  )
+                })}
+              </g>
             )
           })}
 
