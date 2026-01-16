@@ -219,13 +219,15 @@ export function useAuth(): AuthContext {
 
   // Supabase統合版: 認証状態の監視
   useEffect(() => {
+    let subscription: any = null;
+    
     const initAuth = async () => {
       const { supabase } = await import('../../../lib/supabaseClient');
       if (!supabase) return;
       
       debug.log('[auth] Setting up Supabase auth listener');
       
-      const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event: any, session: any) => {
+      const { data } = supabase.auth.onAuthStateChange(async (event: any, session: any) => {
         const token = session?.access_token ?? null;
         const userId = session?.user?.id ?? null;
         const wasGuest = isGuest;
@@ -251,13 +253,15 @@ export function useAuth(): AuthContext {
           console.error('[auth] Failed to set bearer token:', error);
         }
       });
-
-      return () => {
-        subscription?.unsubscribe();
-      };
+      
+      subscription = data.subscription;
     };
 
     initAuth();
+    
+    return () => {
+      subscription?.unsubscribe();
+    };
   }, [migrationStatus]);
 
   const handleLogout = async () => {
