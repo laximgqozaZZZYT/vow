@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import type { Habit, Tag, Activity } from '../types';
 import './HabitNameScroll.css';
 
@@ -50,8 +50,25 @@ export default function TagView({
   onHabitEdit,
   onHabitAction
 }: TagViewProps) {
-  const [openTags, setOpenTags] = useState<Record<string, boolean>>({});
+  // Load openTags from localStorage
+  const [openTags, setOpenTags] = useState<Record<string, boolean>>(() => {
+    if (typeof window === 'undefined') return {};
+    const saved = localStorage.getItem('dashboard:openTags');
+    try {
+      return saved ? JSON.parse(saved) : {};
+    } catch {
+      return {};
+    }
+  });
+
   const [inputValues, setInputValues] = useState<Record<string, string>>({});
+
+  // Save openTags to localStorage when it changes
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('dashboard:openTags', JSON.stringify(openTags));
+    }
+  }, [openTags]);
 
   // Habitをタグでグループ化
   const habitsByTag = useMemo(() => {

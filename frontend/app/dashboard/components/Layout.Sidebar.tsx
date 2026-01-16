@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import GoalTree from './Widget.GoalTree';
 import TagView from './Widget.TagView';
 import type { DashboardSidebarProps, Goal, Habit, Activity } from '../types';
@@ -48,7 +48,20 @@ export default function DashboardSidebar({
   onMindmapDelete
 }: DashboardSidebarExtendedProps) {
   const { isLeftHanded, handedness, setHandedness } = useHandedness();
-  const [viewMode, setViewMode] = useState<ViewMode>('folder');
+  
+  // Load viewMode from localStorage
+  const [viewMode, setViewMode] = useState<ViewMode>(() => {
+    if (typeof window === 'undefined') return 'folder';
+    const saved = localStorage.getItem('dashboard:viewMode');
+    return (saved === 'tag' || saved === 'folder') ? saved : 'folder';
+  });
+
+  // Save viewMode to localStorage when it changes
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('dashboard:viewMode', viewMode);
+    }
+  }, [viewMode]);
   
   if (!isVisible) return null;
 

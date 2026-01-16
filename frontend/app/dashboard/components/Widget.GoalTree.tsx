@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import type { Goal, Habit, Activity } from '../types';
 import { useDragAndDrop } from '../hooks/useDragAndDrop';
 import './DragAndDrop.css';
@@ -357,8 +357,41 @@ export default function GoalTree({
   onMoveGoal,
   onMoveHabit
 }: GoalTreeProps) {
-  const [openGoals, setOpenGoals] = useState<Record<string, boolean>>({});
-  const [onlyHabit, setOnlyHabit] = useState<Record<string, boolean>>({});
+  // Load openGoals from localStorage
+  const [openGoals, setOpenGoals] = useState<Record<string, boolean>>(() => {
+    if (typeof window === 'undefined') return {};
+    const saved = localStorage.getItem('dashboard:openGoals');
+    try {
+      return saved ? JSON.parse(saved) : {};
+    } catch {
+      return {};
+    }
+  });
+
+  // Load onlyHabit from localStorage
+  const [onlyHabit, setOnlyHabit] = useState<Record<string, boolean>>(() => {
+    if (typeof window === 'undefined') return {};
+    const saved = localStorage.getItem('dashboard:onlyHabit');
+    try {
+      return saved ? JSON.parse(saved) : {};
+    } catch {
+      return {};
+    }
+  });
+
+  // Save openGoals to localStorage when it changes
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('dashboard:openGoals', JSON.stringify(openGoals));
+    }
+  }, [openGoals]);
+
+  // Save onlyHabit to localStorage when it changes
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('dashboard:onlyHabit', JSON.stringify(onlyHabit));
+    }
+  }, [onlyHabit]);
 
   // ドラッグ&ドロップ機能を初期化
   const {
