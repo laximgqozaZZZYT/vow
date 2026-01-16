@@ -1,719 +1,59 @@
-import React, { useState, useCallback, useRef } from "react"
-import { debug } from '../../../lib/debug'
+import React, { useCallback, useRef, useEffect } from "react"
 import ReactFlow, {
-  Node,
   addEdge,
   Background,
   BackgroundVariant,
   Controls,
-  useNodesState,
-  useEdgesState,
   Connection,
-  NodeMouseHandler,
   OnSelectionChangeParams,
   ReactFlowProvider,
   useReactFlow,
   Panel,
-  Handle,
-  Position,
-  NodeProps,
 } from 'reactflow'
 import 'reactflow/dist/style.css'
 import { GoalModal } from './Modal.Goal'
 import { HabitModal } from './Modal.Habit'
 import { ToastProvider, useToast } from './ToastManager'
+import { customNodeTypes } from './Mindmap.Node'
+import { useMindmapState } from '../hooks/useMindmapState'
+import { MindmapProps } from '../types/mindmap.types'
+import { 
+  isMobileDevice, 
+  getEdgeStyle, 
+  calculateNewNodePosition,
+  calculateContextMenuPosition 
+} from '../../../lib/mindmap.utils'
+import { getTranslation } from '../../../lib/mindmap.i18n'
+import { initializeMindmapTestHandler } from '../../../lib/mindmap.test-handler'
+import { debug } from '../../../lib/debug'
 
-// デバイス判定ユーティリティ
-const isMobileDevice = () => {
-  if (typeof window === 'undefined') return false;
-  return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) ||
-         (window.innerWidth <= 768) ||
-         ('ontouchstart' in window);
-};
-
-// テスト用のハンドラーを組み込み
+// テストハンドラーの初期化
 if (typeof window !== 'undefined') {
-  // テストハンドラーの初期化
-  class MindmapTestHandler {
-    constructor() {
-      this.setupMessageListener();
-    }
-
-    setupMessageListener() {
-      window.addEventListener('message', (event) => {
-        const data = event.data;
-
-        switch (data.type) {
-          case 'CHECK_EDITING_STATE':
-            this.handleCheckEditingState(data.testType);
-            break;
-        }
-      });
-    }
-
-    sendMessage(type: string, data: any = {}) {
-      try {
-        window.parent.postMessage({
-          type: type,
-          ...data,
-          timestamp: Date.now()
-        }, '*');
-      } catch (error) {
-        console.error('Failed to send message to parent:', error);
-      }
-    }
-
-    handleCheckEditingState(testType: string) {
-      const input = document.querySelector('input.mindmap-text-input') as HTMLInputElement;
-      const isEditing = !!input && (input as any).offsetParent !== null;
-      
-      this.sendMessage('EDITING_STATE_RESULT', {
-        isEditing: isEditing,
-        testType: testType,
-        nodeId: '1',
-        hasInput: !!input,
-        inputVisible: input ? (input as any).offsetParent !== null : false
-      });
-    }
-
-    findNode(nodeId: string) {
-      // data-idでノードを探す
-      let node = document.querySelector(`[data-id="${nodeId}"]`) ||
-                document.querySelector(`[data-testid="mindmap-node-${nodeId}"]`);
-      
-      if (!node) {
-        // React Flowのノードを探す
-        const reactFlowNodes = document.querySelectorAll('[class*="react-flow__node"]');
-        for (let reactNode of reactFlowNodes) {
-          if (reactNode.textContent?.includes('Central Idea') && nodeId === '1') {
-            node = reactNode;
-            break;
-          }
-        }
-      }
-      
-      return node;
-    }
-  }
-
-  // テストハンドラーを初期化
-  if (!(window as any).mindmapTestHandler) {
-    (window as any).mindmapTestHandler = new MindmapTestHandler();
-  }
+  initializeMindmapTestHandler();
 }
-
-interface MindmapProps {
-  onClose: () => void;
-  onRegisterAsHabit: (data: any) => void;
-  onRegisterAsGoal: (data: any) => void;
-  goals?: { id: string; name: string }[];
-  mindmap?: any; // 既存のMindmapデータ（編集時）
-  onSave?: (mindmapData: any) => void; // 保存コールバック
-}
-
-interface ContextMenu {
-  id: string;
-  top?: number;
-  left?: number;
-  right?: number;
-  bottom?: number;
-}
-
-interface MobileBottomMenu {
-  nodeId: string;
-  nodeName: string;
-  isVisible: boolean;
-}
-
-interface ConnectionMode {
-  isActive: boolean;
-  sourceNodeId: string | null;
-  sourceHandleId: string | null;
-}
-
-interface ModalState {
-  habitModal: boolean;
-  goalModal: boolean;
-  selectedNodeName: string;
-  selectedNodeId: string;
-}
-
-// Custom Node Types
-interface CustomNodeData {
-  label: string;
-  isEditing?: boolean;
-  nodeType?: 'default' | 'habit' | 'goal';
-}
-
-// Custom Mindmap Node Component
-// This is a fully custom node that replaces React Flow's default nodes
-// Features: Double-click editing, Long-press dragging, Custom styling, Mobile touch support
-function MindmapNode({ id, data, selected }: NodeProps<CustomNodeData>) {
-  const [isEditing, setIsEditing] = useState(false);
-  const [text, setText] = useState(data.label);
-  const [isLongPressing, setIsLongPressing] = useState(false);
-  const [isDragging, setIsDragging] = useState(false);
-  const inputRef = useRef<HTMLInputElement>(null);
-  const longPressTimerRef = useRef<NodeJS.Timeout | null>(null);
-  const longPressStartRef = useRef<{ x: number; y: number } | null>(null);
-  const nodeRef = useRef<HTMLDivElement>(null);
-  const { setNodes } = useReactFlow();
-  const isMobile = isMobileDevice();
-
-  // 編集状態の変化をログ出力
-  React.useEffect(() => {
-  }, [isEditing, id]);
-
-  // Sync text with data.label when not editing
-  React.useEffect(() => {
-    if (!isEditing) {
-      setText(data.label);
-    }
-  }, [data.label, isEditing]);
-
-  const handleSubmit = useCallback(() => {
-    const newText = text.trim() || 'New Node';
-    
-    // React Flowのノード更新を直接行う
-    setNodes((nds) =>
-      nds.map((node) =>
-        node.id === id
-          ? { ...node, data: { ...node.data, label: newText, isEditing: false } }
-          : node
-      )
-    );
-    
-    // 変更があったことを通知
-    const changeEvent = new CustomEvent('nodeChanged');
-    window.dispatchEvent(changeEvent);
-    
-    setIsEditing(false);
-  }, [text, id, setNodes]);
-
-  const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
-    e.stopPropagation();
-    
-    if (e.key === 'Enter') {
-      handleSubmit();
-    } else if (e.key === 'Escape') {
-      setText(data.label);
-      // Escapeキーでも isEditing を false に設定
-      setNodes((nds) =>
-        nds.map((node) =>
-          node.id === id
-            ? { ...node, data: { ...node.data, isEditing: false } }
-            : node
-        )
-      );
-      setIsEditing(false);
-    }
-  }, [handleSubmit, data.label, id, setNodes]);
-
-  const handleInputFocus = useCallback((e: React.FocusEvent<HTMLInputElement>) => {
-    e.stopPropagation();
-    // フォーカス時に全選択
-    setTimeout(() => {
-      e.target.select();
-    }, 0);
-  }, []);
-
-  const handleBlur = useCallback(() => {
-    handleSubmit();
-  }, [handleSubmit]);
-
-  // 長押し開始処理
-  const handleMouseDown = useCallback((e: React.MouseEvent) => {
-    if (isEditing) return;
-    
-    // イベントの伝播を停止してReact Flowのデフォルト動作を防ぐ
-    e.stopPropagation();
-    
-    const startPos = { x: e.clientX, y: e.clientY };
-    longPressStartRef.current = startPos;
-    
-    // 長押しタイマーを開始（300ms）
-    longPressTimerRef.current = setTimeout(() => {
-      setIsLongPressing(true);
-      setIsDragging(true);
-      // グローバルイベントを発火
-      window.dispatchEvent(new CustomEvent('longPressStart'));
-      
-      // React Flowのノードを選択状態にする
-      setNodes((nds) =>
-        nds.map((n) => ({
-          ...n,
-          selected: n.id === id
-        }))
-      );
-    }, 300);
-  }, [isEditing, id, setNodes]);
-
-  // マウスアップ処理（長押し終了のみ）
-  const handleMouseUp = useCallback((e: React.MouseEvent) => {
-    const wasLongPressing = isLongPressing;
-    
-    if (longPressTimerRef.current) {
-      clearTimeout(longPressTimerRef.current);
-      longPressTimerRef.current = null;
-    }
-    
-    if (wasLongPressing) {
-      setIsLongPressing(false);
-      setIsDragging(false);
-      // グローバルイベントを発火
-      window.dispatchEvent(new CustomEvent('longPressEnd'));
-    }
-    
-    longPressStartRef.current = null;
-  }, [isLongPressing, id]);
-
-  // マウス移動処理
-  const handleMouseMove = useCallback((e: React.MouseEvent) => {
-    if (!longPressStartRef.current || isEditing) return;
-    
-    const currentPos = { x: e.clientX, y: e.clientY };
-    const distance = Math.sqrt(
-      Math.pow(currentPos.x - longPressStartRef.current.x, 2) +
-      Math.pow(currentPos.y - longPressStartRef.current.y, 2)
-    );
-    
-    // 移動距離が5px以上の場合、長押しをキャンセル（より敏感に）
-    if (distance > 5 && longPressTimerRef.current) {
-      clearTimeout(longPressTimerRef.current);
-      longPressTimerRef.current = null;
-    }
-  }, [isEditing]);
-
-  // ダブルクリック/ダブルタップで編集開始
-  const handleDoubleClick = useCallback((e: React.MouseEvent) => {
-    if (isLongPressing || isDragging) return;
-    
-    e.stopPropagation();
-    
-    // 長押しタイマーをクリア（ダブルクリック優先）
-    if (longPressTimerRef.current) {
-      clearTimeout(longPressTimerRef.current);
-      longPressTimerRef.current = null;
-    }
-    
-    // React Flowのノード状態も更新（他のノードの編集を終了）
-    setNodes((nds) =>
-      nds.map((n) =>
-        n.id === id
-          ? { ...n, data: { ...n.data, isEditing: true } }
-          : { ...n, data: { ...n.data, isEditing: false } }
-      )
-    );
-    
-    setIsEditing(true);
-    setText(data.label);
-    
-    // フォーカスを設定
-    setTimeout(() => {
-      if (inputRef.current) {
-        inputRef.current.focus();
-        inputRef.current.select();
-      }
-    }, 50);
-  }, [isLongPressing, isDragging, id, data.label, setNodes, isMobile]);
-
-  // モバイル用のタップハンドラー
-  const handleMobileTap = useCallback((e: React.MouseEvent) => {
-    if (!isMobile || isEditing) return;
-    
-    e.stopPropagation();
-    
-    // 結線モードの状態を直接チェック（グローバル状態から）
-    const connectionModeCheckEvent = new CustomEvent('getConnectionModeState');
-    let currentConnectionMode = { isActive: false, sourceNodeId: null };
-    
-    const stateHandler = (event: Event) => {
-      const customEvent = event as CustomEvent;
-      currentConnectionMode = customEvent.detail;
-    };
-    
-    window.addEventListener('connectionModeStateResponse', stateHandler as EventListener);
-    window.dispatchEvent(connectionModeCheckEvent);
-    
-    // 少し待ってから状態をチェック
-    setTimeout(() => {
-      window.removeEventListener('connectionModeStateResponse', stateHandler as EventListener);
-      
-      if (currentConnectionMode.isActive) {
-        // 結線モードが有効な場合は結線処理を実行
-        debug.log(`Connection mode active: connecting node ${currentConnectionMode.sourceNodeId} to ${id}`);
-        const connectionEvent = new CustomEvent('executeConnection', {
-          detail: { targetNodeId: id }
-        });
-        window.dispatchEvent(connectionEvent);
-      } else {
-        // 結線モードでない場合はボトムメニューを表示
-        const event = new CustomEvent('showMobileBottomMenu', {
-          detail: {
-            nodeId: id,
-            nodeName: data.label
-          }
-        });
-        window.dispatchEvent(event);
-      }
-    }, 5);
-  }, [isMobile, isEditing, id, data.label]);
-
-  // ハンドルクリック/タップ処理（結線用）
-  const handleHandleClick = useCallback((e: React.MouseEvent, position: string) => {
-    if (!isMobile) return; // PC では従来のドラッグ操作を使用
-    
-    e.stopPropagation();
-    e.preventDefault();
-    
-    // モバイル用の結線モードを開始するイベントを発火
-    const event = new CustomEvent('startMobileConnection', {
-      detail: {
-        sourceNodeId: id,
-        sourceHandleId: position
-      }
-    });
-    window.dispatchEvent(event);
-    
-    // ログ出力
-    debug.log(`Mobile connection started from node ${id}, handle ${position}`);
-  }, [isMobile, id]);
-
-  // マウスリーブ処理
-  const handleMouseLeave = useCallback(() => {
-    if (longPressTimerRef.current) {
-      clearTimeout(longPressTimerRef.current);
-      longPressTimerRef.current = null;
-    }
-  }, []);
-
-  // ノードタイプに応じたスタイルを取得
-  const getNodeTypeStyles = useCallback(() => {
-    const nodeType = data.nodeType || 'default';
-    switch (nodeType) {
-      case 'habit':
-        return {
-          borderColor: 'border-green-500',
-          ringColor: 'ring-green-300',
-          bgColor: 'bg-green-50',
-          hoverColor: 'hover:border-green-600'
-        };
-      case 'goal':
-        return {
-          borderColor: 'border-purple-500',
-          ringColor: 'ring-purple-300',
-          bgColor: 'bg-purple-50',
-          hoverColor: 'hover:border-purple-600'
-        };
-      default:
-        return {
-          borderColor: selected ? 'border-blue-500' : 'border-gray-300',
-          ringColor: 'ring-blue-300',
-          bgColor: 'bg-white',
-          hoverColor: 'hover:border-blue-400'
-        };
-    }
-  }, [data.nodeType, selected]);
-
-  // タッチイベント用のハンドラー
-  const handleTouchStart = useCallback((e: React.TouchEvent) => {
-    if (!isMobile || isEditing) return;
-    
-    const touch = e.touches[0];
-    const mouseEvent = {
-      clientX: touch.clientX,
-      clientY: touch.clientY,
-      stopPropagation: () => e.stopPropagation(),
-      preventDefault: () => e.preventDefault()
-    } as React.MouseEvent;
-    
-    handleMouseDown(mouseEvent);
-  }, [isMobile, isEditing, handleMouseDown]);
-
-  const handleTouchEnd = useCallback((e: React.TouchEvent) => {
-    if (!isMobile) return;
-    
-    const touch = e.changedTouches[0];
-    const mouseEvent = {
-      clientX: touch.clientX,
-      clientY: touch.clientY,
-      stopPropagation: () => e.stopPropagation(),
-      preventDefault: () => e.preventDefault()
-    } as React.MouseEvent;
-    
-    handleMouseUp(mouseEvent);
-  }, [isMobile, handleMouseUp]);
-
-  const handleTouchMove = useCallback((e: React.TouchEvent) => {
-    if (!isMobile) return;
-    
-    const touch = e.touches[0];
-    const mouseEvent = {
-      clientX: touch.clientX,
-      clientY: touch.clientY,
-      stopPropagation: () => e.stopPropagation(),
-      preventDefault: () => e.preventDefault()
-    } as React.MouseEvent;
-    
-    handleMouseMove(mouseEvent);
-  }, [isMobile, handleMouseMove]);
-
-  return (
-    <div 
-      ref={nodeRef}
-      data-id={id}
-      data-testid={`mindmap-node-${id}`}
-      className={`mindmap-custom-node px-3 py-2 sm:px-4 sm:py-2 shadow-md rounded-md border-2 min-w-[100px] sm:min-w-[120px] transition-all duration-200 ${
-        (() => {
-          const styles = getNodeTypeStyles();
-          return `${styles.bgColor} ${styles.borderColor} ${styles.hoverColor}`;
-        })()
-      } ${isEditing ? `ring-2 ${getNodeTypeStyles().ringColor} cursor-text` : 'cursor-pointer'} ${
-        isLongPressing ? 'ring-4 ring-yellow-300 scale-105 shadow-lg cursor-move' : ''
-      } ${isDragging ? 'opacity-80' : ''}`}
-      onMouseDown={handleMouseDown}
-      onMouseUp={handleMouseUp}
-      onMouseMove={handleMouseMove}
-      onMouseLeave={handleMouseLeave}
-      onDoubleClick={handleDoubleClick}
-      onClick={isMobile ? handleMobileTap : undefined}
-      onTouchStart={isMobile ? handleTouchStart : undefined}
-      onTouchEnd={isMobile ? handleTouchEnd : undefined}
-      onTouchMove={isMobile ? handleTouchMove : undefined}
-
-      style={{
-        userSelect: isLongPressing ? 'none' : 'auto',
-        pointerEvents: 'all'
-      }}
-    >
-      {/* Connection Handles - モバイルでは大きめに、タップしやすく */}
-      <Handle 
-        type="target" 
-        position={Position.Top} 
-        className={`${isMobile ? 'w-8 h-8' : 'w-3 h-3'} bg-blue-500 border-2 border-white rounded-full`} 
-        style={{ 
-          top: isMobile ? -16 : -6,
-          zIndex: 10
-        }}
-        onClick={isMobile ? (e) => handleHandleClick(e, 'top') : undefined}
-      />
-      <Handle 
-        type="source" 
-        position={Position.Bottom} 
-        className={`${isMobile ? 'w-8 h-8' : 'w-3 h-3'} bg-blue-500 border-2 border-white rounded-full`} 
-        style={{ 
-          bottom: isMobile ? -16 : -6,
-          zIndex: 10
-        }}
-        onClick={isMobile ? (e) => handleHandleClick(e, 'bottom') : undefined}
-      />
-      <Handle 
-        type="target" 
-        position={Position.Left} 
-        className={`${isMobile ? 'w-8 h-8' : 'w-3 h-3'} bg-blue-500 border-2 border-white rounded-full`} 
-        style={{ 
-          left: isMobile ? -16 : -6,
-          zIndex: 10
-        }}
-        onClick={isMobile ? (e) => handleHandleClick(e, 'left') : undefined}
-      />
-      <Handle 
-        type="source" 
-        position={Position.Right} 
-        className={`${isMobile ? 'w-8 h-8' : 'w-3 h-3'} bg-blue-500 border-2 border-white rounded-full`} 
-        style={{ 
-          right: isMobile ? -16 : -6,
-          zIndex: 10
-        }}
-        onClick={isMobile ? (e) => handleHandleClick(e, 'right') : undefined}
-      />
-      
-      {/* Node Content */}
-      <div className="mindmap-node-content">
-        {isEditing ? (
-          <input
-            ref={inputRef}
-            value={text}
-            defaultValue={data.label}
-            onChange={(e) => setText(e.target.value)}
-            onKeyDown={handleKeyDown}
-            onBlur={handleBlur}
-            onClick={(e) => e.stopPropagation()}
-            onMouseDown={(e) => e.stopPropagation()}
-            onMouseUp={(e) => e.stopPropagation()}
-            onFocus={handleInputFocus}
-            className="w-full bg-white text-gray-900 border-none outline-none text-center text-sm sm:text-sm mindmap-text-input"
-            style={{ 
-              minWidth: '80px',
-              color: '#000000',
-              fontSize: isMobile ? '16px' : '14px', // モバイルでは16px以上でズーム防止
-              lineHeight: '1.2'
-            }}
-            autoFocus
-          />
-        ) : (
-          <div 
-            className="text-center text-sm sm:text-sm text-gray-900 select-none mindmap-node-text"
-            onMouseDown={(e) => e.stopPropagation()}
-            style={{
-              fontSize: isMobile ? '16px' : '14px', // モバイルでは16px以上でズーム防止
-              lineHeight: '1.2',
-              wordBreak: 'break-word' // 長いテキストの折り返し
-            }}
-          >
-            {data.label}
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
-
-// Custom Node Types Definition
-const customNodeTypes = {
-  mindmapNode: MindmapNode,
-};
-
-// Initial nodes with custom type
-const initialNodes: Node<CustomNodeData>[] = [
-  {
-    id: '1',
-    position: { x: 400, y: 300 },
-    data: { label: 'Central Idea', isEditing: false, nodeType: 'default' },
-    type: 'mindmapNode',
-  },
-];
 
 function MindmapFlow({ onClose, onRegisterAsHabit, onRegisterAsGoal, goals = [], mindmap, onSave }: MindmapProps) {
-  
-  // データベースから取得したノードをReact Flow形式に変換
-  const convertedNodes = React.useMemo(() => {
-    
-    if (mindmap?.nodes && Array.isArray(mindmap.nodes)) {
-      const converted = mindmap.nodes.map((node: any) => ({
-        id: node.id,
-        position: { x: node.x || node.position?.x || 0, y: node.y || node.position?.y || 0 },
-        data: { 
-          label: node.text || node.label || 'Node', 
-          isEditing: false, 
-          nodeType: node.nodeType || node.node_type || 'default' 
-        },
-        type: 'mindmapNode',
-      }));
-      return converted;
-    }
-    return initialNodes;
-  }, [mindmap?.nodes]);
+  const state = useMindmapState(mindmap, goals);
+  const {
+    nodes, setNodes, onNodesChange,
+    edges, setEdges, onEdgesChange,
+    selectedNodes, setSelectedNodes,
+    contextMenu, setContextMenu,
+    mobileBottomMenu, setMobileBottomMenu,
+    connectionMode, setConnectionMode,
+    showSaveDialog, setShowSaveDialog,
+    showCoachMark, setShowCoachMark,
+    lang, setLang,
+    hasUnsavedChanges, setHasUnsavedChanges,
+    isLongPressMode, setIsLongPressMode,
+    connectionStartInfo, setConnectionStartInfo,
+    modalState, setModalState,
+    mindmapName, setMindmapName,
+    showNameEditor, setShowNameEditor,
+    isEditMode, setIsEditMode,
+  } = state;
 
-  // データベースから取得したエッジをReact Flow形式に変換
-  const convertedEdges = React.useMemo(() => {
-    
-    if (mindmap?.edges && Array.isArray(mindmap.edges)) {
-      const converted = mindmap.edges.map((edge: any) => ({
-        id: edge.id,
-        source: edge.source || edge.fromNodeId || edge.from_node_id,
-        target: edge.target || edge.toNodeId || edge.to_node_id,
-        sourceHandle: edge.sourceHandle || edge.source_handle,
-        targetHandle: edge.targetHandle || edge.target_handle,
-      }));
-      return converted;
-    }
-    return [];
-  }, [mindmap?.edges]);
-
-  const [nodes, setNodes, onNodesChange] = useNodesState<CustomNodeData>(convertedNodes);
-  const [edges, setEdges, onEdgesChange] = useEdgesState(convertedEdges);
-  const [selectedNodes, setSelectedNodes] = useState<Node<CustomNodeData>[]>([]);
-  const [contextMenu, setContextMenu] = useState<ContextMenu | null>(null);
-  const [mobileBottomMenu, setMobileBottomMenu] = useState<MobileBottomMenu>({
-    nodeId: '',
-    nodeName: '',
-    isVisible: false
-  });
-  const [connectionMode, setConnectionMode] = useState<ConnectionMode>({
-    isActive: false,
-    sourceNodeId: null,
-    sourceHandleId: null
-  });
-  const [showSaveDialog, setShowSaveDialog] = useState(false);
-  const [showCoachMark, setShowCoachMark] = useState(false);
-  // language: 'ja' or 'en'
-  const [lang, setLang] = useState<'ja' | 'en'>(() => {
-    if (typeof navigator !== 'undefined') {
-      return navigator.language && navigator.language.startsWith('en') ? 'en' : 'ja';
-    }
-    return 'ja';
-  });
-
-  const i18n = React.useMemo(() => ({
-    ja: {
-      save: '保存',
-      close: '閉じる',
-      saved: '保存しました ✓',
-      got_it: 'わかった',
-      coach_title: 'はじめに',
-      coach_desc: 'ノードを長押しで移動、ダブルタップで編集できます。モバイルではノードをタップして操作メニューを開いてください。',
-      edit_text: 'テキスト編集',
-      register_habit: '習慣として登録',
-      register_goal: '目標として登録',
-      delete_node: 'ノードを削除',
-      add_node: 'ノードを追加',
-      clear_connections: '全ての接続を削除',
-      zoom_in: 'ズームイン',
-      zoom_out: 'ズームアウト',
-      fit_view: '全体を表示',
-      cancel: 'キャンセル',
-      connect: '接続',
-      as_habit: '習慣に',
-      as_goal: '目標に',
-      save_changes_title: '変更を保存しますか？',
-      save_changes_desc: '保存されていない変更があります。閉じる前に保存しますか？',
-      dont_save: '保存しない',
-      save_and_close: '保存して閉じる',
-      click_to_edit_name: 'クリックして名前を編集'
-    },
-    en: {
-      save: 'Save',
-      close: 'Close',
-      saved: 'Saved ✓',
-      got_it: 'Got it',
-      coach_title: 'Getting started',
-      coach_desc: 'Long-press to drag, double-tap to edit. On mobile, tap a node to open the action menu.',
-      edit_text: 'Edit Text',
-      register_habit: 'Register as Habit',
-      register_goal: 'Register as Goal',
-      delete_node: 'Delete Node',
-      add_node: 'Add Node',
-      clear_connections: 'Clear All Connections',
-      zoom_in: 'Zoom In',
-      zoom_out: 'Zoom Out',
-      fit_view: 'Fit View',
-      cancel: 'Cancel',
-      connect: 'Connect',
-      as_habit: 'As Habit',
-      as_goal: 'As Goal',
-      save_changes_title: 'Save Changes?',
-      save_changes_desc: 'You have unsaved changes. Do you want to save before closing?',
-      dont_save: "Don't Save",
-      save_and_close: 'Save & Close',
-      click_to_edit_name: 'Click to edit name'
-    }
-  }), []);
-
-  const t = (key: string) => i18n[lang][key as keyof typeof i18n['ja']] || key;
-  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
-
-  const [isLongPressMode, setIsLongPressMode] = useState(false);
-  const [connectionStartInfo, setConnectionStartInfo] = useState<{nodeId: string, handleId?: string} | null>(null);
-  const [modalState, setModalState] = useState<ModalState>({
-    habitModal: false,
-    goalModal: false,
-    selectedNodeName: '',
-    selectedNodeId: ''
-  });
-  const [mindmapName, setMindmapName] = useState(mindmap?.name || 'Untitled Mindmap');
-  const [showNameEditor, setShowNameEditor] = useState(false);
-  // toast will be used for save messages
+  const t = getTranslation(lang);
   const toastCtx = (() => {
     try {
       return useToast()
@@ -725,8 +65,15 @@ function MindmapFlow({ onClose, onRegisterAsHabit, onRegisterAsGoal, goals = [],
   const { project, getViewport, zoomIn, zoomOut, fitView } = useReactFlow();
   const isMobile = isMobileDevice();
 
+  // 編集モードの状態をグローバルに設定（カスタムノードから参照するため）
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      (window as any).__mindmapEditMode = isEditMode;
+    }
+  }, [isEditMode]);
+  
   // 初回オンボーディング（簡易 coach-mark）
-  React.useEffect(() => {
+  useEffect(() => {
     try {
       const seen = typeof window !== 'undefined' && window.localStorage.getItem('mindmap_coach_seen');
       if (!seen) {
@@ -758,17 +105,23 @@ function MindmapFlow({ onClose, onRegisterAsHabit, onRegisterAsGoal, goals = [],
     }
 
     // 結線を作成
+    const sourceNode = nodes.find(n => n.id === connectionMode.sourceNodeId);
+    const nodeType = sourceNode?.data.nodeType || 'default';
+    const edgeStyle = getEdgeStyle(nodeType);
+    
     const newEdge = {
       id: `edge-${connectionMode.sourceNodeId}-${nodeId}`,
       source: connectionMode.sourceNodeId!,
       target: nodeId,
       sourceHandle: connectionMode.sourceHandleId,
       targetHandle: null,
+      style: edgeStyle,
+      data: { sourceNodeType: nodeType }
     };
 
     setEdges((eds) => eds.concat(newEdge));
     setHasUnsavedChanges(true);
-    addLog(`Mobile connection created: ${connectionMode.sourceNodeId} -> ${nodeId}`);
+    addLog(`Mobile connection created: ${connectionMode.sourceNodeId} (${nodeType}) -> ${nodeId}`);
 
     // 結線モードを終了
     setConnectionMode({
@@ -776,10 +129,10 @@ function MindmapFlow({ onClose, onRegisterAsHabit, onRegisterAsGoal, goals = [],
       sourceNodeId: null,
       sourceHandleId: null
     });
-  }, [connectionMode, setEdges, addLog]);
+  }, [connectionMode, setEdges, addLog, nodes]);
 
   // ノードやエッジの変更を検出して未保存フラグを設定
-  React.useEffect(() => {
+  useEffect(() => {
     const handleNodeChanged = () => {
       setHasUnsavedChanges(true);
     };
@@ -791,18 +144,8 @@ function MindmapFlow({ onClose, onRegisterAsHabit, onRegisterAsGoal, goals = [],
     };
   }, [addLog]);
 
-  // ノードやエッジの数が変わった時も未保存フラグを設定
-  React.useEffect(() => {
-    const initialNodeCount = convertedNodes.length;
-    const initialEdgeCount = convertedEdges.length;
-    
-    if (nodes.length !== initialNodeCount || edges.length !== initialEdgeCount) {
-      setHasUnsavedChanges(true);
-    }
-  }, [nodes.length, edges.length, convertedNodes.length, convertedEdges.length]);
-
   // 長押しモードの状態を監視
-  React.useEffect(() => {
+  useEffect(() => {
     const handleLongPressStart = () => {
       setIsLongPressMode(true);
     };
@@ -822,7 +165,7 @@ function MindmapFlow({ onClose, onRegisterAsHabit, onRegisterAsGoal, goals = [],
   }, [addLog]);
 
   // モバイル用のイベントリスナー
-  React.useEffect(() => {
+  useEffect(() => {
     if (!isMobile) return;
 
     // モバイル用ボトムメニュー表示
@@ -884,7 +227,7 @@ function MindmapFlow({ onClose, onRegisterAsHabit, onRegisterAsGoal, goals = [],
   }, [isMobile, addLog, connectionMode, handleMobileNodeTap]);
 
   // モーダルが開いた時に名前フィールドを自動設定するためのエフェクト
-  React.useEffect(() => {
+  useEffect(() => {
     if (modalState.habitModal || modalState.goalModal) {
       // モーダルが開いた後、少し遅延してから名前フィールドを設定
       setTimeout(() => {
@@ -897,10 +240,6 @@ function MindmapFlow({ onClose, onRegisterAsHabit, onRegisterAsGoal, goals = [],
       }, 100);
     }
   }, [modalState.habitModal, modalState.goalModal, modalState.selectedNodeName]);
-
-  const nodeTypes = customNodeTypes;
-
-
 
   // モバイル用ボトムメニューのハンドラー
   const handleMobileMenuAction = useCallback((action: string) => {
@@ -927,7 +266,6 @@ function MindmapFlow({ onClose, onRegisterAsHabit, onRegisterAsGoal, goals = [],
           sourceNodeId: nodeId,
           sourceHandleId: null
         });
-        // 結線モード開始のログを追加
         debug.log(`Connection mode activated for node: ${nodeId}`);
         break;
       case 'habit':
@@ -962,36 +300,27 @@ function MindmapFlow({ onClose, onRegisterAsHabit, onRegisterAsGoal, goals = [],
     setMobileBottomMenu({ nodeId: '', nodeName: '', isVisible: false });
   }, [mobileBottomMenu.nodeId, nodes, setNodes, setEdges, addLog]);
 
-  // Listen for node label updates (simplified)
-  React.useEffect(() => {
-    // ノード変更通知の処理
-    const handleNodeChanged = () => {
-      setHasUnsavedChanges(true);
-    };
-
-    window.addEventListener('nodeChanged', handleNodeChanged as EventListener);
-    
-    return () => {
-      window.removeEventListener('nodeChanged', handleNodeChanged as EventListener);
-    };
-  }, [addLog]);
-
-  // Track changes for unsaved changes detection
-  React.useEffect(() => {
-    if (nodes.length > 1 || edges.length > 0 || nodes[0]?.data?.label !== 'Central Idea') {
-      setHasUnsavedChanges(true);
-    }
-  }, [nodes, edges]);
-
   const onConnect = useCallback(
     (params: Connection) => {
-      setEdges((eds) => addEdge(params, eds));
+      // ソースノードのnodeTypeを取得してエッジのスタイルを設定
+      const sourceNode = nodes.find(n => n.id === params.source);
+      const nodeType = sourceNode?.data.nodeType || 'default';
+      const edgeStyle = getEdgeStyle(nodeType);
+      
+      const newEdge = {
+        ...params,
+        style: edgeStyle,
+        animated: false,
+        data: { sourceNodeType: nodeType }
+      };
+      
+      setEdges((eds) => addEdge(newEdge, eds));
       setHasUnsavedChanges(true);
-      addLog(`Connection created: ${params.source} -> ${params.target}`);
+      addLog(`Connection created: ${params.source} (${nodeType}) -> ${params.target}`);
       // 接続が成功したら開始情報をクリア
       setConnectionStartInfo(null);
     },
-    [setEdges, addLog]
+    [setEdges, addLog, nodes]
   );
 
   // 接続開始時の処理
@@ -1045,23 +374,29 @@ function MindmapFlow({ onClose, onRegisterAsHabit, onRegisterAsGoal, goals = [],
 
         // 新しいノードを作成
         const newNodeId = `node-${Date.now()}`;
-        const newNode: Node<CustomNodeData> = {
+        const newNode = {
           id: newNodeId,
           position,
-          data: { label: 'New Node', isEditing: false, nodeType: 'default' },
+          data: { label: 'New Node', isEditing: false, nodeType: 'default' as const },
           type: 'mindmapNode',
         };
 
         // ノードを追加
         setNodes((nds) => nds.concat(newNode));
 
-        // 接続を作成
+        // 接続を作成（ソースノードのnodeTypeに応じたスタイルを設定）
+        const sourceNode = nodes.find(n => n.id === connectionStartInfo.nodeId);
+        const nodeType = sourceNode?.data.nodeType || 'default';
+        const edgeStyle = getEdgeStyle(nodeType);
+        
         const newEdge = {
           id: `edge-${connectionStartInfo.nodeId}-${newNodeId}`,
           source: connectionStartInfo.nodeId,
           target: newNodeId,
           sourceHandle: connectionStartInfo.handleId || null,
           targetHandle: null,
+          style: edgeStyle,
+          data: { sourceNodeType: nodeType }
         };
 
         setEdges((eds) => eds.concat(newEdge));
@@ -1084,17 +419,18 @@ function MindmapFlow({ onClose, onRegisterAsHabit, onRegisterAsGoal, goals = [],
       // 接続開始情報をクリア
       setConnectionStartInfo(null);
     },
-    [project, setNodes, setEdges, addLog, connectionStartInfo, getViewport, isMobile]
+    [project, setNodes, setEdges, addLog, connectionStartInfo, getViewport, isMobile, nodes]
   );
 
   const onNodeContextMenu = useCallback(
-    (event: React.MouseEvent, node: Node<CustomNodeData>) => {
+    (event: React.MouseEvent, node: any) => {
       // モバイルでは右クリックメニューを無効化（ボトムメニューを使用）
       if (isMobile) return;
       
       event.preventDefault();
       event.stopPropagation();
       
+      console.log('[Mindmap] Right-click on node:', node.id, 'nodeType:', node.data.nodeType);
       addLog(`Node ${node.id} right-clicked`);
       
       // 選択されていないノードを右クリックした場合、そのノードを選択
@@ -1103,65 +439,40 @@ function MindmapFlow({ onClose, onRegisterAsHabit, onRegisterAsGoal, goals = [],
         setSelectedNodes([clickedNode]);
       }
 
-      const pane = reactFlowWrapper.current?.getBoundingClientRect();
-      if (!pane) return;
+      const { top, left } = calculateContextMenuPosition(event.clientX, event.clientY);
+
+      console.log('[Mindmap] Context menu position:', { top, left, clickX: event.clientX, clickY: event.clientY });
 
       setContextMenu({
         id: node.id,
-        top: event.clientY < pane.height - 200 ? event.clientY : undefined,
-        left: event.clientX < pane.width - 200 ? event.clientX : undefined,
-        right: event.clientX >= pane.width - 200 ? pane.width - event.clientX : undefined,
-        bottom: event.clientY >= pane.height - 200 ? pane.height - event.clientY : undefined,
+        top,
+        left,
+        right: undefined,
+        bottom: undefined,
       });
     },
     [addLog, nodes, selectedNodes, isMobile]
   );
 
   const addNodeAtCenter = useCallback(() => {
+    if (!isEditMode) return; // 閲覧モードでは何もしない
+    
     addLog('+ button clicked - creating new node');
     
     const viewport = getViewport();
-    
-    // モバイルとデスクトップで異なる位置計算
-    let position;
-    if (isMobile) {
-      // モバイルでは画面中央により確実に配置
-      const screenWidth = window.innerWidth;
-      const screenHeight = window.innerHeight;
-      const headerHeight = 60; // ヘッダーの高さを考慮
-      
-      position = {
-        x: (-viewport.x + screenWidth / 2) / viewport.zoom - 60,
-        y: (-viewport.y + (screenHeight - headerHeight) / 2) / viewport.zoom - 30,
-      };
-    } else {
-      // デスクトップでは従来の方法
-      position = {
-        x: -viewport.x + window.innerWidth / 2 / viewport.zoom - 60,
-        y: -viewport.y + window.innerHeight / 2 / viewport.zoom - 30,
-      };
-    }
+    const position = calculateNewNodePosition(viewport, isMobile);
 
-    // 位置が極端に外れていないかチェック
-    const minX = (-viewport.x - 200) / viewport.zoom;
-    const maxX = (-viewport.x + window.innerWidth + 200) / viewport.zoom;
-    const minY = (-viewport.y - 200) / viewport.zoom;
-    const maxY = (-viewport.y + window.innerHeight + 200) / viewport.zoom;
-    
-    position.x = Math.max(minX, Math.min(maxX, position.x));
-    position.y = Math.max(minY, Math.min(maxY, position.y));
-
-    const newNode: Node<CustomNodeData> = {
+    const newNode = {
       id: `node-${Date.now()}`,
       position,
-      data: { label: 'New Node', isEditing: false, nodeType: 'default' },
+      data: { label: 'New Node', isEditing: false, nodeType: 'default' as const },
       type: 'mindmapNode',
     };
 
     addLog(`New node created with ID: ${newNode.id} at position (${Math.round(position.x)}, ${Math.round(position.y)})`);
     setNodes((nds) => nds.concat(newNode));
     setHasUnsavedChanges(true);
-  }, [getViewport, setNodes, addLog, isMobile]);
+  }, [getViewport, setNodes, addLog, isMobile, isEditMode]);
 
   const handleSave = useCallback(async () => {
     try {
@@ -1180,7 +491,8 @@ function MindmapFlow({ onClose, onRegisterAsHabit, onRegisterAsGoal, goals = [],
           source: edge.source,
           target: edge.target,
           sourceHandle: edge.sourceHandle,
-          targetHandle: edge.targetHandle
+          targetHandle: edge.targetHandle,
+          data: edge.data // sourceNodeTypeを保存
         }))
       };
 
@@ -1220,24 +532,25 @@ function MindmapFlow({ onClose, onRegisterAsHabit, onRegisterAsGoal, goals = [],
   }, []);
 
   const onSelectionChange = useCallback(({ nodes }: OnSelectionChangeParams) => {
-    setSelectedNodes(nodes as Node<CustomNodeData>[]);
+    setSelectedNodes(nodes as any);
   }, []);
 
   const deleteSelectedNodes = useCallback(() => {
+    if (!isEditMode) return; // 閲覧モードでは何もしない
     const selectedNodeIds = selectedNodes.map(node => node.id);
     setNodes((nds) => nds.filter((node) => !selectedNodeIds.includes(node.id)));
     setEdges((eds) => eds.filter((edge) => 
       !selectedNodeIds.includes(edge.source) && !selectedNodeIds.includes(edge.target)
     ));
-  }, [selectedNodes, setNodes, setEdges]);
+  }, [selectedNodes, setNodes, setEdges, isEditMode]);
 
   const clearAllConnections = useCallback(() => {
+    if (!isEditMode) return; // 閲覧モードでは何もしない
     setEdges([]);
-  }, [setEdges]);
-
-
+  }, [setEdges, isEditMode]);
 
   const handleEditText = useCallback(() => {
+    if (!isEditMode) return; // 閲覧モードでは何もしない
     if (contextMenu) {
       const nodeId = contextMenu.id;
       addLog(`Edit Text selected for node: ${nodeId}`);
@@ -1252,12 +565,16 @@ function MindmapFlow({ onClose, onRegisterAsHabit, onRegisterAsGoal, goals = [],
       );
     }
     setContextMenu(null);
-  }, [contextMenu, addLog, setNodes]);
+  }, [contextMenu, addLog, setNodes, isEditMode]);
 
   const handleRegisterAsHabit = useCallback(() => {
+    if (!isEditMode) return; // 閲覧モードでは何もしない
     if (contextMenu) {
       const node = nodes.find(n => n.id === contextMenu.id);
       if (node) {
+        if (node.data.nodeType === 'habit') {
+          addLog(`Opening Habit edit modal for node: "${node.data.label}"`);
+        }
         addLog(`Opening Habit registration modal for node: "${node.data.label}"`);
         setModalState({
           habitModal: true,
@@ -1268,12 +585,16 @@ function MindmapFlow({ onClose, onRegisterAsHabit, onRegisterAsGoal, goals = [],
       }
     }
     setContextMenu(null);
-  }, [contextMenu, nodes, addLog]);
+  }, [contextMenu, nodes, addLog, isEditMode]);
 
   const handleRegisterAsGoal = useCallback(() => {
+    if (!isEditMode) return; // 閲覧モードでは何もしない
     if (contextMenu) {
       const node = nodes.find(n => n.id === contextMenu.id);
       if (node) {
+        if (node.data.nodeType === 'goal') {
+          addLog(`Opening Goal edit modal for node: "${node.data.label}"`);
+        }
         addLog(`Opening Goal registration modal for node: "${node.data.label}"`);
         setModalState({
           habitModal: false,
@@ -1284,7 +605,7 @@ function MindmapFlow({ onClose, onRegisterAsHabit, onRegisterAsGoal, goals = [],
       }
     }
     setContextMenu(null);
-  }, [contextMenu, nodes, addLog]);
+  }, [contextMenu, nodes, addLog, isEditMode]);
 
   const handleHabitCreate = useCallback((payload: any) => {
     const { selectedNodeId } = modalState;
@@ -1298,6 +619,20 @@ function MindmapFlow({ onClose, onRegisterAsHabit, onRegisterAsGoal, goals = [],
       )
     );
     
+    // このノードから出ているエッジの色を更新
+    setEdges((eds) =>
+      eds.map((edge) => {
+        if (edge.source === selectedNodeId) {
+          return {
+            ...edge,
+            style: { stroke: '#10b981', strokeWidth: 2 }, // green-500
+            data: { sourceNodeType: 'habit' }
+          };
+        }
+        return edge;
+      })
+    );
+    
     // 親コンポーネントのコールバックを呼び出し
     onRegisterAsHabit(payload);
     addLog(`Habit "${payload.name}" registered successfully`);
@@ -1309,7 +644,7 @@ function MindmapFlow({ onClose, onRegisterAsHabit, onRegisterAsGoal, goals = [],
       selectedNodeName: '',
       selectedNodeId: ''
     });
-  }, [modalState, setNodes, onRegisterAsHabit, addLog]);
+  }, [modalState, setNodes, setEdges, onRegisterAsHabit, addLog]);
 
   const handleGoalCreate = useCallback((payload: any) => {
     const { selectedNodeId } = modalState;
@@ -1323,6 +658,20 @@ function MindmapFlow({ onClose, onRegisterAsHabit, onRegisterAsGoal, goals = [],
       )
     );
     
+    // このノードから出ているエッジの色を更新
+    setEdges((eds) =>
+      eds.map((edge) => {
+        if (edge.source === selectedNodeId) {
+          return {
+            ...edge,
+            style: { stroke: '#a855f7', strokeWidth: 2 }, // purple-500
+            data: { sourceNodeType: 'goal' }
+          };
+        }
+        return edge;
+      })
+    );
+    
     // 親コンポーネントのコールバックを呼び出し
     onRegisterAsGoal(payload);
     addLog(`Goal "${payload.name}" registered successfully`);
@@ -1334,7 +683,7 @@ function MindmapFlow({ onClose, onRegisterAsHabit, onRegisterAsGoal, goals = [],
       selectedNodeName: '',
       selectedNodeId: ''
     });
-  }, [modalState, setNodes, onRegisterAsGoal, addLog]);
+  }, [modalState, setNodes, setEdges, onRegisterAsGoal, addLog]);
 
   const handleModalClose = useCallback(() => {
     setModalState({
@@ -1347,6 +696,7 @@ function MindmapFlow({ onClose, onRegisterAsHabit, onRegisterAsGoal, goals = [],
   }, [addLog]);
 
   const handleDeleteNode = useCallback(() => {
+    if (!isEditMode) return; // 閲覧モードでは何もしない
     if (contextMenu) {
       const nodeToDelete = contextMenu.id;
       
@@ -1363,15 +713,20 @@ function MindmapFlow({ onClose, onRegisterAsHabit, onRegisterAsGoal, goals = [],
       setSelectedNodes([]);
     }
     setContextMenu(null);
-  }, [contextMenu, selectedNodes, setNodes, setEdges]);
+  }, [contextMenu, selectedNodes, setNodes, setEdges, isEditMode]);
 
   // Handle keyboard shortcuts
-  React.useEffect(() => {
+  useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
       // テキスト編集中の場合はキーボードショートカットを無効化
       const isAnyNodeEditing = nodes.some(node => node.data.isEditing);
       if (isAnyNodeEditing) {
         return; // 編集中は何もしない
+      }
+      
+      // 閲覧モードでは削除操作を無効化
+      if (!isEditMode && (event.key === 'Delete' || event.key === 'Backspace')) {
+        return;
       }
       
       switch (event.key) {
@@ -1389,12 +744,12 @@ function MindmapFlow({ onClose, onRegisterAsHabit, onRegisterAsGoal, goals = [],
 
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [selectedNodes, deleteSelectedNodes, nodes]);
+  }, [selectedNodes, deleteSelectedNodes, nodes, isEditMode]);
 
   return (
     <div className="fixed inset-0 z-50 bg-white dark:bg-gray-900">
-      {/* Header - モバイル対応 */}
-      <div className="flex items-center justify-between p-2 sm:p-4 border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 z-10">
+      {/* Header - モバイル対応（折返し表示） */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between p-2 sm:p-4 border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 z-10 gap-2">
         <div className="flex items-center gap-2 sm:gap-3 flex-1 min-w-0">
           {showNameEditor ? (
             <input
@@ -1425,7 +780,8 @@ function MindmapFlow({ onClose, onRegisterAsHabit, onRegisterAsGoal, goals = [],
             </h1>
           )}
         </div>
-          <div className="flex items-center gap-1 sm:gap-2 flex-shrink-0">
+        <div className="flex items-center gap-1 sm:gap-2 flex-shrink-0">
+          {/* 編集/参照モード切替: 削除 (UI不要のため) */}
           <button
             onClick={async () => {
               await handleSave();
@@ -1435,7 +791,7 @@ function MindmapFlow({ onClose, onRegisterAsHabit, onRegisterAsGoal, goals = [],
             }}
             title={t('save')}
             aria-label={t('save')}
-            className="px-2 py-1 sm:px-4 sm:py-2 bg-green-600 text-white rounded hover:bg-green-700 text-sm sm:text-base"
+            className="px-2 py-1 sm:px-4 sm:py-2 bg-green-600 text-white rounded hover:bg-green-700 text-sm sm:text-base whitespace-nowrap"
           >
             {t('save')}
           </button>
@@ -1443,7 +799,7 @@ function MindmapFlow({ onClose, onRegisterAsHabit, onRegisterAsGoal, goals = [],
             onClick={handleClose}
             title={t('close')}
             aria-label={t('close')}
-            className="px-2 py-1 sm:px-4 sm:py-2 bg-blue-600 text-white rounded hover:bg-blue-700 text-sm sm:text-base"
+            className="px-2 py-1 sm:px-4 sm:py-2 bg-blue-600 text-white rounded hover:bg-blue-700 text-sm sm:text-base whitespace-nowrap"
           >
             {t('close')}
           </button>
@@ -1453,15 +809,13 @@ function MindmapFlow({ onClose, onRegisterAsHabit, onRegisterAsGoal, goals = [],
               onClick={() => setLang(lang === 'ja' ? 'en' : 'ja')}
               title="Toggle language"
               aria-label="Toggle language"
-              className="px-2 py-1 bg-transparent text-sm text-gray-700 dark:text-gray-200 border border-gray-300 rounded hover:bg-gray-100"
+              className="px-2 py-1 bg-transparent text-sm text-gray-700 dark:text-gray-200 border border-gray-300 rounded hover:bg-gray-100 whitespace-nowrap"
             >
               {lang === 'ja' ? 'EN' : '日本語'}
             </button>
           </div>
         </div>
       </div>
-
-
 
       {/* React Flow Container */}
       <div 
@@ -1472,23 +826,23 @@ function MindmapFlow({ onClose, onRegisterAsHabit, onRegisterAsGoal, goals = [],
         <ReactFlow
           nodes={nodes}
           edges={edges}
-          onNodesChange={onNodesChange}
-          onEdgesChange={onEdgesChange}
-          onConnect={onConnect}
-          onConnectStart={onConnectStart as any}
-          onConnectEnd={onConnectEnd as any}
-          onNodeContextMenu={onNodeContextMenu}
+          onNodesChange={isEditMode ? onNodesChange : undefined}
+          onEdgesChange={isEditMode ? onEdgesChange : undefined}
+          onConnect={isEditMode ? onConnect : undefined}
+          onConnectStart={isEditMode ? (onConnectStart as any) : undefined}
+          onConnectEnd={isEditMode ? (onConnectEnd as any) : undefined}
+          onNodeContextMenu={isEditMode ? onNodeContextMenu : undefined}
           onSelectionChange={onSelectionChange}
           onNodeClick={isMobile ? (event, node) => {
             if (connectionMode.isActive) {
               handleMobileNodeTap(node.id);
             }
           } : undefined}
-          nodeTypes={nodeTypes}
-          nodesDraggable={true}
-          nodesConnectable={true}
-          elementsSelectable={true}
-          selectNodesOnDrag={true}
+          nodeTypes={customNodeTypes}
+          nodesDraggable={isEditMode}
+          nodesConnectable={isEditMode}
+          elementsSelectable={isEditMode}
+          selectNodesOnDrag={isEditMode}
           panOnDrag={isMobile ? [1] : [1, 2]} // モバイルでは左クリックのみでパン
           fitView
           attributionPosition="bottom-left"
@@ -1540,31 +894,60 @@ function MindmapFlow({ onClose, onRegisterAsHabit, onRegisterAsGoal, goals = [],
               </button>
             </div>
             
-            {/* Action Buttons */}
-            <div className="flex flex-col gap-2 mt-2">
-              <button
-                onClick={addNodeAtCenter}
-                className={`${isMobile ? 'w-14 h-14' : 'w-12 h-12'} bg-blue-600 hover:bg-blue-700 text-white rounded-full shadow-lg flex items-center justify-center text-xl font-bold transition-colors`}
-                title={t('add_node')}
-              >
-                ＋
-              </button>
-              <button
-                onClick={clearAllConnections}
-                className={`${isMobile ? 'w-14 h-14' : 'w-12 h-12'} bg-red-600 hover:bg-red-700 text-white rounded-full shadow-lg flex items-center justify-center text-lg transition-colors`}
-                title={t('clear_connections')}
-              >
-                ✂
-              </button>
-              {selectedNodes.length > 0 && (
+            {/* Action Buttons - 編集モードでのみ表示 */}
+            {isEditMode && (
+              <div className="flex flex-col gap-2 mt-2">
                 <button
-                  onClick={deleteSelectedNodes}
-                  className={`${isMobile ? 'w-14 h-14' : 'w-12 h-12'} bg-orange-600 hover:bg-orange-700 text-white rounded-full shadow-lg flex items-center justify-center text-lg transition-colors`}
-                  title={t('delete_node')}
+                  onClick={addNodeAtCenter}
+                  className={`${isMobile ? 'w-14 h-14' : 'w-12 h-12'} bg-blue-600 hover:bg-blue-700 text-white rounded-full shadow-lg flex items-center justify-center text-xl font-bold transition-colors`}
+                  title={t('add_node')}
                 >
-                  🗑️
+                  ＋
                 </button>
-              )}
+                <button
+                  onClick={clearAllConnections}
+                  className={`${isMobile ? 'w-14 h-14' : 'w-12 h-12'} bg-red-600 hover:bg-red-700 text-white rounded-full shadow-lg flex items-center justify-center text-lg transition-colors`}
+                  title={t('clear_connections')}
+                >
+                  ✂
+                </button>
+                {selectedNodes.length > 0 && (
+                  <button
+                    onClick={deleteSelectedNodes}
+                    className={`${isMobile ? 'w-14 h-14' : 'w-12 h-12'} bg-orange-600 hover:bg-orange-700 text-white rounded-full shadow-lg flex items-center justify-center text-lg transition-colors`}
+                    title={t('delete_node')}
+                  >
+                    🗑️
+                  </button>
+                )}
+              </div>
+            )}
+          </Panel>
+          
+          {/* Edge Legend - 右上に凡例を追加 */}
+          <Panel position="top-right" className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-3 m-2 sm:m-4 border border-gray-200 dark:border-gray-700">
+            <div className="text-xs font-semibold mb-2 text-gray-700 dark:text-gray-300">
+              {t('edge_colors')}
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-0.5 bg-blue-500"></div>
+                <span className="text-xs text-gray-600 dark:text-gray-400">
+                  {t('default')}
+                </span>
+              </div>
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-0.5 bg-green-500"></div>
+                <span className="text-xs text-gray-600 dark:text-gray-400">
+                  {t('habit')}
+                </span>
+              </div>
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-0.5 bg-purple-500"></div>
+                <span className="text-xs text-gray-600 dark:text-gray-400">
+                  {t('goal')}
+                </span>
+              </div>
             </div>
           </Panel>
         </ReactFlow>
@@ -1604,55 +987,100 @@ function MindmapFlow({ onClose, onRegisterAsHabit, onRegisterAsGoal, goals = [],
         </div>
       )}
 
-      {/* Context Menu - PC only */}
-      {!isMobile && contextMenu && (
-        <div
-          className="fixed bg-gray-800 border border-gray-600 rounded-lg shadow-lg py-2 z-50"
-          style={{
-            top: contextMenu.top,
-            left: contextMenu.left,
-            right: contextMenu.right,
-            bottom: contextMenu.bottom,
-          }}
-        >
-          <button
-            onClick={handleEditText}
-            className="w-full px-4 py-2 text-left text-sm text-white hover:bg-gray-700 flex items-center gap-2 transition-colors"
+      {/* Context Menu - PC only（編集モードでのみ表示） */}
+      {!isMobile && isEditMode && contextMenu && (() => {
+        const node = nodes.find(n => n.id === contextMenu.id);
+        const nodeType = node?.data.nodeType;
+        console.log('[Mindmap] Rendering context menu for node:', contextMenu.id, 'nodeType:', nodeType, 'position:', { top: contextMenu.top, left: contextMenu.left });
+        
+        return (
+          <div
+            className="fixed bg-gray-800 border border-gray-600 rounded-lg shadow-lg py-2 z-[60] min-w-[220px]"
+            style={{
+              top: contextMenu.top !== undefined ? `${contextMenu.top}px` : undefined,
+              left: contextMenu.left !== undefined ? `${contextMenu.left}px` : undefined,
+            }}
+            onClick={(e) => e.stopPropagation()}
           >
-            <span>✏️</span>
-            {t('edit_text')}
-          </button>
-          <hr className="my-1 border-gray-600" />
-          <button
-            onClick={handleRegisterAsHabit}
-            className="w-full px-4 py-2 text-left text-sm text-green-400 hover:bg-gray-700 hover:text-green-300 flex items-center gap-2 transition-colors"
-          >
-            <span>🔄</span>
-            {t('register_habit')}
-          </button>
-          <button
-            onClick={handleRegisterAsGoal}
-            className="w-full px-4 py-2 text-left text-sm text-green-400 hover:bg-gray-700 hover:text-green-300 flex items-center gap-2 transition-colors"
-          >
-            <span>🎯</span>
-            {t('register_goal')}
-          </button>
-          <hr className="my-1 border-gray-600" />
-          <button
-            onClick={handleDeleteNode}
-            className="w-full px-4 py-2 text-left text-sm text-destructive hover:bg-destructive/10 hover:text-destructive flex items-center gap-2 transition-colors"
-          >
-            <span>🗑️</span>
-            {selectedNodes.some(node => node.id === contextMenu.id) && selectedNodes.length > 1
-              ? `${t('delete_node')} (${selectedNodes.length})`
-              : t('delete_node')
-            }
-          </button>
-        </div>
-      )}
+            {/* テキスト編集 */}
+            <button
+              onClick={handleEditText}
+              className="w-full px-4 py-2 text-left text-sm text-white hover:bg-gray-700 flex items-center gap-2 transition-colors"
+            >
+              <span>✏️</span>
+              {t('edit_text')}
+            </button>
+            
+            <hr className="my-1 border-gray-600" />
+            
+            {/* 編集オプション（ノードタイプに応じて表示） */}
+            {(() => {
+              if (nodeType === 'habit') {
+                // Habitノードの場合
+                return (
+                  <button
+                    onClick={handleRegisterAsHabit}
+                    className="w-full px-4 py-2 text-left text-sm text-green-400 hover:bg-gray-700 hover:text-green-300 flex items-center gap-2 transition-colors"
+                  >
+                    <span>📝</span>
+                    <span>{t('edit_habit')}</span>
+                  </button>
+                );
+              } else if (nodeType === 'goal') {
+                // Goalノードの場合
+                return (
+                  <button
+                    onClick={handleRegisterAsGoal}
+                    className="w-full px-4 py-2 text-left text-sm text-purple-400 hover:bg-gray-700 hover:text-purple-300 flex items-center gap-2 transition-colors"
+                  >
+                    <span>📝</span>
+                    <span>{t('edit_goal')}</span>
+                  </button>
+                );
+              } else {
+                // 通常ノードの場合は登録オプションを表示
+                return (
+                  <>
+                    <button
+                      onClick={handleRegisterAsHabit}
+                      className="w-full px-4 py-2 text-left text-sm text-green-400 hover:bg-gray-700 hover:text-green-300 flex items-center gap-2 transition-colors"
+                    >
+                      <span>🔄</span>
+                      <span>{t('register_habit')}</span>
+                    </button>
+                    <button
+                      onClick={handleRegisterAsGoal}
+                      >
+                      className="w-full px-4 py-2 text-left text-sm text-purple-400 hover:bg-gray-700 hover:text-purple-300 flex items-center gap-2 transition-colors"
+                      <span>🎯</span>
+                      <span>{t('register_goal')}</span>
+                    </button>
+                  </>
+                );
+              }
+            })()}
+            
+            <hr className="my-1 border-gray-600" />
+            
+            {/* 削除 */}
+            <button
+              onClick={handleDeleteNode}
+              className="w-full px-4 py-2 text-left text-sm text-red-400 hover:bg-gray-700 hover:text-red-300 flex items-center gap-2 transition-colors"
+            >
+              <span>🗑️</span>
+              <span>
+                {selectedNodes.some(node => node.id === contextMenu.id) && selectedNodes.length > 1
+                  ? `${t('delete_node')} (${selectedNodes.length})`
+                  : t('delete_node')
+                }
+              </span>
+            </button>
+          </div>
+        );
+      })()}
 
-      {/* Mobile Bottom Menu - 結線オプションを追加 */}
-      {isMobile && mobileBottomMenu.isVisible && (
+      {/* Mobile Bottom Menu - 結線オプションを追加（編集モードでのみ表示） */}
+      {isMobile && isEditMode && mobileBottomMenu.isVisible && (
         <div className="fixed bottom-0 left-0 right-0 bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700 z-50 safe-area-pb">
           <div className="p-4">
             <div className="text-center text-sm text-gray-600 dark:text-gray-400 mb-4">
@@ -1678,14 +1106,30 @@ function MindmapFlow({ onClose, onRegisterAsHabit, onRegisterAsGoal, goals = [],
                 className="flex flex-col items-center justify-center p-4 bg-green-50 dark:bg-green-900/20 rounded-lg border border-green-200 dark:border-green-800 text-green-600 dark:text-green-400"
               >
                 <span className="text-2xl mb-1">🔄</span>
-                <span className="text-sm">{t('as_habit')}</span>
+                <span className="text-sm">
+                  {(() => {
+                    const node = nodes.find(n => n.id === mobileBottomMenu.nodeId);
+                    if (node?.data.nodeType === 'habit') {
+                      return t('edit_habit');
+                    }
+                    return t('as_habit');
+                  })()}
+                </span>
               </button>
               <button
                 onClick={() => handleMobileMenuAction('goal')}
                 className="flex flex-col items-center justify-center p-4 bg-purple-50 dark:bg-purple-900/20 rounded-lg border border-purple-200 dark:border-purple-800 text-purple-600 dark:text-purple-400"
               >
                 <span className="text-2xl mb-1">🎯</span>
-                <span className="text-sm">{t('as_goal')}</span>
+                <span className="text-sm">
+                  {(() => {
+                    const node = nodes.find(n => n.id === mobileBottomMenu.nodeId);
+                    if (node?.data.nodeType === 'goal') {
+                      return t('edit_goal');
+                    }
+                    return t('as_goal');
+                  })()}
+                </span>
               </button>
             </div>
             <button
@@ -1711,13 +1155,13 @@ function MindmapFlow({ onClose, onRegisterAsHabit, onRegisterAsGoal, goals = [],
           <div className="text-center">
             <div className="text-lg font-bold mb-2 flex items-center justify-center">
               <span className="text-2xl mr-2">🔗</span>
-              結線モード
+              {t('connection_mode_title')}
             </div>
             <div className="text-sm mb-2 opacity-90">
-              開始ノード: {nodes.find(n => n.id === connectionMode.sourceNodeId)?.data.label || 'Unknown'}
+              {t('connection_mode_source')}: {nodes.find(n => n.id === connectionMode.sourceNodeId)?.data.label || 'Unknown'}
             </div>
             <div className="text-sm mb-4 opacity-90">
-              接続したいノードをタップしてください
+              {t('connection_mode_desc')}
             </div>
             <div className="flex justify-center gap-3">
               <button
@@ -1732,7 +1176,7 @@ function MindmapFlow({ onClose, onRegisterAsHabit, onRegisterAsGoal, goals = [],
                 }}
                 className="px-6 py-2 bg-white/20 text-white rounded-lg font-medium border border-white/30 hover:bg-white/30 transition-colors"
               >
-                キャンセル
+                {t('cancel')}
               </button>
             </div>
           </div>
@@ -1775,16 +1219,13 @@ function MindmapFlow({ onClose, onRegisterAsHabit, onRegisterAsGoal, goals = [],
         goals={goals}
       />
 
-      {/* 保存トースト */}
-      {/* save toast is handled by ToastProvider */}
-
       {/* Coach-mark（初回のみ） */}
       {showCoachMark && (
         <div className="fixed top-20 left-1/2 -translate-x-1/2 z-50 max-w-md bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-4 shadow-lg">
           <div className="text-lg font-semibold mb-2">{t('coach_title')}</div>
-            <div className="text-sm text-gray-700 dark:text-gray-300 mb-3">
-              {t('coach_desc')}
-            </div>
+          <div className="text-sm text-gray-700 dark:text-gray-300 mb-3">
+            {t('coach_desc')}
+          </div>
           <div className="flex justify-end">
             <button
               onClick={() => {

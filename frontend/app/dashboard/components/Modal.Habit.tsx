@@ -65,7 +65,7 @@ type ExpandedSections = {
 
 type Habit = { id: string; goalId: string; name: string; active: boolean; type: "do" | "avoid"; count: number; must?: number; duration?: number; reminders?: ({ kind: 'absolute'; time: string; weekdays: string[] } | { kind: 'relative'; minutesBefore: number })[]; dueDate?: string; time?: string; endTime?: string; repeat?: string; allDay?: boolean; notes?: string; createdAt: string; updatedAt: string; workloadUnit?: string; workloadTotal?: number; workloadTotalEnd?: number; workloadPerCount?: number }
 
-type CreateHabitPayload = { name: string; goalId?: string; type: "do" | "avoid"; duration?: number; reminders?: any[]; dueDate?: string; time?: string; endTime?: string; repeat?: string; timings?: any[]; allDay?: boolean; notes?: string; workloadUnit?: string; workloadTotal?: number; workloadTotalEnd?: number; workloadPerCount?: number }
+type CreateHabitPayload = { name: string; goalId?: string; type: "do" | "avoid"; duration?: number; reminders?: any[]; dueDate?: string; time?: string; endTime?: string; repeat?: string; timings?: any[]; allDay?: boolean; notes?: string; workloadUnit?: string; workloadTotal?: number; workloadTotalEnd?: number; workloadPerCount?: number; relatedHabitIds?: string[] }
 
 // CollapsibleSection component for Normal View
 function CollapsibleSection({ 
@@ -107,7 +107,7 @@ function CollapsibleSection({
     )
 }
 
-export function HabitModal({ open, onClose, habit, onUpdate, onDelete, onCreate, initial, categories: goals, tags, onTagsChange }: { open: boolean; onClose: () => void; habit: Habit | null; onUpdate?: (h: Habit) => void; onDelete?: (id: string) => void; onCreate?: (payload: CreateHabitPayload) => void; initial?: { date?: string; time?: string; endTime?: string; type?: "do" | "avoid"; goalId?: string }; categories?: { id: string; name: string }[]; tags?: any[]; onTagsChange?: (habitId: string, tagIds: string[]) => Promise<void> }) {
+export function HabitModal({ open, onClose, habit, onUpdate, onDelete, onCreate, initial, categories: goals, tags, onTagsChange }: { open: boolean; onClose: () => void; habit: Habit | null; onUpdate?: (h: Habit) => void; onDelete?: (id: string) => void; onCreate?: (payload: CreateHabitPayload) => void; initial?: { name?: string; date?: string; time?: string; endTime?: string; type?: "do" | "avoid"; goalId?: string; relatedHabitIds?: string[] }; categories?: { id: string; name: string }[]; tags?: any[]; onTagsChange?: (habitId: string, tagIds: string[]) => Promise<void> }) {
     // Locale
     const { t } = useLocale()
     
@@ -264,7 +264,7 @@ export function HabitModal({ open, onClose, habit, onUpdate, onDelete, onCreate,
             setWorkloadTotal('')
             setWorkloadTotalEnd('')
             setWorkloadPerCount('1')
-            setName('')
+            setName(initial?.name ?? '')
             setNotes('')
             setDueDate(initial?.date ? new Date(initial.date) : undefined)
             setTime(initial?.time ?? undefined)
@@ -280,6 +280,19 @@ export function HabitModal({ open, onClose, habit, onUpdate, onDelete, onCreate,
             setTimingType(initial?.date ? 'Date' : 'Daily')
             setTimingWeekdays([])
             setSelectedTagIds([])
+            
+            // Initialize relations from initial.relatedHabitIds
+            if (initial?.relatedHabitIds && initial.relatedHabitIds.length > 0) {
+                const initialRelations: HabitRelation[] = initial.relatedHabitIds.map(relatedHabitId => ({
+                    id: `temp-${Date.now()}-${relatedHabitId}`,
+                    habitId: '', // Will be set when habit is created
+                    relatedHabitId,
+                    relation: 'next' as const,
+                }))
+                setRelations(initialRelations)
+            } else {
+                setRelations([])
+            }
         }
     }, [habit, initial, open])
 
@@ -417,6 +430,7 @@ export function HabitModal({ open, onClose, habit, onUpdate, onDelete, onCreate,
                 workloadTotalEnd: workloadTotalEnd ? Number(workloadTotalEnd) : undefined,
                 workloadPerCount: Number(workloadPerCount) || 1,
                 notes: notes.trim() || undefined,
+                relatedHabitIds: relations.length > 0 ? relations.map(r => r.relatedHabitId) : undefined,
             };
             
             debug.log('[HabitModal] Create payload:', payload);

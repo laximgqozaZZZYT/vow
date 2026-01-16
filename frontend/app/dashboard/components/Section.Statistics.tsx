@@ -484,7 +484,6 @@ export default function StaticsSection({ habits, activities, goals }: { habits: 
   const pages = React.useMemo(() => ([
     { id: 'counts', title: 'Counts vs Time' },
     { id: 'heatmap', title: 'Activity Heatmap' },
-    { id: 'relations', title: 'Habit Relations' },
     { id: 'summary', title: 'Summary' },
     { id: 'goals', title: 'Goals' },
   ] as const), [])
@@ -730,16 +729,7 @@ export default function StaticsSection({ habits, activities, goals }: { habits: 
             isTransitioning ? 'opacity-0' : 'opacity-100'
           }`}
         >
-          {activePage === 'relations' ? (
-            <div className="min-w-0 h-full -m-3">
-              <HabitRelationMap
-                habits={habits}
-                goals={(goals ?? []) as SharedGoal[]}
-                onClose={() => {}}
-                embedded={true}
-              />
-            </div>
-          ) : activePage === 'summary' ? (
+          {activePage === 'summary' ? (
             <div className="min-w-0">
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
               <div className="rounded border border-zinc-100 p-3 dark:border-slate-800">

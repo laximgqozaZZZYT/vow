@@ -197,7 +197,17 @@ export class SupabaseDirectClient {
       .select()
       .single();
     
-    if (error) throw error;
+    if (error) {
+      // Improved logging: stringify the error to capture nested details (helps with network/fetch failures)
+      try {
+        console.error('[getHabitRelations] Supabase query error:', error);
+        console.error('[getHabitRelations] Error details:', JSON.stringify(error, null, 2));
+      } catch (logErr) {
+        // Fallback if error contains circular refs
+        console.error('[getHabitRelations] Supabase query error (stringify failed):', error);
+      }
+      throw error;
+    }
     
     // Convert snake_case to camelCase for frontend compatibility
     return {
@@ -420,6 +430,19 @@ export class SupabaseDirectClient {
       localStorage.setItem('guest-habits', JSON.stringify(existingHabits));
       
       debug.log('[createHabit] Guest habit saved:', habit);
+      
+      // Create relations for guest user if relatedHabitIds provided
+      if (payload.relatedHabitIds && payload.relatedHabitIds.length > 0) {
+        debug.log('[createHabit] Creating guest relations for:', payload.relatedHabitIds);
+        for (const relatedHabitId of payload.relatedHabitIds) {
+          await this.createHabitRelation({
+            habitId: habit.id,
+            relatedHabitId,
+            relation: 'next'
+          });
+        }
+      }
+      
       return habit;
     }
     
@@ -473,7 +496,7 @@ export class SupabaseDirectClient {
     
     debug.log('[createHabit] Success:', data);
     
-    return {
+    const createdHabit = {
       id: data.id,
       goalId: data.goal_id,
       name: data.name,
@@ -499,6 +522,24 @@ export class SupabaseDirectClient {
       createdAt: data.created_at,
       updatedAt: data.updated_at
     };
+    
+    // Create relations if relatedHabitIds provided
+    if (payload.relatedHabitIds && payload.relatedHabitIds.length > 0) {
+      debug.log('[createHabit] Creating relations for:', payload.relatedHabitIds);
+      for (const relatedHabitId of payload.relatedHabitIds) {
+        try {
+          await this.createHabitRelation({
+            habitId: createdHabit.id,
+            relatedHabitId,
+            relation: 'next'
+          });
+        } catch (err) {
+          console.error('[createHabit] Failed to create relation:', err);
+        }
+      }
+    }
+    
+    return createdHabit;
   }
 
   async updateHabit(id: string, payload: any) {

@@ -26,7 +26,7 @@ function parseYMD(s?: string | Date | null) {
 
 type Goal = { id: string; name: string; details?: string; dueDate?: string | Date | null; parentId?: string | null; isCompleted?: boolean }
 
-export function GoalModal({ open, onClose, goal, onUpdate, onDelete, onCreate, onComplete, goals, tags, onTagsChange }: { open: boolean; onClose: () => void; goal: Goal | null; onUpdate?: (g: Goal) => void; onDelete?: (id: string) => void; onCreate?: (payload: { name: string; details?: string; dueDate?: string; parentId?: string | null }) => void; onComplete?: (goalId: string) => void; goals?: Goal[]; tags?: any[]; onTagsChange?: (goalId: string, tagIds: string[]) => Promise<void> }) {
+export function GoalModal({ open, onClose, goal, onUpdate, onDelete, onCreate, onComplete, goals, tags, onTagsChange, initial }: { open: boolean; onClose: () => void; goal: Goal | null; onUpdate?: (g: Goal) => void; onDelete?: (id: string) => void; onCreate?: (payload: { name: string; details?: string; dueDate?: string; parentId?: string | null }) => void; onComplete?: (goalId: string) => void; goals?: Goal[]; tags?: any[]; onTagsChange?: (goalId: string, tagIds: string[]) => Promise<void>; initial?: { name?: string; parentId?: string | null } }) {
     const [name, setName] = useState(goal?.name ?? "")
     const [details, setDetails] = useState(goal?.details ?? "")
     const [dueDate, setDueDate] = useState<Date | undefined>(goal?.dueDate ? (typeof goal.dueDate === 'string' ? parseYMD(goal.dueDate) : (goal.dueDate as Date)) : undefined)
@@ -35,17 +35,22 @@ export function GoalModal({ open, onClose, goal, onUpdate, onDelete, onCreate, o
 
     React.useEffect(() => {
         if (open) {
-            setName(goal?.name ?? '')
-            setDetails(goal?.details ?? '')
-            setDueDate(goal?.dueDate ? (typeof goal.dueDate === 'string' ? parseYMD(goal.dueDate) : (goal.dueDate as Date)) : undefined)
-            setParentId(goal?.parentId ?? null)
             if (goal) {
+                setName(goal.name ?? '')
+                setDetails(goal.details ?? '')
+                setDueDate(goal.dueDate ? (typeof goal.dueDate === 'string' ? parseYMD(goal.dueDate) : (goal.dueDate as Date)) : undefined)
+                setParentId(goal.parentId ?? null)
                 loadGoalTags(goal.id)
             } else {
+                // 新規作成時は initial の値を使用
+                setName(initial?.name ?? '')
+                setDetails('')
+                setDueDate(undefined)
+                setParentId(initial?.parentId ?? null)
                 setSelectedTagIds([])
             }
         }
-    }, [goal, open])
+    }, [goal, open, initial])
 
     // Load goal tags
     async function loadGoalTags(goalId: string) {

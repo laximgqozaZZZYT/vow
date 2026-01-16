@@ -711,6 +711,9 @@ function DashboardLayout(props: any) {
               <MindmapSection
                 key="mindmap"
                 goals={goals as any}
+                habits={habits as any}
+                onRegisterAsHabit={(data) => createHabit(data)}
+                onRegisterAsGoal={(payload) => createGoal(payload)}
               />
             ) : null
           ))}

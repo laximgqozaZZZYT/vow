@@ -46,8 +46,10 @@ export function useGoalManager({
       const g = await api.createGoal(payload);
       setGoals((s) => [...s, g]);
       setSelectedGoal(g.id);
+      return g; // 作成されたGoalを返す
     } catch (e) { 
       console.error(e);
+      return null;
     }
   }
 
