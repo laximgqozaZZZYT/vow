@@ -55,7 +55,9 @@ export default function ManageTagsModal({
     const result: Array<Tag & { level: number }> = [];
     const hierarchy = buildTagHierarchy(tags);
 
-    const traverse = (nodes: (Tag & { children: Tag[] })[], currentLevel: number) => {
+    type TagWithChildren = Tag & { children: TagWithChildren[] };
+
+    const traverse = (nodes: TagWithChildren[], currentLevel: number) => {
       nodes.forEach(node => {
         result.push({ ...node, level: currentLevel });
         if (node.children.length > 0) {
@@ -64,7 +66,7 @@ export default function ManageTagsModal({
       });
     };
 
-    traverse(hierarchy, 0);
+    traverse(hierarchy as TagWithChildren[], 0);
     return result;
   };
 
