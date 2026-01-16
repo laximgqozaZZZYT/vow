@@ -8,6 +8,7 @@ import remarkBreaks from 'remark-breaks'
 import rehypeRaw from 'rehype-raw'
 import rehypeSanitize, { defaultSchema } from 'rehype-sanitize'
 import type { Tag } from '../types/index'
+import ItemSelector from './Widget.ItemSelector'
 
 type Goal = { id: string; name: string }
 type Habit = { id: string; name: string }
@@ -334,23 +335,7 @@ function Markdown({ value }: { value: string }) {
   )
 }
 
-function TagPill({ label, color, selected, onClick }: { label: string; color?: string | null; selected?: boolean; onClick?: () => void }) {
-  const style: React.CSSProperties = {}
-  if (color) style.borderColor = color
-  if (color && selected) style.backgroundColor = `${color}22`
 
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={`rounded-full border px-2 py-1 text-xs ${selected ? 'font-semibold' : ''} dark:border-slate-700`}
-      style={style}
-      title={label}
-    >
-      {label}
-    </button>
-  )
-}
 
 export default function DiaryModal({
   open,
@@ -399,31 +384,7 @@ export default function DiaryModal({
     setError(null)
   }, [open, initial])
 
-  const toggle = (list: string[], id: string) => (list.includes(id) ? list.filter(x => x !== id) : [...list, id])
 
-  const unifiedTagItems = React.useMemo(() => {
-    type Item =
-      | { kind: 'tag'; id: string; label: string; color?: string | null }
-      | { kind: 'habit'; id: string; label: string }
-      | { kind: 'goal'; id: string; label: string }
-
-    const items: Item[] = []
-    for (const t of tags) items.push({ kind: 'tag', id: t.id, label: t.name, color: t.color })
-    // label format (requested):
-    //   TagA
-    //   Habit名サンプル(Habit)
-    //   ゴール名サンプル(Goal)
-    for (const h of habits) items.push({ kind: 'habit', id: h.id, label: `${h.name}(Habit)` })
-    for (const g of goals) items.push({ kind: 'goal', id: g.id, label: `${g.name}(Goal)` })
-
-    // keep stable sorting: free tags first, then habits, then goals; within each sort by label
-    const rank: Record<Item['kind'], number> = { tag: 0, habit: 1, goal: 2 }
-    return items.sort((a, b) => {
-      const r = rank[a.kind] - rank[b.kind]
-      if (r !== 0) return r
-      return a.label.localeCompare(b.label, 'ja')
-    })
-  }, [tags, habits, goals])
 
   if (!open) return null
 
@@ -493,7 +454,7 @@ export default function DiaryModal({
     <div className="fixed inset-0 z-50 flex items-start justify-center pt-12 bg-black/30">
       <div className="w-full max-w-5xl rounded bg-white px-4 pt-4 pb-4 shadow-lg text-black dark:bg-[#0f1724] dark:text-slate-100">
         <div className="flex items-center justify-between">
-          <h3 className="text-2xl font-semibold">{initial?.id ? 'Edit Diary Card' : 'New Diary Card'}</h3>
+          <h3 className="text-2xl font-semibold">Diary Card</h3>
           <button onClick={onClose} className="text-slate-500">✕</button>
         </div>
 
@@ -535,35 +496,38 @@ export default function DiaryModal({
             )}
 
             <div className="mt-3">
-              <div className="text-xs text-zinc-500 mb-2">Tags</div>
-              <div className="flex flex-wrap gap-2">
-                {unifiedTagItems.map(item => {
-                  const selected =
-                    item.kind === 'tag'
-                      ? tagIds.includes(item.id)
-                      : item.kind === 'habit'
-                        ? habitIds.includes(item.id)
-                        : goalIds.includes(item.id)
+              <div className="text-sm text-zinc-500 mb-2">Tags</div>
+              <ItemSelector
+                availableItems={tags}
+                selectedItemIds={tagIds}
+                onItemAdd={(tagId) => setTagIds(prev => [...prev, tagId])}
+                onItemRemove={(tagId) => setTagIds(prev => prev.filter(id => id !== tagId))}
+                placeholder="Search and add tags..."
+              />
+            </div>
 
-                  const onClick =
-                    item.kind === 'tag'
-                      ? () => setTagIds(s => toggle(s, item.id))
-                      : item.kind === 'habit'
-                        ? () => setHabitIds(s => toggle(s, item.id))
-                        : () => setGoalIds(s => toggle(s, item.id))
+            <div className="mt-3">
+              <div className="text-sm text-zinc-500 mb-2">Goals</div>
+              <ItemSelector
+                availableItems={goals}
+                selectedItemIds={goalIds}
+                onItemAdd={(goalId) => setGoalIds(prev => [...prev, goalId])}
+                onItemRemove={(goalId) => setGoalIds(prev => prev.filter(id => id !== goalId))}
+                placeholder="Search and add goals..."
+                itemColor="#3b82f6"
+              />
+            </div>
 
-                  return (
-                    <TagPill
-                      key={`${item.kind}:${item.id}`}
-                      label={item.label}
-                      color={item.kind === 'tag' ? item.color : undefined}
-                      selected={selected}
-                      onClick={onClick}
-                    />
-                  )
-                })}
-                {unifiedTagItems.length === 0 ? <div className="text-xs text-zinc-500">No tags yet</div> : null}
-              </div>
+            <div className="mt-3">
+              <div className="text-sm text-zinc-500 mb-2">Habits</div>
+              <ItemSelector
+                availableItems={habits}
+                selectedItemIds={habitIds}
+                onItemAdd={(habitId) => setHabitIds(prev => [...prev, habitId])}
+                onItemRemove={(habitId) => setHabitIds(prev => prev.filter(id => id !== habitId))}
+                placeholder="Search and add habits..."
+                itemColor="#22c55e"
+              />
             </div>
 
             <div className="mt-5 flex items-center justify-between">
