@@ -75,6 +75,12 @@ export default function TreeRingEventChart({
   maxTs: number
   onHover: (p: EventPoint | null) => void
 }) {
+  // 回転角度の状態
+  const [rotation, setRotation] = React.useState(0)
+  const [isDragging, setIsDragging] = React.useState(false)
+  const [startAngle, setStartAngle] = React.useState(0)
+  const svgRef = React.useRef<SVGSVGElement>(null)
+
   const [tooltip, setTooltip] = React.useState<{
     visible: boolean
     x: number
@@ -126,6 +132,95 @@ export default function TreeRingEventChart({
     onHover(null)
   }
 
+  // タッチ/マウスイベントから中心からの角度を計算
+  const getAngleFromEvent = (clientX: number, clientY: number): number => {
+    if (!svgRef.current) return 0
+    
+    const rect = svgRef.current.getBoundingClientRect()
+    const centerX = rect.left + rect.width / 2
+    const centerY = rect.top + rect.height / 2
+    
+    const dx = clientX - centerX
+    const dy = clientY - centerY
+    
+    // atan2は-πからπの範囲を返すので、0-360度に変換
+    let angle = Math.atan2(dy, dx) * (180 / Math.PI)
+    angle = (angle + 90 + 360) % 360 // 上を0度とするように調整
+    
+    return angle
+  }
+
+  // タッチ開始
+  const handleTouchStart = (e: React.TouchEvent) => {
+    if (e.touches.length !== 1) return
+    
+    const touch = e.touches[0]
+    const angle = getAngleFromEvent(touch.clientX, touch.clientY)
+    
+    setIsDragging(true)
+    setStartAngle(angle - rotation)
+  }
+
+  // タッチ移動
+  const handleTouchMove = (e: React.TouchEvent) => {
+    if (!isDragging || e.touches.length !== 1) return
+    
+    const touch = e.touches[0]
+    const angle = getAngleFromEvent(touch.clientX, touch.clientY)
+    
+    let newRotation = angle - startAngle
+    // -180から180の範囲に正規化
+    while (newRotation > 180) newRotation -= 360
+    while (newRotation < -180) newRotation += 360
+    
+    setRotation(newRotation)
+  }
+
+  // タッチ終了
+  const handleTouchEnd = () => {
+    setIsDragging(false)
+  }
+
+  // マウスイベント（デスクトップでも使えるように）
+  const handleMouseDown = (e: React.MouseEvent) => {
+    const angle = getAngleFromEvent(e.clientX, e.clientY)
+    setIsDragging(true)
+    setStartAngle(angle - rotation)
+  }
+
+  const handleMouseMove = (e: React.MouseEvent) => {
+    if (!isDragging) return
+    
+    const angle = getAngleFromEvent(e.clientX, e.clientY)
+    let newRotation = angle - startAngle
+    
+    // -180から180の範囲に正規化
+    while (newRotation > 180) newRotation -= 360
+    while (newRotation < -180) newRotation += 360
+    
+    setRotation(newRotation)
+  }
+
+  const handleMouseUp = () => {
+    setIsDragging(false)
+  }
+
+  // グローバルなマウスアップイベントをリッスン
+  React.useEffect(() => {
+    const handleGlobalMouseUp = () => {
+      setIsDragging(false)
+    }
+    
+    if (isDragging) {
+      window.addEventListener('mouseup', handleGlobalMouseUp)
+      window.addEventListener('touchend', handleGlobalMouseUp)
+      return () => {
+        window.removeEventListener('mouseup', handleGlobalMouseUp)
+        window.removeEventListener('touchend', handleGlobalMouseUp)
+      }
+    }
+  }, [isDragging])
+
   // レスポンシブなサイズ設定
   const isMobile = typeof window !== 'undefined' && window.innerWidth <= 768
   const size = isMobile ? 400 : 600
@@ -168,14 +263,32 @@ export default function TreeRingEventChart({
           </svg>
           <span>Time (center → outer)</span>
         </div>
+        <div className="flex items-center gap-2">
+          <span className="text-lg">🔄</span>
+          <span>Swipe to rotate</span>
+        </div>
       </div>
 
       <div className="w-full flex justify-center">
         <svg 
+          ref={svgRef}
           viewBox={`0 0 ${size} ${size}`} 
           className="w-full h-auto max-w-[600px]" 
           preserveAspectRatio="xMidYMid meet"
+          onTouchStart={handleTouchStart}
+          onTouchMove={handleTouchMove}
+          onTouchEnd={handleTouchEnd}
+          onMouseDown={handleMouseDown}
+          onMouseMove={handleMouseMove}
+          onMouseUp={handleMouseUp}
+          style={{ 
+            cursor: isDragging ? 'grabbing' : 'grab',
+            touchAction: 'none', // タッチスクロールを無効化
+            userSelect: 'none'
+          }}
         >
+          {/* 回転可能なグループ */}
+          <g transform={`rotate(${rotation} ${centerX} ${centerY})`}>
           {/* 背景の同心円（時刻の目盛り）と時刻ラベル */}
           {[0.25, 0.5, 0.75, 1].map((ratio) => {
             const r = innerRadius + (outerRadius - innerRadius) * ratio
@@ -499,6 +612,7 @@ export default function TreeRingEventChart({
               </g>
             )
           })}
+          </g> {/* 回転可能なグループの終了 */}
         </svg>
       </div>
 
