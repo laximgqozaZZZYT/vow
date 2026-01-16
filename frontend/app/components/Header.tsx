@@ -10,11 +10,6 @@ export default function Header() {
   const menuRef = useRef<HTMLDivElement | null>(null);
   const pathname = usePathname();
 
-  // ダッシュボードページではヘッダーを非表示
-  if (pathname?.startsWith('/dashboard')) {
-    return null;
-  }
-
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
       if (e.key === "Escape") setOpen(false);
@@ -34,6 +29,11 @@ export default function Header() {
     if (open) document.addEventListener("mousedown", onDocClick);
     return () => document.removeEventListener("mousedown", onDocClick);
   }, [open]);
+
+  // ダッシュボードページではヘッダーを非表示
+  if (pathname?.startsWith('/dashboard')) {
+    return null;
+  }
 
   return (
     <header className="w-full border-b bg-transparent py-3 px-4 flex items-center justify-between">
