@@ -19,6 +19,7 @@ import StickiesSection from './components/Section.Stickies';
 // Extracted components
 import DashboardHeader from './components/Layout.Header';
 import DashboardSidebar from './components/Layout.Sidebar';
+import HandednessToggle from './components/HandednessToggle';
 import NextSection from './components/Section.Next';
 import ActivitySection from './components/Section.Activity';
 import CalendarWidget from './components/Widget.Calendar';
@@ -280,7 +281,7 @@ export default function DashboardPage() {
     }
   };
 
-  const handleCreateTag = async (payload: { name: string; color?: string }) => {
+  const handleCreateTag = async (payload: { name: string; color?: string; parentId?: string | null }) => {
     try {
       await api.createTag(payload);
       await refreshTags();
@@ -290,7 +291,7 @@ export default function DashboardPage() {
     }
   };
 
-  const handleUpdateTag = async (id: string, payload: { name?: string; color?: string }) => {
+  const handleUpdateTag = async (id: string, payload: { name?: string; color?: string; parentId?: string | null }) => {
     try {
       await api.updateTag(id, payload);
       await refreshTags();
@@ -550,6 +551,7 @@ export default function DashboardPage() {
         handleMoveGoal={handleMoveGoal}
         handleMoveHabit={handleMoveHabit}
       />
+      <HandednessToggle />
     </HandednessProvider>
     </LocaleProvider>
   );

@@ -2420,6 +2420,7 @@ export class SupabaseDirectClient {
       id: tag.id,
       name: tag.name,
       color: tag.color,
+      parentId: tag.parent_id,
       createdAt: tag.created_at,
       updatedAt: tag.updated_at
     }));
@@ -2436,6 +2437,7 @@ export class SupabaseDirectClient {
         id: 'tag-' + Date.now(),
         name: payload.name,
         color: payload.color || '#3b82f6',
+        parentId: payload.parentId || null,
         createdAt: now,
         updatedAt: now
       };
@@ -2453,6 +2455,7 @@ export class SupabaseDirectClient {
       .insert({
         name: payload.name,
         color: payload.color || '#3b82f6',
+        parent_id: payload.parentId || null,
         owner_type: 'user',
         owner_id: session.session.user.id,
         created_at: now,
@@ -2467,6 +2470,7 @@ export class SupabaseDirectClient {
       id: data.id,
       name: data.name,
       color: data.color,
+      parentId: data.parent_id,
       createdAt: data.created_at,
       updatedAt: data.updated_at
     };
@@ -2493,6 +2497,7 @@ export class SupabaseDirectClient {
       
       if (payload.name !== undefined) updatedTag.name = payload.name;
       if (payload.color !== undefined) updatedTag.color = payload.color;
+      if (payload.parentId !== undefined) updatedTag.parentId = payload.parentId;
       
       guestTags[tagIndex] = updatedTag;
       localStorage.setItem('guest-tags', JSON.stringify(guestTags));
@@ -2506,6 +2511,7 @@ export class SupabaseDirectClient {
     
     if (payload.name !== undefined) updateData.name = payload.name;
     if (payload.color !== undefined) updateData.color = payload.color;
+    if (payload.parentId !== undefined) updateData.parent_id = payload.parentId;
     
     const { data, error } = await supabase
       .from('tags')
@@ -2522,6 +2528,7 @@ export class SupabaseDirectClient {
       id: data.id,
       name: data.name,
       color: data.color,
+      parentId: data.parent_id,
       createdAt: data.created_at,
       updatedAt: data.updated_at
     };

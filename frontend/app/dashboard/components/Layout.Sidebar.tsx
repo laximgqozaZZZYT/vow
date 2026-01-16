@@ -1,6 +1,10 @@
+import { useState } from 'react';
 import GoalTree from './Widget.GoalTree';
+import TagView from './Widget.TagView';
 import type { DashboardSidebarProps, Goal, Habit, Activity } from '../types';
 import { useHandedness } from '../contexts/HandednessContext';
+
+type ViewMode = 'folder' | 'tag';
 
 interface DashboardSidebarExtendedProps extends DashboardSidebarProps {
   goals: Goal[];
@@ -44,6 +48,7 @@ export default function DashboardSidebar({
   onMindmapDelete
 }: DashboardSidebarExtendedProps) {
   const { isLeftHanded, handedness, setHandedness } = useHandedness();
+  const [viewMode, setViewMode] = useState<ViewMode>('folder');
   
   if (!isVisible) return null;
 
@@ -66,42 +71,64 @@ export default function DashboardSidebar({
             </div>
           </div>
 
-          {/* Handedness toggle - at the top of sidebar */}
-          <div className="mb-4 p-3 rounded-lg border border-border bg-muted">
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-sm font-medium">Panel Position</span>
+          {/* View Mode Toggle - Linear/shadcn style */}
+          <div className="mb-4">
+            <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-3 block">
+              View Mode
+            </label>
+            <div className="inline-flex items-center rounded-lg border border-border bg-muted/50 p-1 w-full">
+              <button
+                onClick={() => setViewMode('folder')}
+                className={`flex-1 inline-flex items-center justify-center gap-2 rounded-md px-3 py-2 text-sm font-medium transition-all ${
+                  viewMode === 'folder'
+                    ? 'bg-background text-foreground shadow-sm'
+                    : 'text-muted-foreground hover:text-foreground'
+                }`}
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
+                </svg>
+                <span>Folder</span>
+              </button>
+              <button
+                onClick={() => setViewMode('tag')}
+                className={`flex-1 inline-flex items-center justify-center gap-2 rounded-md px-3 py-2 text-sm font-medium transition-all ${
+                  viewMode === 'tag'
+                    ? 'bg-background text-foreground shadow-sm'
+                    : 'text-muted-foreground hover:text-foreground'
+                }`}
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z" />
+                </svg>
+                <span>Tag</span>
+              </button>
             </div>
-            <button
-              onClick={() => setHandedness(handedness === 'left' ? 'right' : 'left')}
-              className="group relative inline-flex items-center justify-center w-full rounded-lg border border-border bg-background px-3 py-2 text-sm font-medium transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
-            >
-              <div className="flex items-center gap-2 w-full justify-between">
-                <span className="text-muted-foreground">{isLeftHanded ? 'Left' : 'Right'}</span>
-                <div className="relative w-10 h-5 bg-zinc-200 rounded-full transition-colors group-hover:bg-blue-200 dark:bg-zinc-700 dark:group-hover:bg-blue-900">
-                  <div 
-                    className={`absolute top-0.5 w-4 h-4 bg-blue-600 rounded-full transition-all duration-200 ${
-                      isLeftHanded ? 'left-0.5' : 'left-5'
-                    }`}
-                  />
-                </div>
-              </div>
-            </button>
           </div>
         </div>
 
         <div className="flex-1 overflow-y-auto overscroll-contain px-3">
-          <GoalTree
-            goals={goals}
-            habits={habits}
-            activities={activities}
-            selectedGoal={selectedGoal}
-            onGoalSelect={onGoalSelect}
-            onGoalEdit={onGoalEdit}
-            onHabitEdit={onHabitEdit}
-            onHabitAction={onHabitAction}
-            onMoveGoal={onMoveGoal}
-            onMoveHabit={onMoveHabit}
-          />
+          {viewMode === 'folder' ? (
+            <GoalTree
+              goals={goals}
+              habits={habits}
+              activities={activities}
+              selectedGoal={selectedGoal}
+              onGoalSelect={onGoalSelect}
+              onGoalEdit={onGoalEdit}
+              onHabitEdit={onHabitEdit}
+              onHabitAction={onHabitAction}
+              onMoveGoal={onMoveGoal}
+              onMoveHabit={onMoveHabit}
+            />
+          ) : (
+            <TagView
+              habits={habits}
+              activities={activities}
+              onHabitEdit={onHabitEdit}
+              onHabitAction={onHabitAction}
+            />
+          )}
 
           {/* Mindmaps Section */}
           {mindmaps.length > 0 && (

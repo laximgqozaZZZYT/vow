@@ -7,8 +7,8 @@ interface ManageTagsModalProps {
   isOpen: boolean;
   onClose: () => void;
   tags: Tag[];
-  onCreateTag: (payload: { name: string; color?: string }) => Promise<void>;
-  onUpdateTag: (id: string, payload: { name?: string; color?: string }) => Promise<void>;
+  onCreateTag: (payload: { name: string; color?: string; parentId?: string | null }) => Promise<void>;
+  onUpdateTag: (id: string, payload: { name?: string; color?: string; parentId?: string | null }) => Promise<void>;
   onDeleteTag: (id: string) => Promise<void>;
 }
 
@@ -23,23 +23,68 @@ export default function ManageTagsModal({
   const [editingTag, setEditingTag] = React.useState<Tag | null>(null);
   const [newTagName, setNewTagName] = React.useState('');
   const [newTagColor, setNewTagColor] = React.useState('#3b82f6');
+  const [newTagParentId, setNewTagParentId] = React.useState<string | null>(null);
 
   if (!isOpen) return null;
+
+  // タグの階層構造を構築
+  const buildTagHierarchy = (tags: Tag[]): Tag[] => {
+    const tagMap = new Map<string, Tag & { children: Tag[] }>();
+    const rootTags: (Tag & { children: Tag[] })[] = [];
+
+    // すべてのタグをマップに追加
+    tags.forEach(tag => {
+      tagMap.set(tag.id, { ...tag, children: [] });
+    });
+
+    // 親子関係を構築
+    tags.forEach(tag => {
+      const tagWithChildren = tagMap.get(tag.id)!;
+      if (tag.parentId && tagMap.has(tag.parentId)) {
+        tagMap.get(tag.parentId)!.children.push(tagWithChildren);
+      } else {
+        rootTags.push(tagWithChildren);
+      }
+    });
+
+    return rootTags;
+  };
+
+  // タグを階層的にフラット化（表示用）
+  const flattenTagHierarchy = (tags: Tag[], level = 0): Array<Tag & { level: number }> => {
+    const result: Array<Tag & { level: number }> = [];
+    const hierarchy = buildTagHierarchy(tags);
+
+    const traverse = (nodes: (Tag & { children: Tag[] })[], currentLevel: number) => {
+      nodes.forEach(node => {
+        result.push({ ...node, level: currentLevel });
+        if (node.children.length > 0) {
+          traverse(node.children, currentLevel + 1);
+        }
+      });
+    };
+
+    traverse(hierarchy, 0);
+    return result;
+  };
+
+  const hierarchicalTags = flattenTagHierarchy(tags);
 
   const handleCreateTag = async () => {
     if (!newTagName.trim()) return;
     
     try {
-      await onCreateTag({ name: newTagName.trim(), color: newTagColor });
+      await onCreateTag({ name: newTagName.trim(), color: newTagColor, parentId: newTagParentId });
       setNewTagName('');
       setNewTagColor('#3b82f6');
+      setNewTagParentId(null);
     } catch (error) {
       console.error('Failed to create tag:', error);
       alert('Failed to create tag');
     }
   };
 
-  const handleUpdateTag = async (id: string, updates: { name?: string; color?: string }) => {
+  const handleUpdateTag = async (id: string, updates: { name?: string; color?: string; parentId?: string | null }) => {
     try {
       await onUpdateTag(id, updates);
       setEditingTag(null);
@@ -120,6 +165,22 @@ export default function ManageTagsModal({
                 />
                 
                 <div>
+                  <label className="block text-sm font-medium text-muted-foreground mb-2">Parent Tag (Optional)</label>
+                  <select
+                    value={newTagParentId || ''}
+                    onChange={(e) => setNewTagParentId(e.target.value || null)}
+                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                  >
+                    <option value="">None (Root Tag)</option>
+                    {tags.map((tag) => (
+                      <option key={tag.id} value={tag.id}>
+                        {tag.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
                   <label className="block text-sm font-medium text-muted-foreground mb-2">Color</label>
                   <div className="flex flex-wrap gap-2">
                     {predefinedColors.map((color) => (
@@ -158,10 +219,11 @@ export default function ManageTagsModal({
                 No tags yet. Create your first tag above!
               </p>
             ) : (
-              tags.map((tag) => (
+              hierarchicalTags.map((tag) => (
                 <div
                   key={tag.id}
                   className="flex items-center gap-3 p-3 rounded-lg border border-border hover:bg-accent transition-colors"
+                  style={{ marginLeft: `${tag.level * 24}px` }}
                 >
                   {editingTag?.id === tag.id ? (
                     <>
@@ -169,30 +231,53 @@ export default function ManageTagsModal({
                         type="color"
                         value={editingTag.color || '#3b82f6'}
                         onChange={(e) => setEditingTag({ ...editingTag, color: e.target.value })}
-                        className="w-8 h-8 rounded cursor-pointer"
+                        className="w-8 h-8 rounded cursor-pointer flex-shrink-0"
                       />
-                      <input
-                        type="text"
-                        value={editingTag.name}
-                        onChange={(e) => setEditingTag({ ...editingTag, name: e.target.value })}
-                        className="flex-1 flex h-9 rounded-md border border-input bg-background px-3 py-1 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
-                        autoFocus
-                      />
+                      <div className="flex-1 flex flex-col gap-2">
+                        <input
+                          type="text"
+                          value={editingTag.name}
+                          onChange={(e) => setEditingTag({ ...editingTag, name: e.target.value })}
+                          className="flex h-9 rounded-md border border-input bg-background px-3 py-1 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                          autoFocus
+                        />
+                        <select
+                          value={editingTag.parentId || ''}
+                          onChange={(e) => setEditingTag({ ...editingTag, parentId: e.target.value || null })}
+                          className="flex h-9 rounded-md border border-input bg-background px-3 py-1 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                        >
+                          <option value="">None (Root Tag)</option>
+                          {tags
+                            .filter(t => t.id !== tag.id) // 自分自身は選択できない
+                            .map((t) => (
+                              <option key={t.id} value={t.id}>
+                                {t.name}
+                              </option>
+                            ))}
+                        </select>
+                      </div>
                       <button
-                        onClick={() => handleUpdateTag(tag.id, { name: editingTag.name, color: editingTag.color })}
-                        className="inline-flex items-center justify-center rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                        onClick={() => handleUpdateTag(tag.id, { 
+                          name: editingTag.name, 
+                          color: editingTag.color,
+                          parentId: editingTag.parentId 
+                        })}
+                        className="inline-flex items-center justify-center rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary flex-shrink-0"
                       >
                         Save
                       </button>
                       <button
                         onClick={() => setEditingTag(null)}
-                        className="inline-flex items-center justify-center rounded-md border border-input px-3 py-1.5 text-sm font-medium transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                        className="inline-flex items-center justify-center rounded-md border border-input px-3 py-1.5 text-sm font-medium transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary flex-shrink-0"
                       >
                         Cancel
                       </button>
                     </>
                   ) : (
                     <>
+                      {tag.level > 0 && (
+                        <span className="text-muted-foreground flex-shrink-0">└─</span>
+                      )}
                       <div
                         className="w-8 h-8 rounded flex-shrink-0"
                         style={{ backgroundColor: tag.color || '#3b82f6' }}
@@ -200,13 +285,13 @@ export default function ManageTagsModal({
                       <span className="flex-1">{tag.name}</span>
                       <button
                         onClick={() => setEditingTag(tag)}
-                        className="px-3 py-1.5 text-sm text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary rounded"
+                        className="px-3 py-1.5 text-sm text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary rounded flex-shrink-0"
                       >
                         Edit
                       </button>
                       <button
                         onClick={() => handleDeleteTag(tag.id, tag.name)}
-                        className="px-3 py-1.5 text-sm text-destructive hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary rounded"
+                        className="px-3 py-1.5 text-sm text-destructive hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary rounded flex-shrink-0"
                       >
                         Delete
                       </button>
