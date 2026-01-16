@@ -491,6 +491,9 @@ export default function MultiEventChart({
   displayMode?: 'linear' | 'radial' | 'tree-ring'
   onDisplayModeChange?: (mode: 'linear' | 'radial' | 'tree-ring') => void
 }) {
+  // ドラッグ状態を管理（円グラフの回転中はボタンクリックを無効化）
+  const [isChartDragging, setIsChartDragging] = React.useState(false)
+  
   // Tooltip state
   const [tooltip, setTooltip] = React.useState<{
     visible: boolean
@@ -650,21 +653,39 @@ export default function MultiEventChart({
               <div className="flex items-center gap-1 rounded border border-zinc-200 dark:border-zinc-700 p-0.5">
                 <button
                   className="rounded px-2 py-1 text-xs transition-colors hover:bg-zinc-50 dark:hover:bg-zinc-800"
-                  onClick={() => onDisplayModeChange('linear')}
+                  onClick={(e) => {
+                    if (isChartDragging) {
+                      e.preventDefault()
+                      return
+                    }
+                    onDisplayModeChange('linear')
+                  }}
                   title="Linear timeline view"
                 >
                   📊
                 </button>
                 <button
                   className="rounded px-2 py-1 text-xs transition-colors bg-blue-500 text-white"
-                  onClick={() => onDisplayModeChange('radial')}
+                  onClick={(e) => {
+                    if (isChartDragging) {
+                      e.preventDefault()
+                      return
+                    }
+                    onDisplayModeChange('radial')
+                  }}
                   title="Radial timeline view"
                 >
                   ⭕
                 </button>
                 <button
                   className="rounded px-2 py-1 text-xs transition-colors hover:bg-zinc-50 dark:hover:bg-zinc-800"
-                  onClick={() => onDisplayModeChange('tree-ring')}
+                  onClick={(e) => {
+                    if (isChartDragging) {
+                      e.preventDefault()
+                      return
+                    }
+                    onDisplayModeChange('tree-ring')
+                  }}
                   title="Tree ring view"
                 >
                   🎯
@@ -680,7 +701,13 @@ export default function MultiEventChart({
                       ? 'bg-blue-500 text-white'
                       : 'hover:bg-zinc-50 dark:hover:bg-zinc-800'
                   }`}
-                  onClick={() => onRangeChange('7d')}
+                  onClick={(e) => {
+                    if (isChartDragging) {
+                      e.preventDefault()
+                      return
+                    }
+                    onRangeChange('7d')
+                  }}
                 >
                   Week
                 </button>
@@ -690,7 +717,13 @@ export default function MultiEventChart({
                       ? 'bg-blue-500 text-white'
                       : 'hover:bg-zinc-50 dark:hover:bg-zinc-800'
                   }`}
-                  onClick={() => onRangeChange('1mo')}
+                  onClick={(e) => {
+                    if (isChartDragging) {
+                      e.preventDefault()
+                      return
+                    }
+                    onRangeChange('1mo')
+                  }}
                 >
                   Month
                 </button>
@@ -700,7 +733,13 @@ export default function MultiEventChart({
                       ? 'bg-blue-500 text-white'
                       : 'hover:bg-zinc-50 dark:hover:bg-zinc-800'
                   }`}
-                  onClick={() => onRangeChange('1y')}
+                  onClick={(e) => {
+                    if (isChartDragging) {
+                      e.preventDefault()
+                      return
+                    }
+                    onRangeChange('1y')
+                  }}
                 >
                   Year
                 </button>
@@ -709,7 +748,13 @@ export default function MultiEventChart({
             {onEditGraph && (
               <button 
                 className="rounded border border-zinc-200 dark:border-zinc-700 px-2 py-1 text-xs hover:bg-zinc-50 dark:hover:bg-zinc-800" 
-                onClick={onEditGraph}
+                onClick={(e) => {
+                  if (isChartDragging) {
+                    e.preventDefault()
+                    return
+                  }
+                  onEditGraph()
+                }}
               >
                 Edit Graph
               </button>
@@ -726,6 +771,7 @@ export default function MultiEventChart({
           minTs={minTs}
           maxTs={maxTs}
           onHover={onHover}
+          onDraggingChange={setIsChartDragging}
         />
       </div>
     )
@@ -746,21 +792,39 @@ export default function MultiEventChart({
               <div className="flex items-center gap-1 rounded border border-zinc-200 dark:border-zinc-700 p-0.5">
                 <button
                   className="rounded px-2 py-1 text-xs transition-colors hover:bg-zinc-50 dark:hover:bg-zinc-800"
-                  onClick={() => onDisplayModeChange('linear')}
+                  onClick={(e) => {
+                    if (isChartDragging) {
+                      e.preventDefault()
+                      return
+                    }
+                    onDisplayModeChange('linear')
+                  }}
                   title="Linear timeline view"
                 >
                   📊
                 </button>
                 <button
                   className="rounded px-2 py-1 text-xs transition-colors hover:bg-zinc-50 dark:hover:bg-zinc-800"
-                  onClick={() => onDisplayModeChange('radial')}
+                  onClick={(e) => {
+                    if (isChartDragging) {
+                      e.preventDefault()
+                      return
+                    }
+                    onDisplayModeChange('radial')
+                  }}
                   title="Radial timeline view"
                 >
                   ⭕
                 </button>
                 <button
                   className="rounded px-2 py-1 text-xs transition-colors bg-blue-500 text-white"
-                  onClick={() => onDisplayModeChange('tree-ring')}
+                  onClick={(e) => {
+                    if (isChartDragging) {
+                      e.preventDefault()
+                      return
+                    }
+                    onDisplayModeChange('tree-ring')
+                  }}
                   title="Tree ring view"
                 >
                   🎯
@@ -776,7 +840,13 @@ export default function MultiEventChart({
                       ? 'bg-blue-500 text-white'
                       : 'hover:bg-zinc-50 dark:hover:bg-zinc-800'
                   }`}
-                  onClick={() => onRangeChange('7d')}
+                  onClick={(e) => {
+                    if (isChartDragging) {
+                      e.preventDefault()
+                      return
+                    }
+                    onRangeChange('7d')
+                  }}
                 >
                   Week
                 </button>
@@ -786,7 +856,13 @@ export default function MultiEventChart({
                       ? 'bg-blue-500 text-white'
                       : 'hover:bg-zinc-50 dark:hover:bg-zinc-800'
                   }`}
-                  onClick={() => onRangeChange('1mo')}
+                  onClick={(e) => {
+                    if (isChartDragging) {
+                      e.preventDefault()
+                      return
+                    }
+                    onRangeChange('1mo')
+                  }}
                 >
                   Month
                 </button>
@@ -796,7 +872,13 @@ export default function MultiEventChart({
                       ? 'bg-blue-500 text-white'
                       : 'hover:bg-zinc-50 dark:hover:bg-zinc-800'
                   }`}
-                  onClick={() => onRangeChange('1y')}
+                  onClick={(e) => {
+                    if (isChartDragging) {
+                      e.preventDefault()
+                      return
+                    }
+                    onRangeChange('1y')
+                  }}
                 >
                   Year
                 </button>
@@ -805,7 +887,13 @@ export default function MultiEventChart({
             {onEditGraph && (
               <button 
                 className="rounded border border-zinc-200 dark:border-zinc-700 px-2 py-1 text-xs hover:bg-zinc-50 dark:hover:bg-zinc-800" 
-                onClick={onEditGraph}
+                onClick={(e) => {
+                  if (isChartDragging) {
+                    e.preventDefault()
+                    return
+                  }
+                  onEditGraph()
+                }}
               >
                 Edit Graph
               </button>
@@ -822,6 +910,7 @@ export default function MultiEventChart({
           minTs={minTs}
           maxTs={maxTs}
           onHover={onHover}
+          onDraggingChange={setIsChartDragging}
         />
       </div>
     )

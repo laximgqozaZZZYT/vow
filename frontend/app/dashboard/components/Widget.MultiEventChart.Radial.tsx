@@ -49,6 +49,7 @@ export default function RadialEventChart({
   minTs,
   maxTs,
   onHover,
+  onDraggingChange,
 }: {
   habits: Habit[]
   points: EventPoint[]
@@ -58,6 +59,7 @@ export default function RadialEventChart({
   minTs: number
   maxTs: number
   onHover: (p: EventPoint | null) => void
+  onDraggingChange?: (isDragging: boolean) => void
 }) {
   // 回転角度の状態
   const [rotation, setRotation] = React.useState(0)
@@ -134,6 +136,7 @@ export default function RadialEventChart({
     const angle = getAngleFromEvent(touch.clientX, touch.clientY)
     
     setIsDragging(true)
+    onDraggingChange?.(true)
     setStartAngle(angle - rotation)
   }
 
@@ -155,12 +158,14 @@ export default function RadialEventChart({
   // タッチ終了
   const handleTouchEnd = () => {
     setIsDragging(false)
+    onDraggingChange?.(false)
   }
 
   // マウスイベント（デスクトップでも使えるように）
   const handleMouseDown = (e: React.MouseEvent) => {
     const angle = getAngleFromEvent(e.clientX, e.clientY)
     setIsDragging(true)
+    onDraggingChange?.(true)
     setStartAngle(angle - rotation)
   }
 
@@ -179,12 +184,14 @@ export default function RadialEventChart({
 
   const handleMouseUp = () => {
     setIsDragging(false)
+    onDraggingChange?.(false)
   }
 
   // グローバルなマウスアップイベントをリッスン
   React.useEffect(() => {
     const handleGlobalMouseUp = () => {
       setIsDragging(false)
+      onDraggingChange?.(false)
     }
     
     if (isDragging) {
@@ -195,7 +202,7 @@ export default function RadialEventChart({
         window.removeEventListener('touchend', handleGlobalMouseUp)
       }
     }
-  }, [isDragging])
+  }, [isDragging, onDraggingChange])
 
   // レスポンシブなサイズ設定
   const isMobile = typeof window !== 'undefined' && window.innerWidth <= 768
