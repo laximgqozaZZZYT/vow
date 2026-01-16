@@ -252,34 +252,6 @@ export default function TreeRingEventChart({
 
   return (
     <div className="space-y-3 w-full overflow-hidden">
-      {/* 凡例 */}
-      <div className="flex flex-wrap items-center justify-center gap-4 text-xs text-zinc-600 dark:text-zinc-400">
-        <div className="flex items-center gap-2">
-          <svg width="32" height="16" viewBox="0 0 32 16" className="text-current">
-            <path d="M 16 8 m -7 0 a 7 7 0 0 1 7 -7 l 0 7 z" fill="none" stroke="currentColor" strokeWidth="2" opacity="0.3" />
-          </svg>
-          <span>100% = Full sector</span>
-        </div>
-        <div className="flex items-center gap-2">
-          <svg width="32" height="16" viewBox="0 0 32 16" className="text-current">
-            <path d="M 16 8 m -7 0 a 7 7 0 0 1 3.5 -6.06" fill="none" stroke="currentColor" strokeWidth="2" opacity="0.3" />
-          </svg>
-          <span>Incomplete = Arc gap</span>
-        </div>
-        <div className="flex items-center gap-2">
-          <svg width="32" height="16" viewBox="0 0 32 16" className="text-current">
-            <circle cx="8" cy="8" r="2" fill="none" stroke="currentColor" strokeWidth="0.5" opacity="0.2" />
-            <circle cx="16" cy="8" r="5" fill="none" stroke="currentColor" strokeWidth="0.5" opacity="0.2" />
-            <circle cx="24" cy="8" r="8" fill="none" stroke="currentColor" strokeWidth="0.5" opacity="0.2" />
-          </svg>
-          <span>Time (center → outer)</span>
-        </div>
-        <div className="flex items-center gap-2">
-          <span className="text-lg">🔄</span>
-          <span>Swipe to rotate</span>
-        </div>
-      </div>
-
       <div className="w-full flex justify-center">
         <svg 
           ref={svgRef}

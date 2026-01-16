@@ -239,37 +239,6 @@ export default function RadialEventChart({
 
   return (
     <div className="space-y-3 w-full overflow-hidden">
-      {/* 凡例 */}
-      <div className="flex flex-wrap items-center justify-center gap-4 text-xs text-zinc-600 dark:text-zinc-400">
-        <div className="flex items-center gap-2">
-          <div className="w-8 h-0.5 bg-current opacity-40" style={{ borderTop: '2px dashed currentColor' }}></div>
-          <span>Planned</span>
-        </div>
-        <div className="flex items-center gap-2">
-          <div className="w-3 h-3 bg-current rounded-full"></div>
-          <span>Actual</span>
-        </div>
-        <div className="flex items-center gap-2">
-          <svg width="32" height="16" viewBox="0 0 32 16" className="text-current">
-            <circle cx="8" cy="8" r="2" fill="none" stroke="currentColor" strokeWidth="0.5" opacity="0.2" />
-            <circle cx="16" cy="8" r="5" fill="none" stroke="currentColor" strokeWidth="0.5" opacity="0.2" />
-            <circle cx="24" cy="8" r="8" fill="none" stroke="currentColor" strokeWidth="0.5" opacity="0.2" />
-          </svg>
-          <span>Time (center → outer)</span>
-        </div>
-        <div className="flex items-center gap-2">
-          <svg width="24" height="24" viewBox="0 0 24 24" className="text-current">
-            <path d="M 12 2 A 10 10 0 0 1 22 12" fill="none" stroke="currentColor" strokeWidth="2" opacity="0.3" />
-            <text x="17" y="8" fontSize="8" fill="currentColor" opacity="0.5">100%</text>
-          </svg>
-          <span>Progress (angle in sector)</span>
-        </div>
-        <div className="flex items-center gap-2">
-          <span className="text-lg">🔄</span>
-          <span>Swipe to rotate</span>
-        </div>
-      </div>
-
       <div className="w-full flex justify-center">
         <svg 
           ref={svgRef}
@@ -683,44 +652,6 @@ export default function RadialEventChart({
         </svg>
       </div>
 
-      {/* ツールチップ */}
-      {tooltip && (
-        <div
-          className="fixed z-50 pointer-events-none"
-          style={{
-            left: tooltip.x + 10,
-            top: tooltip.y - 10,
-            transform: 'translateY(-100%)'
-          }}
-        >
-          <div className="rounded border border-zinc-100 p-2 text-xs text-zinc-700 dark:border-slate-800 dark:text-zinc-200 bg-white dark:bg-slate-900 shadow-lg max-w-xs">
-            <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
-              <div>
-                <span className="font-medium">{tooltip.content.habitName}</span>
-                <span className="ml-2 rounded bg-zinc-100 px-1.5 py-0.5 text-[10px] dark:bg-slate-800">
-                  {tooltip.content.kind}
-                </span>
-              </div>
-              <div className="text-zinc-500 text-[10px]">{tooltip.content.timestamp}</div>
-            </div>
-
-            <div className="grid grid-cols-1 gap-1">
-              <div className="rounded bg-zinc-50 p-1.5 dark:bg-slate-900/40">
-                <div className="text-[9px] text-zinc-500">Progress</div>
-                <div className="font-semibold text-[11px]">{Math.round(tooltip.content.progressRatio * 100)}%</div>
-              </div>
-              <div className="rounded bg-zinc-50 p-1.5 dark:bg-slate-900/40">
-                <div className="text-[9px] text-zinc-500">Workload Cumulative</div>
-                <div className="font-semibold text-[11px]">{tooltip.content.workloadCumulative} {tooltip.content.workloadUnit}</div>
-              </div>
-              <div className="rounded bg-zinc-50 p-1.5 dark:bg-slate-900/40">
-                <div className="text-[9px] text-zinc-500">Workload Total</div>
-                <div className="font-semibold text-[11px]">{tooltip.content.workloadTotal ?? '-'} {tooltip.content.workloadUnit}</div>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   )
 }

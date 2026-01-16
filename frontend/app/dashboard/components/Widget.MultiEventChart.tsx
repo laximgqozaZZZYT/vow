@@ -640,14 +640,74 @@ export default function MultiEventChart({
 
   // 同心円グラフの場合は別コンポーネントを使用
   if (displayMode === 'radial') {
+    // Legend help tooltip state for radial
+    const [showLegendHelp, setShowLegendHelp] = React.useState(false)
+    
     return (
       <div className="space-y-3 w-full overflow-hidden">
         {/* Header with Range selector and Edit Graph button */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-          <h3 className="text-sm font-medium text-zinc-600 dark:text-zinc-300">
-            Habit Progress Timeline (Actual vs Planned)
-          </h3>
-          <div className="flex items-center gap-2 self-start sm:self-auto">
+        <div className="flex flex-col gap-2">
+          <div className="flex items-center justify-between gap-2">
+            <h3 className="text-sm font-medium text-zinc-600 dark:text-zinc-300">
+              Habit Progress Timeline (Actual vs Planned)
+            </h3>
+            {/* Legend Help Button */}
+            <div className="relative">
+              <button
+                className="rounded-full w-5 h-5 flex items-center justify-center text-xs border border-zinc-300 dark:border-zinc-600 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
+                onMouseEnter={() => setShowLegendHelp(true)}
+                onMouseLeave={() => setShowLegendHelp(false)}
+                title="Show legend"
+              >
+                ?
+              </button>
+              {showLegendHelp && (
+                <div className="absolute right-0 top-6 z-50 w-72 rounded border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-slate-900 p-3 shadow-lg text-xs">
+                  <div className="font-medium mb-2 text-zinc-700 dark:text-zinc-200">Chart Legend - Radial View</div>
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-2">
+                      <div className="w-8 h-0.5 border-t-2 border-dashed border-blue-500"></div>
+                      <span className="text-zinc-600 dark:text-zinc-300">Planned Progress (dashed line)</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <div className="w-3 h-3 rounded-full bg-blue-500"></div>
+                      <span className="text-zinc-600 dark:text-zinc-300">Actual Progress (solid dots)</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <svg width="32" height="16" viewBox="0 0 32 16" className="text-blue-500">
+                        <circle cx="8" cy="8" r="2" fill="none" stroke="currentColor" strokeWidth="0.5" opacity="0.4" />
+                        <circle cx="16" cy="8" r="5" fill="none" stroke="currentColor" strokeWidth="0.5" opacity="0.4" />
+                        <circle cx="24" cy="8" r="8" fill="none" stroke="currentColor" strokeWidth="0.5" opacity="0.4" />
+                      </svg>
+                      <span className="text-zinc-600 dark:text-zinc-300">Time (center → outer)</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <svg width="24" height="24" viewBox="0 0 24 24" className="text-blue-500">
+                        <path d="M 12 2 A 10 10 0 0 1 22 12" fill="none" stroke="currentColor" strokeWidth="2" opacity="0.5" />
+                        <text x="17" y="8" fontSize="8" fill="currentColor" opacity="0.6">100%</text>
+                      </svg>
+                      <span className="text-zinc-600 dark:text-zinc-300">Progress (angle in sector)</span>
+                    </div>
+                    <div className="mt-3 pt-2 border-t border-zinc-200 dark:border-zinc-700">
+                      <div className="font-medium mb-1.5 text-zinc-700 dark:text-zinc-200">Progress Indicators:</div>
+                      <div className="space-y-1 pl-2">
+                        <div className="text-zinc-600 dark:text-zinc-300">• 100% = Full Habit (complete sector)</div>
+                        <div className="text-zinc-600 dark:text-zinc-300">• 50% = Half Habit (half sector)</div>
+                        <div className="text-zinc-600 dark:text-zinc-300">• 0% = No Habit (sector start)</div>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-lg">🔄</span>
+                      <span className="text-zinc-600 dark:text-zinc-300">Swipe to rotate</span>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+          
+          {/* Controls - wrapped on mobile */}
+          <div className="flex flex-wrap items-center gap-2">
             {/* Display Mode Toggle */}
             {onDisplayModeChange && (
               <div className="flex items-center gap-1 rounded border border-zinc-200 dark:border-zinc-700 p-0.5">
@@ -761,14 +821,63 @@ export default function MultiEventChart({
 
   // 樹の断面グラフの場合は別コンポーネントを使用
   if (displayMode === 'tree-ring') {
+    // Legend help tooltip state for tree-ring
+    const [showLegendHelp, setShowLegendHelp] = React.useState(false)
+    
     return (
       <div className="space-y-3 w-full overflow-hidden">
         {/* Header with Range selector and Edit Graph button */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-          <h3 className="text-sm font-medium text-zinc-600 dark:text-zinc-300">
-            Habit Progress Timeline (Actual vs Planned)
-          </h3>
-          <div className="flex items-center gap-2 self-start sm:self-auto">
+        <div className="flex flex-col gap-2">
+          <div className="flex items-center justify-between gap-2">
+            <h3 className="text-sm font-medium text-zinc-600 dark:text-zinc-300">
+              Habit Progress Timeline (Actual vs Planned)
+            </h3>
+            {/* Legend Help Button */}
+            <div className="relative">
+              <button
+                className="rounded-full w-5 h-5 flex items-center justify-center text-xs border border-zinc-300 dark:border-zinc-600 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
+                onMouseEnter={() => setShowLegendHelp(true)}
+                onMouseLeave={() => setShowLegendHelp(false)}
+                title="Show legend"
+              >
+                ?
+              </button>
+              {showLegendHelp && (
+                <div className="absolute right-0 top-6 z-50 w-72 rounded border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-slate-900 p-3 shadow-lg text-xs">
+                  <div className="font-medium mb-2 text-zinc-700 dark:text-zinc-200">Chart Legend - Tree Ring View</div>
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-2">
+                      <svg width="32" height="16" viewBox="0 0 32 16" className="text-blue-500">
+                        <path d="M 16 8 m -7 0 a 7 7 0 0 1 7 -7 l 0 7 z" fill="none" stroke="currentColor" strokeWidth="2" opacity="0.5" />
+                      </svg>
+                      <span className="text-zinc-600 dark:text-zinc-300">100% = Full sector</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <svg width="32" height="16" viewBox="0 0 32 16" className="text-blue-500">
+                        <path d="M 16 8 m -7 0 a 7 7 0 0 1 3.5 -6.06" fill="none" stroke="currentColor" strokeWidth="2" opacity="0.5" />
+                      </svg>
+                      <span className="text-zinc-600 dark:text-zinc-300">Incomplete = Arc gap</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <svg width="32" height="16" viewBox="0 0 32 16" className="text-blue-500">
+                        <circle cx="8" cy="8" r="2" fill="none" stroke="currentColor" strokeWidth="0.5" opacity="0.4" />
+                        <circle cx="16" cy="8" r="5" fill="none" stroke="currentColor" strokeWidth="0.5" opacity="0.4" />
+                        <circle cx="24" cy="8" r="8" fill="none" stroke="currentColor" strokeWidth="0.5" opacity="0.4" />
+                      </svg>
+                      <span className="text-zinc-600 dark:text-zinc-300">Time (center → outer)</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-lg">🔄</span>
+                      <span className="text-zinc-600 dark:text-zinc-300">Swipe to rotate</span>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+          
+          {/* Controls - wrapped on mobile */}
+          <div className="flex flex-wrap items-center gap-2">
             {/* Display Mode Toggle */}
             {onDisplayModeChange && (
               <div className="flex items-center gap-1 rounded border border-zinc-200 dark:border-zinc-700 p-0.5">
@@ -880,14 +989,55 @@ export default function MultiEventChart({
     )
   }
 
+  // Legend help tooltip state
+  const [showLegendHelp, setShowLegendHelp] = React.useState(false)
+
   return (
     <div className="space-y-3 w-full overflow-hidden">
       {/* Header with Range selector and Edit Graph button */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-        <h3 className="text-sm font-medium text-zinc-600 dark:text-zinc-300">
-          Habit Progress Timeline (Actual vs Planned)
-        </h3>
-        <div className="flex items-center gap-2 self-start sm:self-auto">
+      <div className="flex flex-col gap-2">
+        <div className="flex items-center justify-between gap-2">
+          <h3 className="text-sm font-medium text-zinc-600 dark:text-zinc-300">
+            Habit Progress Timeline (Actual vs Planned)
+          </h3>
+          {/* Legend Help Button */}
+          <div className="relative">
+            <button
+              className="rounded-full w-5 h-5 flex items-center justify-center text-xs border border-zinc-300 dark:border-zinc-600 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
+              onMouseEnter={() => setShowLegendHelp(true)}
+              onMouseLeave={() => setShowLegendHelp(false)}
+              title="Show legend"
+            >
+              ?
+            </button>
+            {showLegendHelp && (
+              <div className="absolute right-0 top-6 z-50 w-64 rounded border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-slate-900 p-3 shadow-lg text-xs">
+                <div className="font-medium mb-2 text-zinc-700 dark:text-zinc-200">Chart Legend</div>
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2">
+                    <div className="w-8 h-0.5 bg-blue-500"></div>
+                    <span className="text-zinc-600 dark:text-zinc-300">Actual Progress (solid line)</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <div className="w-8 h-0.5 border-t-2 border-dashed border-blue-500"></div>
+                    <span className="text-zinc-600 dark:text-zinc-300">Planned Progress (dashed line)</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <div className="w-3 h-3 rounded-full bg-blue-500"></div>
+                    <span className="text-zinc-600 dark:text-zinc-300">Actual Data Point</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <div className="w-3 h-3 rounded-full border-2 border-dashed border-blue-500"></div>
+                    <span className="text-zinc-600 dark:text-zinc-300">Planned Data Point</span>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+        
+        {/* Controls - wrapped on mobile */}
+        <div className="flex flex-wrap items-center gap-2">
           {/* Display Mode Toggle */}
           {onDisplayModeChange && (
             <div className="flex items-center gap-1 rounded border border-zinc-200 dark:border-zinc-700 p-0.5">
