@@ -52,16 +52,15 @@ describe('SEO Metadata Property-Based Tests', () => {
             const uniqueDescriptions = new Set(descriptions);
 
             // Property: If we have different page configurations, we should have unique metadata
-            // We allow duplicates only if the input configurations are identical
-            const uniqueConfigs = new Set(
-              pageConfigs.map(c => JSON.stringify({ title: c.title.trim(), description: c.description.trim() }))
-            );
+            // Count unique titles and descriptions separately from input
+            const uniqueInputTitles = new Set(pageConfigs.map(c => c.title.trim()));
+            const uniqueInputDescriptions = new Set(pageConfigs.map(c => c.description.trim()));
 
-            // The number of unique titles should match the number of unique input title configs
-            expect(uniqueTitles.size).toBe(uniqueConfigs.size);
+            // The number of unique titles should match the number of unique input titles
+            expect(uniqueTitles.size).toBe(uniqueInputTitles.size);
             
-            // The number of unique descriptions should match the number of unique input description configs
-            expect(uniqueDescriptions.size).toBe(uniqueConfigs.size);
+            // The number of unique descriptions should match the number of unique input descriptions
+            expect(uniqueDescriptions.size).toBe(uniqueInputDescriptions.size);
 
             // Each metadata object should have both title and description defined
             metadataList.forEach(({ metadata }) => {
@@ -113,16 +112,16 @@ describe('SEO Metadata Property-Based Tests', () => {
             const uniqueOgUrls = new Set(ogUrls);
 
             // Property: If we have different page configurations, we should have unique OG metadata
-            const uniqueConfigs = new Set(
-              pageConfigs.map(c => JSON.stringify({ title: c.title.trim(), description: c.description.trim() }))
-            );
+            // Count unique titles and descriptions separately
+            const uniqueTitles = new Set(pageConfigs.map(c => c.title.trim()));
+            const uniqueDescriptions = new Set(pageConfigs.map(c => c.description.trim()));
             const uniquePaths = new Set(pageConfigs.map(c => c.path));
 
-            // The number of unique OG titles should match the number of unique input title configs
-            expect(uniqueOgTitles.size).toBe(uniqueConfigs.size);
+            // The number of unique OG titles should match the number of unique input titles
+            expect(uniqueOgTitles.size).toBe(uniqueTitles.size);
             
-            // The number of unique OG descriptions should match the number of unique input description configs
-            expect(uniqueOgDescriptions.size).toBe(uniqueConfigs.size);
+            // The number of unique OG descriptions should match the number of unique input descriptions
+            expect(uniqueOgDescriptions.size).toBe(uniqueDescriptions.size);
 
             // The number of unique OG URLs should match the number of unique paths
             expect(uniqueOgUrls.size).toBe(uniquePaths.size);
@@ -169,15 +168,15 @@ describe('SEO Metadata Property-Based Tests', () => {
             const uniqueTwitterDescriptions = new Set(twitterDescriptions);
 
             // Property: If we have different page configurations, we should have unique Twitter metadata
-            const uniqueConfigs = new Set(
-              pageConfigs.map(c => JSON.stringify({ title: c.title.trim(), description: c.description.trim() }))
-            );
+            // Count unique titles and descriptions separately
+            const uniqueTitles = new Set(pageConfigs.map(c => c.title.trim()));
+            const uniqueDescriptions = new Set(pageConfigs.map(c => c.description.trim()));
 
-            // The number of unique Twitter titles should match the number of unique input title configs
-            expect(uniqueTwitterTitles.size).toBe(uniqueConfigs.size);
+            // The number of unique Twitter titles should match the number of unique input titles
+            expect(uniqueTwitterTitles.size).toBe(uniqueTitles.size);
             
-            // The number of unique Twitter descriptions should match the number of unique input description configs
-            expect(uniqueTwitterDescriptions.size).toBe(uniqueConfigs.size);
+            // The number of unique Twitter descriptions should match the number of unique input descriptions
+            expect(uniqueTwitterDescriptions.size).toBe(uniqueDescriptions.size);
 
             // Each metadata object should have complete Twitter Card data
             metadataList.forEach(({ metadata }) => {
@@ -263,16 +262,15 @@ describe('SEO Metadata Property-Based Tests', () => {
             const descriptions = metadataList.map(m => m.metadata.description);
             const uniqueDescriptions = new Set(descriptions);
 
-            // Property: Each unique (title, description) pair should produce unique metadata
-            const uniqueConfigs = new Set(
-              metadataList.map(m => JSON.stringify({ 
-                title: m.config.title.trim(), 
-                description: m.config.description.trim() 
-              }))
-            );
+            // Property: Each unique input title/description should produce unique metadata
+            // Count unique input titles and descriptions
+            const uniqueInputTitles = new Set(baseConfigs.map(c => c.title.trim()));
+            const uniqueInputDescriptions = new Set(baseConfigs.map(c => c.description.trim()));
 
-            expect(uniqueTitles.size).toBe(uniqueConfigs.size);
-            expect(uniqueDescriptions.size).toBe(uniqueConfigs.size);
+            // Since we generate for 2 locales, but the title/description are the same across locales,
+            // we expect the same number of unique titles/descriptions as unique inputs
+            expect(uniqueTitles.size).toBe(uniqueInputTitles.size);
+            expect(uniqueDescriptions.size).toBe(uniqueInputDescriptions.size);
 
             // Each metadata should have appropriate locale-specific keywords
             metadataList.forEach(({ metadata, config }) => {
