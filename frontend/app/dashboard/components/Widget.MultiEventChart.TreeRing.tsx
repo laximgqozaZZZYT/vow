@@ -373,6 +373,9 @@ export default function TreeRingEventChart({
           />
 
           {/* 習慣名を外側のリング上に配置（円環に沿って） */}
+          </g> {/* 回転可能なグループの一時終了 */}
+          
+          {/* パス定義（回転状態に応じて再生成） */}
           <defs>
             {habitIds.map((habitId, habitIndex) => {
               const habitCount = habitIds.length
@@ -385,9 +388,10 @@ export default function TreeRingEventChart({
               const endPos = polarToCartesian(centerX, centerY, labelRingRadius, sectorEndAngle)
               const largeArcFlag = anglePerHabit > 180 ? 1 : 0
               
-              // 下半分は逆方向に描画（テキストが上下反転しないように）
+              // 回転を考慮した実際の角度を計算
               const midAngle = (sectorStartAngle + sectorEndAngle) / 2
-              const isBottomHalf = midAngle > 90 && midAngle < 270
+              const rotatedMidAngle = (midAngle + rotation + 360) % 360
+              const isBottomHalf = rotatedMidAngle > 90 && rotatedMidAngle < 270
               
               let pathD
               if (isBottomHalf) {
@@ -400,7 +404,7 @@ export default function TreeRingEventChart({
               
               return (
                 <path
-                  key={`textPath-${habitId}`}
+                  key={`textPath-${habitId}-${rotation.toFixed(0)}`}
                   id={`textPath-${habitId}`}
                   d={pathD}
                   fill="none"
@@ -408,6 +412,9 @@ export default function TreeRingEventChart({
               )
             })}
           </defs>
+          
+          {/* ラベルは回転グループ内に配置 */}
+          <g transform={`rotate(${rotation} ${centerX} ${centerY})`}>
           
           {habitIds.map((habitId, habitIndex) => {
             const habit = habits.find(h => h.id === habitId)
@@ -441,7 +448,10 @@ export default function TreeRingEventChart({
             const sectorStartAngle = habitIndex * anglePerHabit
             const sectorEndAngle = (habitIndex + 1) * anglePerHabit
             const midAngle = (sectorStartAngle + sectorEndAngle) / 2
-            const isBottomHalf = midAngle > 90 && midAngle < 270
+            
+            // 回転を考慮した実際の角度を計算
+            const rotatedMidAngle = (midAngle + rotation + 360) % 360
+            const isBottomHalf = rotatedMidAngle > 90 && rotatedMidAngle < 270
 
             return (
               <g key={`label-${habitId}`}>
@@ -451,21 +461,6 @@ export default function TreeRingEventChart({
                   const lineSpacing = isMobile ? 11 : 13
                   const totalHeight = (totalLines - 1) * lineSpacing
                   const yOffset = (lineIndex * lineSpacing) - (totalHeight / 2)
-                  
-                  // 各行用の半径を調整（上下にずらす）
-                  const adjustedRadius = labelRingRadius + (isBottomHalf ? -yOffset : yOffset)
-                  
-                  // 調整された半径で新しいパスを生成
-                  const startPos = polarToCartesian(centerX, centerY, adjustedRadius, sectorStartAngle)
-                  const endPos = polarToCartesian(centerX, centerY, adjustedRadius, sectorEndAngle)
-                  const largeArcFlag = anglePerHabit > 180 ? 1 : 0
-                  
-                  let pathD
-                  if (isBottomHalf) {
-                    pathD = `M ${endPos.x} ${endPos.y} A ${adjustedRadius} ${adjustedRadius} 0 ${largeArcFlag} 0 ${startPos.x} ${startPos.y}`
-                  } else {
-                    pathD = `M ${startPos.x} ${startPos.y} A ${adjustedRadius} ${adjustedRadius} 0 ${largeArcFlag} 1 ${endPos.x} ${endPos.y}`
-                  }
                   
                   return (
                     <text

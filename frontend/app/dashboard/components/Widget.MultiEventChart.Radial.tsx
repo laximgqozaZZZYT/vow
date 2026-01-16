@@ -363,6 +363,10 @@ export default function RadialEventChart({
           />
 
           {/* 習慣名を外側のリング上に配置（円環に沿って） */}
+          {/* defsは回転グループの外に配置 */}
+          </g> {/* 回転可能なグループの一時終了 */}
+          
+          {/* パス定義（回転状態に応じて再生成） */}
           <defs>
             {habitIds.map((habitId, habitIndex) => {
               const habitCount = habitIds.length
@@ -375,9 +379,10 @@ export default function RadialEventChart({
               const endPos = polarToCartesian(centerX, centerY, labelRingRadius, sectorEndAngle)
               const largeArcFlag = anglePerHabit > 180 ? 1 : 0
               
-              // 下半分は逆方向に描画（テキストが上下反転しないように）
+              // 回転を考慮した実際の角度を計算
               const midAngle = (sectorStartAngle + sectorEndAngle) / 2
-              const isBottomHalf = midAngle > 90 && midAngle < 270
+              const rotatedMidAngle = (midAngle + rotation + 360) % 360
+              const isBottomHalf = rotatedMidAngle > 90 && rotatedMidAngle < 270
               
               let pathD
               if (isBottomHalf) {
@@ -390,7 +395,7 @@ export default function RadialEventChart({
               
               return (
                 <path
-                  key={`textPath-${habitId}`}
+                  key={`textPath-${habitId}-${rotation.toFixed(0)}`}
                   id={`textPath-radial-${habitId}`}
                   d={pathD}
                   fill="none"
@@ -398,6 +403,9 @@ export default function RadialEventChart({
               )
             })}
           </defs>
+          
+          {/* ラベルは回転グループ内に配置 */}
+          <g transform={`rotate(${rotation} ${centerX} ${centerY})`}>
           
           {habitIds.map((habitId, habitIndex) => {
             const habit = habits.find(h => h.id === habitId)
@@ -431,7 +439,10 @@ export default function RadialEventChart({
             const sectorStartAngle = habitIndex * anglePerHabit
             const sectorEndAngle = (habitIndex + 1) * anglePerHabit
             const midAngle = (sectorStartAngle + sectorEndAngle) / 2
-            const isBottomHalf = midAngle > 90 && midAngle < 270
+            
+            // 回転を考慮した実際の角度を計算
+            const rotatedMidAngle = (midAngle + rotation + 360) % 360
+            const isBottomHalf = rotatedMidAngle > 90 && rotatedMidAngle < 270
 
             return (
               <g key={`label-${habitId}`}>
