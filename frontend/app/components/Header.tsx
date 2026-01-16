@@ -1,12 +1,19 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
+import { usePathname } from "next/navigation";
 import Link from "next/link";
 
 export default function Header() {
   const [open, setOpen] = useState(false);
   const btnRef = useRef<HTMLButtonElement | null>(null);
   const menuRef = useRef<HTMLDivElement | null>(null);
+  const pathname = usePathname();
+
+  // ダッシュボードページではヘッダーを非表示
+  if (pathname?.startsWith('/dashboard')) {
+    return null;
+  }
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
