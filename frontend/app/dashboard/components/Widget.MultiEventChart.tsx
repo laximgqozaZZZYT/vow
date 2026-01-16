@@ -662,7 +662,7 @@ export default function MultiEventChart({
                 ?
               </button>
               {showLegendHelp && (
-                <div className="absolute right-0 top-6 z-50 w-72 rounded border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-slate-900 p-3 shadow-lg text-xs">
+                <div className="absolute right-0 top-6 z-50 w-56 sm:w-72 rounded border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-slate-900 p-3 shadow-lg text-xs">
                   <div className="font-medium mb-2 text-zinc-700 dark:text-zinc-200">Chart Legend - Radial View</div>
                   <div className="space-y-2">
                     <div className="flex items-center gap-2">
@@ -843,7 +843,7 @@ export default function MultiEventChart({
                 ?
               </button>
               {showLegendHelp && (
-                <div className="absolute right-0 top-6 z-50 w-72 rounded border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-slate-900 p-3 shadow-lg text-xs">
+                <div className="absolute right-0 top-6 z-50 w-56 sm:w-72 rounded border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-slate-900 p-3 shadow-lg text-xs">
                   <div className="font-medium mb-2 text-zinc-700 dark:text-zinc-200">Chart Legend - Tree Ring View</div>
                   <div className="space-y-2">
                     <div className="flex items-center gap-2">
@@ -1011,7 +1011,7 @@ export default function MultiEventChart({
               ?
             </button>
             {showLegendHelp && (
-              <div className="absolute right-0 top-6 z-50 w-64 rounded border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-slate-900 p-3 shadow-lg text-xs">
+              <div className="absolute right-0 top-6 z-50 w-56 sm:w-64 rounded border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-slate-900 p-3 shadow-lg text-xs">
                 <div className="font-medium mb-2 text-zinc-700 dark:text-zinc-200">Chart Legend</div>
                 <div className="space-y-2">
                   <div className="flex items-center gap-2">
