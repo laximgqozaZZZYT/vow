@@ -200,11 +200,15 @@ export default function RadialEventChart({
   // レスポンシブなサイズ設定
   const isMobile = typeof window !== 'undefined' && window.innerWidth <= 768
   const size = isMobile ? 400 : 600
-  const centerX = size / 2
-  const centerY = size / 2
-  const innerRadius = size * 0.1   // 中心の空白
-  const outerRadius = size * 0.35  // 外側の半径（ラベル用のスペースを確保）
-  const labelRingRadius = size * 0.42  // ラベルリングの半径
+  
+  // スマホでは中心を右下に配置して四分円を表示
+  const centerX = isMobile ? size * 0.85 : size / 2
+  const centerY = isMobile ? size * 0.85 : size / 2
+  
+  // スマホでは半径を大きくして四分円を画面いっぱいに表示
+  const innerRadius = isMobile ? size * 0.15 : size * 0.1   // 中心の空白
+  const outerRadius = isMobile ? size * 0.7 : size * 0.35  // 外側の半径
+  const labelRingRadius = isMobile ? size * 0.78 : size * 0.42  // ラベルリングの半径
   
   const habitIds = visibleHabitIds.filter(id => habits.find(h => h.id === id))
   const habitCount = habitIds.length
@@ -263,7 +267,7 @@ export default function RadialEventChart({
         <svg 
           ref={svgRef}
           viewBox={`0 0 ${size} ${size}`} 
-          className="w-full h-auto max-w-[600px]" 
+          className={`w-full h-auto ${isMobile ? 'max-w-full' : 'max-w-[600px]'}`}
           preserveAspectRatio="xMidYMid meet"
           onTouchStart={handleTouchStart}
           onTouchMove={handleTouchMove}
