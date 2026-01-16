@@ -653,39 +653,21 @@ export default function MultiEventChart({
               <div className="flex items-center gap-1 rounded border border-zinc-200 dark:border-zinc-700 p-0.5">
                 <button
                   className="rounded px-2 py-1 text-xs transition-colors hover:bg-zinc-50 dark:hover:bg-zinc-800"
-                  onClick={(e) => {
-                    if (isChartDragging) {
-                      e.preventDefault()
-                      return
-                    }
-                    onDisplayModeChange('linear')
-                  }}
+                  onClick={() => onDisplayModeChange('linear')}
                   title="Linear timeline view"
                 >
                   📊
                 </button>
                 <button
                   className="rounded px-2 py-1 text-xs transition-colors bg-blue-500 text-white"
-                  onClick={(e) => {
-                    if (isChartDragging) {
-                      e.preventDefault()
-                      return
-                    }
-                    onDisplayModeChange('radial')
-                  }}
+                  onClick={() => onDisplayModeChange('radial')}
                   title="Radial timeline view"
                 >
                   ⭕
                 </button>
                 <button
                   className="rounded px-2 py-1 text-xs transition-colors hover:bg-zinc-50 dark:hover:bg-zinc-800"
-                  onClick={(e) => {
-                    if (isChartDragging) {
-                      e.preventDefault()
-                      return
-                    }
-                    onDisplayModeChange('tree-ring')
-                  }}
+                  onClick={() => onDisplayModeChange('tree-ring')}
                   title="Tree ring view"
                 >
                   🎯
@@ -792,39 +774,21 @@ export default function MultiEventChart({
               <div className="flex items-center gap-1 rounded border border-zinc-200 dark:border-zinc-700 p-0.5">
                 <button
                   className="rounded px-2 py-1 text-xs transition-colors hover:bg-zinc-50 dark:hover:bg-zinc-800"
-                  onClick={(e) => {
-                    if (isChartDragging) {
-                      e.preventDefault()
-                      return
-                    }
-                    onDisplayModeChange('linear')
-                  }}
+                  onClick={() => onDisplayModeChange('linear')}
                   title="Linear timeline view"
                 >
                   📊
                 </button>
                 <button
                   className="rounded px-2 py-1 text-xs transition-colors hover:bg-zinc-50 dark:hover:bg-zinc-800"
-                  onClick={(e) => {
-                    if (isChartDragging) {
-                      e.preventDefault()
-                      return
-                    }
-                    onDisplayModeChange('radial')
-                  }}
+                  onClick={() => onDisplayModeChange('radial')}
                   title="Radial timeline view"
                 >
                   ⭕
                 </button>
                 <button
                   className="rounded px-2 py-1 text-xs transition-colors bg-blue-500 text-white"
-                  onClick={(e) => {
-                    if (isChartDragging) {
-                      e.preventDefault()
-                      return
-                    }
-                    onDisplayModeChange('tree-ring')
-                  }}
+                  onClick={() => onDisplayModeChange('tree-ring')}
                   title="Tree ring view"
                 >
                   🎯

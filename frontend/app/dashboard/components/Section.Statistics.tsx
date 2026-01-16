@@ -489,38 +489,82 @@ export default function StaticsSection({ habits, activities, goals }: { habits: 
     { id: 'goals', title: 'Goals' },
   ] as const), [])
   const [pageIndex, setPageIndex] = React.useState(0)
+  const [isTransitioning, setIsTransitioning] = React.useState(false)
 
-  // スワイプ操作用のstate
-  const [touchStart, setTouchStart] = React.useState<number | null>(null)
-  const [touchEnd, setTouchEnd] = React.useState<number | null>(null)
-
-  // スワイプの最小距離（ピクセル）
-  const minSwipeDistance = 50
-
-  const onTouchStart = (e: React.TouchEvent) => {
-    setTouchEnd(null)
-    setTouchStart(e.targetTouches[0].clientX)
-  }
-
-  const onTouchMove = (e: React.TouchEvent) => {
-    setTouchEnd(e.targetTouches[0].clientX)
-  }
-
-  const onTouchEnd = () => {
-    if (!touchStart || !touchEnd) return
+  // ページ切り替え時のアニメーション処理
+  const handlePageChange = React.useCallback((newIndex: number) => {
+    if (isTransitioning) return
     
-    const distance = touchStart - touchEnd
-    const isLeftSwipe = distance > minSwipeDistance
-    const isRightSwipe = distance < -minSwipeDistance
+    setIsTransitioning(true)
+    
+    // フェードアウト後にページを切り替え
+    setTimeout(() => {
+      setPageIndex(newIndex)
+      // フェードイン
+      setTimeout(() => {
+        setIsTransitioning(false)
+      }, 50)
+    }, 200)
+  }, [isTransitioning])
 
-    if (isLeftSwipe) {
-      // 左スワイプ = 次のページ
-      setPageIndex((i) => (i + 1) % pages.length)
-    } else if (isRightSwipe) {
-      // 右スワイプ = 前のページ
-      setPageIndex((i) => (i - 1 + pages.length) % pages.length)
+  // 自動切り替え用のstate
+  const [isAutoPlaying, setIsAutoPlaying] = React.useState(true)
+  const [hasUserInteracted, setHasUserInteracted] = React.useState(false)
+  const autoPlayIntervalRef = React.useRef<NodeJS.Timeout | null>(null)
+
+  // 自動切り替えのタイマーをリセット
+  const resetAutoPlay = React.useCallback(() => {
+    if (autoPlayIntervalRef.current) {
+      clearInterval(autoPlayIntervalRef.current)
+      autoPlayIntervalRef.current = null
     }
-  }
+    
+    // ユーザーが一度でも操作したら自動切り替えしない
+    if (isAutoPlaying && !hasUserInteracted) {
+      autoPlayIntervalRef.current = setInterval(() => {
+        const nextIndex = (pageIndex + 1) % pages.length
+        handlePageChange(nextIndex)
+      }, 5000) // 5秒ごとに切り替え
+    }
+  }, [isAutoPlaying, hasUserInteracted, pages.length, pageIndex, handlePageChange])
+
+  // 自動切り替えの開始/停止
+  React.useEffect(() => {
+    resetAutoPlay()
+    
+    return () => {
+      if (autoPlayIntervalRef.current) {
+        clearInterval(autoPlayIntervalRef.current)
+      }
+    }
+  }, [resetAutoPlay])
+
+  // isAutoPlayingが変更されたときにタイマーを再設定
+  React.useEffect(() => {
+    if (isAutoPlaying && !hasUserInteracted) {
+      resetAutoPlay()
+    } else {
+      if (autoPlayIntervalRef.current) {
+        clearInterval(autoPlayIntervalRef.current)
+        autoPlayIntervalRef.current = null
+      }
+    }
+  }, [isAutoPlaying, hasUserInteracted, resetAutoPlay])
+
+  // ユーザー操作時に自動切り替えを完全に停止
+  const handleUserInteraction = React.useCallback(() => {
+    // ユーザーが操作したことを記録
+    setHasUserInteracted(true)
+    
+    // 自動再生を停止
+    setIsAutoPlaying(false)
+    
+    // タイマーをクリア
+    if (autoPlayIntervalRef.current) {
+      clearInterval(autoPlayIntervalRef.current)
+      autoPlayIntervalRef.current = null
+    }
+  }, [])
 
   // Graph controls - allow range selection
   const [range, setRange] = React.useState<RangeKey>('7d')
@@ -664,31 +708,11 @@ export default function StaticsSection({ habits, activities, goals }: { habits: 
   }, [habits, activities, visibleHabitIds, range, activeWindow, goals])
 
   return (
-    <section className="relative rounded bg-white p-4 shadow dark:bg-[#0b0b0b]">
-      {/* Edge-attached carousel arrows (replaces old buttons) */}
-      <button
-        type="button"
-        aria-label="Previous"
-        title="Previous"
-        onClick={() => setPageIndex((i) => (i - 1 + pages.length) % pages.length)}
-        className={`absolute ${isLeftHanded ? 'right-0 translate-x-1/2' : 'left-0 -translate-x-1/2'} top-1/2 z-10 -translate-y-1/2 h-14 w-14 rounded-full border bg-white/40 shadow-sm backdrop-blur text-zinc-800 transition hover:bg-white/60 dark:border-slate-700 dark:bg-slate-900/35 dark:text-slate-100 dark:hover:bg-slate-900/55 opacity-60 hover:opacity-100`}
-      >
-        {isLeftHanded ? '→' : '←'}
-      </button>
-      <button
-        type="button"
-        aria-label="Next"
-        title="Next"
-        onClick={() => setPageIndex((i) => (i + 1) % pages.length)}
-        className={`absolute ${isLeftHanded ? 'left-0 -translate-x-1/2' : 'right-0 translate-x-1/2'} top-1/2 z-10 -translate-y-1/2 h-14 w-14 rounded-full border bg-white/40 shadow-sm backdrop-blur text-zinc-800 transition hover:bg-white/60 dark:border-slate-700 dark:bg-slate-900/35 dark:text-slate-100 dark:hover:bg-slate-900/55 opacity-60 hover:opacity-100`}
-      >
-        {isLeftHanded ? '←' : '→'}
-      </button>
-
-      <div className={`flex items-start gap-3 ${isLeftHanded ? 'flex-row-reverse' : 'justify-between'}`}>
+    <section className="relative rounded-lg bg-white p-6 shadow-sm border border-zinc-200/50 dark:bg-[#0b0b0b] dark:border-slate-800/50 transition-colors">
+      <div className={`flex items-start gap-4 ${isLeftHanded ? 'flex-row-reverse' : 'justify-between'}`}>
         <div>
-          <h2 className="text-lg font-medium">Statics</h2>
-          <div className="text-xs text-zinc-500">Stats & charts</div>
+          <h2 className="text-xl font-semibold text-zinc-900 dark:text-zinc-50">Statistics</h2>
+          <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">Insights and analytics</p>
         </div>
       </div>
 
@@ -699,12 +723,13 @@ export default function StaticsSection({ habits, activities, goals }: { habits: 
 
       {/* Responsive height page viewport */}
       <div 
-        className="mt-4 rounded border border-zinc-100 dark:border-slate-800 h-[520px] sm:h-[400px] md:h-[520px] overflow-hidden"
-        onTouchStart={onTouchStart}
-        onTouchMove={onTouchMove}
-        onTouchEnd={onTouchEnd}
+        className="mt-6 rounded-lg border border-zinc-200/80 dark:border-slate-800/80 bg-zinc-50/30 dark:bg-slate-900/20 h-[520px] sm:h-[400px] md:h-[520px] overflow-hidden backdrop-blur-sm transition-colors"
       >
-        <div className="h-full overflow-auto p-3">
+        <div 
+          className={`h-full overflow-auto p-4 transition-opacity duration-200 ${
+            isTransitioning ? 'opacity-0' : 'opacity-100'
+          }`}
+        >
           {activePage === 'relations' ? (
             <div className="min-w-0 h-full -m-3">
               <HabitRelationMap
@@ -828,6 +853,74 @@ export default function StaticsSection({ habits, activities, goals }: { habits: 
             </>
           )}
         </div>
+      </div>
+
+      {/* 矢印ボタンとページインジケーター - セクション下部に配置 */}
+      <div className="mt-6 flex items-center justify-center gap-3">
+        {/* 左矢印ボタン */}
+        <button
+          type="button"
+          aria-label="Previous"
+          title="Previous"
+          disabled={isTransitioning}
+          onClick={() => {
+            handleUserInteraction()
+            const prevIndex = (pageIndex - 1 + pages.length) % pages.length
+            handlePageChange(prevIndex)
+          }}
+          className="group flex-shrink-0 h-9 w-9 rounded-full border border-zinc-200 bg-white shadow-sm text-zinc-600 transition-all hover:border-zinc-300 hover:bg-zinc-50 hover:text-zinc-900 hover:shadow active:scale-95 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:border-slate-600 dark:hover:bg-slate-800 dark:hover:text-slate-100 flex items-center justify-center text-base font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          <span className="transition-transform group-hover:-translate-x-0.5">
+            {isLeftHanded ? '→' : '←'}
+          </span>
+        </button>
+
+        {/* ページインジケーター（ドット） */}
+        <div className="flex items-center gap-1.5">
+          {pages.map((page, idx) => (
+            <button
+              key={idx}
+              disabled={isTransitioning}
+              onClick={() => {
+                handleUserInteraction()
+                handlePageChange(idx)
+              }}
+              aria-label={`Go to ${page.title}`}
+              title={page.title}
+              className={`h-2 rounded-full transition-all disabled:cursor-not-allowed ${
+                idx === pageIndex
+                  ? 'w-6 bg-blue-500 dark:bg-blue-400'
+                  : 'w-2 bg-zinc-300 dark:bg-slate-600 hover:bg-zinc-400 dark:hover:bg-slate-500'
+              }`}
+            />
+          ))}
+        </div>
+
+        {/* 右矢印ボタン */}
+        <button
+          type="button"
+          aria-label="Next"
+          title="Next"
+          disabled={isTransitioning}
+          onClick={() => {
+            handleUserInteraction()
+            const nextIndex = (pageIndex + 1) % pages.length
+            handlePageChange(nextIndex)
+          }}
+          className="group flex-shrink-0 h-9 w-9 rounded-full border border-zinc-200 bg-white shadow-sm text-zinc-600 transition-all hover:border-zinc-300 hover:bg-zinc-50 hover:text-zinc-900 hover:shadow active:scale-95 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:border-slate-600 dark:hover:bg-slate-800 dark:hover:text-slate-100 flex items-center justify-center text-base font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          <span className="transition-transform group-hover:translate-x-0.5">
+            {isLeftHanded ? '←' : '→'}
+          </span>
+        </button>
+
+        {/* 自動再生インジケーター */}
+        {isAutoPlaying && !hasUserInteracted && (
+          <div className="ml-2 flex items-center gap-1.5 text-xs text-zinc-400 dark:text-zinc-500">
+            <div className="h-1.5 w-1.5 rounded-full bg-blue-500 dark:bg-blue-400 animate-pulse" />
+            <span className="hidden sm:inline">Auto</span>
+          </div>
+        )}
       </div>
 
 
