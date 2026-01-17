@@ -261,6 +261,7 @@ function EditableMindmapFlow({ habits, goals, onClose, onRegisterAsHabit, onRegi
   const [nodeType, setNodeType] = useState<'habit' | 'goal'>('habit');
   const [connectionStartInfo, setConnectionStartInfo] = useState<{nodeId: string, handleId?: string} | null>(null);
   const [selectedNode, setSelectedNode] = useState<Node | null>(null);
+  const [isEditing, setIsEditing] = useState(false);
   const [tags, setTags] = useState<any[]>([]);
   const [detailViewMode, setDetailViewMode] = useState<'normal' | 'detail'>('normal');
   const reactFlowWrapper = useRef<HTMLDivElement>(null);
@@ -364,6 +365,7 @@ function EditableMindmapFlow({ habits, goals, onClose, onRegisterAsHabit, onRegi
   const onNodeClick = useCallback(
     (event: React.MouseEvent, node: Node) => {
       setSelectedNode(node);
+      setIsEditing(false); // Reset to show action buttons first
     },
     []
   );
@@ -533,6 +535,79 @@ function EditableMindmapFlow({ habits, goals, onClose, onRegisterAsHabit, onRegi
     [project, setFlowNodes, setFlowEdges, connectionStartInfo, nodeType, flowNodes, onRegisterAsGoal, onRegisterAsHabit]
   );
 
+  // Handle delete
+  const handleDelete = useCallback(async () => {
+    if (!selectedNode) return;
+    
+    const confirmed = window.confirm(
+      selectedNode.type === 'goalNode'
+        ? 'Delete this Goal? All child Goals and Habits will also be deleted.'
+        : 'Delete this Habit?'
+    );
+    
+    if (!confirmed) return;
+    
+    try {
+      if (selectedNode.type === 'goalNode') {
+        const goalNodeData = selectedNode.data as GoalNodeData;
+        const goalId = goalNodeData.goal.id;
+        
+        // Find all child goals recursively
+        const findChildGoals = (parentId: string): string[] => {
+          const children = goals.filter(g => g.parentId === parentId);
+          const childIds = children.map(c => c.id);
+          const grandChildIds = children.flatMap(c => findChildGoals(c.id));
+          return [...childIds, ...grandChildIds];
+        };
+        
+        const allGoalIdsToDelete = [goalId, ...findChildGoals(goalId)];
+        
+        // Find all habits in these goals
+        const habitsToDelete = habits.filter(h => allGoalIdsToDelete.includes(h.goalId));
+        
+        // Delete all habits first
+        for (const habit of habitsToDelete) {
+          await supabaseDirectClient.deleteHabit(habit.id);
+        }
+        
+        // Delete all goals
+        for (const gId of allGoalIdsToDelete) {
+          await supabaseDirectClient.deleteGoal(gId);
+        }
+        
+        // Remove nodes and edges from UI
+        const nodeIdsToRemove = [
+          ...allGoalIdsToDelete.map(id => `goal-${id}`),
+          ...habitsToDelete.map(h => `habit-${h.id}`)
+        ];
+        
+        setFlowNodes((nds) => nds.filter(n => !nodeIdsToRemove.includes(n.id)));
+        setFlowEdges((eds) => eds.filter(e => 
+          !nodeIdsToRemove.includes(e.source) && !nodeIdsToRemove.includes(e.target)
+        ));
+        
+      } else if (selectedNode.type === 'habitNode') {
+        const habitNodeData = selectedNode.data as HabitNodeData;
+        const habitId = habitNodeData.habit.id;
+        
+        await supabaseDirectClient.deleteHabit(habitId);
+        
+        // Remove node and connected edges from UI
+        setFlowNodes((nds) => nds.filter(n => n.id !== selectedNode.id));
+        setFlowEdges((eds) => eds.filter(e => 
+          e.source !== selectedNode.id && e.target !== selectedNode.id
+        ));
+      }
+      
+      setSelectedNode(null);
+      setIsEditing(false);
+      
+    } catch (error) {
+      console.error('[EditableMindmap] Failed to delete:', error);
+      alert('Failed to delete. Please try again.');
+    }
+  }, [selectedNode, goals, habits, setFlowNodes, setFlowEdges]);
+
   // Handle form save
   const handleHabitSave = useCallback(async (habitData: any) => {
     if (!selectedNode || selectedNode.type !== 'habitNode') return;
@@ -649,32 +724,71 @@ function EditableMindmapFlow({ habits, goals, onClose, onRegisterAsHabit, onRegi
         <div className="border-t border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 shadow-lg max-h-[50vh] overflow-y-auto">
           <div className="p-4">
             <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold text-slate-900 dark:text-white">
+                {selectedNode.type === 'goalNode' 
+                  ? (selectedNode.data as GoalNodeData).goal.name
+                  : (selectedNode.data as HabitNodeData).habit.name
+                }
+              </h3>
               <button
-                onClick={() => setSelectedNode(null)}
+                onClick={() => {
+                  setSelectedNode(null);
+                  setIsEditing(false);
+                }}
                 className="text-slate-500 hover:text-slate-700 dark:hover:text-slate-300"
               >
                 ✕ Close
               </button>
             </div>
 
-            {selectedNode.type === 'goalNode' ? (
-              <GoalForm
-                goal={(selectedNode.data as GoalNodeData).goal}
-                goals={goals}
-                tags={tags}
-                viewMode={detailViewMode}
-                onViewModeChange={setDetailViewMode}
-                onSave={handleGoalSave}
-              />
+            {!isEditing ? (
+              // Show action buttons
+              <div className="flex gap-3 justify-center">
+                <button
+                  onClick={() => setIsEditing(true)}
+                  className="px-6 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors"
+                >
+                  Edit
+                </button>
+                <button
+                  onClick={handleDelete}
+                  className="px-6 py-2 bg-red-600 text-white rounded hover:bg-red-700 transition-colors"
+                >
+                  Delete
+                </button>
+                <button
+                  onClick={() => {
+                    setSelectedNode(null);
+                    setIsEditing(false);
+                  }}
+                  className="px-6 py-2 bg-slate-300 dark:bg-slate-600 text-slate-900 dark:text-white rounded hover:bg-slate-400 dark:hover:bg-slate-500 transition-colors"
+                >
+                  Cancel
+                </button>
+              </div>
             ) : (
-              <HabitForm
-                habit={(selectedNode.data as HabitNodeData).habit}
-                goals={goals}
-                tags={tags}
-                viewMode={detailViewMode}
-                onViewModeChange={setDetailViewMode}
-                onSave={handleHabitSave}
-              />
+              // Show edit form
+              <>
+                {selectedNode.type === 'goalNode' ? (
+                  <GoalForm
+                    goal={(selectedNode.data as GoalNodeData).goal}
+                    goals={goals}
+                    tags={tags}
+                    viewMode={detailViewMode}
+                    onViewModeChange={setDetailViewMode}
+                    onSave={handleGoalSave}
+                  />
+                ) : (
+                  <HabitForm
+                    habit={(selectedNode.data as HabitNodeData).habit}
+                    goals={goals}
+                    tags={tags}
+                    viewMode={detailViewMode}
+                    onViewModeChange={setDetailViewMode}
+                    onSave={handleHabitSave}
+                  />
+                )}
+              </>
             )}
           </div>
         </div>
