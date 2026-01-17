@@ -11,8 +11,6 @@ import ReactFlow, {
   useNodesState,
   useEdgesState,
   ReactFlowProvider,
-  Handle,
-  Position,
   NodeProps,
   MarkerType,
   useReactFlow,
@@ -23,6 +21,7 @@ import 'reactflow/dist/style.css'
 import { supabaseDirectClient } from '../../../lib/supabase-direct'
 import { HabitModal } from './Modal.Habit'
 import { GoalModal } from './Modal.Goal'
+import { GoalNodeHandles, HabitNodeHandles } from './Mindmap.Handle'
 import type { Habit, Goal } from '../types'
 import type { HabitRelation } from '../types/shared'
 
@@ -160,14 +159,9 @@ function EditableGoalNode({ id, data }: NodeProps<GoalNodeData>) {
     }
   }, [handleSubmit, label, id, setNodes]);
 
-  const handleClass = isMobile ? "w-6 h-6 bg-purple-500 border-2 border-white" : "w-3 h-3 bg-purple-500";
-
   return (
     <div className="relative">
-      <Handle type="target" position={Position.Top} className={handleClass} />
-      <Handle type="source" position={Position.Bottom} className={handleClass} />
-      <Handle type="source" position={Position.Right} id="right" className={handleClass} />
-      <Handle type="target" position={Position.Left} id="left" className={handleClass} />
+      <GoalNodeHandles isMobile={isMobile} />
       
       <div className="min-w-[220px] max-w-[280px] bg-gradient-to-br from-purple-50 to-purple-100 dark:from-purple-900/30 dark:to-purple-800/30 rounded-lg shadow-xl border-2 border-purple-400 dark:border-purple-600 overflow-hidden">
         <div className="relative h-2 bg-purple-200 dark:bg-purple-900">
@@ -259,14 +253,9 @@ function EditableHabitNode({ id, data }: NodeProps<HabitNodeData>) {
     }
   }, [handleSubmit, label, id, setNodes]);
 
-  const handleClass = isMobile ? "w-6 h-6 bg-blue-500 border-2 border-white" : "w-3 h-3 bg-blue-500";
-
   return (
     <div className="relative">
-      <Handle type="target" position={Position.Top} className={handleClass} />
-      <Handle type="source" position={Position.Bottom} className={handleClass} />
-      <Handle type="target" position={Position.Left} className={handleClass} />
-      <Handle type="source" position={Position.Right} className={handleClass} />
+      <HabitNodeHandles isMobile={isMobile} />
       
       <div className="min-w-[180px] max-w-[220px] bg-white dark:bg-slate-800 rounded-lg shadow-lg border-2 border-slate-300 dark:border-slate-600 overflow-hidden">
         <div className="relative h-2 bg-slate-200 dark:bg-slate-700">
@@ -356,14 +345,9 @@ function EditableMainHabitGroupNode({ id, data }: NodeProps<MainHabitGroupNodeDa
     return (current / total) * 100;
   };
 
-  const handleClass = isMobile ? "w-6 h-6 bg-blue-500 border-2 border-white" : "w-3 h-3 bg-blue-500";
-
   return (
     <div className="relative">
-      <Handle type="target" position={Position.Top} className={handleClass} />
-      <Handle type="source" position={Position.Bottom} className={handleClass} />
-      <Handle type="target" position={Position.Left} className={handleClass} />
-      <Handle type="source" position={Position.Right} className={handleClass} />
+      <HabitNodeHandles isMobile={isMobile} />
       
       <div className="min-w-[260px] max-w-[300px] bg-gradient-to-br from-blue-50 to-blue-100 dark:from-blue-900/30 dark:to-blue-800/30 rounded-lg shadow-xl border-3 border-blue-500 dark:border-blue-600 overflow-hidden p-3">
         <div className="bg-white dark:bg-slate-800 rounded-lg shadow-md border-2 border-blue-400 dark:border-blue-500 overflow-hidden mb-2">

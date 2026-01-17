@@ -1,6 +1,41 @@
 @import "tailwindcss";
 @import "reactflow/dist/style.css";
 
+/* Override React Flow Handle sizes - Semi-transparent with center dot */
+.react-flow__handle {
+  width: 16px !important;
+  height: 16px !important;
+  border-radius: 50% !important;
+  background-color: rgba(59, 130, 246, 0.25) !important;
+  border: 2px solid rgba(59, 130, 246, 0.4) !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+}
+
+/* Center dot inside handle */
+.react-flow__handle::after {
+  content: '';
+  width: 5px;
+  height: 5px;
+  background-color: rgba(59, 130, 246, 0.9);
+  border-radius: 50%;
+  pointer-events: none;
+}
+
+/* Mobile-specific handle sizes */
+@media (max-width: 768px) {
+  .react-flow__handle {
+    width: 24px !important;
+    height: 24px !important;
+  }
+  
+  .react-flow__handle::after {
+    width: 8px;
+    height: 8px;
+  }
+}
+
 /* Hide React Flow attribution */
 .react-flow__attribution {
   display: none !important;

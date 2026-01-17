@@ -1,5 +1,6 @@
 import React, { useState, useCallback, useRef } from "react";
-import { Handle, Position, NodeProps, useReactFlow } from 'reactflow';
+import { NodeProps, useReactFlow } from 'reactflow';
+import { NodeHandles } from './Mindmap.Handle';
 import { CustomNodeData } from '../types/mindmap.types';
 import { isMobileDevice, getNodeTypeStyles } from '../../../lib/mindmap.utils';
 import { debug } from '../../../lib/debug';
@@ -365,54 +366,12 @@ export function MindmapNode({ id, data, selected }: NodeProps<CustomNodeData>) {
         pointerEvents: 'all'
       }}
     >
-      {/* Connection Handles - モバイルでは大きめに、タップしやすく */}
-      <Handle 
-        type="target" 
-        position={Position.Top} 
-        className={`${isMobile ? 'w-16 h-16' : 'w-8 h-8'} bg-blue-500 border-3 border-white rounded-full shadow-lg hover:bg-blue-600 hover:scale-110 transition-all`} 
-        style={{ 
-          top: isMobile ? -32 : -16,
-          zIndex: 10
-        }}
-        onClick={isMobile ? (e) => handleHandleClick(e, 'top') : undefined}
-        onTouchStart={isMobile ? (e) => handleHandleTouchStart(e, 'top') : undefined}
-        onTouchEnd={isMobile ? (e) => handleHandleTouchEnd(e, 'top') : undefined}
-      />
-      <Handle 
-        type="source" 
-        position={Position.Bottom} 
-        className={`${isMobile ? 'w-16 h-16' : 'w-8 h-8'} bg-blue-500 border-3 border-white rounded-full shadow-lg hover:bg-blue-600 hover:scale-110 transition-all`} 
-        style={{ 
-          bottom: isMobile ? -32 : -16,
-          zIndex: 10
-        }}
-        onClick={isMobile ? (e) => handleHandleClick(e, 'bottom') : undefined}
-        onTouchStart={isMobile ? (e) => handleHandleTouchStart(e, 'bottom') : undefined}
-        onTouchEnd={isMobile ? (e) => handleHandleTouchEnd(e, 'bottom') : undefined}
-      />
-      <Handle 
-        type="target" 
-        position={Position.Left} 
-        className={`${isMobile ? 'w-16 h-16' : 'w-8 h-8'} bg-blue-500 border-3 border-white rounded-full shadow-lg hover:bg-blue-600 hover:scale-110 transition-all`} 
-        style={{ 
-          left: isMobile ? -32 : -16,
-          zIndex: 10
-        }}
-        onClick={isMobile ? (e) => handleHandleClick(e, 'left') : undefined}
-        onTouchStart={isMobile ? (e) => handleHandleTouchStart(e, 'left') : undefined}
-        onTouchEnd={isMobile ? (e) => handleHandleTouchEnd(e, 'left') : undefined}
-      />
-      <Handle 
-        type="source" 
-        position={Position.Right} 
-        className={`${isMobile ? 'w-16 h-16' : 'w-8 h-8'} bg-blue-500 border-3 border-white rounded-full shadow-lg hover:bg-blue-600 hover:scale-110 transition-all`} 
-        style={{ 
-          right: isMobile ? -32 : -16,
-          zIndex: 10
-        }}
-        onClick={isMobile ? (e) => handleHandleClick(e, 'right') : undefined}
-        onTouchStart={isMobile ? (e) => handleHandleTouchStart(e, 'right') : undefined}
-        onTouchEnd={isMobile ? (e) => handleHandleTouchEnd(e, 'right') : undefined}
+      {/* Connection Handles - 統一ハンドルコンポーネントを使用 */}
+      <NodeHandles 
+        isMobile={isMobile}
+        onHandleClick={isMobile ? (position) => (e) => handleHandleClick(e, position) : undefined}
+        onHandleTouchStart={isMobile ? (position) => (e) => handleHandleTouchStart(e, position) : undefined}
+        onHandleTouchEnd={isMobile ? (position) => (e) => handleHandleTouchEnd(e, position) : undefined}
       />
       
       {/* Node Content */}

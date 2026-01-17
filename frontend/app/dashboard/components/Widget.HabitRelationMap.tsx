@@ -10,13 +10,12 @@ import ReactFlow, {
   useNodesState,
   useEdgesState,
   ReactFlowProvider,
-  Handle,
-  Position,
   NodeProps,
   MarkerType,
 } from 'reactflow'
 import 'reactflow/dist/style.css'
 import { supabaseDirectClient } from '../../../lib/supabase-direct'
+import { GoalNodeHandles, HabitNodeHandles } from './Mindmap.Handle'
 import type { Habit, Goal } from '../types'
 import type { HabitRelation } from '../types/shared'
 
@@ -63,10 +62,7 @@ function GoalNode({ id, data }: NodeProps<GoalNodeData>) {
 
   return (
     <div className="relative">
-      <Handle type="target" position={Position.Top} className="w-3 h-3 bg-purple-500" />
-      <Handle type="source" position={Position.Bottom} className="w-3 h-3 bg-purple-500" />
-      <Handle type="source" position={Position.Right} id="right" className="w-3 h-3 bg-purple-500" />
-      <Handle type="target" position={Position.Left} id="left" className="w-3 h-3 bg-purple-500" />
+      <GoalNodeHandles />
       
       <div className="min-w-[220px] max-w-[280px] bg-gradient-to-br from-purple-50 to-purple-100 dark:from-purple-900/30 dark:to-purple-800/30 rounded-lg shadow-xl border-2 border-purple-400 dark:border-purple-600 overflow-hidden">
         <div className="relative h-2 bg-purple-200 dark:bg-purple-900">
@@ -124,10 +120,7 @@ function MainHabitGroupNode({ id, data }: NodeProps<MainHabitGroupNodeData>) {
 
   return (
     <div className="relative">
-      <Handle type="target" position={Position.Top} className="w-3 h-3 bg-blue-500" />
-      <Handle type="source" position={Position.Bottom} className="w-3 h-3 bg-blue-500" />
-      <Handle type="target" position={Position.Left} className="w-3 h-3 bg-blue-500" />
-      <Handle type="source" position={Position.Right} className="w-3 h-3 bg-blue-500" />
+      <HabitNodeHandles />
       
       {/* Main Habitの箱 */}
       <div className="min-w-[260px] max-w-[300px] bg-gradient-to-br from-blue-50 to-blue-100 dark:from-blue-900/30 dark:to-blue-800/30 rounded-lg shadow-xl border-3 border-blue-500 dark:border-blue-600 overflow-hidden p-3">
@@ -212,10 +205,7 @@ function HabitNode({ id, data }: NodeProps<HabitNodeData>) {
 
   return (
     <div className="relative">
-      <Handle type="target" position={Position.Top} className="w-3 h-3 bg-blue-500" />
-      <Handle type="source" position={Position.Bottom} className="w-3 h-3 bg-blue-500" />
-      <Handle type="target" position={Position.Left} className="w-3 h-3 bg-blue-500" />
-      <Handle type="source" position={Position.Right} className="w-3 h-3 bg-blue-500" />
+      <HabitNodeHandles />
       
       <div className="min-w-[180px] max-w-[220px] bg-white dark:bg-slate-800 rounded-lg shadow-lg border-2 border-slate-300 dark:border-slate-600 overflow-hidden">
         <div className="relative h-2 bg-slate-200 dark:bg-slate-700">
