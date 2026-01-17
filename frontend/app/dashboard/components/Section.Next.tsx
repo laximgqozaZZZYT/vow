@@ -24,10 +24,20 @@ export default function NextSection({ habits, onHabitAction }: NextSectionProps)
         try {
           if (t.start) {
             const baseDate = t.date ?? h.dueDate ?? now.toISOString().slice(0,10);
-            const dt = new Date(`${baseDate}T${t.start}:00`);
+            let dt = new Date(`${baseDate}T${t.start}:00`);
+            
+            // If the datetime is in the past, shift to today or tomorrow
+            if (dt < now) {
+              const todayStr = now.toISOString().slice(0,10);
+              dt = new Date(`${todayStr}T${t.start}:00`);
+              
+              // If still in the past (earlier today), try tomorrow
+              if (dt < now) {
+                dt = new Date(dt.getTime() + 24*60*60*1000);
+              }
+            }
+            
             if (dt >= now && dt <= windowEnd) { found = dt; break }
-            const dtNext = new Date(dt.getTime() + 24*60*60*1000);
-            if (dtNext >= now && dtNext <= windowEnd) { found = dtNext; break }
           }
         } catch (e) { /* ignore malformed */ }
       }
