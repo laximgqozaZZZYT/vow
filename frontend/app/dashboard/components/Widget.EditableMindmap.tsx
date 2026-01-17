@@ -267,6 +267,7 @@ function EditableMindmapFlow({ habits, goals, onClose, onRegisterAsHabit, onRegi
   const [zoomLevel, setZoomLevel] = useState(0.8);
   const reactFlowWrapper = useRef<HTMLDivElement>(null);
   const { project, fitView, zoomIn, zoomOut, setViewport, getViewport } = useReactFlow();
+  const isMobile = isMobileDevice();
 
   // ビューポートの変更を監視してズームレベルを更新
   React.useEffect(() => {

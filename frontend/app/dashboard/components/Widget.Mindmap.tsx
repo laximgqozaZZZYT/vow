@@ -527,7 +527,7 @@ function MindmapFlow({ onClose, onRegisterAsHabit, onRegisterAsGoal, goals = [],
       // 接続開始情報をクリア
       setConnectionStartInfo(null);
     },
-    [project, setNodes, setEdges, addLog, connectionStartInfo, getViewport, isMobile, nodes, setModalState]
+    [project, setNodes, setEdges, addLog, connectionStartInfo, getViewport, isMobile, nodes, setModalState, goals, habits]
   );
 
 
@@ -865,19 +865,124 @@ function MindmapFlow({ onClose, onRegisterAsHabit, onRegisterAsGoal, goals = [],
           className="bg-gray-50 dark:bg-gray-800"
           minZoom={isMobile ? 0.3 : 0.5} // モバイルでより小さくズームアウト可能
           maxZoom={isMobile ? 2 : 4} // モバイルでズームイン制限
-          onPaneClick={() => {
+          onPaneClick={(event) => {
             if (isMobile) {
               setMobileBottomMenu({ nodeId: '', nodeName: '', isVisible: false });
-              if (connectionMode.isActive) {
-                setConnectionMode({
-                  isActive: false,
-                  sourceNodeId: null,
-                  sourceHandleId: null
+              
+              // 結線モードが有効な場合は、空白領域タップで新規ノード作成
+              if (connectionMode.isActive && reactFlowWrapper.current) {
+                const reactFlowBounds = reactFlowWrapper.current.getBoundingClientRect();
+                const clientX = event.clientX;
+                const clientY = event.clientY;
+                
+                let position = project({
+                  x: clientX - reactFlowBounds.left,
+                  y: clientY - reactFlowBounds.top,
                 });
-                addLog('Mobile connection mode cancelled by pane click');
-              }
-            }
-          }}
+
+                // 画面内に配置されるように位置を調整
+                const viewport = getViewport();
+                const screenWidth = window.innerWidth;
+                const screenHeight = window.innerHeight;
+                
+                const margin = 100;
+                const minX = (-viewport.x + margin) / viewport.zoom;
+                const maxX = (-viewport.x + screenWidth - margin) / viewport.zoom;
+                const minY = (-viewport.y + margin) / viewport.zoom;
+                const maxY = (-viewport.y + screenHeight - margin) / viewport.zoom;
+                
+                position.x = Math.max(minX, Math.min(maxX, position.x));
+                position.y = Math.max(minY, Math.min(maxY, position.y));
+
+                // 新しいノードを作成
+                const newNodeId = `node-${Date.now()}`;
+                const sourceNode = nodes.find(n => n.id === connectionMode.sourceNodeId);
+                const nodeType = sourceNode?.data.nodeType || 'default';
+                
+                const newNode = {
+                  id: newNodeId,
+                  position,
+                  data: { label: 'New Node', isEditing: false, nodeType: 'default' as const },
+                  type: 'mindmapNode',
+                };
+
+                // ノードを追加
+                setNodes((nds) => nds.concat(newNode));
+
+                // 接続を作成
+                const edgeStyle = getEdgeStyle(nodeType);
+                const newEdge = {
+                  id: `edge-${connectionMode.sourceNodeId}-${newNodeId}`,
+                  source: connectionMode.sourceNodeId!,
+                  target: newNodeId,
+                  sourceHandle: connectionMode.sourceHandleId,
+                  targetHandle: null,
+                  style: edgeStyle,
+                  data: { sourceNodeType: nodeType }
+                };
+
+                setEdges((eds) => eds.concat(newEdge));
+                setHasUnsavedChanges(true);
+                
+                addLog(`Mobile: Created new node at (${Math.round(position.x)}, ${Math.round(position.y)}) and connected from ${connectionMode.sourceNodeId}`);
+                
+                // 結線元のノードタイプに応じて自動的にモーダルを開く
+                if (nodeType === 'goal') {
+                  // Goalから結線された場合
+                  let sourceGoalId = (sourceNode?.data as any)?.goalId;
+                  
+                  if (!sourceGoalId && sourceNode?.data.label) {
+                    const matchingGoal = goals.find(g => g.name === sourceNode.data.label);
+                    if (matchingGoal) {
+                      sourceGoalId = matchingGoal.id;
+                      addLog(`Found matching Goal by label: ${matchingGoal.name} (${matchingGoal.id})`);
+                    }
+                  }
+                  
+                  setModalState({
+                    habitModal: false,
+                    goalModal: true,
+                    selectedNodeName: 'New Goal',
+                    selectedNodeId: newNodeId
+                  });
+                  
+                  if (sourceGoalId) {
+                    (window as any).__mindmapNewNodeParentGoalId = sourceGoalId;
+                  }
+                } else if (nodeType === 'habit') {
+                  // Habitから結線された場合
+                  let sourceHabitId = (sourceNode?.data as any)?.habitId;
+                  
+                  if (!sourceHabitId && sourceNode?.data.label && habits) {
+                    const matchingHabit = habits.find(h => h.name === sourceNode.data.label);
+                    if (matchingHabit) {
+                      sourceHabitId = matchingHabit.id;
+                      addLog(`Found matching Habit by label: ${matchingHabit.name} (${matchingHabit.id})`);
+                    }
+                  }
+                  
+                  setModalState({
+                    habitModal: true,
+                    goalModal: false,
+                    selectedNodeName: 'New Habit',
+                    selectedNodeId: newNodeId
+                  });
+                  
+                  if (sourceHabitId) {
+                    (window as any).__mindmapNewNodeRelatedHabitIds = [sourceHabitId];
+                  }
+                } else {
+                  // 通常ノードの場合は編集モードにする
+                  setTimeout(() => {
+                    setNodes((nds) =>
+                      nds.map((n) =>
+                        n.id === newNodeId
+                          ? { ...n, data: { ...n.data, isEditing: true } }
+                          : { ...n, data: { ...n.data, isEditing: false } }
+                      )
+                    );
+                  }, 100);
+       
         >
           <Background variant={BackgroundVariant.Dots} gap={20} size={1} />
           
