@@ -685,7 +685,7 @@ function EditableMindmapFlow({ habits, goals, onClose, onRegisterAsHabit, onRegi
       {/* Header */}
       <div className="flex items-center justify-between p-4 border-b border-gray-200 dark:border-gray-700">
         <h2 className="text-xl font-semibold text-gray-900 dark:text-white">
-          Editable Mindmap
+          Edit Mindmap
         </h2>
         <button
           onClick={onClose}

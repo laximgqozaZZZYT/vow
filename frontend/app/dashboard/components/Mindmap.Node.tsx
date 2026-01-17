@@ -224,25 +224,109 @@ export function MindmapNode({ id, data, selected }: NodeProps<CustomNodeData>) {
     }, 5);
   }, [isMobile, isEditing, id, data.label]);
 
-  // ハンドルクリック/タップ処理（結線用）
-  const handleHandleClick = useCallback((e: React.MouseEvent, position: string) => {
-    if (!isMobile) return; // PC では従来のドラッグ操作を使用
+  // ハンドルのタッチ開始処理（ドラッグ&ドロップ用）
+  const handleHandleTouchStart = useCallback((e: React.TouchEvent, position: string) => {
+    if (!isMobile) return;
     
     e.stopPropagation();
     e.preventDefault();
     
-    // モバイル用の結線モードを開始するイベントを発火
-    const event = new CustomEvent('startMobileConnection', {
-      detail: {
-        sourceNodeId: id,
-        sourceHandleId: position
-      }
-    });
-    window.dispatchEvent(event);
+    // タッチ開始位置を記録
+    const touch = e.touches[0];
+    const startPos = { x: touch.clientX, y: touch.clientY };
     
-    // ログ出力
-    debug.log(`Mobile connection started from node ${id}, handle ${position}`);
+    // ハンドルのドラッグ開始情報を保存
+    (window as any).__handleDragInfo = {
+      isDragging: false,
+      startPos,
+      sourceNodeId: id,
+      sourceHandleId: position,
+      hasMoved: false
+    };
+    
+    debug.log(`Handle touch started from node ${id}, handle ${position}`);
   }, [isMobile, id]);
+
+  // ハンドルのタッチ移動処理
+  const handleHandleTouchMove = useCallback((e: React.TouchEvent) => {
+    if (!isMobile) return;
+    
+    const dragInfo = (window as any).__handleDragInfo;
+    if (!dragInfo) return;
+    
+    e.preventDefault(); // スクロールを防止
+    
+    const touch = e.touches[0];
+    const currentPos = { x: touch.clientX, y: touch.clientY };
+    const distance = Math.sqrt(
+      Math.pow(currentPos.x - dragInfo.startPos.x, 2) +
+      Math.pow(currentPos.y - dragInfo.startPos.y, 2)
+    );
+    
+    // 10px以上移動したらドラッグと判定
+    if (distance > 10 && !dragInfo.isDragging) {
+      dragInfo.isDragging = true;
+      dragInfo.hasMoved = true;
+      
+      // React Flowの接続開始イベントを発火
+      const connectStartEvent = new CustomEvent('handleDragStart', {
+        detail: {
+          nodeId: dragInfo.sourceNodeId,
+          handleId: dragInfo.sourceHandleId
+        }
+      });
+      window.dispatchEvent(connectStartEvent);
+      
+      debug.log(`Handle drag started from node ${dragInfo.sourceNodeId}`);
+    }
+    
+    // ドラッグ中の位置を更新（視覚的フィードバック用）
+    if (dragInfo.isDragging) {
+      dragInfo.currentPos = currentPos;
+    }
+  }, [isMobile]);
+
+  // ハンドルのタッチ終了処理
+  const handleHandleTouchEnd = useCallback((e: React.TouchEvent) => {
+    if (!isMobile) return;
+    
+    const dragInfo = (window as any).__handleDragInfo;
+    if (!dragInfo) return;
+    
+    e.stopPropagation();
+    e.preventDefault();
+    
+    const touch = e.changedTouches[0];
+    
+    if (dragInfo.hasMoved && dragInfo.isDragging) {
+      // ドラッグ終了位置でReact Flowの接続終了イベントを発火
+      const connectEndEvent = new CustomEvent('handleDragEnd', {
+        detail: {
+          clientX: touch.clientX,
+          clientY: touch.clientY,
+          sourceNodeId: dragInfo.sourceNodeId,
+          sourceHandleId: dragInfo.sourceHandleId
+        }
+      });
+      window.dispatchEvent(connectEndEvent);
+      
+      debug.log(`Handle drag ended at (${touch.clientX}, ${touch.clientY})`);
+    } else {
+      // 移動していない場合は従来の結線モード（タップ操作）
+      const event = new CustomEvent('startMobileConnection', {
+        detail: {
+          sourceNodeId: dragInfo.sourceNodeId,
+          sourceHandleId: dragInfo.sourceHandleId
+        }
+      });
+      window.dispatchEvent(event);
+      
+      debug.log(`Mobile connection started from node ${dragInfo.sourceNodeId}, handle ${dragInfo.sourceHandleId}`);
+    }
+    
+    // クリーンアップ
+    delete (window as any).__handleDragInfo;
+  }, [isMobile]);
 
   // マウスリーブ処理
   const handleMouseLeave = useCallback(() => {
@@ -327,42 +411,50 @@ export function MindmapNode({ id, data, selected }: NodeProps<CustomNodeData>) {
       <Handle 
         type="target" 
         position={Position.Top} 
-        className={`${isMobile ? 'w-8 h-8' : 'w-3 h-3'} bg-blue-500 border-2 border-white rounded-full`} 
+        className={`${isMobile ? 'w-16 h-16' : 'w-8 h-8'} bg-blue-500 border-3 border-white rounded-full shadow-lg hover:bg-blue-600 hover:scale-110 transition-all`} 
         style={{ 
-          top: isMobile ? -16 : -6,
+          top: isMobile ? -32 : -16,
           zIndex: 10
         }}
-        onClick={isMobile ? (e) => handleHandleClick(e, 'top') : undefined}
+        onTouchStart={isMobile ? (e) => handleHandleTouchStart(e, 'top') : undefined}
+        onTouchMove={isMobile ? handleHandleTouchMove : undefined}
+        onTouchEnd={isMobile ? handleHandleTouchEnd : undefined}
       />
       <Handle 
         type="source" 
         position={Position.Bottom} 
-        className={`${isMobile ? 'w-8 h-8' : 'w-3 h-3'} bg-blue-500 border-2 border-white rounded-full`} 
+        className={`${isMobile ? 'w-16 h-16' : 'w-8 h-8'} bg-blue-500 border-3 border-white rounded-full shadow-lg hover:bg-blue-600 hover:scale-110 transition-all`} 
         style={{ 
-          bottom: isMobile ? -16 : -6,
+          bottom: isMobile ? -32 : -16,
           zIndex: 10
         }}
-        onClick={isMobile ? (e) => handleHandleClick(e, 'bottom') : undefined}
+        onTouchStart={isMobile ? (e) => handleHandleTouchStart(e, 'bottom') : undefined}
+        onTouchMove={isMobile ? handleHandleTouchMove : undefined}
+        onTouchEnd={isMobile ? handleHandleTouchEnd : undefined}
       />
       <Handle 
         type="target" 
         position={Position.Left} 
-        className={`${isMobile ? 'w-8 h-8' : 'w-3 h-3'} bg-blue-500 border-2 border-white rounded-full`} 
+        className={`${isMobile ? 'w-16 h-16' : 'w-8 h-8'} bg-blue-500 border-3 border-white rounded-full shadow-lg hover:bg-blue-600 hover:scale-110 transition-all`} 
         style={{ 
-          left: isMobile ? -16 : -6,
+          left: isMobile ? -32 : -16,
           zIndex: 10
         }}
-        onClick={isMobile ? (e) => handleHandleClick(e, 'left') : undefined}
+        onTouchStart={isMobile ? (e) => handleHandleTouchStart(e, 'left') : undefined}
+        onTouchMove={isMobile ? handleHandleTouchMove : undefined}
+        onTouchEnd={isMobile ? handleHandleTouchEnd : undefined}
       />
       <Handle 
         type="source" 
         position={Position.Right} 
-        className={`${isMobile ? 'w-8 h-8' : 'w-3 h-3'} bg-blue-500 border-2 border-white rounded-full`} 
+        className={`${isMobile ? 'w-16 h-16' : 'w-8 h-8'} bg-blue-500 border-3 border-white rounded-full shadow-lg hover:bg-blue-600 hover:scale-110 transition-all`} 
         style={{ 
-          right: isMobile ? -16 : -6,
+          right: isMobile ? -32 : -16,
           zIndex: 10
         }}
-        onClick={isMobile ? (e) => handleHandleClick(e, 'right') : undefined}
+        onTouchStart={isMobile ? (e) => handleHandleTouchStart(e, 'right') : undefined}
+        onTouchMove={isMobile ? handleHandleTouchMove : undefined}
+        onTouchEnd={isMobile ? handleHandleTouchEnd : undefined}
       />
       
       {/* Node Content */}
