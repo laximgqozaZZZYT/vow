@@ -83,7 +83,7 @@ function MermaidBlock({ code }: { code: string }) {
             } catch (e) {
               debug.warn('Mermaid run method failed, trying legacy render:', e)
               // Fallback to legacy render - only if in browser environment
-              if (typeof window !== 'undefined' && typeof document !== 'undefined' && document.createElementNS) {
+              if (typeof window !== 'undefined' && typeof document !== 'undefined') {
                 await new Promise<void>((resolve, reject) => {
                   const renderTimeout = setTimeout(() => reject(new Error('Render timeout')), 5000)
                   
