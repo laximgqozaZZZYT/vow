@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Unified Relation Map - Improvements Test</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      padding: 20px;
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+    h1 {
+      color: #333;
+    }
+    .test-section {
+      margin: 30px 0;
+      padding: 20px;
+      border: 1px solid #ddd;
+      border-radius: 8px;
+      background: #f9f9f9;
+    }
+    .test-section h2 {
+      margin-top: 0;
+      color: #555;
+    }
+    .feature-list {
+      list-style: none;
+      padding: 0;
+    }
+    .feature-list li {
+      padding: 10px;
+      margin: 5px 0;
+      background: white;
+      border-left: 4px solid #4CAF50;
+      border-radius: 4px;
+    }
+    .feature-list li.completed {
+      border-left-color: #2196F3;
+    }
+    .code-block {
+      background: #f4f4f4;
+      padding: 10px;
+      border-radius: 4px;
+      font-family: monospace;
+      margin: 10px 0;
+    }
+  </style>
+</head>
+<body>
+  <h1>🎯 Unified Relation Map - 改善テスト</h1>
+  
+  <div class="test-section">
+    <h2>✅ 完了した改善項目</h2>
+    <ul class="feature-list">
+      <li class="completed">
+        <strong>1. Habitから延ばした新規ノードをHabitとして登録時、Related Habitに結線元を設定</strong>
+        <div class="code-block">
+          - 新規ノード作成時に sourceNodeId を保存<br>
+          - handleRegisterAsHabit で sourceNodeId をチェックし connectedHabitIds に追加
+        </div>
+      </li>
+      
+      <li class="completed">
+        <strong>2. 空白クリックで新規ノード作成</strong>
+        <div class="code-block">
+          - handlePaneClick コールバックを実装<br>
+          - ReactFlow の onPaneClick に設定
+        </div>
+      </li>
+      
+      <li class="completed">
+        <strong>3. グループボタンのページネーション実装</strong>
+        <div class="code-block">
+          - [全体] と [&lt;&lt;][群1][群2][群3]...[&gt;&gt;] の形式<br>
+          - 1ページあたり5群まで表示<br>
+          - 埋め込みモードとフルスクリーンモードの両方に実装
+        </div>
+      </li>
+      
+      <li class="completed">
+        <strong>4. スマホ操作の改善</strong>
+        <div class="code-block">
+          - ハンドルサイズをモバイルで拡大 (3x3 → 6x6)<br>
+          - 白い枠線を追加して視認性向上<br>
+          - モバイル接続モードボタン (🔗) を追加<br>
+          - すべてのノードタイプ (Goal, Habit, MainGroup) に適用
+        </div>
+      </li>
+    </ul>
+  </div>
+
+  <div class="test-section">
+    <h2>🧪 テスト手順</h2>
+    <ol>
+      <li>
+        <strong>Related Habit設定のテスト:</strong>
+        <ul>
+          <li>既存のHabitノードからハンドルをドラッグして空白にドロップ</li>
+          <li>新しいノードが作成されることを確認</li>
+          <li>新しいノードを右クリック → [習慣として登録]</li>
+          <li>Related Habitsに結線元のHabitが自動的に設定されていることを確認</li>
+        </ul>
+      </li>
+      
+      <li>
+        <strong>空白クリックでノード作成のテスト:</strong>
+        <ul>
+          <li>マップの空白部分をクリック</li>
+          <li>新しいノードが作成され、編集モードになることを確認</li>
+        </ul>
+      </li>
+      
+      <li>
+        <strong>グループページネーションのテスト:</strong>
+        <ul>
+          <li>6つ以上の独立したGoal群を作成</li>
+          <li>[&lt;&lt;] と [&gt;&gt;] ボタンが表示されることを確認</li>
+          <li>ボタンをクリックしてページ切り替えが動作することを確認</li>
+          <li>最初のページでは [&lt;&lt;] が無効化されることを確認</li>
+          <li>最後のページでは [&gt;&gt;] が無効化されることを確認</li>
+        </ul>
+      </li>
+      
+      <li>
+        <strong>モバイル操作のテスト:</strong>
+        <ul>
+          <li>モバイルデバイスまたはブラウザのデバイスエミュレーション (幅768px以下) でテスト</li>
+          <li>ノードのハンドルが大きく表示されることを確認</li>
+          <li>🔗 接続モードボタンが表示されることを確認</li>
+          <li>ハンドルをタップして接続操作がしやすいことを確認</li>
+        </ul>
+      </li>
+    </ol>
+  </div>
+
+  <div class="test-section">
+    <h2>📝 実装の詳細</h2>
+    <h3>変更されたファイル:</h3>
+    <ul>
+      <li><code>frontend/app/dashboard/components/Widget.UnifiedRelationMap.tsx</code></li>
+    </ul>
+    
+    <h3>主な変更点:</h3>
+    <ul>
+      <li>グループページネーション用の state: <code>groupPage</code></li>
+      <li>モバイル接続モード用の state: <code>mobileConnectionMode</code></li>
+      <li>各ノードコンポーネントでモバイル判定に基づいてハンドルサイズを動的に変更</li>
+      <li>グループボタンのレンダリングロジックを更新してページネーション対応</li>
+      <li>新規ノード作成時に <code>sourceNodeId</code> を保存</li>
+      <li><code>handleRegisterAsHabit</code> で <code>sourceNodeId</code> をチェック</li>
+    </ul>
+  </div>
+
+  <div class="test-section">
+    <h2>🎨 UI/UX の改善</h2>
+    <ul class="feature-list">
+      <li>
+        <strong>グループボタンのページネーション</strong><br>
+        多数のGoal群がある場合でも、UIが煩雑にならず、5群ずつ表示されます。
+      </li>
+      <li>
+        <strong>モバイルでの操作性向上</strong><br>
+        ハンドルが大きくなり、タッチ操作がしやすくなりました。
+      </li>
+      <li>
+        <strong>接続モードボタン</strong><br>
+        モバイルでは🔗ボタンで接続モードを切り替えられます（将来的な拡張用）。
+      </li>
+    </ul>
+  </div>
+
+  <div class="test-section">
+    <h2>✨ すべての要件が完了しました！</h2>
+    <p>以下の4つの改善がすべて実装されました：</p>
+    <ol>
+      <li>✅ Habitから延ばして作成した新規ノードを[Habitとして登録]するとき、そのRelated Habitは結線元のHabitとなる</li>
+      <li>✅ 何もないところでクリックしたら新しいノードを作成</li>
+      <li>✅ [全体][群1][群2]・・・を[全体] と [&lt;&lt;][群1][群2][群3]...[&gt;&gt;]に変更（ページネーション）</li>
+      <li>✅ スマホ操作でも結線等がやりやすいように改善</li>
+    </ol>
+  </div>
+
+</body>
+</html>

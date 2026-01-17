@@ -70,7 +70,7 @@ export function GoalModal({ open, onClose, goal, onUpdate, onDelete, onCreate, o
             onUpdate && onUpdate(updated)
             onClose()
         } else {
-            const payload = { name: name.trim() || 'Untitled', details: details.trim() || undefined, dueDate: dueDate ? formatLocalDate(dueDate) : undefined, parentId: parentId ?? undefined }
+            const payload = { name: name.trim() || 'Untitled', details: details.trim() || undefined, dueDate: dueDate ? formatLocalDate(dueDate) : undefined, parentId: parentId || null }
             onCreate && onCreate(payload)
             onClose()
         }
@@ -122,7 +122,7 @@ export function GoalModal({ open, onClose, goal, onUpdate, onDelete, onCreate, o
                         <label className="block text-sm font-medium mb-1">Parent goal (optional)</label>
                         <select value={parentId ?? ''} onChange={(e) => setParentId(e.target.value || null)} className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">
                             <option value="">(no parent)</option>
-                            {goals?.map(g => (
+                            {goals?.filter(g => !goal || g.id !== goal.id).map(g => (
                                 <option key={g.id} value={g.id}>{g.name}</option>
                             ))}
                         </select>

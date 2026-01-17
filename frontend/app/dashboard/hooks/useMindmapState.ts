@@ -2,7 +2,6 @@ import { useState, useCallback, useMemo } from 'react';
 import { Node, useNodesState, useEdgesState } from 'reactflow';
 import { 
   CustomNodeData, 
-  ContextMenu, 
   MobileBottomMenu, 
   ConnectionMode, 
   ModalState,
@@ -24,7 +23,6 @@ export const useMindmapState = (mindmap: any, goals: any[]) => {
   const [nodes, setNodes, onNodesChange] = useNodesState<CustomNodeData>(convertedNodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState(convertedEdges);
   const [selectedNodes, setSelectedNodes] = useState<Node<CustomNodeData>[]>([]);
-  const [contextMenu, setContextMenu] = useState<ContextMenu | null>(null);
   const [mobileBottomMenu, setMobileBottomMenu] = useState<MobileBottomMenu>({
     nodeId: '',
     nodeName: '',
@@ -68,8 +66,6 @@ export const useMindmapState = (mindmap: any, goals: any[]) => {
     onEdgesChange,
     selectedNodes,
     setSelectedNodes,
-    contextMenu,
-    setContextMenu,
     mobileBottomMenu,
     setMobileBottomMenu,
     connectionMode,

@@ -247,6 +247,7 @@ export function useEventHandlers({ habits, setHabits, goals, activities, setActi
       debug.log('[useEventHandlers] api.createHabit success:', h);
       setHabits((s) => [...s, h]);
       debug.log('[useEventHandlers] Habit added to state');
+      return h; // 作成されたHabitを返す
     } catch (e) { 
       console.error('[useEventHandlers] createHabit error:', e);
       console.error('[useEventHandlers] Error details:', {
@@ -254,6 +255,7 @@ export function useEventHandlers({ habits, setHabits, goals, activities, setActi
         message: (e as any)?.message,
         stack: (e as any)?.stack
       });
+      throw e; // エラーを再スローして呼び出し元で処理できるようにする
     }
   }
 

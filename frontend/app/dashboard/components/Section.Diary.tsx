@@ -58,7 +58,7 @@ function MermaidBlock({ code }: { code: string }) {
           if (!mm) throw new Error('Mermaid not available')
           
           // Check if we're in a proper browser environment
-          if (typeof document === 'undefined' || !document.createElementNS) {
+          if (typeof document === 'undefined' || typeof window === 'undefined' || !document.createElementNS) {
             throw new Error('Browser environment not available')
           }
           
@@ -82,20 +82,24 @@ function MermaidBlock({ code }: { code: string }) {
               await mm.run({ nodes: [mermaidDiv] })
             } catch (e) {
               debug.warn('Mermaid run method failed, trying legacy render:', e)
-              // Fallback to legacy render
-              await new Promise<void>((resolve, reject) => {
-                const renderTimeout = setTimeout(() => reject(new Error('Render timeout')), 5000)
-                
-                mm.render(`${instanceId}-legacy-${Date.now()}`, code, (svgCode: string) => {
-                  clearTimeout(renderTimeout)
-                  try {
-                    mermaidDiv.innerHTML = svgCode
-                    resolve()
-                  } catch (e) {
-                    reject(e)
-                  }
+              // Fallback to legacy render - only if in browser environment
+              if (typeof window !== 'undefined' && typeof document !== 'undefined' && document.createElementNS) {
+                await new Promise<void>((resolve, reject) => {
+                  const renderTimeout = setTimeout(() => reject(new Error('Render timeout')), 5000)
+                  
+                  mm.render(`${instanceId}-legacy-${Date.now()}`, code, (svgCode: string) => {
+                    clearTimeout(renderTimeout)
+                    try {
+                      mermaidDiv.innerHTML = svgCode
+                      resolve()
+                    } catch (e) {
+                      reject(e)
+                    }
+                  })
                 })
-              })
+              } else {
+                throw new Error('Legacy render not available in this environment')
+              }
             }
           } else if (mm.render) {
             // Legacy render method

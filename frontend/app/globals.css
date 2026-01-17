@@ -465,3 +465,46 @@ select:focus-visible,
   .shadow-md { box-shadow: var(--shadow-md); }
   .shadow-lg { box-shadow: var(--shadow-lg); }
 }
+
+/* Vertical Range Slider Styles */
+input[type="range"].vertical-slider {
+  -webkit-appearance: none;
+  appearance: none;
+  background: transparent;
+  outline: none;
+}
+
+input[type="range"].vertical-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #ffffff;
+  cursor: pointer;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+  position: relative;
+  z-index: 10;
+}
+
+input[type="range"].vertical-slider::-moz-range-thumb {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #ffffff;
+  cursor: pointer;
+  border: none;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+  position: relative;
+  z-index: 10;
+}
+
+input[type="range"].vertical-slider::-webkit-slider-runnable-track {
+  background: transparent;
+  height: 100%;
+}
+
+input[type="range"].vertical-slider::-moz-range-track {
+  background: transparent;
+  height: 100%;
+}

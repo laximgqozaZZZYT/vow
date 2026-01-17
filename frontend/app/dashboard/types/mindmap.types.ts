@@ -3,20 +3,12 @@ import { Node } from 'reactflow';
 // Mindmap Props
 export interface MindmapProps {
   onClose: () => void;
-  onRegisterAsHabit: (data: any) => void;
-  onRegisterAsGoal: (data: any) => void;
+  onRegisterAsHabit: (data: any) => Promise<any>;
+  onRegisterAsGoal: (data: any) => Promise<any>;
   goals?: { id: string; name: string }[];
+  habits?: { id: string; name: string }[];
   mindmap?: any;
   onSave?: (mindmapData: any) => void;
-}
-
-// Context Menu
-export interface ContextMenu {
-  id: string;
-  top?: number;
-  left?: number;
-  right?: number;
-  bottom?: number;
 }
 
 // Mobile Bottom Menu
@@ -46,6 +38,8 @@ export interface CustomNodeData {
   label: string;
   isEditing?: boolean;
   nodeType?: 'default' | 'habit' | 'goal';
+  habitId?: string;
+  goalId?: string;
 }
 
 // Node Type Styles

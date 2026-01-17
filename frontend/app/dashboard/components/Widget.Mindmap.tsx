@@ -20,8 +20,7 @@ import { MindmapProps } from '../types/mindmap.types'
 import { 
   isMobileDevice, 
   getEdgeStyle, 
-  calculateNewNodePosition,
-  calculateContextMenuPosition 
+  calculateNewNodePosition
 } from '../../../lib/mindmap.utils'
 import { getTranslation } from '../../../lib/mindmap.i18n'
 import { initializeMindmapTestHandler } from '../../../lib/mindmap.test-handler'
@@ -32,13 +31,12 @@ if (typeof window !== 'undefined') {
   initializeMindmapTestHandler();
 }
 
-function MindmapFlow({ onClose, onRegisterAsHabit, onRegisterAsGoal, goals = [], mindmap, onSave }: MindmapProps) {
+function MindmapFlow({ onClose, onRegisterAsHabit, onRegisterAsGoal, goals = [], habits = [], mindmap, onSave }: MindmapProps) {
   const state = useMindmapState(mindmap, goals);
   const {
     nodes, setNodes, onNodesChange,
     edges, setEdges, onEdgesChange,
     selectedNodes, setSelectedNodes,
-    contextMenu, setContextMenu,
     mobileBottomMenu, setMobileBottomMenu,
     connectionMode, setConnectionMode,
     showSaveDialog, setShowSaveDialog,
@@ -62,7 +60,7 @@ function MindmapFlow({ onClose, onRegisterAsHabit, onRegisterAsGoal, goals = [],
     }
   })();
   const reactFlowWrapper = useRef<HTMLDivElement>(null);
-  const { project, getViewport, zoomIn, zoomOut, fitView } = useReactFlow();
+  const { project, getViewport, zoomIn, zoomOut, fitView, setViewport } = useReactFlow();
   const isMobile = isMobileDevice();
 
   // 編集モードの状態をグローバルに設定（カスタムノードから参照するため）
@@ -104,9 +102,36 @@ function MindmapFlow({ onClose, onRegisterAsHabit, onRegisterAsGoal, goals = [],
       return;
     }
 
-    // 結線を作成
+    // ソースノードとターゲットノードを取得
     const sourceNode = nodes.find(n => n.id === connectionMode.sourceNodeId);
+    const targetNode = nodes.find(n => n.id === nodeId);
     const nodeType = sourceNode?.data.nodeType || 'default';
+    
+    // Goal ノードの場合、ターゲットノードが既に別の Goal と結線されているかチェック
+    if (nodeType === 'goal') {
+      // ターゲットノードに接続されている Goal タイプのエッジを探す
+      const hasGoalConnection = edges.some(edge => 
+        (edge.target === nodeId && edge.data?.sourceNodeType === 'goal') ||
+        (edge.source === nodeId && nodes.find(n => n.id === edge.source)?.data.nodeType === 'goal')
+      );
+      
+      if (hasGoalConnection) {
+        addLog(`Cannot connect: Target node already has a Goal connection`);
+        if (toastCtx) {
+          toastCtx.showToast({ 
+            message: 'このノードは既に別のGoalと結線されています', 
+            duration: 2000 
+          });
+        }
+        setConnectionMode({
+          isActive: false,
+          sourceNodeId: null,
+          sourceHandleId: null
+        });
+        return;
+      }
+    }
+    
     const edgeStyle = getEdgeStyle(nodeType);
     
     const newEdge = {
@@ -129,7 +154,7 @@ function MindmapFlow({ onClose, onRegisterAsHabit, onRegisterAsGoal, goals = [],
       sourceNodeId: null,
       sourceHandleId: null
     });
-  }, [connectionMode, setEdges, addLog, nodes]);
+  }, [connectionMode, setEdges, addLog, nodes, edges, toastCtx]);
 
   // ノードやエッジの変更を検出して未保存フラグを設定
   useEffect(() => {
@@ -226,6 +251,8 @@ function MindmapFlow({ onClose, onRegisterAsHabit, onRegisterAsGoal, goals = [],
     };
   }, [isMobile, addLog, connectionMode, handleMobileNodeTap]);
 
+
+
   // モーダルが開いた時に名前フィールドを自動設定するためのエフェクト
   useEffect(() => {
     if (modalState.habitModal || modalState.goalModal) {
@@ -304,7 +331,30 @@ function MindmapFlow({ onClose, onRegisterAsHabit, onRegisterAsGoal, goals = [],
     (params: Connection) => {
       // ソースノードのnodeTypeを取得してエッジのスタイルを設定
       const sourceNode = nodes.find(n => n.id === params.source);
+      const targetNode = nodes.find(n => n.id === params.target);
       const nodeType = sourceNode?.data.nodeType || 'default';
+      
+      // Goal ノードの場合、ターゲットノードが既に別の Goal と結線されているかチェック
+      if (nodeType === 'goal') {
+        // ターゲットノードに接続されている Goal タイプのエッジを探す
+        const hasGoalConnection = edges.some(edge => 
+          (edge.target === params.target && edge.data?.sourceNodeType === 'goal') ||
+          (edge.source === params.target && nodes.find(n => n.id === edge.source)?.data.nodeType === 'goal')
+        );
+        
+        if (hasGoalConnection) {
+          addLog(`Cannot connect: Target node already has a Goal connection`);
+          if (toastCtx) {
+            toastCtx.showToast({ 
+              message: 'このノードは既に別のGoalと結線されています', 
+              duration: 2000 
+            });
+          }
+          setConnectionStartInfo(null);
+          return;
+        }
+      }
+      
       const edgeStyle = getEdgeStyle(nodeType);
       
       const newEdge = {
@@ -320,7 +370,7 @@ function MindmapFlow({ onClose, onRegisterAsHabit, onRegisterAsGoal, goals = [],
       // 接続が成功したら開始情報をクリア
       setConnectionStartInfo(null);
     },
-    [setEdges, addLog, nodes]
+    [setEdges, addLog, nodes, edges, toastCtx]
   );
 
   // 接続開始時の処理
@@ -404,55 +454,84 @@ function MindmapFlow({ onClose, onRegisterAsHabit, onRegisterAsGoal, goals = [],
         
         addLog(`Auto-created node "${newNode.data.label}" at (${Math.round(position.x)}, ${Math.round(position.y)}) and connected from node ${connectionStartInfo.nodeId}`);
         
-        // 新しく作成されたノードを編集モードにする
-        setTimeout(() => {
-          setNodes((nds) =>
-            nds.map((n) =>
-              n.id === newNodeId
-                ? { ...n, data: { ...n.data, isEditing: true } }
-                : { ...n, data: { ...n.data, isEditing: false } }
-            )
-          );
-        }, 100);
+        // 結線元のノードタイプに応じて自動的にモーダルを開く
+        if (nodeType === 'goal') {
+          // Goalから結線された場合: 親Goalとして新しいGoalを作成
+          addLog(`Opening Goal modal for new node connected from Goal: ${sourceNode?.data.label}`);
+          
+          // Goalノードに紐づくgoalIdを取得
+          // 1. ノードのdataに保存されている場合はそれを使用
+          let sourceGoalId = (sourceNode?.data as any)?.goalId;
+          
+          // 2. 保存されていない場合は、ノードのラベルからGoalを検索
+          if (!sourceGoalId && sourceNode?.data.label) {
+            const matchingGoal = goals.find(g => g.name === sourceNode.data.label);
+            if (matchingGoal) {
+              sourceGoalId = matchingGoal.id;
+              addLog(`Found matching Goal by label: ${matchingGoal.name} (${matchingGoal.id})`);
+            }
+          }
+          
+          setModalState({
+            habitModal: false,
+            goalModal: true,
+            selectedNodeName: 'New Goal',
+            selectedNodeId: newNodeId
+          });
+          
+          // parentIdを設定
+          if (sourceGoalId) {
+            (window as any).__mindmapNewNodeParentGoalId = sourceGoalId;
+          }
+        } else if (nodeType === 'habit') {
+          // Habitから結線された場合: 結線元Habitの後続Habitとして登録
+          addLog(`Opening Habit modal for new node connected from Habit: ${sourceNode?.data.label}`);
+          
+          // Habitノードに紐づくhabitIdを取得
+          // 1. ノードのdataに保存されている場合はそれを使用
+          let sourceHabitId = (sourceNode?.data as any)?.habitId;
+          
+          // 2. 保存されていない場合は、ノードのラベルからHabitを検索
+          if (!sourceHabitId && sourceNode?.data.label && habits) {
+            const matchingHabit = habits.find(h => h.name === sourceNode.data.label);
+            if (matchingHabit) {
+              sourceHabitId = matchingHabit.id;
+              addLog(`Found matching Habit by label: ${matchingHabit.name} (${matchingHabit.id})`);
+            }
+          }
+          
+          setModalState({
+            habitModal: true,
+            goalModal: false,
+            selectedNodeName: 'New Habit',
+            selectedNodeId: newNodeId
+          });
+          
+          // relatedHabitIdsを設定
+          if (sourceHabitId) {
+            (window as any).__mindmapNewNodeRelatedHabitIds = [sourceHabitId];
+          }
+        } else {
+          // 通常ノードの場合は編集モードにする
+          setTimeout(() => {
+            setNodes((nds) =>
+              nds.map((n) =>
+                n.id === newNodeId
+                  ? { ...n, data: { ...n.data, isEditing: true } }
+                  : { ...n, data: { ...n.data, isEditing: false } }
+              )
+            );
+          }, 100);
+        }
       }
       
       // 接続開始情報をクリア
       setConnectionStartInfo(null);
     },
-    [project, setNodes, setEdges, addLog, connectionStartInfo, getViewport, isMobile, nodes]
+    [project, setNodes, setEdges, addLog, connectionStartInfo, getViewport, isMobile, nodes, setModalState]
   );
 
-  const onNodeContextMenu = useCallback(
-    (event: React.MouseEvent, node: any) => {
-      // モバイルでは右クリックメニューを無効化（ボトムメニューを使用）
-      if (isMobile) return;
-      
-      event.preventDefault();
-      event.stopPropagation();
-      
-      console.log('[Mindmap] Right-click on node:', node.id, 'nodeType:', node.data.nodeType);
-      addLog(`Node ${node.id} right-clicked`);
-      
-      // 選択されていないノードを右クリックした場合、そのノードを選択
-      const clickedNode = nodes.find(n => n.id === node.id);
-      if (clickedNode && !selectedNodes.some(selectedNode => selectedNode.id === node.id)) {
-        setSelectedNodes([clickedNode]);
-      }
 
-      const { top, left } = calculateContextMenuPosition(event.clientX, event.clientY);
-
-      console.log('[Mindmap] Context menu position:', { top, left, clickX: event.clientX, clickY: event.clientY });
-
-      setContextMenu({
-        id: node.id,
-        top,
-        left,
-        right: undefined,
-        bottom: undefined,
-      });
-    },
-    [addLog, nodes, selectedNodes, isMobile]
-  );
 
   const addNodeAtCenter = useCallback(() => {
     if (!isEditMode) return; // 閲覧モードでは何もしない
@@ -484,7 +563,9 @@ function MindmapFlow({ onClose, onRegisterAsHabit, onRegisterAsGoal, goals = [],
           label: node.data.label,
           x: node.position.x,
           y: node.position.y,
-          nodeType: node.data.nodeType || 'default'
+          nodeType: node.data.nodeType || 'default',
+          habitId: (node.data as any).habitId,
+          goalId: (node.data as any).goalId
         })),
         edges: edges.map(edge => ({
           id: edge.id,
@@ -549,140 +630,94 @@ function MindmapFlow({ onClose, onRegisterAsHabit, onRegisterAsGoal, goals = [],
     setEdges([]);
   }, [setEdges, isEditMode]);
 
-  const handleEditText = useCallback(() => {
-    if (!isEditMode) return; // 閲覧モードでは何もしない
-    if (contextMenu) {
-      const nodeId = contextMenu.id;
-      addLog(`Edit Text selected for node: ${nodeId}`);
+
+
+  const handleHabitCreate = useCallback(async (payload: any) => {
+    const { selectedNodeId } = modalState;
+    
+    try {
+      // 親コンポーネントのコールバックを呼び出してHabitを作成
+      const createdHabit = await onRegisterAsHabit(payload);
+      addLog(`Habit "${payload.name}" registered successfully with ID: ${createdHabit?.id}`);
       
-      // 直接該当ノードの編集開始
+      // ノードタイプをhabitに変更し、habitIdを保存
       setNodes((nds) =>
         nds.map((n) =>
-          n.id === nodeId
-            ? { ...n, data: { ...n.data, isEditing: true } }
-            : { ...n, data: { ...n.data, isEditing: false } }
+          n.id === selectedNodeId
+            ? { ...n, data: { ...n.data, nodeType: 'habit', habitId: createdHabit?.id } }
+            : n
         )
       );
+      
+      // このノードから出ているエッジの色を更新
+      setEdges((eds) =>
+        eds.map((edge) => {
+          if (edge.source === selectedNodeId) {
+            return {
+              ...edge,
+              style: { stroke: '#10b981', strokeWidth: 2 }, // green-500
+              data: { sourceNodeType: 'habit' }
+            };
+          }
+          return edge;
+        })
+      );
+      
+      // モーダルを閉じる
+      setModalState({
+        habitModal: false,
+        goalModal: false,
+        selectedNodeName: '',
+        selectedNodeId: ''
+      });
+    } catch (error) {
+      console.error('[Mindmap] Failed to create habit:', error);
+      addLog(`Failed to create habit: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
-    setContextMenu(null);
-  }, [contextMenu, addLog, setNodes, isEditMode]);
-
-  const handleRegisterAsHabit = useCallback(() => {
-    if (!isEditMode) return; // 閲覧モードでは何もしない
-    if (contextMenu) {
-      const node = nodes.find(n => n.id === contextMenu.id);
-      if (node) {
-        if (node.data.nodeType === 'habit') {
-          addLog(`Opening Habit edit modal for node: "${node.data.label}"`);
-        }
-        addLog(`Opening Habit registration modal for node: "${node.data.label}"`);
-        setModalState({
-          habitModal: true,
-          goalModal: false,
-          selectedNodeName: node.data.label,
-          selectedNodeId: contextMenu.id
-        });
-      }
-    }
-    setContextMenu(null);
-  }, [contextMenu, nodes, addLog, isEditMode]);
-
-  const handleRegisterAsGoal = useCallback(() => {
-    if (!isEditMode) return; // 閲覧モードでは何もしない
-    if (contextMenu) {
-      const node = nodes.find(n => n.id === contextMenu.id);
-      if (node) {
-        if (node.data.nodeType === 'goal') {
-          addLog(`Opening Goal edit modal for node: "${node.data.label}"`);
-        }
-        addLog(`Opening Goal registration modal for node: "${node.data.label}"`);
-        setModalState({
-          habitModal: false,
-          goalModal: true,
-          selectedNodeName: node.data.label,
-          selectedNodeId: contextMenu.id
-        });
-      }
-    }
-    setContextMenu(null);
-  }, [contextMenu, nodes, addLog, isEditMode]);
-
-  const handleHabitCreate = useCallback((payload: any) => {
-    const { selectedNodeId } = modalState;
-    
-    // ノードタイプをhabitに変更
-    setNodes((nds) =>
-      nds.map((n) =>
-        n.id === selectedNodeId
-          ? { ...n, data: { ...n.data, nodeType: 'habit' } }
-          : n
-      )
-    );
-    
-    // このノードから出ているエッジの色を更新
-    setEdges((eds) =>
-      eds.map((edge) => {
-        if (edge.source === selectedNodeId) {
-          return {
-            ...edge,
-            style: { stroke: '#10b981', strokeWidth: 2 }, // green-500
-            data: { sourceNodeType: 'habit' }
-          };
-        }
-        return edge;
-      })
-    );
-    
-    // 親コンポーネントのコールバックを呼び出し
-    onRegisterAsHabit(payload);
-    addLog(`Habit "${payload.name}" registered successfully`);
-    
-    // モーダルを閉じる
-    setModalState({
-      habitModal: false,
-      goalModal: false,
-      selectedNodeName: '',
-      selectedNodeId: ''
-    });
   }, [modalState, setNodes, setEdges, onRegisterAsHabit, addLog]);
 
-  const handleGoalCreate = useCallback((payload: any) => {
+  const handleGoalCreate = useCallback(async (payload: any) => {
     const { selectedNodeId } = modalState;
     
-    // ノードタイプをgoalに変更
-    setNodes((nds) =>
-      nds.map((n) =>
-        n.id === selectedNodeId
-          ? { ...n, data: { ...n.data, nodeType: 'goal' } }
-          : n
-      )
-    );
-    
-    // このノードから出ているエッジの色を更新
-    setEdges((eds) =>
-      eds.map((edge) => {
-        if (edge.source === selectedNodeId) {
-          return {
-            ...edge,
-            style: { stroke: '#a855f7', strokeWidth: 2 }, // purple-500
-            data: { sourceNodeType: 'goal' }
-          };
-        }
-        return edge;
-      })
-    );
-    
-    // 親コンポーネントのコールバックを呼び出し
-    onRegisterAsGoal(payload);
-    addLog(`Goal "${payload.name}" registered successfully`);
-    
-    // モーダルを閉じる
-    setModalState({
-      habitModal: false,
-      goalModal: false,
-      selectedNodeName: '',
-      selectedNodeId: ''
-    });
+    try {
+      // 親コンポーネントのコールバックを呼び出してGoalを作成
+      const createdGoal = await onRegisterAsGoal(payload);
+      addLog(`Goal "${payload.name}" registered successfully with ID: ${createdGoal?.id}`);
+      
+      // ノードタイプをgoalに変更し、goalIdを保存
+      setNodes((nds) =>
+        nds.map((n) =>
+          n.id === selectedNodeId
+            ? { ...n, data: { ...n.data, nodeType: 'goal', goalId: createdGoal?.id } }
+            : n
+        )
+      );
+      
+      // このノードから出ているエッジの色を更新
+      setEdges((eds) =>
+        eds.map((edge) => {
+          if (edge.source === selectedNodeId) {
+            return {
+              ...edge,
+              style: { stroke: '#a855f7', strokeWidth: 2 }, // purple-500
+              data: { sourceNodeType: 'goal' }
+            };
+          }
+          return edge;
+        })
+      );
+      
+      // モーダルを閉じる
+      setModalState({
+        habitModal: false,
+        goalModal: false,
+        selectedNodeName: '',
+        selectedNodeId: ''
+      });
+    } catch (error) {
+      console.error('[Mindmap] Failed to create goal:', error);
+      addLog(`Failed to create goal: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
   }, [modalState, setNodes, setEdges, onRegisterAsGoal, addLog]);
 
   const handleModalClose = useCallback(() => {
@@ -693,27 +728,14 @@ function MindmapFlow({ onClose, onRegisterAsHabit, onRegisterAsGoal, goals = [],
       selectedNodeId: ''
     });
     addLog('Modal closed without registration');
+    
+    // グローバル変数をクリア
+    delete (window as any).__mindmapNewNodeGoalId;
+    delete (window as any).__mindmapNewNodeRelatedHabitIds;
+    delete (window as any).__mindmapNewNodeParentGoalId;
   }, [addLog]);
 
-  const handleDeleteNode = useCallback(() => {
-    if (!isEditMode) return; // 閲覧モードでは何もしない
-    if (contextMenu) {
-      const nodeToDelete = contextMenu.id;
-      
-      const nodesToDelete = selectedNodes.some(node => node.id === nodeToDelete)
-        ? selectedNodes.map(node => node.id)
-        : [nodeToDelete];
-      
-      setNodes((nds) => nds.filter((node) => !nodesToDelete.includes(node.id)));
-      
-      setEdges((eds) => eds.filter((edge) => 
-        !nodesToDelete.includes(edge.source) && !nodesToDelete.includes(edge.target)
-      ));
-      
-      setSelectedNodes([]);
-    }
-    setContextMenu(null);
-  }, [contextMenu, selectedNodes, setNodes, setEdges, isEditMode]);
+
 
   // Handle keyboard shortcuts
   useEffect(() => {
@@ -735,9 +757,6 @@ function MindmapFlow({ onClose, onRegisterAsHabit, onRegisterAsGoal, goals = [],
           if (selectedNodes.length > 0) {
             deleteSelectedNodes();
           }
-          break;
-        case 'Escape':
-          setContextMenu(null);
           break;
       }
     };
@@ -821,7 +840,6 @@ function MindmapFlow({ onClose, onRegisterAsHabit, onRegisterAsGoal, goals = [],
       <div 
         className="flex-1 h-full" 
         ref={reactFlowWrapper}
-        onClick={() => setContextMenu(null)}
       >
         <ReactFlow
           nodes={nodes}
@@ -831,7 +849,6 @@ function MindmapFlow({ onClose, onRegisterAsHabit, onRegisterAsGoal, goals = [],
           onConnect={isEditMode ? onConnect : undefined}
           onConnectStart={isEditMode ? (onConnectStart as any) : undefined}
           onConnectEnd={isEditMode ? (onConnectEnd as any) : undefined}
-          onNodeContextMenu={isEditMode ? onNodeContextMenu : undefined}
           onSelectionChange={onSelectionChange}
           onNodeClick={isMobile ? (event, node) => {
             if (connectionMode.isActive) {
@@ -850,7 +867,6 @@ function MindmapFlow({ onClose, onRegisterAsHabit, onRegisterAsGoal, goals = [],
           minZoom={isMobile ? 0.3 : 0.5} // モバイルでより小さくズームアウト可能
           maxZoom={isMobile ? 2 : 4} // モバイルでズームイン制限
           onPaneClick={() => {
-            setContextMenu(null);
             if (isMobile) {
               setMobileBottomMenu({ nodeId: '', nodeName: '', isVisible: false });
               if (connectionMode.isActive) {
@@ -865,33 +881,53 @@ function MindmapFlow({ onClose, onRegisterAsHabit, onRegisterAsGoal, goals = [],
           }}
         >
           <Background variant={BackgroundVariant.Dots} gap={20} size={1} />
-          <Controls />
           
           {/* Custom Panels - モバイル対応 */}
           <Panel position="bottom-left" className="flex flex-col gap-2 m-2 sm:m-4">
-            {/* Zoom Controls */}
-            <div className="flex flex-col gap-1">
-              <button
-                onClick={() => zoomIn()}
-                className={`${isMobile ? 'w-12 h-12' : 'w-10 h-10'} bg-gray-600 hover:bg-gray-700 text-white rounded shadow-lg flex items-center justify-center text-lg transition-colors`}
-                title={t('zoom_in')}
-              >
-                ＋
-              </button>
+            {/* Zoom Controls - スライダー式 */}
+            <div className="flex flex-col gap-2 bg-gray-600/90 backdrop-blur-sm rounded-lg p-3 shadow-lg items-center">
               <button
                 onClick={() => fitView()}
-                className={`${isMobile ? 'w-12 h-12' : 'w-10 h-10'} bg-gray-600 hover:bg-gray-700 text-white rounded shadow-lg flex items-center justify-center ${isMobile ? 'text-sm' : 'text-xs'} transition-colors`}
+                className={`${isMobile ? 'w-10 h-10' : 'w-8 h-8'} bg-gray-700 hover:bg-gray-800 text-white rounded flex items-center justify-center text-base transition-colors`}
                 title={t('fit_view')}
               >
                 ⌂
               </button>
-              <button
-                onClick={() => zoomOut()}
-                className={`${isMobile ? 'w-12 h-12' : 'w-10 h-10'} bg-gray-600 hover:bg-gray-700 text-white rounded shadow-lg flex items-center justify-center text-lg transition-colors`}
-                title={t('zoom_out')}
-              >
-                －
-              </button>
+              <div className="flex flex-col items-center gap-1 py-2">
+                <span className="text-white text-sm font-bold">＋</span>
+                <div className="relative" style={{ width: '40px', height: '120px' }}>
+                  <input
+                    type="range"
+                    min={isMobile ? 30 : 50}
+                    max={isMobile ? 200 : 400}
+                    step="10"
+                    defaultValue="100"
+                    onChange={(e) => {
+                      const zoomLevel = parseInt(e.target.value) / 100;
+                      const viewport = getViewport();
+                      // 画面中心を基準にズーム
+                      const centerX = window.innerWidth / 2;
+                      const centerY = window.innerHeight / 2;
+                      const x = centerX - (centerX - viewport.x) * (zoomLevel / viewport.zoom);
+                      const y = centerY - (centerY - viewport.y) * (zoomLevel / viewport.zoom);
+                      setViewport({ x, y, zoom: zoomLevel }, { duration: 200 });
+                    }}
+                    className="absolute vertical-slider"
+                    style={{ 
+                      width: '120px',
+                      height: '40px',
+                      transform: 'rotate(-90deg)',
+                      transformOrigin: '20px 20px',
+                    }}
+                    title="Zoom"
+                  />
+                  <div 
+                    className="absolute left-1/2 top-0 bottom-0 w-2 bg-gray-500 rounded-full"
+                    style={{ transform: 'translateX(-50%)', pointerEvents: 'none' }}
+                  />
+                </div>
+                <span className="text-white text-sm font-bold">ー</span>
+              </div>
             </div>
             
             {/* Action Buttons - 編集モードでのみ表示 */}
@@ -987,97 +1023,7 @@ function MindmapFlow({ onClose, onRegisterAsHabit, onRegisterAsGoal, goals = [],
         </div>
       )}
 
-      {/* Context Menu - PC only（編集モードでのみ表示） */}
-      {!isMobile && isEditMode && contextMenu && (() => {
-        const node = nodes.find(n => n.id === contextMenu.id);
-        const nodeType = node?.data.nodeType;
-        console.log('[Mindmap] Rendering context menu for node:', contextMenu.id, 'nodeType:', nodeType, 'position:', { top: contextMenu.top, left: contextMenu.left });
-        
-        return (
-          <div
-            className="fixed bg-gray-800 border border-gray-600 rounded-lg shadow-lg py-2 z-[60] min-w-[220px]"
-            style={{
-              top: contextMenu.top !== undefined ? `${contextMenu.top}px` : undefined,
-              left: contextMenu.left !== undefined ? `${contextMenu.left}px` : undefined,
-            }}
-            onClick={(e) => e.stopPropagation()}
-          >
-            {/* テキスト編集 */}
-            <button
-              onClick={handleEditText}
-              className="w-full px-4 py-2 text-left text-sm text-white hover:bg-gray-700 flex items-center gap-2 transition-colors"
-            >
-              <span>✏️</span>
-              {t('edit_text')}
-            </button>
-            
-            <hr className="my-1 border-gray-600" />
-            
-            {/* 編集オプション（ノードタイプに応じて表示） */}
-            {(() => {
-              if (nodeType === 'habit') {
-                // Habitノードの場合
-                return (
-                  <button
-                    onClick={handleRegisterAsHabit}
-                    className="w-full px-4 py-2 text-left text-sm text-green-400 hover:bg-gray-700 hover:text-green-300 flex items-center gap-2 transition-colors"
-                  >
-                    <span>📝</span>
-                    <span>{t('edit_habit')}</span>
-                  </button>
-                );
-              } else if (nodeType === 'goal') {
-                // Goalノードの場合
-                return (
-                  <button
-                    onClick={handleRegisterAsGoal}
-                    className="w-full px-4 py-2 text-left text-sm text-purple-400 hover:bg-gray-700 hover:text-purple-300 flex items-center gap-2 transition-colors"
-                  >
-                    <span>📝</span>
-                    <span>{t('edit_goal')}</span>
-                  </button>
-                );
-              } else {
-                // 通常ノードの場合は登録オプションを表示
-                return (
-                  <>
-                    <button
-                      onClick={handleRegisterAsHabit}
-                      className="w-full px-4 py-2 text-left text-sm text-green-400 hover:bg-gray-700 hover:text-green-300 flex items-center gap-2 transition-colors"
-                    >
-                      <span>🔄</span>
-                      <span>{t('register_habit')}</span>
-                    </button>
-                    <button
-                      onClick={handleRegisterAsGoal}
-                      >
-                      className="w-full px-4 py-2 text-left text-sm text-purple-400 hover:bg-gray-700 hover:text-purple-300 flex items-center gap-2 transition-colors"
-                      <span>🎯</span>
-                      <span>{t('register_goal')}</span>
-                    </button>
-                  </>
-                );
-              }
-            })()}
-            
-            <hr className="my-1 border-gray-600" />
-            
-            {/* 削除 */}
-            <button
-              onClick={handleDeleteNode}
-              className="w-full px-4 py-2 text-left text-sm text-red-400 hover:bg-gray-700 hover:text-red-300 flex items-center gap-2 transition-colors"
-            >
-              <span>🗑️</span>
-              <span>
-                {selectedNodes.some(node => node.id === contextMenu.id) && selectedNodes.length > 1
-                  ? `${t('delete_node')} (${selectedNodes.length})`
-                  : t('delete_node')
-                }
-              </span>
-            </button>
-          </div>
-        );
-      })()}
+
 
       {/* Mobile Bottom Menu - 結線オプションを追加（編集モードでのみ表示） */}
       {isMobile && isEditMode && mobileBottomMenu.isVisible && (
@@ -1190,15 +1136,20 @@ function MindmapFlow({ onClose, onRegisterAsHabit, onRegisterAsGoal, goals = [],
         habit={null}
         initial={{ 
           date: new Date().toISOString().slice(0, 10),
-          goalId: goals.length > 0 ? goals[0].id : undefined
+          goalId: (window as any).__mindmapNewNodeGoalId || (goals.length > 0 ? goals[0].id : undefined),
+          relatedHabitIds: (window as any).__mindmapNewNodeRelatedHabitIds || undefined
         }}
-        onCreate={(payload) => {
+        onCreate={async (payload) => {
           // ノード名をHabit名として使用
           const updatedPayload = {
             ...payload,
             name: modalState.selectedNodeName || payload.name
           };
-          handleHabitCreate(updatedPayload);
+          await handleHabitCreate(updatedPayload);
+          
+          // グローバル変数をクリア
+          delete (window as any).__mindmapNewNodeGoalId;
+          delete (window as any).__mindmapNewNodeRelatedHabitIds;
         }}
         categories={goals}
       />
@@ -1208,13 +1159,20 @@ function MindmapFlow({ onClose, onRegisterAsHabit, onRegisterAsGoal, goals = [],
         open={modalState.goalModal}
         onClose={handleModalClose}
         goal={null}
-        onCreate={(payload) => {
+        initial={{
+          name: modalState.selectedNodeName,
+          parentId: (window as any).__mindmapNewNodeParentGoalId || null
+        }}
+        onCreate={async (payload) => {
           // ノード名をGoal名として使用
           const updatedPayload = {
             ...payload,
             name: modalState.selectedNodeName || payload.name
           };
-          handleGoalCreate(updatedPayload);
+          await handleGoalCreate(updatedPayload);
+          
+          // グローバル変数をクリア
+          delete (window as any).__mindmapNewNodeParentGoalId;
         }}
         goals={goals}
       />

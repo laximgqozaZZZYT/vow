@@ -712,8 +712,14 @@ function DashboardLayout(props: any) {
                 key="mindmap"
                 goals={goals as any}
                 habits={habits as any}
-                onRegisterAsHabit={(data) => createHabit(data)}
-                onRegisterAsGoal={(payload) => createGoal(payload)}
+                onRegisterAsHabit={async (data) => {
+                  const createdHabit = await createHabit(data);
+                  return createdHabit;
+                }}
+                onRegisterAsGoal={async (payload) => {
+                  const createdGoal = await createGoal(payload);
+                  return createdGoal;
+                }}
               />
             ) : null
           ))}

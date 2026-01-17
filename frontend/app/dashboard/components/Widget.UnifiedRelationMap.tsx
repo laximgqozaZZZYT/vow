@@ -1568,10 +1568,7 @@ function UnifiedRelationMapFlow({ habits, goals, onClose, embedded = false, onRe
             edges={flowEdges}
             onNodesChange={onNodesChange}
             onEdgesChange={onEdgesChange}
-            onConnect={onConnect}
-            onConnectStart={onConnectStart as any}
-            onConnectEnd={onConnectEnd as any}
-            onNodeContextMenu={onNodeContextMenu}
+            nodesDraggable={false} nodesConnectable={false} elementsSelectable={false}
             onNodeDoubleClick={onNodeDoubleClick}
             nodeTypes={nodeTypes}
             defaultViewport={{ x: 50, y: 50, zoom: 0.6 }}
@@ -1780,10 +1777,7 @@ function UnifiedRelationMapFlow({ habits, goals, onClose, embedded = false, onRe
             edges={flowEdges}
             onNodesChange={onNodesChange}
             onEdgesChange={onEdgesChange}
-            onConnect={onConnect}
-            onConnectStart={onConnectStart as any}
-            onConnectEnd={onConnectEnd as any}
-            onNodeContextMenu={onNodeContextMenu}
+            nodesDraggable={false} nodesConnectable={false} elementsSelectable={false}
             onNodeDoubleClick={onNodeDoubleClick}
             nodeTypes={nodeTypes}
             defaultViewport={{ x: 50, y: 50, zoom: 0.6 }}

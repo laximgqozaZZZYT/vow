@@ -65,7 +65,10 @@ export const convertNodesToReactFlow = (mindmapNodes: any[]): Node<CustomNodeDat
     data: { 
       label: node.text || node.label || 'Node', 
       isEditing: false, 
-      nodeType: node.nodeType || node.node_type || 'default' 
+      nodeType: node.nodeType || node.node_type || 'default',
+      // habitIdとgoalIdを保存
+      habitId: node.habitId || node.habit_id,
+      goalId: node.goalId || node.goal_id
     },
     type: 'mindmapNode',
   }));
@@ -124,35 +127,4 @@ export const calculateNewNodePosition = (viewport: any, isMobile: boolean) => {
   position.y = Math.max(minY, Math.min(maxY, position.y));
 
   return position;
-};
-
-// コンテキストメニューの位置を計算
-export const calculateContextMenuPosition = (
-  clickX: number,
-  clickY: number,
-  menuWidth: number = 220,
-  menuHeight: number = 280
-) => {
-  const padding = 10;
-  const windowWidth = window.innerWidth;
-  const windowHeight = window.innerHeight;
-  
-  let top = clickY + padding;
-  let left = clickX + padding;
-  
-  // 右端に近い場合は左側に表示
-  if (left + menuWidth > windowWidth - padding) {
-    left = clickX - menuWidth - padding;
-  }
-  
-  // 下端に近い場合は上側に表示
-  if (top + menuHeight > windowHeight - padding) {
-    top = clickY - menuHeight - padding;
-  }
-  
-  // 画面外に出ないように最終調整
-  top = Math.max(padding, Math.min(top, windowHeight - menuHeight - padding));
-  left = Math.max(padding, Math.min(left, windowWidth - menuWidth - padding));
-
-  return { top, left };
 };
