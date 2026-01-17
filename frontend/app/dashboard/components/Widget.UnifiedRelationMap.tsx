@@ -470,9 +470,25 @@ function UnifiedRelationMapFlow({ habits, goals, onClose, embedded = false, onRe
   const [mobileConnectionMode, setMobileConnectionMode] = useState(false);
   const [nodeType, setNodeType] = useState<'habit' | 'goal'>('habit');
   const [isEditMode, setIsEditMode] = useState(false);
+  const [zoomLevel, setZoomLevel] = useState(0.6);
   const reactFlowWrapper = useRef<HTMLDivElement>(null);
-  const { project, fitView } = useReactFlow();
+  const { project, fitView, zoomIn, zoomOut, setViewport, getViewport } = useReactFlow();
   const isMobile = isMobileDevice();
+
+  // ビューポートの変更を監視してズームレベルを更新
+  React.useEffect(() => {
+    const updateZoom = () => {
+      const viewport = getViewport();
+      setZoomLevel(viewport.zoom);
+    };
+    
+    // 初期値を設定
+    updateZoom();
+    
+    // ビューポート変更時に更新（ReactFlowのイベントを使用）
+    const interval = setInterval(updateZoom, 100);
+    return () => clearInterval(interval);
+  }, [getViewport]);
 
   React.useEffect(() => {
     async function loadAllRelations() {
@@ -1544,8 +1560,51 @@ function UnifiedRelationMapFlow({ habits, goals, onClose, embedded = false, onRe
       <div className="h-full w-full flex flex-col bg-white dark:bg-slate-900 rounded-lg overflow-hidden">
         <div className="px-3 py-2 bg-slate-50 dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700">
           <div className="flex items-center justify-between mb-2">
-            <div className="flex items-center gap-3">
-              {/* 編集/参照スイッチは一時的に非表示 */}
+            <div className="flex items-center gap-2 flex-wrap">
+              {/* 群フィルター - モバイル対応 */}
+              {connectedGroups.length > 1 && (
+                <div className="flex items-center gap-1.5">
+                  <span className="text-xs text-slate-600 dark:text-slate-400 font-medium">群:</span>
+                  <button
+                    onClick={() => setSelectedGroup(null)}
+                    className={`px-2 py-1 text-xs rounded transition-colors ${selectedGroup === null ? 'bg-blue-500 text-white shadow-sm' : 'bg-slate-200/80 dark:bg-slate-700/80 text-slate-700 dark:text-slate-300 hover:bg-slate-300 dark:hover:bg-slate-600'}`}
+                  >
+                    全体
+                  </button>
+                  {connectedGroups.length > GROUPS_PER_PAGE && (
+                    <button
+                      onClick={() => setGroupPage(Math.max(0, groupPage - 1))}
+                      disabled={groupPage === 0}
+                      className={`px-2 py-1 text-xs rounded transition-colors ${groupPage === 0 ? 'bg-slate-100/80 dark:bg-slate-800/80 text-slate-400 dark:text-slate-600 cursor-not-allowed' : 'bg-slate-200/80 dark:bg-slate-700/80 text-slate-700 dark:text-slate-300 hover:bg-slate-300 dark:hover:bg-slate-600'}`}
+                    >
+                      ‹
+                    </button>
+                  )}
+                  {connectedGroups
+                    .slice(groupPage * GROUPS_PER_PAGE, (groupPage + 1) * GROUPS_PER_PAGE)
+                    .map((_, idx) => {
+                      const actualIdx = groupPage * GROUPS_PER_PAGE + idx;
+                      return (
+                        <button
+                          key={actualIdx}
+                          onClick={() => setSelectedGroup(actualIdx)}
+                          className={`px-2 py-1 text-xs rounded transition-colors ${selectedGroup === actualIdx ? 'bg-blue-500 text-white shadow-sm' : 'bg-slate-200/80 dark:bg-slate-700/80 text-slate-700 dark:text-slate-300 hover:bg-slate-300 dark:hover:bg-slate-600'}`}
+                        >
+                          {actualIdx + 1}
+                        </button>
+                      );
+                    })}
+                  {connectedGroups.length > GROUPS_PER_PAGE && (
+                    <button
+                      onClick={() => setGroupPage(Math.min(Math.ceil(connectedGroups.length / GROUPS_PER_PAGE) - 1, groupPage + 1))}
+                      disabled={groupPage >= Math.ceil(connectedGroups.length / GROUPS_PER_PAGE) - 1}
+                      className={`px-2 py-1 text-xs rounded transition-colors ${groupPage >= Math.ceil(connectedGroups.length / GROUPS_PER_PAGE) - 1 ? 'bg-slate-100/80 dark:bg-slate-800/80 text-slate-400 dark:text-slate-600 cursor-not-allowed' : 'bg-slate-200/80 dark:bg-slate-700/80 text-slate-700 dark:text-slate-300 hover:bg-slate-300 dark:hover:bg-slate-600'}`}
+                    >
+                      ›
+                    </button>
+                  )}
+                </div>
+              )}
             </div>
 
             <div className="flex items-center gap-2">
@@ -1580,78 +1639,50 @@ function UnifiedRelationMapFlow({ habits, goals, onClose, embedded = false, onRe
           >
             <Background variant={BackgroundVariant.Dots} gap={16} size={1} />
             
-            {/* フィルターパネル - 半透明 */}
+            {/* ズームコントロールパネル - 半透明 */}
             <Panel position="top-center" className="mt-2">
               <div className="bg-white/80 dark:bg-slate-800/80 backdrop-blur-sm rounded-lg shadow-lg px-3 py-2 border border-slate-200/50 dark:border-slate-700/50">
-                <div className="flex flex-wrap items-center gap-2">
-                  {/* NodeTypeフィルター */}
-                  <div className="flex items-center gap-1.5">
-                    <span className="text-xs text-slate-600 dark:text-slate-400 font-medium">Type:</span>
-                    <button
-                      onClick={() => setNodeType('habit')}
-                      className={`px-2 py-1 text-xs rounded transition-colors ${nodeType === 'habit' ? 'bg-blue-500 text-white shadow-sm' : 'bg-slate-200/80 dark:bg-slate-700/80 text-slate-700 dark:text-slate-300 hover:bg-slate-300 dark:hover:bg-slate-600'}`}
-                    >
-                      Habit
-                    </button>
-                    <button
-                      onClick={() => setNodeType('goal')}
-                      className={`px-2 py-1 text-xs rounded transition-colors ${nodeType === 'goal' ? 'bg-purple-500 text-white shadow-sm' : 'bg-slate-200/80 dark:bg-slate-700/80 text-slate-700 dark:text-slate-300 hover:bg-slate-300 dark:hover:bg-slate-600'}`}
-                    >
-                      Goal
-                    </button>
-                  </div>
-                  
-                  {/* 群フィルター */}
-                  {connectedGroups.length > 1 && (
-                    <>
-                      <div className="h-4 w-px bg-slate-300 dark:bg-slate-600"></div>
-                      <div className="flex items-center gap-1.5">
-                        <span className="text-xs text-slate-600 dark:text-slate-400 font-medium">群:</span>
-                        <button
-                          onClick={() => setSelectedGroup(null)}
-                          className={`px-2 py-1 text-xs rounded transition-colors ${selectedGroup === null ? 'bg-blue-500 text-white shadow-sm' : 'bg-slate-200/80 dark:bg-slate-700/80 text-slate-700 dark:text-slate-300 hover:bg-slate-300 dark:hover:bg-slate-600'}`}
-                        >
-                          全体
-                        </button>
-                        {connectedGroups.length > GROUPS_PER_PAGE && (
-                          <button
-                            onClick={() => setGroupPage(Math.max(0, groupPage - 1))}
-                            disabled={groupPage === 0}
-                            className={`px-2 py-1 text-xs rounded transition-colors ${groupPage === 0 ? 'bg-slate-100/80 dark:bg-slate-800/80 text-slate-400 dark:text-slate-600 cursor-not-allowed' : 'bg-slate-200/80 dark:bg-slate-700/80 text-slate-700 dark:text-slate-300 hover:bg-slate-300 dark:hover:bg-slate-600'}`}
-                          >
-                            ‹
-                          </button>
-                        )}
-                        {connectedGroups
-                          .slice(groupPage * GROUPS_PER_PAGE, (groupPage + 1) * GROUPS_PER_PAGE)
-                          .map((_, idx) => {
-                            const actualIdx = groupPage * GROUPS_PER_PAGE + idx;
-                            return (
-                              <button
-                                key={actualIdx}
-                                onClick={() => setSelectedGroup(actualIdx)}
-                                className={`px-2 py-1 text-xs rounded transition-colors ${selectedGroup === actualIdx ? 'bg-blue-500 text-white shadow-sm' : 'bg-slate-200/80 dark:bg-slate-700/80 text-slate-700 dark:text-slate-300 hover:bg-slate-300 dark:hover:bg-slate-600'}`}
-                              >
-                                {actualIdx + 1}
-                              </button>
-                            );
-                          })}
-                        {connectedGroups.length > GROUPS_PER_PAGE && (
-                          <button
-                            onClick={() => setGroupPage(Math.min(Math.ceil(connectedGroups.length / GROUPS_PER_PAGE) - 1, groupPage + 1))}
-                            disabled={groupPage >= Math.ceil(connectedGroups.length / GROUPS_PER_PAGE) - 1}
-                            className={`px-2 py-1 text-xs rounded transition-colors ${groupPage >= Math.ceil(connectedGroups.length / GROUPS_PER_PAGE) - 1 ? 'bg-slate-100/80 dark:bg-slate-800/80 text-slate-400 dark:text-slate-600 cursor-not-allowed' : 'bg-slate-200/80 dark:bg-slate-700/80 text-slate-700 dark:text-slate-300 hover:bg-slate-300 dark:hover:bg-slate-600'}`}
-                          >
-                            ›
-                          </button>
-                        )}
-                      </div>
-                    </>
-                  )}
+                <div className="flex items-center gap-2">
+                  {/* ズームコントロール */}
+                  <button
+                    onClick={() => zoomOut()}
+                    className="px-2 py-1 text-xs rounded bg-slate-200/80 dark:bg-slate-700/80 text-slate-700 dark:text-slate-300 hover:bg-slate-300 dark:hover:bg-slate-600 transition-colors"
+                    title="ズームアウト"
+                  >
+                    −
+                  </button>
+                  <input
+                    type="range"
+                    min="0.1"
+                    max="2"
+                    step="0.1"
+                    value={zoomLevel}
+                    onChange={(e) => {
+                      const zoom = parseFloat(e.target.value);
+                      setZoomLevel(zoom);
+                      const viewport = getViewport();
+                      setViewport({ ...viewport, zoom });
+                    }}
+                    className="w-24 h-1 bg-slate-300 dark:bg-slate-600 rounded-lg appearance-none cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-blue-500 [&::-moz-range-thumb]:w-3 [&::-moz-range-thumb]:h-3 [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:bg-blue-500 [&::-moz-range-thumb]:border-0"
+                    title="ズーム"
+                  />
+                  <button
+                    onClick={() => zoomIn()}
+                    className="px-2 py-1 text-xs rounded bg-slate-200/80 dark:bg-slate-700/80 text-slate-700 dark:text-slate-300 hover:bg-slate-300 dark:hover:bg-slate-600 transition-colors"
+                    title="ズームイン"
+                  >
+                    ＋
+                  </button>
+                  <button
+                    onClick={() => fitView({ padding: 0.2, duration: 300 })}
+                    className="px-2 py-1 text-xs rounded bg-slate-200/80 dark:bg-slate-700/80 text-slate-700 dark:text-slate-300 hover:bg-slate-300 dark:hover:bg-slate-600 transition-colors"
+                    title="全体表示"
+                  >
+                    ⊡
+                  </button>
                 </div>
               </div>
             </Panel>
-            <Controls />
           </ReactFlow>
         </div>
 
@@ -1719,225 +1750,8 @@ function UnifiedRelationMapFlow({ habits, goals, onClose, embedded = false, onRe
     );
   }
 
-  // フルスクリーンモード
-  return (
-    <div className="fixed inset-0 z-50 bg-black/30">
-      <div className="h-full flex flex-col bg-white dark:bg-slate-900">
-        <div className="flex items-center justify-between px-4 py-3 border-b border-slate-200 dark:border-slate-700">
-          <div>
-            <h2 className="text-xl font-semibold text-slate-900 dark:text-slate-100">
-              統合 Goal & Habit 関係性マップ
-            </h2>
-            <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
-              Goalツリーと配下のHabit、Habit間の関係を視覚化（編集・追加機能付き）
-            </p>
-          </div>
-          <button
-            onClick={onClose}
-            className="text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 text-2xl p-2"
-          >
-            ✕
-          </button>
-        </div>
-
-        <div className="px-4 py-2 bg-slate-50 dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700">
-          <div className="flex items-center justify-between mb-2">
-            <div className="flex flex-wrap gap-4 text-sm items-center">
-              <div className="flex items-center gap-2">
-                <div className="w-8 h-0.5 bg-purple-600" style={{ height: '3px' }}></div>
-                <span className="text-slate-700 dark:text-slate-300">Goal階層</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <div className="w-8 border-t-2 border-dashed border-purple-400"></div>
-                <span className="text-slate-700 dark:text-slate-300">Goal→Habit</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <div className="w-8 h-0.5 bg-green-500"></div>
-                <span className="text-slate-700 dark:text-slate-300">→ Next</span>
-              </div>
-              {/* 編集/参照スイッチは一時的に非表示 */}
-            </div>
-            <div className="flex items-center gap-2">
-              {isMobile && (
-                <button
-                  onClick={() => setMobileConnectionMode(!mobileConnectionMode)}
-                  className={`px-3 py-1 text-sm rounded ${mobileConnectionMode ? 'bg-green-500 text-white' : 'bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300'}`}
-                  title="接続モード"
-                >
-                  🔗
-                </button>
-              )}
-            </div>
-          </div>
-        </div>
-
-        <div className="flex-1 relative" ref={reactFlowWrapper} onClick={() => setContextMenu(null)}>
-          <ReactFlow
-            nodes={flowNodes}
-            edges={flowEdges}
-            onNodesChange={onNodesChange}
-            onEdgesChange={onEdgesChange}
-            nodesDraggable={false} nodesConnectable={false} elementsSelectable={false}
-            onNodeDoubleClick={onNodeDoubleClick}
-            nodeTypes={nodeTypes}
-            defaultViewport={{ x: 50, y: 50, zoom: 0.6 }}
-            minZoom={0.1}
-            maxZoom={2}
-            defaultEdgeOptions={{
-              type: 'step',
-            }}
-          >
-            <Background variant={BackgroundVariant.Dots} gap={16} size={1} />
-            <Controls />
-            
-            {/* フィルターパネル - 半透明 */}
-            <Panel position="top-center" className="mt-2">
-              <div className="bg-white/80 dark:bg-slate-800/80 backdrop-blur-sm rounded-lg shadow-lg px-3 py-2 border border-slate-200/50 dark:border-slate-700/50">
-                <div className="flex flex-wrap items-center gap-2">
-                  {/* NodeTypeフィルター */}
-                  <div className="flex items-center gap-1.5">
-                    <span className="text-xs text-slate-600 dark:text-slate-400 font-medium">Type:</span>
-                    <button
-                      onClick={() => setNodeType('habit')}
-                      className={`px-2 py-1 text-xs rounded transition-colors ${nodeType === 'habit' ? 'bg-blue-500 text-white shadow-sm' : 'bg-slate-200/80 dark:bg-slate-700/80 text-slate-700 dark:text-slate-300 hover:bg-slate-300 dark:hover:bg-slate-600'}`}
-                    >
-                      Habit
-                    </button>
-                    <button
-                      onClick={() => setNodeType('goal')}
-                      className={`px-2 py-1 text-xs rounded transition-colors ${nodeType === 'goal' ? 'bg-purple-500 text-white shadow-sm' : 'bg-slate-200/80 dark:bg-slate-700/80 text-slate-700 dark:text-slate-300 hover:bg-slate-300 dark:hover:bg-slate-600'}`}
-                    >
-                      Goal
-                    </button>
-                  </div>
-                  
-                  {/* 群フィルター */}
-                  {connectedGroups.length > 1 && (
-                    <>
-                      <div className="h-4 w-px bg-slate-300 dark:bg-slate-600"></div>
-                      <div className="flex items-center gap-1.5">
-                        <span className="text-xs text-slate-600 dark:text-slate-400 font-medium">群:</span>
-                        <button
-                          onClick={() => setSelectedGroup(null)}
-                          className={`px-2 py-1 text-xs rounded transition-colors ${selectedGroup === null ? 'bg-blue-500 text-white shadow-sm' : 'bg-slate-200/80 dark:bg-slate-700/80 text-slate-700 dark:text-slate-300 hover:bg-slate-300 dark:hover:bg-slate-600'}`}
-                        >
-                          全体
-                        </button>
-                        {connectedGroups.length > GROUPS_PER_PAGE && (
-                          <button
-                            onClick={() => setGroupPage(Math.max(0, groupPage - 1))}
-                            disabled={groupPage === 0}
-                            className={`px-2 py-1 text-xs rounded transition-colors ${groupPage === 0 ? 'bg-slate-100/80 dark:bg-slate-800/80 text-slate-400 dark:text-slate-600 cursor-not-allowed' : 'bg-slate-200/80 dark:bg-slate-700/80 text-slate-700 dark:text-slate-300 hover:bg-slate-300 dark:hover:bg-slate-600'}`}
-                          >
-                            ‹
-                          </button>
-                        )}
-                        {connectedGroups
-                          .slice(groupPage * GROUPS_PER_PAGE, (groupPage + 1) * GROUPS_PER_PAGE)
-                          .map((_, idx) => {
-                            const actualIdx = groupPage * GROUPS_PER_PAGE + idx;
-                            return (
-                              <button
-                                key={actualIdx}
-                                onClick={() => setSelectedGroup(actualIdx)}
-                                className={`px-2 py-1 text-xs rounded transition-colors ${selectedGroup === actualIdx ? 'bg-blue-500 text-white shadow-sm' : 'bg-slate-200/80 dark:bg-slate-700/80 text-slate-700 dark:text-slate-300 hover:bg-slate-300 dark:hover:bg-slate-600'}`}
-                              >
-                                {actualIdx + 1}
-                              </button>
-                            );
-                          })}
-                        {connectedGroups.length > GROUPS_PER_PAGE && (
-                          <button
-                            onClick={() => setGroupPage(Math.min(Math.ceil(connectedGroups.length / GROUPS_PER_PAGE) - 1, groupPage + 1))}
-                            disabled={groupPage >= Math.ceil(connectedGroups.length / GROUPS_PER_PAGE) - 1}
-                            className={`px-2 py-1 text-xs rounded transition-colors ${groupPage >= Math.ceil(connectedGroups.length / GROUPS_PER_PAGE) - 1 ? 'bg-slate-100/80 dark:bg-slate-800/80 text-slate-400 dark:text-slate-600 cursor-not-allowed' : 'bg-slate-200/80 dark:bg-slate-700/80 text-slate-700 dark:text-slate-300 hover:bg-slate-300 dark:hover:bg-slate-600'}`}
-                          >
-                            ›
-                          </button>
-                        )}
-                      </div>
-                    </>
-                  )}
-                </div>
-              </div>
-            </Panel>
-          </ReactFlow>
-
-          {/* 新規群追加ボタン */}
-          <div className="absolute bottom-4 left-4 z-10">
-            <button
-              onClick={addNewGroup}
-              className="w-12 h-12 bg-blue-600 hover:bg-blue-700 text-white rounded-full shadow-lg flex items-center justify-center text-xl font-bold"
-              title="新しい群を追加"
-            >
-              ＋
-            </button>
-          </div>
-        </div>
-
-        {/* コンテキストメニュー */}
-        {!isMobile && contextMenu && (
-          <div
-            className="fixed bg-gray-800 border border-gray-600 rounded-lg shadow-lg py-2 z-50"
-            style={{
-              top: contextMenu.top,
-              left: contextMenu.left,
-              right: contextMenu.right,
-              bottom: contextMenu.bottom,
-            }}
-          >
-            <button
-              onClick={handleEditText}
-              className="w-full px-4 py-2 text-left text-sm text-white hover:bg-gray-700 flex items-center gap-2"
-            >
-              <span>✏️</span>
-              テキスト編集
-            </button>
-            <hr className="my-1 border-gray-600" />
-            <button
-              onClick={handleDeleteNode}
-              className="w-full px-4 py-2 text-left text-sm text-red-400 hover:bg-gray-700 flex items-center gap-2"
-            >
-              <span>🗑️</span>
-              削除
-            </button>
-          </div>
-        )}
-
-        {/* モーダル */}
-        <HabitModal
-          open={modalState.habitModal}
-          onClose={handleModalClose}
-          habit={null}
-          initial={{ 
-            name: modalState.selectedNodeName,
-            date: new Date().toISOString().slice(0, 10),
-            goalId: modalState.selectedGoalId || (goals.length > 0 ? goals[0].id : undefined),
-            relatedHabitIds: modalState.connectedHabitIds || []
-          }}
-          onCreate={(payload) => {
-            handleHabitCreate(payload);
-          }}
-          categories={goals}
-        />
-
-        <GoalModal
-          open={modalState.goalModal}
-          onClose={handleModalClose}
-          goal={null}
-          initial={{
-            name: modalState.selectedNodeName,
-            parentId: modalState.selectedGoalId || null,
-          }}
-          onCreate={(payload) => {
-            console.log('[UnifiedRelationMap] GoalModal onCreate called with:', payload);
-            handleGoalCreate(payload);
-          }}
-          goals={goals}
-        />
-      </div>
-    </div>
-  );
+  // フルスクリーンモードは削除（冗長なため）
+  return null;
 }
 
 export function UnifiedRelationMap(props: UnifiedRelationMapProps) {
@@ -1947,3 +1761,4 @@ export function UnifiedRelationMap(props: UnifiedRelationMapProps) {
     </ReactFlowProvider>
   );
 }
+

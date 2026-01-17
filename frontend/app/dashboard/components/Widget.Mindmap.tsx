@@ -3,7 +3,6 @@ import ReactFlow, {
   addEdge,
   Background,
   BackgroundVariant,
-  Controls,
   Connection,
   OnSelectionChangeParams,
   ReactFlowProvider,
@@ -882,54 +881,8 @@ function MindmapFlow({ onClose, onRegisterAsHabit, onRegisterAsGoal, goals = [],
         >
           <Background variant={BackgroundVariant.Dots} gap={20} size={1} />
           
-          {/* Custom Panels - モバイル対応 */}
+          {/* Custom Panels - Action Buttons */}
           <Panel position="bottom-left" className="flex flex-col gap-2 m-2 sm:m-4">
-            {/* Zoom Controls - スライダー式 */}
-            <div className="flex flex-col gap-2 bg-gray-600/90 backdrop-blur-sm rounded-lg p-3 shadow-lg items-center">
-              <button
-                onClick={() => fitView()}
-                className={`${isMobile ? 'w-10 h-10' : 'w-8 h-8'} bg-gray-700 hover:bg-gray-800 text-white rounded flex items-center justify-center text-base transition-colors`}
-                title={t('fit_view')}
-              >
-                ⌂
-              </button>
-              <div className="flex flex-col items-center gap-1 py-2">
-                <span className="text-white text-sm font-bold">＋</span>
-                <div className="relative" style={{ width: '40px', height: '120px' }}>
-                  <input
-                    type="range"
-                    min={isMobile ? 30 : 50}
-                    max={isMobile ? 200 : 400}
-                    step="10"
-                    defaultValue="100"
-                    onChange={(e) => {
-                      const zoomLevel = parseInt(e.target.value) / 100;
-                      const viewport = getViewport();
-                      // 画面中心を基準にズーム
-                      const centerX = window.innerWidth / 2;
-                      const centerY = window.innerHeight / 2;
-                      const x = centerX - (centerX - viewport.x) * (zoomLevel / viewport.zoom);
-                      const y = centerY - (centerY - viewport.y) * (zoomLevel / viewport.zoom);
-                      setViewport({ x, y, zoom: zoomLevel }, { duration: 200 });
-                    }}
-                    className="absolute vertical-slider"
-                    style={{ 
-                      width: '120px',
-                      height: '40px',
-                      transform: 'rotate(-90deg)',
-                      transformOrigin: '20px 20px',
-                    }}
-                    title="Zoom"
-                  />
-                  <div 
-                    className="absolute left-1/2 top-0 bottom-0 w-2 bg-gray-500 rounded-full"
-                    style={{ transform: 'translateX(-50%)', pointerEvents: 'none' }}
-                  />
-                </div>
-                <span className="text-white text-sm font-bold">ー</span>
-              </div>
-            </div>
-            
             {/* Action Buttons - 編集モードでのみ表示 */}
             {isEditMode && (
               <div className="flex flex-col gap-2 mt-2">
@@ -961,7 +914,8 @@ function MindmapFlow({ onClose, onRegisterAsHabit, onRegisterAsGoal, goals = [],
           </Panel>
           
           {/* Edge Legend - 右上に凡例を追加 */}
-          <Panel position="top-right" className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-3 m-2 sm:m-4 border border-gray-200 dark:border-gray-700">
+          <Panel position="top-right" className="bg-white/95 dark:bg-gray-900/95 backdrop-blur-sm rounded-lg shadow-lg p-4 m-2 sm:m-4 border border-gray-200/50 dark:border-gray-800/50">
+            {/* Edge Colors Legend */}
             <div className="text-xs font-semibold mb-2 text-gray-700 dark:text-gray-300">
               {t('edge_colors')}
             </div>

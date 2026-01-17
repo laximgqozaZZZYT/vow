@@ -264,8 +264,24 @@ function EditableMindmapFlow({ habits, goals, onClose, onRegisterAsHabit, onRegi
   const [isEditing, setIsEditing] = useState(false);
   const [tags, setTags] = useState<any[]>([]);
   const [detailViewMode, setDetailViewMode] = useState<'normal' | 'detail'>('normal');
+  const [zoomLevel, setZoomLevel] = useState(0.8);
   const reactFlowWrapper = useRef<HTMLDivElement>(null);
-  const { project } = useReactFlow();
+  const { project, fitView, zoomIn, zoomOut, setViewport, getViewport } = useReactFlow();
+
+  // ビューポートの変更を監視してズームレベルを更新
+  React.useEffect(() => {
+    const updateZoom = () => {
+      const viewport = getViewport();
+      setZoomLevel(viewport.zoom);
+    };
+    
+    // 初期値を設定
+    updateZoom();
+    
+    // ビューポート変更時に更新
+    const interval = setInterval(updateZoom, 100);
+    return () => clearInterval(interval);
+  }, [getViewport]);
 
   // Load tags
   React.useEffect(() => {
@@ -695,11 +711,10 @@ function EditableMindmapFlow({ habits, goals, onClose, onRegisterAsHabit, onRegi
           maxZoom={2}
         >
           <Background variant={BackgroundVariant.Dots} gap={16} size={1} />
-          <Controls />
           
           <Panel position="top-center" className="mt-2">
-            <div className="bg-white dark:bg-slate-800 rounded-lg shadow-lg px-4 py-2 border border-slate-200 dark:border-slate-700">
-              <div className="flex items-center gap-2">
+            <div className="bg-white/80 dark:bg-slate-800/80 backdrop-blur-sm rounded-lg shadow-lg px-4 py-2 border border-slate-200/50 dark:border-slate-700/50">
+              <div className="flex items-center gap-3">
                 <span className="text-sm text-slate-600 dark:text-slate-400 font-medium">Create:</span>
                 <button
                   onClick={() => setNodeType('habit')}
@@ -713,6 +728,47 @@ function EditableMindmapFlow({ habits, goals, onClose, onRegisterAsHabit, onRegi
                 >
                   Goal
                 </button>
+                
+                {/* ズームコントロール */}
+                <div className="h-6 w-px bg-slate-300 dark:bg-slate-600"></div>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => zoomOut()}
+                    className="px-2 py-1 text-xs rounded bg-slate-200/80 dark:bg-slate-700/80 text-slate-700 dark:text-slate-300 hover:bg-slate-300 dark:hover:bg-slate-600 transition-colors"
+                    title="ズームアウト"
+                  >
+                    −
+                  </button>
+                  <input
+                    type="range"
+                    min="0.1"
+                    max="2"
+                    step="0.1"
+                    value={zoomLevel}
+                    onChange={(e) => {
+                      const zoom = parseFloat(e.target.value);
+                      setZoomLevel(zoom);
+                      const viewport = getViewport();
+                      setViewport({ ...viewport, zoom });
+                    }}
+                    className="w-24 h-1 bg-slate-300 dark:bg-slate-600 rounded-lg appearance-none cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-blue-500 [&::-moz-range-thumb]:w-3 [&::-moz-range-thumb]:h-3 [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:bg-blue-500 [&::-moz-range-thumb]:border-0"
+                    title="ズーム"
+                  />
+                  <button
+                    onClick={() => zoomIn()}
+                    className="px-2 py-1 text-xs rounded bg-slate-200/80 dark:bg-slate-700/80 text-slate-700 dark:text-slate-300 hover:bg-slate-300 dark:hover:bg-slate-600 transition-colors"
+                    title="ズームイン"
+                  >
+                    ＋
+                  </button>
+                  <button
+                    onClick={() => fitView({ padding: 0.2, duration: 300 })}
+                    className="px-2 py-1 text-xs rounded bg-slate-200/80 dark:bg-slate-700/80 text-slate-700 dark:text-slate-300 hover:bg-slate-300 dark:hover:bg-slate-600 transition-colors"
+                    title="全体表示"
+                  >
+                    ⊡
+                  </button>
+                </div>
               </div>
             </div>
           </Panel>
