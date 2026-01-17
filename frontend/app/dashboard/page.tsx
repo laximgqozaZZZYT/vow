@@ -73,7 +73,7 @@ export default function DashboardPage() {
   }, [isAuthed, isGuest, migrationStatus]);
 
   // Custom hooks for data and state management
-  const { goals, setGoals, habits, setHabits, activities, setActivities, pageSections, setPageSections, isClient, isLoading, manualReset } = useDataManager();
+  const { goals, setGoals, habits, setHabits, activities, setActivities, pageSections, setPageSections, isClient, isLoading, loadData, manualReset } = useDataManager();
   const [stickies, setStickies] = useState<any[]>([]);
   const { 
     recurringRequest, 
@@ -719,6 +719,17 @@ function DashboardLayout(props: any) {
                 onRegisterAsGoal={async (payload) => {
                   const createdGoal = await createGoal(payload);
                   return createdGoal;
+                }}
+                onDataChange={async () => {
+                  // データを再読み込み
+                  try {
+                    const gs = await api.getGoals();
+                    setGoals(gs || []);
+                    const hs = await api.getHabits();
+                    setHabits(hs || []);
+                  } catch (e) {
+                    console.error('Failed to reload data', e);
+                  }
                 }}
               />
             ) : null

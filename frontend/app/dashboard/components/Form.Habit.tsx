@@ -135,7 +135,8 @@ export function HabitForm({ habit, goals, tags, viewMode, onViewModeChange, onSa
         outdates: false,
         type: false,
         goal: false,
-        relatedHabits: false
+        relatedHabits: false,
+        timings: false
     })
     
     const [name, setName] = useState<string>(habit?.name ?? "")
@@ -151,10 +152,23 @@ export function HabitForm({ habit, goals, tags, viewMode, onViewModeChange, onSa
     const [workloadTotalEnd, setWorkloadTotalEnd] = useState<string>(String((habit as any)?.workloadTotalEnd ?? ''))
     const [workloadPerCount, setWorkloadPerCount] = useState<string>(String((habit as any)?.workloadPerCount ?? 1))
     const [goalId, setGoalId] = useState<string | undefined>(habit?.goalId)
-    const [timings, setTimings] = useState<Timing[]>((habit?.timings ?? [{ type: 'Daily' }]) as Timing[])
-    const [outdates, setOutdates] = useState<Timing[]>((habit?.outdates ?? []) as Timing[])
+    const [timings, setTimings] = useState<Timing[]>(
+        (habit?.timings && (habit.timings as Timing[]).length > 0) 
+            ? (habit.timings as Timing[]).map(x => ({ ...x }))
+            : [{ type: 'Daily', start: habit?.time, end: habit?.endTime, date: habit?.dueDate }]
+    )
+    const [outdates, setOutdates] = useState<Timing[]>(
+        (habit?.outdates && (habit.outdates as Timing[]).length > 0)
+            ? (habit.outdates as Timing[]).map(x => ({ ...x }))
+            : []
+    )
     const [showOutdates, setShowOutdates] = useState<boolean>(false)
     const [timingType, setTimingType] = useState<TimingType>(habit?.dueDate ? 'Date' : 'Daily')
+    const [timingWeekdays, setTimingWeekdays] = useState<number[]>([])
+    
+    function toggleTimingWeekday(idx: number) { 
+        setTimingWeekdays(p => p.includes(idx) ? p.filter(i => i !== idx) : [...p, idx]) 
+    }
     
     // Related habits
     const [allHabits, setAllHabits] = useState<Habit[]>([])
@@ -330,16 +344,14 @@ export function HabitForm({ habit, goals, tags, viewMode, onViewModeChange, onSa
                         selectedTagIds={selectedTagIds}
                         onTagAdd={async (tagId) => {
                             if (habit) {
-                                const newTagIds = [...selectedTagIds, tagId]
-                                await supabaseDirectClient.setHabitTags(habit.id, newTagIds)
-                                setSelectedTagIds(newTagIds)
+                                await supabaseDirectClient.addHabitTag(habit.id, tagId)
+                                setSelectedTagIds([...selectedTagIds, tagId])
                             }
                         }}
                         onTagRemove={async (tagId) => {
                             if (habit) {
-                                const newTagIds = selectedTagIds.filter(id => id !== tagId)
-                                await supabaseDirectClient.setHabitTags(habit.id, newTagIds)
-                                setSelectedTagIds(newTagIds)
+                                await supabaseDirectClient.removeHabitTag(habit.id, tagId)
+                                setSelectedTagIds(selectedTagIds.filter(id => id !== tagId))
                             }
                         }}
                         placeholder="Search and add tags..."
@@ -392,6 +404,254 @@ export function HabitForm({ habit, goals, tags, viewMode, onViewModeChange, onSa
                                 />
                             </div>
                         </div>
+                        <div className="mt-4">
+                            <label className="block text-sm mb-1">Load Total(End) (optional)</label>
+                            <input 
+                                type="number" 
+                                min={0} 
+                                value={workloadTotalEnd} 
+                                onChange={(e) => setWorkloadTotalEnd(e.target.value)} 
+                                onBlur={handleAutoSave}
+                                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" 
+                            />
+                        </div>
+                    </div>
+                    
+                    {/* Timings section */}
+                    <div>
+                        <h3 className="text-lg font-medium mb-2">Timings</h3>
+                        <div className="space-y-4">
+                            {timings.map((t, idx) => (
+                                <div key={idx} className="flex flex-wrap items-end gap-3 rounded px-3 py-3 border">
+                                    <div className="w-32">
+                                        <label className="block text-sm mb-1">Timing</label>
+                                        <Popover className="relative">
+                                            <Popover.Button className="w-full text-left px-3 py-2 border rounded bg-background">
+                                                {t.type === 'Date' ? 'A Day' : t.type}
+                                            </Popover.Button>
+                                            <Popover.Panel className="absolute z-50 mt-2 left-0 w-36 bg-card border rounded shadow-lg p-2">
+                                                <button type="button" onClick={() => {
+                                                    setTimings(s => s.map((x, i) => i === idx ? { ...x, type: 'Date' } : x))
+                                                    setTimeout(handleAutoSave, 100)
+                                                }} className={`w-full text-left px-3 py-2 hover:bg-accent rounded ${t.type === 'Date' ? 'bg-primary text-primary-foreground' : ''}`}>A Day</button>
+                                                <button type="button" onClick={() => {
+                                                    setTimings(s => s.map((x, i) => i === idx ? { ...x, type: 'Daily' } : x))
+                                                    setTimeout(handleAutoSave, 100)
+                                                }} className={`w-full text-left px-3 py-2 hover:bg-accent rounded ${t.type === 'Daily' ? 'bg-primary text-primary-foreground' : ''}`}>Daily</button>
+                                                <button type="button" onClick={() => {
+                                                    setTimings(s => s.map((x, i) => i === idx ? { ...x, type: 'Weekly' } : x))
+                                                    setTimeout(handleAutoSave, 100)
+                                                }} className={`w-full text-left px-3 py-2 hover:bg-accent rounded ${t.type === 'Weekly' ? 'bg-primary text-primary-foreground' : ''}`}>Weekly</button>
+                                                <button type="button" onClick={() => {
+                                                    setTimings(s => s.map((x, i) => i === idx ? { ...x, type: 'Monthly' } : x))
+                                                    setTimeout(handleAutoSave, 100)
+                                                }} className={`w-full text-left px-3 py-2 hover:bg-accent rounded ${t.type === 'Monthly' ? 'bg-primary text-primary-foreground' : ''}`}>Monthly</button>
+                                            </Popover.Panel>
+                                        </Popover>
+                                    </div>
+
+                                    <div className="w-32">
+                                        <label className="block text-sm mb-1">Date</label>
+                                        <Popover className="relative">
+                                            <Popover.Button className="w-full text-left px-3 py-2 border rounded bg-background text-sm">
+                                                {t.date ? (parseYMD(t.date) ? parseYMD(t.date)!.toDateString() : new Date(t.date).toDateString()) : 'Select date'}
+                                            </Popover.Button>
+                                            <Popover.Panel className="absolute z-50 mt-2 left-0 w-[min(380px,90vw)] bg-card border rounded shadow-lg p-4">
+                                                <DayPicker mode="single" selected={t.date ? parseYMD(t.date) : undefined} onSelect={(d) => {
+                                                    setTimings(s => s.map((x, i) => i === idx ? { ...x, date: d ? formatLocalDate(d) : undefined } : x))
+                                                    setTimeout(handleAutoSave, 100)
+                                                }} />
+                                            </Popover.Panel>
+                                        </Popover>
+                                    </div>
+
+                                    <div className="w-32">
+                                        <label className="block text-sm mb-1">Start</label>
+                                        <Popover className="relative">
+                                            <Popover.Button className="w-full text-left px-3 py-2 border rounded bg-background">
+                                                {t.start ?? '--:--'}
+                                            </Popover.Button>
+                                            <Popover.Panel className="absolute z-50 mt-2 left-0 w-40 bg-card border rounded shadow-lg p-3">
+                                                <div className="max-h-56 overflow-auto">
+                                                    {buildTimeOptions().map((opt) => (
+                                                        <button key={opt.value} type="button" onClick={() => {
+                                                            setTimings(s => s.map((x, i) => i === idx ? { ...x, start: opt.value } : x))
+                                                            setTimeout(handleAutoSave, 100)
+                                                        }} className={`w-full text-left px-3 py-2 hover:bg-accent rounded ${t.start === opt.value ? 'bg-primary text-primary-foreground' : ''}`}>{opt.label}</button>
+                                                    ))}
+                                                </div>
+                                            </Popover.Panel>
+                                        </Popover>
+                                    </div>
+
+                                    <div className="w-32">
+                                        <label className="block text-sm mb-1">End</label>
+                                        <Popover className="relative">
+                                            <Popover.Button className="w-full text-left px-3 py-2 border rounded bg-background">
+                                                {t.end ?? '--:--'}
+                                            </Popover.Button>
+                                            <Popover.Panel className="absolute z-50 mt-2 left-0 w-40 bg-card border rounded shadow-lg p-3">
+                                                <div className="max-h-56 overflow-auto">
+                                                    {buildTimeOptions().map((opt) => (
+                                                        <button key={opt.value} type="button" onClick={() => {
+                                                            setTimings(s => s.map((x, i) => i === idx ? { ...x, end: opt.value } : x))
+                                                            setTimeout(handleAutoSave, 100)
+                                                        }} className={`w-full text-left px-3 py-2 hover:bg-accent rounded ${t.end === opt.value ? 'bg-primary text-primary-foreground' : ''}`}>{opt.label}</button>
+                                                    ))}
+                                                </div>
+                                            </Popover.Panel>
+                                        </Popover>
+                                    </div>
+
+                                    <div className="ml-auto flex items-center gap-3">
+                                        {idx === 0 ? (
+                                            <button
+                                                type="button"
+                                                onClick={() => {
+                                                    setTimings(s => [...s, { type: s[0]?.type ?? 'Daily', date: s[0]?.date, start: s[0]?.start, end: s[0]?.end }])
+                                                    setTimeout(handleAutoSave, 100)
+                                                }}
+                                                className="rounded bg-blue-600 p-2 text-white"
+                                                title="Add row"
+                                            >
+                                                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+                                                </svg>
+                                            </button>
+                                        ) : (
+                                            <button type="button" onClick={() => {
+                                                setTimings(s => s.filter((_, i) => i !== idx))
+                                                setTimeout(handleAutoSave, 100)
+                                            }} className="p-2 text-red-600" title="Remove row">
+                                                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                                                    <path fillRule="evenodd" d="M6 2a1 1 0 011-1h6a1 1 0 011 1v1h3a1 1 0 110 2h-1v11a2 2 0 01-2 2H6a2 2 0 01-2-2V5H3a1 1 0 110-2h3V2zm2 5a1 1 0 10-2 0v7a1 1 0 102 0V7zm4 0a1 1 0 10-2 0v7a1 1 0 102 0V7z" clipRule="evenodd" />
+                                                </svg>
+                                            </button>
+                                        )}
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                    
+                    {/* Outdates section */}
+                    <div>
+                        <div className="flex items-center justify-between mb-2">
+                            <h3 className="text-lg font-medium">Outdates (exclude periods)</h3>
+                            <div className="flex items-center gap-2">
+                                <button type="button" onClick={() => {
+                                    const tType: TimingType = timingType ?? (dueDate ? 'Date' : 'Daily')
+                                    const t: Timing = { type: tType, start: time ?? undefined, end: endTime ?? undefined }
+                                    if (tType === 'Date' && dueDate) t.date = formatLocalDate(dueDate)
+                                    setOutdates((s) => [...s, t])
+                                    setTimeout(handleAutoSave, 100)
+                                }} className="rounded bg-slate-600 p-2 text-white text-sm">
+                                    Add outdate
+                                </button>
+                                <button type="button" onClick={() => setShowOutdates(s => !s)} className="text-sm text-slate-500">
+                                    {showOutdates ? 'Collapse' : 'Expand'}
+                                </button>
+                            </div>
+                        </div>
+                        {showOutdates && (
+                            <div className="space-y-2">
+                                {outdates.length === 0 && <div className="text-sm text-slate-500">No outdates added.</div>}
+                                {outdates.map((t, idx) => (
+                                    <div key={idx} className="flex flex-wrap items-end gap-2 rounded px-2 py-2 border">
+                                        <div className="w-28">
+                                            <label className="block text-xs mb-1">Timing</label>
+                                            <Popover className="relative">
+                                                <Popover.Button className="w-full text-left px-3 py-2 border rounded bg-background text-sm">
+                                                    {t.type === 'Date' ? 'A Day' : t.type}
+                                                </Popover.Button>
+                                                <Popover.Panel className="absolute z-50 mt-2 left-0 w-36 bg-card border rounded shadow-lg p-2">
+                                                    <button type="button" onClick={() => {
+                                                        setOutdates(s => s.map((x, i) => i === idx ? { ...x, type: 'Date' } : x))
+                                                        setTimeout(handleAutoSave, 100)
+                                                    }} className={`w-full text-left px-2 py-1 hover:bg-accent rounded ${t.type === 'Date' ? 'bg-primary text-primary-foreground' : ''}`}>A Day</button>
+                                                    <button type="button" onClick={() => {
+                                                        setOutdates(s => s.map((x, i) => i === idx ? { ...x, type: 'Daily' } : x))
+                                                        setTimeout(handleAutoSave, 100)
+                                                    }} className={`w-full text-left px-2 py-1 hover:bg-accent rounded ${t.type === 'Daily' ? 'bg-primary text-primary-foreground' : ''}`}>Daily</button>
+                                                    <button type="button" onClick={() => {
+                                                        setOutdates(s => s.map((x, i) => i === idx ? { ...x, type: 'Weekly' } : x))
+                                                        setTimeout(handleAutoSave, 100)
+                                                    }} className={`w-full text-left px-2 py-1 hover:bg-accent rounded ${t.type === 'Weekly' ? 'bg-primary text-primary-foreground' : ''}`}>Weekly</button>
+                                                    <button type="button" onClick={() => {
+                                                        setOutdates(s => s.map((x, i) => i === idx ? { ...x, type: 'Monthly' } : x))
+                                                        setTimeout(handleAutoSave, 100)
+                                                    }} className={`w-full text-left px-2 py-1 hover:bg-accent rounded ${t.type === 'Monthly' ? 'bg-primary text-primary-foreground' : ''}`}>Monthly</button>
+                                                </Popover.Panel>
+                                            </Popover>
+                                        </div>
+
+                                        <div className="w-28">
+                                            <label className="block text-xs mb-1">Date</label>
+                                            <Popover className="relative">
+                                                <Popover.Button className="w-full text-left px-3 py-2 border rounded bg-background text-sm">
+                                                    {t.date ? (parseYMD(t.date) ? parseYMD(t.date)!.toDateString() : new Date(t.date).toDateString()) : 'Select date'}
+                                                </Popover.Button>
+                                                <Popover.Panel className="absolute z-50 mt-2 left-0 w-[min(380px,90vw)] bg-card border rounded shadow-lg p-4">
+                                                    <DayPicker mode="single" selected={t.date ? parseYMD(t.date) : undefined} onSelect={(d) => {
+                                                        setOutdates(s => s.map((x, i) => i === idx ? { ...x, date: d ? formatLocalDate(d) : undefined } : x))
+                                                        setTimeout(handleAutoSave, 100)
+                                                    }} />
+                                                </Popover.Panel>
+                                            </Popover>
+                                        </div>
+
+                                        <div className="w-28">
+                                            <label className="block text-xs mb-1">Start</label>
+                                            <Popover className="relative">
+                                                <Popover.Button className="w-full text-left px-3 py-2 border rounded bg-background text-sm">
+                                                    {t.start ?? '--:--'}
+                                                </Popover.Button>
+                                                <Popover.Panel className="absolute z-50 mt-2 left-0 w-40 bg-card border rounded shadow-lg p-3">
+                                                    <div className="max-h-56 overflow-auto">
+                                                        {buildTimeOptions().map((opt) => (
+                                                            <button key={opt.value} type="button" onClick={() => {
+                                                                setOutdates(s => s.map((x, i) => i === idx ? { ...x, start: opt.value } : x))
+                                                                setTimeout(handleAutoSave, 100)
+                                                            }} className={`w-full text-left px-2 py-1 hover:bg-accent rounded ${t.start === opt.value ? 'bg-primary text-primary-foreground' : ''}`}>{opt.label}</button>
+                                                        ))}
+                                                    </div>
+                                                </Popover.Panel>
+                                            </Popover>
+                                        </div>
+
+                                        <div className="w-28">
+                                            <label className="block text-xs mb-1">End</label>
+                                            <Popover className="relative">
+                                                <Popover.Button className="w-full text-left px-3 py-2 border rounded bg-background text-sm">
+                                                    {t.end ?? '--:--'}
+                                                </Popover.Button>
+                                                <Popover.Panel className="absolute z-50 mt-2 left-0 w-40 bg-card border rounded shadow-lg p-3">
+                                                    <div className="max-h-56 overflow-auto">
+                                                        {buildTimeOptions().map((opt) => (
+                                                            <button key={opt.value} type="button" onClick={() => {
+                                                                setOutdates(s => s.map((x, i) => i === idx ? { ...x, end: opt.value } : x))
+                                                                setTimeout(handleAutoSave, 100)
+                                                            }} className={`w-full text-left px-2 py-1 hover:bg-accent rounded ${t.end === opt.value ? 'bg-primary text-primary-foreground' : ''}`}>{opt.label}</button>
+                                                        ))}
+                                                    </div>
+                                                </Popover.Panel>
+                                            </Popover>
+                                        </div>
+
+                                        <div className="ml-auto flex items-center gap-2">
+                                            <button type="button" onClick={() => {
+                                                setOutdates(s => s.filter((_, i) => i !== idx))
+                                                setTimeout(handleAutoSave, 100)
+                                            }} className="p-2 text-red-600" title="Remove outdate">
+                                                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                                                    <path fillRule="evenodd" d="M6 2a1 1 0 011-1h6a1 1 0 011 1v1h3a1 1 0 110 2h-1v11a2 2 0 01-2 2H6a2 2 0 01-2-2V5H3a1 1 0 110-2h3V2zm2 5a1 1 0 10-2 0v7a1 1 0 102 0V7zm4 0a1 1 0 10-2 0v7a1 1 0 102 0V7z" clipRule="evenodd" />
+                                                </svg>
+                                            </button>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
                     </div>
                     
                     {/* Type section */}

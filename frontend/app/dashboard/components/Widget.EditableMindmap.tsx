@@ -538,13 +538,17 @@ function EditableMindmapFlow({ habits, goals, onClose, onRegisterAsHabit, onRegi
     if (!selectedNode || selectedNode.type !== 'habitNode') return;
     
     const habitNodeData = selectedNode.data as HabitNodeData;
-    const updatedHabit = {
-      ...habitNodeData.habit,
-      ...habitData,
-    };
+    const habitId = habitNodeData.habit.id;
     
     try {
-      await supabaseDirectClient.updateHabit(updatedHabit);
+      await supabaseDirectClient.updateHabit(habitId, habitData);
+      
+      // Update local state
+      const updatedHabit = {
+        ...habitNodeData.habit,
+        ...habitData,
+      };
+      
       setFlowNodes((nds) =>
         nds.map((n) =>
           n.id === selectedNode.id
@@ -561,13 +565,17 @@ function EditableMindmapFlow({ habits, goals, onClose, onRegisterAsHabit, onRegi
     if (!selectedNode || selectedNode.type !== 'goalNode') return;
     
     const goalNodeData = selectedNode.data as GoalNodeData;
-    const updatedGoal = {
-      ...goalNodeData.goal,
-      ...goalData,
-    };
+    const goalId = goalNodeData.goal.id;
     
     try {
-      await supabaseDirectClient.updateGoal(updatedGoal);
+      await supabaseDirectClient.updateGoal(goalId, goalData);
+      
+      // Update local state
+      const updatedGoal = {
+        ...goalNodeData.goal,
+        ...goalData,
+      };
+      
       setFlowNodes((nds) =>
         nds.map((n) =>
           n.id === selectedNode.id

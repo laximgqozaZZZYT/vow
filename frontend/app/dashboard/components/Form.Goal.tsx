@@ -182,16 +182,14 @@ export function GoalForm({ goal, goals, tags, viewMode, onViewModeChange, onSave
                         selectedTagIds={selectedTagIds}
                         onTagAdd={async (tagId) => {
                             if (goal) {
-                                const newTagIds = [...selectedTagIds, tagId]
-                                await supabaseDirectClient.setGoalTags(goal.id, newTagIds)
-                                setSelectedTagIds(newTagIds)
+                                await supabaseDirectClient.addGoalTag(goal.id, tagId)
+                                setSelectedTagIds([...selectedTagIds, tagId])
                             }
                         }}
                         onTagRemove={async (tagId) => {
                             if (goal) {
-                                const newTagIds = selectedTagIds.filter(id => id !== tagId)
-                                await supabaseDirectClient.setGoalTags(goal.id, newTagIds)
-                                setSelectedTagIds(newTagIds)
+                                await supabaseDirectClient.removeGoalTag(goal.id, tagId)
+                                setSelectedTagIds(selectedTagIds.filter(id => id !== tagId))
                             }
                         }}
                         placeholder="Search and add tags..."

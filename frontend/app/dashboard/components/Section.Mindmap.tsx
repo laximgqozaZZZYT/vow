@@ -11,17 +11,26 @@ interface MindmapSectionProps {
   habits: Habit[];
   onRegisterAsHabit?: (data: any) => Promise<any>;
   onRegisterAsGoal?: (data: any) => Promise<any>;
+  onDataChange?: () => void; // データ変更時のコールバック
 }
 
-export default function MindmapSection({ goals, habits, onRegisterAsHabit, onRegisterAsGoal }: MindmapSectionProps) {
+export default function MindmapSection({ goals, habits, onRegisterAsHabit, onRegisterAsGoal, onDataChange }: MindmapSectionProps) {
   const [showEditableMode, setShowEditableMode] = useState(false);
+
+  const handleClose = () => {
+    setShowEditableMode(false);
+    // EditableMindmapを閉じた時にデータを再読み込み
+    if (onDataChange) {
+      onDataChange();
+    }
+  };
 
   if (showEditableMode) {
     return (
       <EditableMindmap
         habits={habits}
         goals={goals}
-        onClose={() => setShowEditableMode(false)}
+        onClose={handleClose}
         onRegisterAsHabit={onRegisterAsHabit || (async () => {})}
         onRegisterAsGoal={onRegisterAsGoal || (async () => {})}
       />

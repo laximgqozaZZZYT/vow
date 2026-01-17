@@ -190,6 +190,7 @@ export function useDataManager() {
     setPageSections,
     isClient,
     isLoading,
+    loadData, // Export loadData for manual refresh
     manualReset // Export manual reset for debugging
   };
 }
