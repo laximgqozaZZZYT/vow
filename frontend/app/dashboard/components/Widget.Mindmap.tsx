@@ -237,167 +237,153 @@ function MindmapFlow({ onClose, onRegisterAsHabit, onRegisterAsGoal, goals = [],
       }
     };
 
-    // ハンドルドラッグ開始ハンドラー（スマホ用）
-    const handleHandleDragStart = (event: Event) => {
-      const customEvent = event as CustomEvent;
-      const { nodeId, handleId } = customEvent.detail;
-      
-      // React Flowの接続開始処理を呼び出す
-      setConnectionStartInfo({ nodeId, handleId });
-      addLog(`Handle drag started from node: ${nodeId}, handle: ${handleId}`);
-    };
-
-    // ハンドルドラッグ終了ハンドラー（スマホ用）
-    const handleHandleDragEnd = (event: Event) => {
+    // ハンドルのタッチ終了時に新しいノードを作成するハンドラー
+    const handleTouchEndOnPane = (event: Event) => {
       const customEvent = event as CustomEvent;
       const { clientX, clientY, sourceNodeId, sourceHandleId } = customEvent.detail;
       
-      // ドロップ位置を取得してReact Flowの接続終了処理を呼び出す
-      if (reactFlowWrapper.current) {
-        const reactFlowBounds = reactFlowWrapper.current.getBoundingClientRect();
-        
-        // TouchEventを模倣したMouseEventを作成
-        const syntheticEvent = new MouseEvent('mouseup', {
-          clientX,
-          clientY,
-          bubbles: true,
-          cancelable: true
-        });
-        
-        // React Flowペインの要素を取得
-        const paneElement = reactFlowWrapper.current.querySelector('.react-flow__pane');
-        
-        if (paneElement) {
-          // onConnectEndを直接呼び出す代わりに、座標から新規ノードを作成
-          const position = project({
-            x: clientX - reactFlowBounds.left,
-            y: clientY - reactFlowBounds.top,
-          });
-
-          // 画面内に配置されるように位置を調整
-          const viewport = getViewport();
-          const screenWidth = window.innerWidth;
-          const screenHeight = window.innerHeight;
-          
-          const margin = 100;
-          const minX = (-viewport.x + margin) / viewport.zoom;
-          const maxX = (-viewport.x + screenWidth - margin) / viewport.zoom;
-          const minY = (-viewport.y + margin) / viewport.zoom;
-          const maxY = (-viewport.y + screenHeight - margin) / viewport.zoom;
-          
-          position.x = Math.max(minX, Math.min(maxX, position.x));
-          position.y = Math.max(minY, Math.min(maxY, position.y));
-
-          // 新しいノードを作成
-          const newNodeId = `node-${Date.now()}`;
-          const sourceNode = nodes.find(n => n.id === sourceNodeId);
-          const nodeType = sourceNode?.data.nodeType || 'default';
-          
-          const newNode = {
-            id: newNodeId,
-            position,
-            data: { label: 'New Node', isEditing: false, nodeType: 'default' as const },
-            type: 'mindmapNode',
-          };
-
-          // ノードを追加
-          setNodes((nds) => nds.concat(newNode));
-
-          // 接続を作成
-          const edgeStyle = getEdgeStyle(nodeType);
-          const newEdge = {
-            id: `edge-${sourceNodeId}-${newNodeId}`,
-            source: sourceNodeId,
-            target: newNodeId,
-            sourceHandle: sourceHandleId,
-            targetHandle: null,
-            style: edgeStyle,
-            data: { sourceNodeType: nodeType }
-          };
-
-          setEdges((eds) => eds.concat(newEdge));
-          setHasUnsavedChanges(true);
-          
-          addLog(`Mobile: Created new node at (${Math.round(position.x)}, ${Math.round(position.y)}) and connected from ${sourceNodeId}`);
-          
-          // 結線元のノードタイプに応じて自動的にモーダルを開く
-          if (nodeType === 'goal') {
-            let sourceGoalId = (sourceNode?.data as any)?.goalId;
-            
-            if (!sourceGoalId && sourceNode?.data.label) {
-              const matchingGoal = goals.find(g => g.name === sourceNode.data.label);
-              if (matchingGoal) {
-                sourceGoalId = matchingGoal.id;
-                addLog(`Found matching Goal by label: ${matchingGoal.name} (${matchingGoal.id})`);
-              }
-            }
-            
-            setModalState({
-              habitModal: false,
-              goalModal: true,
-              selectedNodeName: 'New Goal',
-              selectedNodeId: newNodeId
-            });
-            
-            if (sourceGoalId) {
-              (window as any).__mindmapNewNodeParentGoalId = sourceGoalId;
-            }
-          } else if (nodeType === 'habit') {
-            let sourceHabitId = (sourceNode?.data as any)?.habitId;
-            
-            if (!sourceHabitId && sourceNode?.data.label && habits) {
-              const matchingHabit = habits.find(h => h.name === sourceNode.data.label);
-              if (matchingHabit) {
-                sourceHabitId = matchingHabit.id;
-                addLog(`Found matching Habit by label: ${matchingHabit.name} (${matchingHabit.id})`);
-              }
-            }
-            
-            setModalState({
-              habitModal: true,
-              goalModal: false,
-              selectedNodeName: 'New Habit',
-              selectedNodeId: newNodeId
-            });
-            
-            if (sourceHabitId) {
-              (window as any).__mindmapNewNodeRelatedHabitIds = [sourceHabitId];
-            }
-          } else {
-            // 通常ノードの場合は編集モードにする
-            setTimeout(() => {
-              setNodes((nds) =>
-                nds.map((n) =>
-                  n.id === newNodeId
-                    ? { ...n, data: { ...n.data, isEditing: true } }
-                    : { ...n, data: { ...n.data, isEditing: false } }
-                )
-              );
-            }, 100);
-          }
-        }
+      if (!reactFlowWrapper.current) return;
+      
+      // タッチ終了位置がノード上でない場合のみ新しいノードを作成
+      const target = document.elementFromPoint(clientX, clientY);
+      const isOnNode = target?.closest('.mindmap-custom-node');
+      
+      if (isOnNode) {
+        // ノード上の場合は結線のみ（既存の処理）
+        return;
       }
       
-      // 接続開始情報をクリア
-      setConnectionStartInfo(null);
+      // 空白領域の場合は新しいノードを作成
+      const reactFlowBounds = reactFlowWrapper.current.getBoundingClientRect();
+      let position = project({
+        x: clientX - reactFlowBounds.left,
+        y: clientY - reactFlowBounds.top,
+      });
+
+      // 画面内に配置されるように位置を調整
+      const viewport = getViewport();
+      const screenWidth = window.innerWidth;
+      const screenHeight = window.innerHeight;
+      
+      const margin = 100;
+      const minX = (-viewport.x + margin) / viewport.zoom;
+      const maxX = (-viewport.x + screenWidth - margin) / viewport.zoom;
+      const minY = (-viewport.y + margin) / viewport.zoom;
+      const maxY = (-viewport.y + screenHeight - margin) / viewport.zoom;
+      
+      position.x = Math.max(minX, Math.min(maxX, position.x));
+      position.y = Math.max(minY, Math.min(maxY, position.y));
+
+      // 新しいノードを作成
+      const newNodeId = `node-${Date.now()}`;
+      const sourceNode = nodes.find(n => n.id === sourceNodeId);
+      const nodeType = sourceNode?.data.nodeType || 'default';
+      
+      const newNode = {
+        id: newNodeId,
+        position,
+        data: { label: 'New Node', isEditing: false, nodeType: 'default' as const },
+        type: 'mindmapNode',
+      };
+
+      // ノードを追加
+      setNodes((nds) => nds.concat(newNode));
+
+      // 接続を作成
+      const edgeStyle = getEdgeStyle(nodeType);
+      const newEdge = {
+        id: `edge-${sourceNodeId}-${newNodeId}`,
+        source: sourceNodeId,
+        target: newNodeId,
+        sourceHandle: sourceHandleId,
+        targetHandle: null,
+        style: edgeStyle,
+        data: { sourceNodeType: nodeType }
+      };
+
+      setEdges((eds) => eds.concat(newEdge));
+      setHasUnsavedChanges(true);
+      
+      addLog(`Mobile: Created new node at (${Math.round(position.x)}, ${Math.round(position.y)}) and connected from ${sourceNodeId}`);
+      
+      // 結線元のノードタイプに応じて自動的にモーダルを開く
+      if (nodeType === 'goal') {
+        let sourceGoalId = (sourceNode?.data as any)?.goalId;
+        
+        if (!sourceGoalId && sourceNode?.data.label) {
+          const matchingGoal = goals.find(g => g.name === sourceNode.data.label);
+          if (matchingGoal) {
+            sourceGoalId = matchingGoal.id;
+            addLog(`Found matching Goal by label: ${matchingGoal.name} (${matchingGoal.id})`);
+          }
+        }
+        
+        setModalState({
+          habitModal: false,
+          goalModal: true,
+          selectedNodeName: 'New Goal',
+          selectedNodeId: newNodeId
+        });
+        
+        if (sourceGoalId) {
+          (window as any).__mindmapNewNodeParentGoalId = sourceGoalId;
+        }
+      } else if (nodeType === 'habit') {
+        let sourceHabitId = (sourceNode?.data as any)?.habitId;
+        
+        if (!sourceHabitId && sourceNode?.data.label && habits) {
+          const matchingHabit = habits.find(h => h.name === sourceNode.data.label);
+          if (matchingHabit) {
+            sourceHabitId = matchingHabit.id;
+            addLog(`Found matching Habit by label: ${matchingHabit.name} (${matchingHabit.id})`);
+          }
+        }
+        
+        setModalState({
+          habitModal: true,
+          goalModal: false,
+          selectedNodeName: 'New Habit',
+          selectedNodeId: newNodeId
+        });
+        
+        if (sourceHabitId) {
+          (window as any).__mindmapNewNodeRelatedHabitIds = [sourceHabitId];
+        }
+      } else {
+        // 通常ノードの場合は編集モードにする
+        setTimeout(() => {
+          setNodes((nds) =>
+            nds.map((n) =>
+              n.id === newNodeId
+                ? { ...n, data: { ...n.data, isEditing: true } }
+                : { ...n, data: { ...n.data, isEditing: false } }
+            )
+          );
+        }, 100);
+      }
+      
+      // 結線モードを終了
+      setConnectionMode({
+        isActive: false,
+        sourceNodeId: null,
+        sourceHandleId: null
+      });
     };
 
     window.addEventListener('showMobileBottomMenu', handleShowMobileBottomMenu as EventListener);
     window.addEventListener('startMobileConnection', handleStartMobileConnection as EventListener);
     window.addEventListener('getConnectionModeState', handleGetConnectionModeState as EventListener);
     window.addEventListener('executeConnection', handleExecuteConnection as EventListener);
-    window.addEventListener('handleDragStart', handleHandleDragStart as EventListener);
-    window.addEventListener('handleDragEnd', handleHandleDragEnd as EventListener);
+    window.addEventListener('handleTouchEndOnPane', handleTouchEndOnPane as EventListener);
 
     return () => {
       window.removeEventListener('showMobileBottomMenu', handleShowMobileBottomMenu as EventListener);
       window.removeEventListener('startMobileConnection', handleStartMobileConnection as EventListener);
       window.removeEventListener('getConnectionModeState', handleGetConnectionModeState as EventListener);
       window.removeEventListener('executeConnection', handleExecuteConnection as EventListener);
-      window.removeEventListener('handleDragStart', handleHandleDragStart as EventListener);
-      window.removeEventListener('handleDragEnd', handleHandleDragEnd as EventListener);
+      window.removeEventListener('handleTouchEndOnPane', handleTouchEndOnPane as EventListener);
     };
-  }, [isMobile, addLog, connectionMode, handleMobileNodeTap, project, getViewport, nodes, setNodes, setEdges, setHasUnsavedChanges, goals, habits, setModalState]);
+  }, [isMobile, addLog, connectionMode, handleMobileNodeTap, nodes, edges, goals, habits, project, getViewport, setNodes, setEdges, setHasUnsavedChanges, setModalState, setConnectionMode]);
 
 
 

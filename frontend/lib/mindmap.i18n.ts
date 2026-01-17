@@ -37,7 +37,6 @@ export const i18n = {
     connection_mode_title: '結線モード',
     connection_mode_source: '開始ノード',
     connection_mode_desc: '接続したいノードをタップしてください',
-    drag_to_create: 'ドラッグして新しいノードを作成',
   },
   en: {
     save: 'Save',
@@ -75,7 +74,6 @@ export const i18n = {
     connection_mode_title: 'Connection Mode',
     connection_mode_source: 'Source Node',
     connection_mode_desc: 'Tap the node you want to connect to',
-    drag_to_create: 'Drag to create new node',
   }
 };
 
