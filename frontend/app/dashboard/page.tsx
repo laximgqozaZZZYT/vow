@@ -663,7 +663,11 @@ function DashboardLayout(props: any) {
               <NextSection 
                 key="next" 
                 habits={habits} 
-                onHabitAction={handleHabitAction} 
+                onHabitAction={handleHabitAction}
+                onHabitEdit={(habitId) => {
+                  setSelectedHabitId(habitId);
+                  setOpenHabitModal(true);
+                }}
               />
             ) : sec === 'activity' ? (
               <ActivitySection 

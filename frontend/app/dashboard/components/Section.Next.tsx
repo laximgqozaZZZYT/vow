@@ -4,7 +4,7 @@ import { useState } from 'react';
 import './HabitNameScroll.css';
 import { useHandedness } from '../contexts/HandednessContext';
 
-export default function NextSection({ habits, onHabitAction }: NextSectionProps) {
+export default function NextSection({ habits, onHabitAction, onHabitEdit }: NextSectionProps) {
   const [inputValues, setInputValues] = useState<Record<string, string>>({});
   const { isLeftHanded } = useHandedness();
   
@@ -120,9 +120,12 @@ export default function NextSection({ habits, onHabitAction }: NextSectionProps)
             <div className={`flex min-w-0 items-center gap-2 sm:gap-3 flex-1 ${isLeftHanded ? 'flex-row-reverse' : ''}`}>
               <div className="flex-1 min-w-0">
                 <div className="habit-name-scroll min-w-0 overflow-hidden">
-                  <div className={`habit-name-text inline-block whitespace-nowrap text-sm ${c.h.completed ? 'line-through text-zinc-400' : 'text-zinc-800 dark:text-zinc-100'}`}>
+                  <button
+                    onClick={(e) => { e.stopPropagation(); onHabitEdit(c.h.id); }}
+                    className={`habit-name-text inline-block whitespace-nowrap text-sm text-left hover:text-blue-600 dark:hover:text-blue-400 transition-colors cursor-pointer ${c.h.completed ? 'line-through text-zinc-400' : 'text-zinc-800 dark:text-zinc-100'}`}
+                  >
                     {c.h.name}
-                  </div>
+                  </button>
                 </div>
                 {(c.h as any)?.workloadUnit && (
                   <div className="text-xs text-zinc-500 mt-0.5 truncate">

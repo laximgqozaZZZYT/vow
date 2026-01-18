@@ -174,6 +174,7 @@ export interface GoalTreeProps {
 export interface NextSectionProps {
   habits: Habit[];
   onHabitAction: (habitId: string, action: HabitAction, amount?: number) => void;
+  onHabitEdit: (habitId: string) => void;
 }
 
 export interface ActivitySectionProps {
