@@ -3,6 +3,7 @@
 import { useState, useMemo, useRef, useEffect } from "react";
 import { debug } from '../../../lib/debug';
 import type { Goal, Habit } from '../types';
+import CalendarControls, { type CalendarViewType } from './calendar/CalendarControls';
 
 interface CalendarWidgetProps {
   habits: Habit[];
@@ -162,7 +163,7 @@ export default function CalendarWidget({
   }, []);
 
   const calendarRef = useRef<any>(null);
-  const [navSelection, setNavSelection] = useState<'today' | 'tomorrow' | 'week' | 'month'>('today');
+  const [navSelection, setNavSelection] = useState<CalendarViewType>('today');
   
   // Mobile touch interaction states
   const [selectedEventId, setSelectedEventId] = useState<string | null>(null);
@@ -528,39 +529,31 @@ export default function CalendarWidget({
   return (
     <section className="mt-6 rounded-lg border border-border bg-card text-card-foreground shadow-sm p-4 sm:p-6 w-full overflow-hidden">
       <h2 className="mb-3 text-lg font-semibold">Calendar</h2>
-      <div className="mb-3 flex flex-wrap items-center gap-2">
-        {(['today','tomorrow','week','month'] as const).map((b) => (
-          <button
-            key={b}
-            type="button"
-            onClick={() => {
-              const cal = calendarRef.current?.getApi?.();
-              if (!cal) return;
-              if (b === 'today') {
-                cal.gotoDate(new Date());
-                cal.changeView('timeGridDay');
-                setNavSelection('today');
-                window.setTimeout(() => scrollToNowCenter(), 50);
-              } else if (b === 'tomorrow') {
-                const t = new Date(); 
-                t.setDate(t.getDate() + 1);
-                cal.gotoDate(t);
-                cal.changeView('timeGridDay');
-                setNavSelection('tomorrow');
-              } else if (b === 'week') {
-                cal.changeView('timeGridWeek');
-                setNavSelection('week');
-              } else if (b === 'month') {
-                cal.changeView('dayGridMonth');
-                setNavSelection('month');
-              }
-            }}
-            className={`rounded px-2 sm:px-3 py-1 text-xs sm:text-sm ${navSelection === b ? 'bg-sky-600 text-white' : 'bg-white dark:bg-slate-800 border text-slate-700 dark:text-slate-200'}`}
-          >
-            {b === 'today' ? 'today' : b === 'tomorrow' ? 'tomorrow' : b === 'week' ? 'week' : 'month'}
-          </button>
-        ))}
-      </div>
+      <CalendarControls
+        selectedView={navSelection}
+        onViewChange={(view) => {
+          const cal = calendarRef.current?.getApi?.();
+          if (!cal) return;
+          if (view === 'today') {
+            cal.gotoDate(new Date());
+            cal.changeView('timeGridDay');
+            setNavSelection('today');
+          } else if (view === 'tomorrow') {
+            const t = new Date(); 
+            t.setDate(t.getDate() + 1);
+            cal.gotoDate(t);
+            cal.changeView('timeGridDay');
+            setNavSelection('tomorrow');
+          } else if (view === 'week') {
+            cal.changeView('timeGridWeek');
+            setNavSelection('week');
+          } else if (view === 'month') {
+            cal.changeView('dayGridMonth');
+            setNavSelection('month');
+          }
+        }}
+        onScrollToNow={scrollToNowCenter}
+      />
       
       <div className="w-full overflow-x-auto">
         <div className="min-w-[300px]">
