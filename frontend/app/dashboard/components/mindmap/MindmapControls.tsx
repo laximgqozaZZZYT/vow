@@ -67,16 +67,17 @@ const translations = {
  * - Minimum touch target size (44px)
  * - Consistent shadow and transition effects
  */
-function MindmapControlsComponent({
-  onAddNode,
-  onClearConnections,
-  onZoomIn,
-  onZoomOut,
-  onFitView,
-  isEditMode = true,
-  isMobile = false,
-  lang = 'ja',
-}: MindmapControlsProps): React.ReactElement | null {
+function MindmapControlsComponent(props: MindmapControlsProps): React.ReactElement | null {
+  const {
+    onAddNode,
+    onClearConnections,
+    onZoomIn,
+    onZoomOut,
+    onFitView,
+    isEditMode = true,
+    isMobile = false,
+    lang = 'ja',
+  } = props;
   const t = translations[lang];
   
   // Button size based on device type - ensures minimum 44px touch target

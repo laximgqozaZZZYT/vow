@@ -1,6 +1,12 @@
 import React from 'react'
 
-export default function DashboardShell({ children, nav }: { children: React.ReactNode; nav?: React.ReactNode }) {
+interface DashboardShellProps {
+  children: React.ReactNode
+  nav?: React.ReactNode
+}
+
+export default function DashboardShell(props: DashboardShellProps) {
+  const { children } = props
   return (
     <div className="min-h-screen bg-background text-foreground">
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">

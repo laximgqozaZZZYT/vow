@@ -85,21 +85,24 @@ const getDotPositionStyle = (position: Position, isMobile: boolean, size: number
   }
 };
 
+/** Color configuration for handle variants */
+const colorConfig = {
+  blue: {
+    bg: 'rgba(59, 130, 246, 0.25)',
+    border: 'rgba(59, 130, 246, 0.4)',
+    dot: 'rgba(59, 130, 246, 0.9)',
+  },
+  purple: {
+    bg: 'rgba(147, 51, 234, 0.25)',
+    border: 'rgba(147, 51, 234, 0.4)',
+    dot: 'rgba(147, 51, 234, 0.9)',
+  },
+};
+
 /** Get color styles based on variant */
 const getColorStyles = (color: HandleColor) => {
-  const colors = {
-    blue: {
-      bg: 'rgba(59, 130, 246, 0.25)',
-      border: 'rgba(59, 130, 246, 0.4)',
-      dot: 'rgba(59, 130, 246, 0.9)',
-    },
-    purple: {
-      bg: 'rgba(147, 51, 234, 0.25)',
-      border: 'rgba(147, 51, 234, 0.4)',
-      dot: 'rgba(147, 51, 234, 0.9)',
-    },
-  };
-  return colors[color];
+  const { bg, border, dot } = colorConfig[color];
+  return { bg, border, dot };
 };
 
 /**

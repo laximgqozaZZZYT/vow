@@ -43,11 +43,9 @@ const VIEW_BUTTONS: { key: CalendarViewType; label: string }[] = [
  * - Accessible focus states with focus-visible
  * - Minimum touch target size (44px height via py-1 + text size)
  */
-export default function CalendarControls({
-  selectedView,
-  onViewChange,
-  onScrollToNow,
-}: CalendarControlsProps) {
+export default function CalendarControls(props: CalendarControlsProps) {
+  const { selectedView, onViewChange, onScrollToNow } = props;
+  
   const handleViewClick = (view: CalendarViewType) => {
     onViewChange(view);
     

@@ -9,7 +9,8 @@ interface AnimationCaptureControlProps {
   className?: string;
 }
 
-export default function AnimationCaptureControl({ className = '' }: AnimationCaptureControlProps) {
+export default function AnimationCaptureControl(props: AnimationCaptureControlProps) {
+  const { className = '' } = props;
   const { 
     startCapture, 
     stopCapture, 

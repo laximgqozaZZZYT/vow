@@ -48,11 +48,8 @@ export function markCoachMarkSeen(): void {
 /**
  * Coach mark component for first-time users.
  */
-function CoachMarkComponent({
-  isVisible,
-  lang,
-  onDismiss,
-}: CoachMarkProps): React.ReactElement | null {
+function CoachMarkComponent(props: CoachMarkProps): React.ReactElement | null {
+  const { isVisible, lang, onDismiss } = props;
   const t = getTranslation(lang);
 
   if (!isVisible) {

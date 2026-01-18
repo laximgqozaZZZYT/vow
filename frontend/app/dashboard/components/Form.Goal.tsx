@@ -44,7 +44,8 @@ interface GoalFormProps {
     showViewModeToggle?: boolean;
 }
 
-export function GoalForm({ goal, goals, tags, viewMode, onViewModeChange, onSave, showViewModeToggle = true }: GoalFormProps) {
+export function GoalForm(props: GoalFormProps) {
+    const { goal, goals, tags, viewMode, onViewModeChange, onSave, showViewModeToggle = true } = props;
     const [name, setName] = useState(goal?.name ?? "")
     const [details, setDetails] = useState(goal?.details ?? "")
     const [dueDate, setDueDate] = useState<Date | undefined>(

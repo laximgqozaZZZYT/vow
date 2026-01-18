@@ -1,6 +1,11 @@
 import React from 'react'
 
-export default function MindmapDesignWrapper({ children }: { children: React.ReactNode }) {
+interface MindmapDesignWrapperProps {
+  children: React.ReactNode
+}
+
+export default function MindmapDesignWrapper(props: MindmapDesignWrapperProps) {
+  const { children } = props
   return (
     <>
       {children}
