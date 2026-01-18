@@ -334,8 +334,20 @@ export class SupabaseDirectClient {
     if (!session?.session?.user) {
       // ゲストユーザーの場合はローカルストレージから取得
       const guestHabits = JSON.parse(localStorage.getItem('guest-habits') || '[]');
-      debug.log('[getHabits] Guest mode - loaded from localStorage:', guestHabits.length, 'habits');
-      return guestHabits;
+      const guestEntityTags = JSON.parse(localStorage.getItem('guest-entity-tags') || '[]');
+      const guestTags = JSON.parse(localStorage.getItem('guest-tags') || '[]');
+      
+      // 各habitにタグ情報を付与
+      const habitsWithTags = guestHabits.map((h: any) => {
+        const habitTagIds = guestEntityTags
+          .filter((et: any) => et.entityType === 'habit' && et.entityId === h.id)
+          .map((et: any) => et.tagId);
+        const tags = guestTags.filter((t: any) => habitTagIds.includes(t.id));
+        return { ...h, tags };
+      });
+      
+      debug.log('[getHabits] Guest mode - loaded from localStorage:', habitsWithTags.length, 'habits');
+      return habitsWithTags;
     }
     
     debug.log('[getHabits] Authenticated mode - querying Supabase for user:', session.session.user.id);
@@ -353,6 +365,38 @@ export class SupabaseDirectClient {
     }
     
     debug.log('[getHabits] Successfully loaded', data?.length || 0, 'habits from Supabase');
+    
+    // 各habitのタグを取得
+    const habitIds = (data || []).map((h: any) => h.id);
+    const { data: entityTags, error: tagsError } = await supabase
+      .from('entity_tags')
+      .select('entity_id, tag_id, tags(*)')
+      .eq('entity_type', 'habit')
+      .eq('owner_type', 'user')
+      .eq('owner_id', session.session.user.id)
+      .in('entity_id', habitIds);
+    
+    if (tagsError) {
+      console.error('[getHabits] Failed to load tags:', tagsError);
+    }
+    
+    // habitIdごとにタグをグループ化
+    const tagsByHabitId: Record<string, any[]> = {};
+    (entityTags || []).forEach((et: any) => {
+      if (!tagsByHabitId[et.entity_id]) {
+        tagsByHabitId[et.entity_id] = [];
+      }
+      if (et.tags) {
+        tagsByHabitId[et.entity_id].push({
+          id: et.tags.id,
+          name: et.tags.name,
+          color: et.tags.color,
+          parentId: et.tags.parent_id,
+          createdAt: et.tags.created_at,
+          updatedAt: et.tags.updated_at
+        });
+      }
+    });
     
     // Convert snake_case to camelCase
     const habits = (data || []).map((h: any) => ({
@@ -380,10 +424,11 @@ export class SupabaseDirectClient {
       completed: h.completed,
       lastCompletedAt: h.last_completed_at,
       createdAt: h.created_at,
-      updatedAt: h.updated_at
+      updatedAt: h.updated_at,
+      tags: tagsByHabitId[h.id] || []
     }));
     
-    debug.log('[getHabits] Converted habits data:', habits);
+    debug.log('[getHabits] Converted habits data with tags:', habits);
     return habits;
   }
 
