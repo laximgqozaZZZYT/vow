@@ -1,0 +1,50 @@
+# devfile.yaml（リポジトリルートに配置）
+# Amazon CodeCatalyst Dev Environment設定
+# Requirements: 9.1, 9.2, 9.3
+
+schemaVersion: 2.2.0
+metadata:
+  name: vow-app-dev
+  version: 1.0.0
+  description: Vow App Development Environment
+
+components:
+  - name: dev-container
+    container:
+      image: public.ecr.aws/amazonlinux/amazonlinux:2023
+      memoryLimit: 4Gi
+      mountSources: true
+      env:
+        - name: NODE_VERSION
+          value: "20"
+      endpoints:
+        - name: nextjs-dev
+          targetPort: 3000
+          exposure: public
+          protocol: https
+
+commands:
+  - id: install-node
+    exec:
+      component: dev-container
+      commandLine: |
+        curl -fsSL https://rpm.nodesource.com/setup_20.x | bash -
+        yum install -y nodejs git
+      workingDir: /projects
+      
+  - id: install-deps
+    exec:
+      component: dev-container
+      commandLine: npm install
+      workingDir: /projects/vow/frontend
+      
+  - id: dev-server
+    exec:
+      component: dev-container
+      commandLine: npm run dev
+      workingDir: /projects/vow/frontend
+
+events:
+  postStart:
+    - install-node
+    - install-deps

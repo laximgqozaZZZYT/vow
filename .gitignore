@@ -1,23 +1,52 @@
-node_modules/*
-.venv/*
+# Dependencies
+node_modules/
+
+# Environment files
 .env
 .env.local
-.pytest_cache/*
-pycache/*
+.env*.local
+
+# Python
+.venv/
+strands-env/
+__pycache__/
+.pytest_cache/
+*.pyc
+
+# OS files
 .DS_Store
+Thumbs.db
+
+# Secrets
 serviceAccountKey.json
 cookies.txt
 
+# Kiro (keep steering files, ignore temp)
+.kiro/settings/
+.kiro/specs/**/.*
+!.kiro/steering/
+
+# Frontend (Next.js)
+frontend/.next/
+frontend/.swc/
+frontend/out/
+frontend/*.tsbuildinfo
+
+# Test results (regenerated)
+frontend/test-results/
+frontend/__tests__/test-results/
+frontend/__tests__/playwright-report/
+*.xml
+test-results.json
+
 # Backend (Node/Prisma)
-backend/node_modules/*
-backend/dist/*
+backend/dist/
 backend/.env
 backend/.env.*
 !backend/.env.example
 backend/*.log
 backend/npm-debug.log*
 backend/yarn-error.log*
-backend/.DS_Store
 
 # Docker compose local overrides
 backend/docker-compose.override.yml
@@ -26,13 +55,16 @@ backend/docker-compose.*.yml
 # Prisma local artifacts
 backend/prisma/dev.db
 backend/prisma/dev.db-journal
-node_modules
 
-# Build/deploy artifacts (do not commit)
+# Build/deploy artifacts
 backend/dist-bundle/
 backend/.lambda-artifact/
 backend/.lambda-artifact-api/
 backend/.lambda-artifact-migrate/
 backend/lambda-*.zip
-.vercel
-.env*.local
+.vercel/
+
+# IDE
+.idea/
+*.swp
+*.swo

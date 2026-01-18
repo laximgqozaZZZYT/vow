@@ -96,13 +96,13 @@
   - **Property 6: robots.txtとsitemap.xmlの整合性**
   - **Validates: Requirements 7.1, 7.2, 7.3, 7.4, 7.5, 7.6, 7.7**
 
-- [ ] 10. OGP画像の最適化
+- [x] 10. OGP画像の最適化
   - `app/opengraph-image.tsx`を確認し、必要に応じて更新
   - 1200x630pxのサイズを維持
   - 日本語テキストを含むバージョンを検討
   - _Requirements: 2.4, 6.3_
 
-- [ ] 11. Checkpoint - 静的ファイルとOGP画像の確認
+- [x] 11. Checkpoint - 静的ファイルとOGP画像の確認
   - robots.txtとsitemap.xmlが正しく生成されることを確認
   - ユーザーに質問があれば確認
   - OGP画像が適切に表示されることを確認
@@ -124,7 +124,7 @@
   - Google Rich Results Testでの検証をシミュレート
   - _Requirements: 8.3, 8.4, 8.5_
 
-- [ ] 15. 最終チェックポイント - 全体検証
+- [x] 15. 最終チェックポイント - 全体検証
   - 全てのテストが通ることを確認
   - 各ページのメタデータが正しく設定されていることを確認
   - SEOツール（Lighthouse、PageSpeed Insights）でスコアを確認

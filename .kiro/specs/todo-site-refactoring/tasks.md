@@ -19,7 +19,7 @@ TODOサイトの保守性向上を目的とした段階的リファクタリン�
   - 既存コードから重複する日付処理ロジックを特定・統合 ✅
   - _Requirements: 2.1_
 
-- [ ]* 1.2 日付ユーティリティのプロパティテスト作成
+- [x]* 1.2 日付ユーティリティのプロパティテスト作成
   - **Property 4: Code deduplication effectiveness**
   - **Validates: Requirements 2.1, 3.1**
 
@@ -30,7 +30,7 @@ TODOサイトの保守性向上を目的とした段階的リファクタリン�
   - 後方互換性のためのヘルパー関数も提供 ✅
   - _Requirements: 3.1_
 
-- [ ]* 1.4 デバイス検出フックのプロパティテスト作成
+- [x]* 1.4 デバイス検出フックのプロパティテスト作成
   - **Property 4: Code deduplication effectiveness**
   - **Validates: Requirements 2.1, 3.1**
 
@@ -41,7 +41,7 @@ TODOサイトの保守性向上を目的とした段階的リファクタリン�
   - ユーティリティ型とエラーハンドリング型も追加 ✅
   - _Requirements: 2.2, 6.1_
 
-- [ ]* 1.6 型定義統合のプロパティテスト作成
+- [x]* 1.6 型定義統合のプロパティテスト作成
   - **Property 5: File organization consistency**
   - **Validates: Requirements 2.2, 6.1**
 
@@ -58,7 +58,7 @@ TODOサイトの保守性向上を目的とした段階的リファクタリン�
   - リトライ機能や複数API管理も追加実装 ✅
   - _Requirements: 2.1, 5.1_
 
-- [ ]* 2.2 API共通フックのプロパティテスト作成
+- [x]* 2.2 API共通フックのプロパティテスト作成
   - **Property 4: Code deduplication effectiveness**
   - **Validates: Requirements 2.1, 3.1**
 
@@ -69,65 +69,65 @@ TODOサイトの保守性向上を目的とした段階的リファクタリン�
   - SSR対応、タブ間同期、型安全性も追加実装 ✅
   - _Requirements: 2.1_
 
-- [ ]* 2.4 ローカルストレージフックのプロパティテスト作成
+- [x]* 2.4 ローカルストレージフックのプロパティテスト作成
   - **Property 4: Code deduplication effectiveness**
   - **Validates: Requirements 2.1, 3.1**
 
-- [ ] 3. Phase 3a: 独立性の高いコンポーネント抽出
+- [x] 3. Phase 3a: 独立性の高いコンポーネント抽出
   - 状態を持たない純粋な表示コンポーネントを抽出
   - 親コンポーネントからpropsを受け取るのみの低リスク分割
   - 既存の大型コンポーネントから独立性の高い部分を分離
   - _Requirements: 1.1, 1.2, 1.3_
 
-- [ ] 3.1 カレンダーコントロールコンポーネントの抽出
+- [x] 3.1 カレンダーコントロールコンポーネントの抽出
   - `frontend/app/dashboard/components/calendar/` ディレクトリを作成
   - `CalendarControls.tsx` を作成（ナビゲーション部分）
   - Widget.Calendar.tsx からナビゲーション部分を抽出
   - selectedView, onViewChange, onScrollToNow のpropsインターフェース
   - _Requirements: 1.1, 1.2, 1.3_
 
-- [ ]* 3.2 カレンダーコントロールのプロパティテスト作成
+- [x]* 3.2 カレンダーコントロールのプロパティテスト作成
   - **Property 2: Functional equivalence preservation**
   - **Validates: Requirements 1.2, 8.2**
 
-- [ ] 3.3 マインドマップコントロールコンポーネントの抽出
+- [x] 3.3 マインドマップコントロールコンポーネントの抽出
   - `frontend/app/dashboard/components/mindmap/` ディレクトリを作成
   - `MindmapControls.tsx` を作成（ツールバー部分）
   - Widget.Mindmap.tsx からツールバー部分を抽出
   - onAddNode, onClearConnections, onZoomIn, onZoomOut, onFitView のpropsインターフェース
   - _Requirements: 1.1, 1.2, 1.3_
 
-- [ ]* 3.4 マインドマップコントロールのプロパティテスト作成
+- [x]* 3.4 マインドマップコントロールのプロパティテスト作成
   - **Property 2: Functional equivalence preservation**
   - **Validates: Requirements 1.2, 8.2**
 
-- [ ] 4. 統合テストとチェックポイント
+- [x] 4. 統合テストとチェックポイント
   - 全ての抽出されたコンポーネントとユーティリティが正常に動作することを確認
   - 既存機能に影響がないことを検証
   - _Requirements: 1.2, 8.2_
 
-- [ ] 4.1 機能等価性の検証
+- [x] 4.1 機能等価性の検証
   - 既存のテストスイートを実行して全てパスすることを確認
   - 抽出されたコンポーネントが元の機能と同等に動作することを確認
   - _Requirements: 1.2, 8.2_
 
-- [ ]* 4.2 コンポーネントサイズ制約の検証
+- [x]* 4.2 コンポーネントサイズ制約の検証
   - **Property 1: Component size constraint**
   - **Validates: Requirements 1.1**
 
-- [ ]* 4.3 命名規則一貫性の検証
+- [x]* 4.3 命名規則一貫性の検証
   - **Property 3: Naming convention consistency**
   - **Validates: Requirements 1.3**
 
-- [ ]* 4.4 ファイル組織一貫性の検証
+- [x]* 4.4 ファイル組織一貫性の検証
   - **Property 5: File organization consistency**
   - **Validates: Requirements 2.2, 6.1**
 
-- [ ]* 4.5 段階的実装順序の検証
+- [x]* 4.5 段階的実装順序の検証
   - **Property 6: Incremental refactoring order**
   - **Validates: Requirements 8.1**
 
-- [ ] 5. 最終チェックポイント
+- [x] 5. 最終チェックポイント
   - 全ての低リスクタスクが完了し、既存機能が正常に動作することを確認
   - 将来の中・高リスクリファクタリングのための基盤が整備されたことを確認
 
