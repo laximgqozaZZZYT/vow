@@ -21,10 +21,8 @@ Thumbs.db
 serviceAccountKey.json
 cookies.txt
 
-# Kiro (keep steering files, ignore temp)
-.kiro/settings/
-.kiro/specs/**/.*
-!.kiro/steering/
+# Kiro
+.kiro/
 
 # Frontend (Next.js)
 frontend/.next/
