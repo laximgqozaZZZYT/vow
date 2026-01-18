@@ -14,7 +14,6 @@ import {
   constrainPositionToViewport,
   type NodeType,
 } from '../../../lib/mindmap';
-import type { Goal, Habit } from '../types';
 
 /** Connection mode state */
 interface ConnectionModeState {
@@ -178,11 +177,11 @@ export function useConnectionHandlers({
 
     // Open modal based on source node type
     if (nodeType === 'goal') {
-      const sourceGoalId = (sourceNode?.data as any)?.goalId ||
+      const sourceGoalId = sourceNode?.data?.goalId ||
         goals.find(g => g.name === sourceNode?.data.label)?.id;
       openGoalModal(newNode.id, 'New Goal', { parentGoalId: sourceGoalId });
     } else if (nodeType === 'habit') {
-      const sourceHabitId = (sourceNode?.data as any)?.habitId ||
+      const sourceHabitId = sourceNode?.data?.habitId ||
         habits?.find(h => h.name === sourceNode?.data.label)?.id;
       openHabitModal(newNode.id, 'New Habit', { relatedHabitIds: sourceHabitId ? [sourceHabitId] : undefined });
     } else {

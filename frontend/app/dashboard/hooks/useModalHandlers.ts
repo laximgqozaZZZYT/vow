@@ -6,6 +6,7 @@
  */
 
 import { useCallback } from 'react';
+import type { RegisterHabitData, RegisterGoalData } from '../types/mindmap.types';
 
 /** Modal state */
 interface ModalState {
@@ -20,9 +21,9 @@ interface UseModalHandlersProps {
   /** Current modal state */
   modalState: ModalState;
   /** Register habit callback from parent */
-  onRegisterAsHabit: (payload: any) => Promise<any>;
+  onRegisterAsHabit: (payload: RegisterHabitData) => Promise<{ id: string; name: string } | null>;
   /** Register goal callback from parent */
-  onRegisterAsGoal: (payload: any) => Promise<any>;
+  onRegisterAsGoal: (payload: RegisterGoalData) => Promise<{ id: string; name: string } | null>;
   /** Set node type after creation */
   setNodeType: (nodeId: string, type: 'habit' | 'goal', entityId?: string) => void;
   /** Close modal */
@@ -32,9 +33,9 @@ interface UseModalHandlersProps {
 /** Return type for the hook */
 interface UseModalHandlersReturn {
   /** Handle habit creation from modal */
-  handleHabitCreate: (payload: any) => Promise<void>;
+  handleHabitCreate: (payload: RegisterHabitData) => Promise<void>;
   /** Handle goal creation from modal */
-  handleGoalCreate: (payload: any) => Promise<void>;
+  handleGoalCreate: (payload: RegisterGoalData) => Promise<void>;
 }
 
 /**
@@ -55,7 +56,7 @@ export function useModalHandlers({
    * Handles habit creation from modal.
    * Updates the node type after successful creation.
    */
-  const handleHabitCreate = useCallback(async (payload: any) => {
+  const handleHabitCreate = useCallback(async (payload: RegisterHabitData) => {
     try {
       const createdHabit = await onRegisterAsHabit({
         ...payload,
@@ -73,7 +74,7 @@ export function useModalHandlers({
    * Handles goal creation from modal.
    * Updates the node type after successful creation.
    */
-  const handleGoalCreate = useCallback(async (payload: any) => {
+  const handleGoalCreate = useCallback(async (payload: RegisterGoalData) => {
     try {
       const createdGoal = await onRegisterAsGoal({
         ...payload,

@@ -5,19 +5,26 @@ import {
   MobileBottomMenu, 
   ConnectionMode, 
   ModalState,
-  Language
+  Language,
+  MindmapData
 } from '../types/mindmap.types';
 import { convertNodesToReactFlow, convertEdgesToReactFlow } from '../../../lib/mindmap.utils';
 
-export const useMindmapState = (mindmap: any, goals: any[]) => {
+/** Goal reference for mindmap */
+interface GoalRef {
+  id: string;
+  name: string;
+}
+
+export const useMindmapState = (mindmap: MindmapData | undefined, goals: GoalRef[]) => {
   // データベースから取得したノードをReact Flow形式に変換
   const convertedNodes = useMemo(() => {
-    return convertNodesToReactFlow(mindmap?.nodes);
+    return convertNodesToReactFlow(mindmap?.nodes ?? []);
   }, [mindmap?.nodes]);
 
   // データベースから取得したエッジをReact Flow形式に変換
   const convertedEdges = useMemo(() => {
-    return convertEdgesToReactFlow(mindmap?.edges, convertedNodes);
+    return convertEdgesToReactFlow(mindmap?.edges ?? [], convertedNodes);
   }, [mindmap?.edges, convertedNodes]);
 
   const [nodes, setNodes, onNodesChange] = useNodesState<CustomNodeData>(convertedNodes);

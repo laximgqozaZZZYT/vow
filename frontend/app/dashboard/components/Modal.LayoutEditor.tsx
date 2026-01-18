@@ -1,7 +1,7 @@
 "use client"
 
 import React from 'react'
-import { useLocale } from '../../contexts/LocaleContext'
+import { useLocale } from '@/contexts/LocaleContext'
 
 type SectionId = 'next' | 'activity' | 'calendar' | 'statics' | 'diary' | 'stickies' | 'mindmap'
 

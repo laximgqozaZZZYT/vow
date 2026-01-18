@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react'
 import { UnifiedRelationMap } from './Widget.UnifiedRelationMap'
-import { EditableMindmap } from './Widget.EditableMindmap'
+import { EditableMindmapRefactored as EditableMindmap } from './Widget.EditableMindmap.Refactored'
 import DashboardShell from './Dashboard.Shell'
 import type { Goal, Habit } from '../types'
 

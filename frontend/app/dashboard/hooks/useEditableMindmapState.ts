@@ -6,7 +6,7 @@
  */
 
 import { useState, useCallback, useEffect } from 'react';
-import { Node, Edge, useNodesState, useEdgesState, MarkerType } from 'reactflow';
+import { Node, Edge, useNodesState, useEdgesState, MarkerType, OnNodesChange, OnEdgesChange } from 'reactflow';
 import type { Habit, Goal } from '../types';
 
 /** Node data for Goal nodes */
@@ -38,12 +38,12 @@ interface UseEditableMindmapStateReturn {
   // Node state
   flowNodes: Node[];
   setFlowNodes: React.Dispatch<React.SetStateAction<Node[]>>;
-  onNodesChange: any;
+  onNodesChange: OnNodesChange;
   
   // Edge state
   flowEdges: Edge[];
   setFlowEdges: React.Dispatch<React.SetStateAction<Edge[]>>;
-  onEdgesChange: any;
+  onEdgesChange: OnEdgesChange;
   
   // Selection state
   selectedNode: Node | null;

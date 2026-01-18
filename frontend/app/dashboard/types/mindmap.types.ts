@@ -1,14 +1,73 @@
-import { Node } from 'reactflow';
+import { Node, Edge } from 'reactflow';
+import type { MindmapNode, MindmapConnection } from './index';
+
+/** Data for registering a node as a habit (from Mindmap component) */
+export interface RegisterHabitData {
+  nodeId?: string;
+  name: string;
+  goalId?: string;
+  relatedHabitIds?: string[];
+  type?: 'do' | 'avoid';
+  must?: number;
+}
+
+/** Data for registering a node as a goal (from Mindmap component) */
+export interface RegisterGoalData {
+  nodeId?: string;
+  name: string;
+  parentGoalId?: string;
+  parentId?: string | null;
+  details?: string;
+  dueDate?: string;
+}
+
+/** Mindmap data structure from database */
+export interface MindmapData {
+  id: string;
+  name: string;
+  description?: string;
+  nodes?: MindmapNode[];
+  edges?: MindmapConnection[];
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+/** Mindmap save payload */
+export interface MindmapSavePayload {
+  id?: string;
+  name: string;
+  description?: string;
+  nodes: Array<{
+    id: string;
+    label: string;
+    x: number;
+    y: number;
+    nodeType?: 'default' | 'habit' | 'goal';
+    width?: number;
+    height?: number;
+    color?: string;
+    goalId?: string | null;
+    habitId?: string | null;
+  }>;
+  edges: Array<{
+    id: string;
+    source: string;
+    target: string;
+    sourceHandle?: string | null;
+    targetHandle?: string | null;
+    data?: Record<string, unknown>;
+  }>;
+}
 
 // Mindmap Props
 export interface MindmapProps {
   onClose: () => void;
-  onRegisterAsHabit: (data: any) => Promise<any>;
-  onRegisterAsGoal: (data: any) => Promise<any>;
+  onRegisterAsHabit: (data: RegisterHabitData) => Promise<{ id: string; name: string } | null>;
+  onRegisterAsGoal: (data: RegisterGoalData) => Promise<{ id: string; name: string } | null>;
   goals?: { id: string; name: string }[];
   habits?: { id: string; name: string }[];
-  mindmap?: any;
-  onSave?: (mindmapData: any) => void;
+  mindmap?: MindmapData;
+  onSave?: (mindmapData: MindmapSavePayload) => void;
 }
 
 // Mobile Bottom Menu

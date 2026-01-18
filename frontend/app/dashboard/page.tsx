@@ -36,7 +36,7 @@ import type { CreateGoalPayload } from './types';
 
 import { useAuth } from './hooks/useAuth';
 import { HandednessProvider, useHandedness } from './contexts/HandednessContext';
-import { LocaleProvider } from '../contexts/LocaleContext';
+import { LocaleProvider } from '@/contexts/LocaleContext';
 
 export default function DashboardPage() {
   const [showLeftPane, setShowLeftPane] = useState(false);

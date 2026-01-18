@@ -5,7 +5,7 @@
  */
 
 import { renderHook } from '@testing-library/react';
-import { useScrollReveal } from '../app/hooks/useScrollReveal';
+import { useScrollReveal } from '@/hooks/useScrollReveal';
 
 // Mock IntersectionObserver
 class MockIntersectionObserver {

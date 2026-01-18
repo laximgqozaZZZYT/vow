@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
+import type { AuthChangeEvent, Session, Subscription } from '@supabase/supabase-js';
 import api from '../../../lib/api';
 import { supabase } from '../../../lib/supabaseClient';
 import { GuestDataMigration, type GuestDataMigrationResult } from '../../../lib/guest-data-migration';
@@ -219,7 +220,7 @@ export function useAuth(): AuthContext {
 
   // Supabase統合版: 認証状態の監視
   useEffect(() => {
-    let subscription: any = null;
+    let subscription: Subscription | null = null;
     
     const initAuth = async () => {
       const { supabase } = await import('../../../lib/supabaseClient');
@@ -227,7 +228,7 @@ export function useAuth(): AuthContext {
       
       debug.log('[auth] Setting up Supabase auth listener');
       
-      const { data } = supabase.auth.onAuthStateChange(async (event: any, session: any) => {
+      const { data } = supabase.auth.onAuthStateChange(async (event: AuthChangeEvent, session: Session | null) => {
         const token = session?.access_token ?? null;
         const userId = session?.user?.id ?? null;
         const wasGuest = isGuest;

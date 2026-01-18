@@ -7,29 +7,7 @@
 
 import { useCallback, useMemo } from 'react';
 import { Node, Edge } from 'reactflow';
-
-/** Mindmap data structure for saving */
-export interface MindmapSaveData {
-  id?: string;
-  name: string;
-  nodes: Array<{
-    id: string;
-    label: string;
-    x: number;
-    y: number;
-    nodeType: string;
-    habitId?: string;
-    goalId?: string;
-  }>;
-  edges: Array<{
-    id: string;
-    source: string;
-    target: string;
-    sourceHandle?: string | null;
-    targetHandle?: string | null;
-    data?: any;
-  }>;
-}
+import type { MindmapSavePayload } from '../types/mindmap.types';
 
 /** Props for the hook */
 interface UseMindmapPersistenceProps {
@@ -48,7 +26,7 @@ interface UseMindmapPersistenceProps {
   /** Setter for save dialog visibility */
   setShowSaveDialog: (value: boolean) => void;
   /** Save callback from parent */
-  onSave?: (data: MindmapSaveData) => void;
+  onSave?: (data: MindmapSavePayload) => void;
   /** Close callback from parent */
   onClose: () => void;
   /** Show toast message */
@@ -70,7 +48,7 @@ interface UseMindmapPersistenceReturn {
   /** Handle cancel close dialog */
   handleCancelClose: () => void;
   /** Serialized mindmap data for saving */
-  mindmapData: MindmapSaveData;
+  mindmapData: MindmapSavePayload;
 }
 
 /**
@@ -96,7 +74,7 @@ export function useMindmapPersistence({
   /**
    * Serializes mindmap data for saving.
    */
-  const mindmapData = useMemo<MindmapSaveData>(() => ({
+  const mindmapData = useMemo<MindmapSavePayload>(() => ({
     id: mindmap?.id,
     name: mindmapName,
     nodes: nodes.map(node => ({
@@ -104,9 +82,9 @@ export function useMindmapPersistence({
       label: node.data.label,
       x: node.position.x,
       y: node.position.y,
-      nodeType: node.data.nodeType || 'default',
-      habitId: (node.data as any).habitId,
-      goalId: (node.data as any).goalId,
+      nodeType: (node.data.nodeType || 'default') as 'default' | 'habit' | 'goal',
+      habitId: node.data.habitId,
+      goalId: node.data.goalId,
     })),
     edges: edges.map(edge => ({
       id: edge.id,
@@ -114,7 +92,7 @@ export function useMindmapPersistence({
       target: edge.target,
       sourceHandle: edge.sourceHandle,
       targetHandle: edge.targetHandle,
-      data: edge.data,
+      data: edge.data as Record<string, unknown> | undefined,
     })),
   }), [mindmap?.id, mindmapName, nodes, edges]);
 

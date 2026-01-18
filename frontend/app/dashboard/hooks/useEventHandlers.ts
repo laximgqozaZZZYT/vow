@@ -25,6 +25,31 @@ interface RecurringConfirmation {
   updated: { start?: string; end?: string; timingIndex?: number };
 }
 
+/** Parse ISO datetime to local date and time */
+function parseIsoToLocal(iso: string): { date: string; time?: string } {
+  const d = new Date(iso);
+  const date = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  const time = iso.length > 10 
+    ? `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
+    : undefined;
+  return { date, time };
+}
+
+/** Build update payload for habit */
+function buildHabitUpdatePayload(
+  newDue: string | undefined,
+  newTime: string | undefined,
+  newEnd: string | undefined,
+  timingIndex: number | undefined
+): Partial<Habit> & { timingIndex?: number } {
+  const payload: Partial<Habit> & { timingIndex?: number } = {};
+  if (newDue !== undefined) payload.dueDate = newDue;
+  if (newTime !== undefined) payload.time = newTime;
+  if (newEnd !== undefined) payload.endTime = newEnd;
+  if (typeof timingIndex === 'number') payload.timingIndex = timingIndex;
+  return payload;
+}
+
 export function useEventHandlers({ habits, setHabits, goals, activities, setActivities }: UseEventHandlersProps) {
   const [recurringRequest, setRecurringRequest] = useState<RecurringRequest | null>(null);
   const [selectedHabitId, setSelectedHabitId] = useState<string | null>(null);
@@ -39,43 +64,11 @@ export function useEventHandlers({ habits, setHabits, goals, activities, setActi
     habitId: string,
     updated: { start?: string; end?: string; timingIndex?: number }
   ) {
-    const startIso = updated.start;
-    const endIso = updated.end;
-    
-    // Convert UTC datetime to local date and time
-    let newDue: string | undefined;
-    let newTime: string | undefined;
-    let newEnd: string | undefined;
-    
-    if (startIso) {
-      const startDate = new Date(startIso);
-      // Use local date (not UTC date)
-      newDue = `${startDate.getFullYear()}-${String(startDate.getMonth() + 1).padStart(2, '0')}-${String(startDate.getDate()).padStart(2, '0')}`;
-      
-      if (startIso.length > 10) {
-        // Use local time (not UTC time)
-        newTime = `${String(startDate.getHours()).padStart(2, '0')}:${String(startDate.getMinutes()).padStart(2, '0')}`;
-      }
-    }
-    
-    if (endIso && endIso.length > 10) {
-      const endDate = new Date(endIso);
-      // Use local time (not UTC time)
-      newEnd = `${String(endDate.getHours()).padStart(2, '0')}:${String(endDate.getMinutes()).padStart(2, '0')}`;
-    }
-    
-    const timingIndex = typeof updated.timingIndex === 'number' ? updated.timingIndex : undefined;
+    const { newDue, newTime, newEnd, timingIndex } = parseEventUpdate(updated);
 
     debug.log('[EventHandlers] handleEventChange called:', { 
-      habitId, 
-      startIso, 
-      endIso, 
-      newDue, 
-      newTime, 
-      newEnd, 
-      timingIndex,
-      'startDate (local)': startIso ? new Date(startIso).toString() : 'N/A',
-      'endDate (local)': endIso ? new Date(endIso).toString() : 'N/A'
+      habitId, startIso: updated.start, endIso: updated.end, 
+      newDue, newTime, newEnd, timingIndex
     });
 
     const prev = habits.find(h => h.id === habitId);
@@ -84,97 +77,98 @@ export function useEventHandlers({ habits, setHabits, goals, activities, setActi
       return;
     }
 
-    debug.log('[EventHandlers] Found habit:', {
-      id: prev.id,
-      name: prev.name,
-      dueDate: prev.dueDate,
-      time: (prev as any).time,
-      endTime: (prev as any).endTime,
-      timings: (prev as any).timings
-    });
-
-    // Build the update payload - match backend expectations
-    const payload: any = {};
-    
-    // Always include the basic fields
-    if (newDue !== undefined) payload.dueDate = newDue;
-    if (newTime !== undefined) payload.time = newTime;
-    if (newEnd !== undefined) payload.endTime = newEnd;
-    
-    // Include timingIndex if specified - backend will handle timings update
-    if (typeof timingIndex === 'number') {
-      payload.timingIndex = timingIndex;
-      debug.log('[EventHandlers] Including timingIndex in payload:', timingIndex);
-    }
-
-    debug.log('[EventHandlers] Final update payload before API call:', payload);
-    debug.log('[EventHandlers] Payload types:', {
-      dueDate: typeof payload.dueDate,
-      time: typeof payload.time,
-      endTime: typeof payload.endTime,
-      timingIndex: typeof payload.timingIndex
-    });
+    const payload = buildHabitUpdatePayload(newDue, newTime, newEnd, timingIndex);
+    debug.log('[EventHandlers] Final update payload:', payload);
 
     // Optimistic UI update
-    setHabits((s) => s.map(h => {
-      if (h.id !== habitId) return h;
-      const now = new Date().toISOString();
-      const next: any = {
-        ...h,
-        updatedAt: now,
-      };
+    setHabits(s => applyOptimisticUpdate(s, habitId, newDue, newTime, newEnd, timingIndex));
 
-      // Update basic fields
+    // Persist to backend
+    await persistHabitUpdate(habitId, payload, prev);
+  }
+
+  /** Parse event update to local date/time values */
+  function parseEventUpdate(updated: { start?: string; end?: string; timingIndex?: number }) {
+    let newDue: string | undefined;
+    let newTime: string | undefined;
+    let newEnd: string | undefined;
+    
+    if (updated.start) {
+      const parsed = parseIsoToLocal(updated.start);
+      newDue = parsed.date;
+      newTime = parsed.time;
+    }
+    
+    if (updated.end && updated.end.length > 10) {
+      const parsed = parseIsoToLocal(updated.end);
+      newEnd = parsed.time;
+    }
+    
+    return { newDue, newTime, newEnd, timingIndex: updated.timingIndex };
+  }
+
+  /** Apply optimistic update to habits state */
+  function applyOptimisticUpdate(
+    habits: Habit[],
+    habitId: string,
+    newDue: string | undefined,
+    newTime: string | undefined,
+    newEnd: string | undefined,
+    timingIndex: number | undefined
+  ): Habit[] {
+    return habits.map(h => {
+      if (h.id !== habitId) return h;
+      
+      const now = new Date().toISOString();
+      const next: Habit = { ...h, updatedAt: now };
+
       if (newDue !== undefined) next.dueDate = newDue;
       if (newTime !== undefined) next.time = newTime;
       if (newEnd !== undefined) next.endTime = newEnd;
 
-      // Update timings if timingIndex is specified
       if (typeof timingIndex === 'number') {
-        const timings = Array.isArray((h as any).timings) ? (h as any).timings : [];
-        debug.log('[EventHandlers] Current timings for optimistic update:', timings);
-        
-        if (timings[timingIndex]) {
-          const updatedTimings = [...timings];
-          const timing = { ...updatedTimings[timingIndex] };
-          
-          // Update the specific timing entry
-          if (newDue) timing.date = newDue;
-          if (newTime !== undefined) timing.start = newTime;
-          if (newEnd !== undefined) timing.end = newEnd;
-          
-          updatedTimings[timingIndex] = timing;
-          next.timings = updatedTimings;
-          
-          debug.log('[EventHandlers] Optimistically updated timings:', updatedTimings);
-        } else {
-          debug.warn('[EventHandlers] Timing index out of bounds for optimistic update:', timingIndex, 'in', timings);
-        }
+        next.timings = updateTimingAtIndex(h.timings, timingIndex, newDue, newTime, newEnd);
       }
 
-      debug.log('[EventHandlers] Optimistic update result:', next);
       return next;
-    }));
+    });
+  }
 
-    // Persist to backend
+  /** Update a specific timing entry */
+  function updateTimingAtIndex(
+    timings: any[] | undefined,
+    index: number,
+    newDue: string | undefined,
+    newTime: string | undefined,
+    newEnd: string | undefined
+  ): any[] {
+    const arr = Array.isArray(timings) ? [...timings] : [];
+    if (!arr[index]) return arr;
+    
+    const timing = { ...arr[index] };
+    if (newDue) timing.date = newDue;
+    if (newTime !== undefined) timing.start = newTime;
+    if (newEnd !== undefined) timing.end = newEnd;
+    arr[index] = timing;
+    
+    return arr;
+  }
+
+  /** Persist habit update to backend */
+  async function persistHabitUpdate(
+    habitId: string,
+    payload: Partial<Habit> & { timingIndex?: number },
+    prev: Habit
+  ) {
     try {
-      debug.log('[EventHandlers] Sending API request to update habit...');
+      debug.log('[EventHandlers] Sending API request...');
       const saved = await api.updateHabit(habitId, payload);
-      debug.log('[EventHandlers] API response received successfully:', saved);
-      debug.log('[EventHandlers] API response timings:', (saved as any).timings);
+      debug.log('[EventHandlers] API response:', saved);
       
-      // Always use the API response to ensure consistency
-      setHabits((s) => s.map(h => {
-        if (h.id === habitId) {
-          debug.log('[EventHandlers] Updating habit state with API response');
-          return saved;
-        }
-        return h;
-      }));
+      setHabits(s => s.map(h => h.id === habitId ? saved : h));
     } catch (e) {
       console.error('[EventHandlers] API request failed:', e);
-      // revert to previous state if persistence fails
-      setHabits((s) => s.map(h => h.id === habitId ? prev : h));
+      setHabits(s => s.map(h => h.id === habitId ? prev : h));
     }
   }
 
@@ -219,7 +213,7 @@ export function useEventHandlers({ habits, setHabits, goals, activities, setActi
           };
         }
 
-        const payload: any = {
+        const payload: Partial<Habit> = {
           timings: [...currentTimings, newTiming],
           outdates: newOutdate ? [...currentOutdates, newOutdate] : currentOutdates
         };

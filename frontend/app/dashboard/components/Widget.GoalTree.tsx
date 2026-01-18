@@ -4,7 +4,7 @@ import { useDragAndDrop } from '../hooks/useDragAndDrop';
 import './DragAndDrop.css';
 import './HabitNameScroll.css';
 
-// JST日付範囲でのActivity集計関数（Section.Activity.tsxと同じ）
+/** Calculate daily workload for a habit in JST timezone */
 function calculateDailyWorkload(habitId: string, activities: Activity[]): number {
   const now = new Date();
   const jstTime = new Date(now.toLocaleString("en-US", {timeZone: "Asia/Tokyo"}));
@@ -17,10 +17,8 @@ function calculateDailyWorkload(habitId: string, activities: Activity[]): number
   
   const todayActivities = activities.filter(activity => {
     if (activity.habitId !== habitId || !activity.timestamp) return false;
-    
     const activityTime = new Date(activity.timestamp);
     const activityJST = new Date(activityTime.toLocaleString("en-US", {timeZone: "Asia/Tokyo"}));
-    
     return activityJST >= todayStartJST && activityJST <= todayEndJST;
   });
   
@@ -29,14 +27,120 @@ function calculateDailyWorkload(habitId: string, activities: Activity[]): number
     .reduce((sum, activity) => sum + (activity.amount || 1), 0);
 }
 
-// JST日次ベースでのHabit完了判定
+/** Check if habit is completed today in JST */
 function isHabitCompletedToday(habit: Habit, activities: Activity[]): boolean {
   if (!habit.active || habit.type !== 'do') return false;
-  
   const totalCount = (habit as any).workloadTotal || habit.must || 1;
   const currentCount = calculateDailyWorkload(habit.id, activities);
-  
   return currentCount >= totalCount;
+}
+
+/** Props for HabitActions component */
+interface HabitActionsProps {
+  habit: Habit;
+  inputValue: string;
+  onInputChange: (value: string) => void;
+  onComplete: () => void;
+}
+
+/** Habit action buttons (input + complete button) */
+function HabitActions({ habit, inputValue, onInputChange, onComplete }: HabitActionsProps) {
+  return (
+    <div className="flex items-center gap-1.5 shrink-0">
+      <input
+        type="number"
+        min="0"
+        step="0.1"
+        value={inputValue}
+        onChange={(e) => onInputChange(e.target.value)}
+        className="w-10 sm:w-12 text-xs text-center bg-zinc-100 dark:bg-zinc-800 border-0 rounded px-1 py-1 sm:py-0.5 focus:ring-1 focus:ring-blue-500 outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+        onClick={(e) => e.stopPropagation()}
+      />
+      <span className="text-xs text-zinc-500 hidden sm:inline w-16 text-left truncate" title={(habit as any)?.workloadUnit || 'units'}>
+        {(habit as any)?.workloadUnit || 'units'}
+      </span>
+      <button
+        title="Complete"
+        onClick={(e) => { e.stopPropagation(); onComplete(); }}
+        className="bg-green-600 hover:bg-green-700 active:bg-green-800 text-white rounded px-2 py-1 text-xs font-medium transition-colors min-w-[32px] min-h-[32px] flex items-center justify-center"
+      >
+        ✓
+      </button>
+    </div>
+  );
+}
+
+/** Props for HabitItem component */
+interface HabitItemProps {
+  habit: Habit;
+  activities: Activity[];
+  goalCompleted: boolean;
+  inputValue: string;
+  onInputChange: (value: string) => void;
+  onComplete: () => void;
+  onEdit: () => void;
+  isDragged: boolean;
+  isDragging: boolean;
+  onDragStart: (item: any, event?: React.DragEvent) => void;
+  onDragEnd: () => void;
+  onTouchStart: (item: any, event: React.TouchEvent) => void;
+  onTouchMove: (event: React.TouchEvent) => void;
+  onTouchEnd: (event: React.TouchEvent) => void;
+}
+
+/** Single habit item in the goal tree */
+function HabitItem({
+  habit,
+  activities,
+  goalCompleted,
+  inputValue,
+  onInputChange,
+  onComplete,
+  onEdit,
+  isDragged,
+  isDragging,
+  onDragStart,
+  onDragEnd,
+  onTouchStart,
+  onTouchMove,
+  onTouchEnd
+}: HabitItemProps) {
+  const isCompleted = isHabitCompletedToday(habit, activities) || goalCompleted || !habit.active;
+  
+  return (
+    <div
+      onClick={onEdit}
+      className={`flex items-center justify-between gap-2 rounded px-2 py-1.5 text-sm draggable ${
+        isCompleted ? 'line-through text-zinc-400' : 'text-zinc-700 dark:text-zinc-200'
+      } hover:bg-zinc-100 dark:hover:bg-white/5 cursor-pointer ${isDragged ? 'dragging' : ''}`}
+      draggable={!isDragging}
+      onDragStart={(e) => onDragStart({ type: 'habit', id: habit.id, data: habit }, e)}
+      onDragEnd={onDragEnd}
+      onTouchStart={(e) => onTouchStart({ type: 'habit', id: habit.id, data: habit }, e)}
+      onTouchMove={onTouchMove}
+      onTouchEnd={onTouchEnd}
+    >
+      <div className="flex items-center gap-2 min-w-0 flex-1">
+        <span className="shrink-0">📄</span>
+        <div className="flex flex-col min-w-0 flex-1">
+          <div className="habit-name-scroll min-w-0 overflow-hidden">
+            <span className="habit-name-text inline-block whitespace-nowrap">{habit.name}</span>
+          </div>
+          {(habit as any)?.workloadUnit && (
+            <span className="text-xs text-zinc-500 truncate">
+              Target: {(habit as any)?.workloadPerCount || 1} {(habit as any)?.workloadUnit}
+            </span>
+          )}
+        </div>
+      </div>
+      <HabitActions
+        habit={habit}
+        inputValue={inputValue}
+        onInputChange={onInputChange}
+        onComplete={onComplete}
+      />
+    </div>
+  );
 }
 
 interface GoalTreeProps {
@@ -88,7 +192,7 @@ function GoalNode({
   goal, 
   depth = 1, 
   habits,
-  activities, // 追加
+  activities,
   selectedGoal,
   openGoals,
   onlyHabit,
@@ -121,17 +225,13 @@ function GoalNode({
   const myHabits = habits.filter(h => h.goalId === goal.id);
   const goalCompleted = effectiveGoalCompleted(goal.id);
 
-  // ドロップターゲットかどうかを判定
   const isDropTarget = dropTarget?.type === 'goal' && dropTarget?.id === goal.id;
   const isDraggedItem = draggedItem?.type === 'goal' && draggedItem?.id === goal.id;
 
   const getInputValue = (habitId: string) => {
-    if (inputValues[habitId] !== undefined) {
-      return inputValues[habitId];
-    }
+    if (inputValues[habitId] !== undefined) return inputValues[habitId];
     const habit = habits.find(h => h.id === habitId);
-    const workloadPerCount = (habit as any)?.workloadPerCount ?? 1;
-    return String(workloadPerCount);
+    return String((habit as any)?.workloadPerCount ?? 1);
   };
 
   const setInputValue = (habitId: string, value: string) => {
@@ -143,63 +243,130 @@ function GoalNode({
     onHabitAction(habitId, 'complete', amount);
   };
 
-  const renderHabitActions = (h: Habit) => (
-    <div className="flex items-center gap-1.5 shrink-0">
-      <input
-        type="number"
-        min="0"
-        step="0.1"
-        value={getInputValue(h.id)}
-        onChange={(e) => setInputValue(h.id, e.target.value)}
-        className="w-10 sm:w-12 text-xs text-center bg-zinc-100 dark:bg-zinc-800 border-0 rounded px-1 py-1 sm:py-0.5 focus:ring-1 focus:ring-blue-500 outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-        onClick={(e) => e.stopPropagation()}
+  /** Render a single habit item */
+  const renderHabitItem = (h: Habit) => {
+    const isDraggedHabit = draggedItem?.type === 'habit' && draggedItem?.id === h.id;
+    return (
+      <HabitItem
+        key={h.id}
+        habit={h}
+        activities={activities}
+        goalCompleted={goalCompleted}
+        inputValue={getInputValue(h.id)}
+        onInputChange={(value) => setInputValue(h.id, value)}
+        onComplete={() => handleCompleteWithAmount(h.id)}
+        onEdit={() => { onGoalSelect(goal.id); onHabitEdit(h.id); }}
+        isDragged={isDraggedHabit}
+        isDragging={isDragging}
+        onDragStart={onDragStart}
+        onDragEnd={onDragEnd}
+        onTouchStart={onTouchStart}
+        onTouchMove={onTouchMove}
+        onTouchEnd={onTouchEnd}
       />
-      <span className="text-xs text-zinc-500 hidden sm:inline w-16 text-left truncate" title={(h as any)?.workloadUnit || 'units'}>
-        {(h as any)?.workloadUnit || 'units'}
-      </span>
-      <button
-        title="Complete"
-        onClick={(e) => { e.stopPropagation(); handleCompleteWithAmount(h.id) }}
-        className="bg-green-600 hover:bg-green-700 active:bg-green-800 text-white rounded px-2 py-1 text-xs font-medium transition-colors min-w-[32px] min-h-[32px] flex items-center justify-center"
-      >
-        ✓
-      </button>
-    </div>
+    );
+  };
+
+  /** Render nested habits (when "Only Habit" is checked) */
+  const renderNestedHabits = () => {
+    const nestedHabits = habits.filter(h => isDescendantOf(h.goalId, goal.id));
+    if (nestedHabits.length === 0) {
+      return <div className="px-2 py-1 text-xs text-zinc-500">(no habits)</div>;
+    }
+    return nestedHabits.map(renderHabitItem);
+  };
+
+  /** Render direct habits and child goals */
+  const renderDirectContent = () => (
+    <>
+      {myHabits.map(renderHabitItem)}
+      {myHabits.length === 0 && (
+        <div className="px-2 py-1 text-xs text-zinc-500">(no habits)</div>
+      )}
+      {kids.map(k => renderChildGoal(k))}
+    </>
   );
+
+  /** Render a child goal node */
+  const renderChildGoal = (k: Goal) => {
+    if (depth < 3) {
+      return (
+        <div key={k.id} className="ml-2 mt-1">
+          <GoalNode 
+            goal={k} 
+            depth={depth + 1}
+            habits={habits}
+            activities={activities}
+            selectedGoal={selectedGoal}
+            openGoals={openGoals}
+            onlyHabit={onlyHabit}
+            goalsById={goalsById}
+            onToggleGoal={onToggleGoal}
+            onGoalSelect={onGoalSelect}
+            onGoalEdit={onGoalEdit}
+            onHabitEdit={onHabitEdit}
+            onHabitAction={onHabitAction}
+            onSetOnlyHabitFor={onSetOnlyHabitFor}
+            childrenOf={childrenOf}
+            effectiveOnlyHabit={effectiveOnlyHabit}
+            effectiveGoalCompleted={effectiveGoalCompleted}
+            isDescendantOf={isDescendantOf}
+            draggedItem={draggedItem}
+            dropTarget={dropTarget}
+            isDragging={isDragging}
+            onDragStart={onDragStart}
+            onDragEnd={onDragEnd}
+            onDrop={onDrop}
+            onDragOver={onDragOver}
+            onTouchStart={onTouchStart}
+            onTouchMove={onTouchMove}
+            onTouchEnd={onTouchEnd}
+          />
+        </div>
+      );
+    }
+    return (
+      <div key={k.id} className="ml-4 mt-1">
+        <div className="flex items-center justify-between rounded px-2 py-1 text-sm">
+          <div className="flex items-center gap-2"><span className="text-sm">{k.name}</span></div>
+          <div className="text-xs text-zinc-500">{habits.filter(h => h.goalId === k.id).length}</div>
+        </div>
+      </div>
+    );
+  };
 
   return (
     <div key={goal.id}>
       <div 
         className={`flex items-center justify-between cursor-pointer rounded px-3 py-2 hover:bg-zinc-100 dark:hover:bg-white/5 draggable ${
           selectedGoal === goal.id ? 'bg-zinc-100 dark:bg-white/5' : ''
-        } ${isDropTarget ? 'drop-target' : ''} ${
-          isDraggedItem ? 'dragging' : ''
-        }`}
+        } ${isDropTarget ? 'drop-target' : ''} ${isDraggedItem ? 'dragging' : ''}`}
         draggable={!isDragging}
         data-drop-target="true"
         data-drop-target-type="goal"
         data-drop-target-id={goal.id}
         onDragStart={(e) => onDragStart({ type: 'goal', id: goal.id, data: goal }, e)}
         onDragEnd={onDragEnd}
-        onDragOver={(e) => {
-          e.preventDefault();
-          onDragOver({ type: 'goal', id: goal.id });
-        }}
+        onDragOver={(e) => { e.preventDefault(); onDragOver({ type: 'goal', id: goal.id }); }}
         onDrop={(e) => onDrop({ type: 'goal', id: goal.id }, e)}
         onTouchStart={(e) => onTouchStart({ type: 'goal', id: goal.id, data: goal }, e)}
         onTouchMove={onTouchMove}
         onTouchEnd={onTouchEnd}
       >
         <div className="flex items-center gap-2">
-          <button onClick={() => { onToggleGoal(goal.id); onGoalSelect(goal.id); }} className="inline-block w-3">{isOpen ? '▾' : '▸'}</button>
-          <button onClick={() => onGoalEdit(goal.id)} className={`text-sm font-medium text-left ${goalCompleted ? 'line-through text-zinc-400' : ''}`}>{goal.name}</button>
+          <button onClick={() => { onToggleGoal(goal.id); onGoalSelect(goal.id); }} className="inline-block w-3">
+            {isOpen ? '▾' : '▸'}
+          </button>
+          <button onClick={() => onGoalEdit(goal.id)} className={`text-sm font-medium text-left ${goalCompleted ? 'line-through text-zinc-400' : ''}`}>
+            {goal.name}
+          </button>
         </div>
         <div className="flex items-center gap-2">
           <label className="flex items-center gap-2 text-xs">
             <input
               type="checkbox"
               checked={!!onlyHabit[goal.id]}
-              onChange={(e) => { e.stopPropagation(); onSetOnlyHabitFor(goal.id, e.target.checked) }}
+              onChange={(e) => { e.stopPropagation(); onSetOnlyHabitFor(goal.id, e.target.checked); }}
             />
             <span>Only Habit</span>
           </label>
@@ -208,137 +375,7 @@ function GoalNode({
 
       {isOpen && (
         <div className={`ml-6 mt-1 flex flex-col gap-1 ${depth >= 3 ? 'mb-2' : ''}`}>
-          {effectiveOnlyHabit(goal.id) ? (
-            // show all habits under this goal regardless of depth
-            (() => {
-              const nestedHabits = habits.filter(h => isDescendantOf(h.goalId, goal.id))
-              return nestedHabits.length > 0 ? nestedHabits.map(h => {
-                const isHabitDropTarget = dropTarget?.type === 'goal' && dropTarget?.id === goal.id && draggedItem?.type === 'habit';
-                const isDraggedHabit = draggedItem?.type === 'habit' && draggedItem?.id === h.id;
-                
-                return (
-                  <div
-                    key={h.id}
-                    onClick={() => { onGoalSelect(goal.id); onHabitEdit(h.id); }}
-                    className={`flex items-center justify-between gap-2 rounded px-2 py-1.5 text-sm draggable ${
-                      (isHabitCompletedToday(h, activities) || goalCompleted || !h.active) ? 'line-through text-zinc-400' : 'text-zinc-700 dark:text-zinc-200'
-                    } hover:bg-zinc-100 dark:hover:bg-white/5 cursor-pointer ${
-                      isDraggedHabit ? 'dragging' : ''
-                    }`}
-                    draggable={!isDragging}
-                    onDragStart={(e) => onDragStart({ type: 'habit', id: h.id, data: h }, e)}
-                    onDragEnd={onDragEnd}
-                    onTouchStart={(e) => onTouchStart({ type: 'habit', id: h.id, data: h }, e)}
-                    onTouchMove={onTouchMove}
-                    onTouchEnd={onTouchEnd}
-                  >
-                    <div className="flex items-center gap-2 min-w-0 flex-1">
-                      <span className="shrink-0">📄</span>
-                      <div className="flex flex-col min-w-0 flex-1">
-                        <div className="habit-name-scroll min-w-0 overflow-hidden">
-                          <span className="habit-name-text inline-block whitespace-nowrap">{h.name}</span>
-                        </div>
-                        {(h as any)?.workloadUnit && (
-                          <span className="text-xs text-zinc-500 truncate">
-                            Target: {(h as any)?.workloadPerCount || 1} {(h as any)?.workloadUnit}
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                    {renderHabitActions(h)}
-                  </div>
-                );
-              }) : <div className="px-2 py-1 text-xs text-zinc-500">(no habits)</div>
-            })()
-          ) : (
-            <>
-              {myHabits.map(h => {
-                const isDraggedHabit = draggedItem?.type === 'habit' && draggedItem?.id === h.id;
-                
-                return (
-                  <div
-                    key={h.id}
-                    onClick={() => { onGoalSelect(goal.id); onHabitEdit(h.id); }}
-                    className={`flex items-center justify-between gap-2 rounded px-2 py-1.5 text-sm draggable ${
-                      (isHabitCompletedToday(h, activities) || goalCompleted || !h.active) ? 'line-through text-zinc-400' : 'text-zinc-700 dark:text-zinc-200'
-                    } hover:bg-zinc-100 dark:hover:bg-white/5 cursor-pointer ${
-                      isDraggedHabit ? 'dragging' : ''
-                    }`}
-                    draggable={!isDragging}
-                    onDragStart={(e) => onDragStart({ type: 'habit', id: h.id, data: h }, e)}
-                    onDragEnd={onDragEnd}
-                    onTouchStart={(e) => onTouchStart({ type: 'habit', id: h.id, data: h }, e)}
-                    onTouchMove={onTouchMove}
-                    onTouchEnd={onTouchEnd}
-                  >
-                    <div className="flex items-center gap-2 min-w-0 flex-1">
-                      <span className="shrink-0">📄</span>
-                      <div className="flex flex-col min-w-0 flex-1">
-                        <div className="habit-name-scroll min-w-0 overflow-hidden">
-                          <span className="habit-name-text inline-block whitespace-nowrap">{h.name}</span>
-                        </div>
-                        {(h as any)?.workloadUnit && (
-                          <span className="text-xs text-zinc-500 truncate">
-                            Target: {(h as any)?.workloadPerCount || 1} {(h as any)?.workloadUnit}
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                    {renderHabitActions(h)}
-                  </div>
-                );
-              })}
-
-              {myHabits.length === 0 && (
-                <div className="px-2 py-1 text-xs text-zinc-500">(no habits)</div>
-              )}
-
-              {/* render child goals recursively up to depth 3 */}
-              {kids.map(k => (
-                depth < 3 ? (
-                  <div key={k.id} className="ml-2 mt-1">
-                    <GoalNode 
-                      goal={k} 
-                      depth={depth + 1}
-                      habits={habits}
-                      activities={activities}
-                      selectedGoal={selectedGoal}
-                      openGoals={openGoals}
-                      onlyHabit={onlyHabit}
-                      goalsById={goalsById}
-                      onToggleGoal={onToggleGoal}
-                      onGoalSelect={onGoalSelect}
-                      onGoalEdit={onGoalEdit}
-                      onHabitEdit={onHabitEdit}
-                      onHabitAction={onHabitAction}
-                      onSetOnlyHabitFor={onSetOnlyHabitFor}
-                      childrenOf={childrenOf}
-                      effectiveOnlyHabit={effectiveOnlyHabit}
-                      effectiveGoalCompleted={effectiveGoalCompleted}
-                      isDescendantOf={isDescendantOf}
-                      draggedItem={draggedItem}
-                      dropTarget={dropTarget}
-                      isDragging={isDragging}
-                      onDragStart={onDragStart}
-                      onDragEnd={onDragEnd}
-                      onDrop={onDrop}
-                      onDragOver={onDragOver}
-                      onTouchStart={onTouchStart}
-                      onTouchMove={onTouchMove}
-                      onTouchEnd={onTouchEnd}
-                    />
-                  </div>
-                ) : (
-                  <div key={k.id} className="ml-4 mt-1">
-                    <div className="flex items-center justify-between rounded px-2 py-1 text-sm">
-                      <div className="flex items-center gap-2"><span className="text-sm">{k.name}</span></div>
-                      <div className="text-xs text-zinc-500">{habits.filter(h => h.goalId === k.id).length}</div>
-                    </div>
-                  </div>
-                )
-              ))}
-            </>
-          )}
+          {effectiveOnlyHabit(goal.id) ? renderNestedHabits() : renderDirectContent()}
         </div>
       )}
     </div>

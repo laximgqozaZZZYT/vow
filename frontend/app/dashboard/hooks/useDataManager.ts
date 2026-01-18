@@ -38,7 +38,7 @@ export function useDataManager() {
                        (!habit.repeat || habit.repeat === 'Does not repeat') && !habit.dueDate;
         
         // Also check timings for Daily type
-        const hasDaily = (habit as any).timings?.some((t: any) => t.type === 'Daily');
+        const hasDaily = habit.timings?.some((t) => t.type === 'Daily');
         
         const shouldReset = isDaily || hasDaily;
         
@@ -46,7 +46,7 @@ export function useDataManager() {
           debug.log('[useDataManager] Resetting habit:', habit.name, {
             repeat: habit.repeat,
             dueDate: habit.dueDate,
-            timings: (habit as any).timings,
+            timings: habit.timings,
             shouldReset,
             currentJSTTime: jstTime.toISOString(),
             previousCount: habit.count,

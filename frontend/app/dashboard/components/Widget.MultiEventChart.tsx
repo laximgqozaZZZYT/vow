@@ -1,237 +1,47 @@
 "use client"
 
+/**
+ * Multi-Event Chart Component
+ * 
+ * A versatile chart component for visualizing habit progress over time.
+ * Supports multiple display modes (linear, radial, tree-ring) and time ranges.
+ * 
+ * Features:
+ * - Linear chart with actual vs planned progress lines
+ * - Radial chart for circular visualization
+ * - Tree-ring chart for hierarchical data
+ * - Interactive tooltips with detailed progress information
+ * - Responsive design for mobile and desktop
+ * - Daily aggregation for extended time ranges (7d, 1mo, 1y)
+ */
+
 import React from 'react'
 import RadialEventChart from './Widget.MultiEventChart.Radial'
 import TreeRingEventChart from './Widget.MultiEventChart.TreeRing'
+import {
+  type Timing,
+  type ChartHabit as Habit,
+  type EventPoint,
+  type RangeKey,
+  safeMinutes,
+  parseYmdToDate,
+  timingAppliesOnDay,
+  computeAutoLoadPerTimingSet,
+  getDayStart,
+  getDayEnd,
+  getRangeStartTs,
+  isRecurring,
+  palette
+} from '../utils/chartUtils'
+import {
+  buildPlannedSeriesForHabit,
+  buildDailyAggregatedSeries
+} from '../utils/chartSeriesBuilder'
 
-type TimingType = 'Date' | 'Daily' | 'Weekly' | 'Monthly'
-type Timing = {
-  id?: string
-  type: TimingType
-  date?: string
-  start?: string
-  end?: string
-  cron?: string
-}
-
-type Habit = {
-  id: string
-  name: string
-  createdAt?: string | null
-  dueDate?: string | null
-  repeat?: string | null
-  // schedule
-  timings?: Timing[] | null
-  outdates?: Timing[] | null
-  // legacy-ish fields used by calendar UI
-  time?: string | null
-  endTime?: string | null
-  // workload
-  workloadUnit?: string | null
-  workloadTotal?: number | null
-  must?: number | null
-  workloadPerCount?: number | null
-}
-
-type EventPoint = {
-  habitId: string
-  ts: number
-  iso: string
-  kind: 'pause' | 'complete'
-
-  // workload numbers
-  workloadDelta: number
-  workloadCumulative: number
-  workloadTotal: number | null
-  progressDelta: number
-  progressCumulative: number
-  workloadUnit: string
-}
-
-type RangeKey = 'auto' | '24h' | '7d' | '1mo' | '1y'
-
-function safeMinutes(s?: string): number | null {
-  if (!s) return null
-  const m = String(s).trim().match(/^(\d{1,2}):(\d{2})$/)
-  if (!m) return null
-  const hh = Number(m[1])
-  const mm = Number(m[2])
-  if (Number.isNaN(hh) || Number.isNaN(mm)) return null
-  return hh * 60 + mm
-}
-
-function parseYmdToDate(s?: string | null): Date | null {
-  if (!s) return null
-  const parts = String(s).split('-').map(x => Number(x))
-  if (parts.length >= 3 && !Number.isNaN(parts[0]) && !Number.isNaN(parts[1]) && !Number.isNaN(parts[2])) {
-    return new Date(parts[0], parts[1] - 1, parts[2], 0, 0, 0, 0)
-  }
-  const d = new Date(String(s))
-  return Number.isFinite(d.getTime()) ? d : null
-}
-
-function getWeeklyAllowedWeekdays(t: Timing): number[] | null {
-  const cron = (t.cron ?? '').trim()
-  if (cron && cron.startsWith('WEEKDAYS:')) {
-    const list = cron.split(':')[1] || ''
-    const days = list.split(',').map(x => Number(x)).filter(n => !Number.isNaN(n))
-    return days.length ? days : []
-  }
-  return null
-}
-
-function timingAppliesOnDay(t: Timing, day: Date): boolean {
-  if (t.type === 'Daily') return true
-  if (t.type === 'Date') {
-    const d = parseYmdToDate(t.date)
-    if (!d) return false
-    return d.getFullYear() === day.getFullYear() && d.getMonth() === day.getMonth() && d.getDate() === day.getDate()
-  }
-  if (t.type === 'Weekly') {
-    const days = getWeeklyAllowedWeekdays(t)
-    if (days === null) return true
-    return days.includes(day.getDay())
-  }
-  if (t.type === 'Monthly') {
-    const d = parseYmdToDate(t.date)
-    if (!d) return true
-    return d.getDate() === day.getDate()
-  }
-  return false
-}
-
-function durationMinutes(start?: string, end?: string): number {
-  const sm = safeMinutes(start)
-  const em = safeMinutes(end)
-  if (sm === null || em === null) return 0
-  const d = em - sm
-  return d > 0 ? d : 0
-}
-
-function computeAutoLoadPerTimingSet(workloadTotalDay: number, timings: Timing[]): number[] {
-  // Allocate by (timing duration / total duration). If durations are missing, split equally.
-  const durs = timings.map(t => durationMinutes(t.start, t.end))
-  const sum = durs.reduce((a, b) => a + b, 0)
-  const n = Math.max(1, timings.length)
-  if (sum <= 0) return timings.map(() => workloadTotalDay / n)
-  return durs.map(d => workloadTotalDay * (d / sum))
-}
-
-function buildPlannedSeriesForHabit(h: Habit, minTs: number, maxTs: number): Array<{ ts: number; v: number }> {
-  const startTs = Number.isFinite(minTs) ? minTs : 0
-  const endTs = Number.isFinite(maxTs) ? maxTs : Date.now()
-  if (endTs <= startTs) return []
-
-  // Planned load is based on Workload Total(Day) and Timing rows.
-  // We allocate workloadTotal across timing rows by (timing duration / total duration),
-  // which matches the Habit modal's "Auto Load / Set".
-  const workloadTotalDay = (typeof h.workloadTotal === 'number' && Number.isFinite(h.workloadTotal))
-    ? h.workloadTotal
-    : ((typeof h.must === 'number' && Number.isFinite(h.must)) ? h.must : null)
-  if (workloadTotalDay === null || workloadTotalDay <= 0) return []
-  const perDayTarget = workloadTotalDay
-
-  let timings = (Array.isArray((h as any).timings) ? ((h as any).timings as Timing[]) : [])
-  // Fallback: if timings are missing, synthesize one from repeat + time/endTime.
-  if (!timings.length) {
-    const start = (h.time ?? undefined) as any
-    const end = (h.endTime ?? undefined) as any
-    const sm = safeMinutes(start)
-    const em = safeMinutes(end)
-    // only synthesize if we have a usable time (otherwise later we'll default to all-day)
-    if (sm !== null) {
-      timings = [{ type: 'Daily', start: start, end: (em !== null ? end : undefined) }]
-    } else {
-      // last resort: assume a daily occurrence sometime in the day
-      timings = [{ type: 'Daily', start: '00:00', end: '00:00' }]
-    }
-  }
-  const autoLoads = computeAutoLoadPerTimingSet(workloadTotalDay, timings)
-
-  // Requirement update:
-  // 100% should mean "if you completed this habit as scheduled for the whole window".
-  // So we simulate each day in the selected window, apply timing rules, and accumulate
-  // Auto Load/Set across all occurrences.
-  const startDay = new Date(startTs)
-  startDay.setHours(0, 0, 0, 0)
-  const endDay = new Date(endTs)
-  endDay.setHours(0, 0, 0, 0)
-
-  let cum = 0
-  const series: Array<{ ts: number; v: number }> = []
-
-  for (let dayTs = startDay.getTime(); dayTs <= endDay.getTime(); dayTs += 24 * 60 * 60_000) {
-    const day = new Date(dayTs)
-
-    // Gather this day's applicable timings (in table order).
-    const idxs: number[] = []
-    for (let i = 0; i < timings.length; i++) {
-      const t = timings[i]
-      if (!t) continue
-      if (t.type === 'Date') {
-        // Date timings are independent of window-day iteration.
-        const d = t.date ? parseYmdToDate(t.date) : null
-        if (!d) continue
-        const d0 = new Date(d)
-        d0.setHours(0, 0, 0, 0)
-        if (d0.getTime() !== dayTs) continue
-        idxs.push(i)
-        continue
-      }
-      if (timingAppliesOnDay(t, day)) idxs.push(i)
-    }
-
-    if (!idxs.length) continue
-
-    // Scale daily total if not all timing rows apply (e.g., Weekly selections).
-    const loadsRaw = idxs.map(i => autoLoads[i] ?? 0)
-    const sumRaw = loadsRaw.reduce((a, b) => a + b, 0)
-    const scale = sumRaw > 0 ? (perDayTarget / sumRaw) : 1
-
-    for (let j = 0; j < idxs.length; j++) {
-      const i = idxs[j]
-      const t = timings[i]
-      if (!t) continue
-
-      const endMinRaw = safeMinutes(t.end)
-      const endMin = endMinRaw !== null ? endMinRaw : 0
-      const ts = endMinRaw !== null
-        ? (dayTs + endMin * 60_000)
-        : (dayTs + 24 * 60 * 60_000)
-
-      cum += (autoLoads[i] ?? 0) * scale
-      if (ts >= startTs && ts <= endTs) series.push({ ts, v: cum })
-    }
-  }
-
-  // If we never produced any planned points, no line should be drawn.
-  if (!series.length) return []
-
-  // Do NOT extend to chart end.
-  // Requirement: planned plots are only at each timing row's End time.
-  // sort & de-dupe by ts
-  series.sort((a, b) => a.ts - b.ts)
-  const dedup: typeof series = []
-  for (const p of series) {
-    const last = dedup[dedup.length - 1]
-    if (!last || last.ts !== p.ts) dedup.push(p)
-    else last.v = Math.max(last.v, p.v)
-  }
-  return dedup
-}
-
-function getRangeStartTs(range: RangeKey): number {
-  const now = Date.now()
-  const hour = 60 * 60 * 1000
-  const day = 24 * hour
-  if (range === 'auto') return 0
-  if (range === '24h') return now - day
-  if (range === '7d') return now - 7 * day
-  if (range === '1mo') return now - 30 * day
-  if (range === '1y') return now - 365 * day
-  return 0
-}
-
+/**
+ * Compute the time domain (min/max timestamps) for the chart
+ * based on the selected range and optional custom time window
+ */
 function computeDomainTs(range: RangeKey, points: EventPoint[], timeWindow?: { fromTs: number; untilTs: number }): { minTs: number; maxTs: number } {
   const now = Date.now()
   
@@ -272,200 +82,6 @@ function computeDomainTs(range: RangeKey, points: EventPoint[], timeWindow?: { f
   }
   
   return { minTs: startDate.getTime(), maxTs }
-}
-
-// Helper function to get day start timestamp
-function getDayStart(ts: number): number {
-  const d = new Date(ts)
-  d.setHours(0, 0, 0, 0)
-  return d.getTime()
-}
-
-// Helper function to get day end timestamp
-function getDayEnd(ts: number): number {
-  const d = new Date(ts)
-  d.setHours(23, 59, 59, 999)
-  return d.getTime()
-}
-
-// Build daily aggregated series for extended time ranges
-function buildDailyAggregatedSeries(
-  habits: Habit[],
-  points: EventPoint[],
-  visibleHabitIds: string[],
-  minTs: number,
-  maxTs: number,
-  range: RangeKey
-): {
-  actualSeriesByHabit: Map<string, Array<{ ts: number; ratio: number; cum: number; total: number }>>
-  plannedSeriesByHabit: Map<string, Array<{ ts: number; ratio: number; cum: number; total: number }>>
-} {
-  const actualSeriesByHabit = new Map<string, Array<{ ts: number; ratio: number; cum: number; total: number }>>()
-  const plannedSeriesByHabit = new Map<string, Array<{ ts: number; ratio: number; cum: number; total: number }>>()
-  
-  // Only aggregate for extended ranges
-  if (!['7d', '1mo', '1y'].includes(range)) {
-    return { actualSeriesByHabit, plannedSeriesByHabit }
-  }
-  
-  const habitMap = new Map(habits.map(h => [h.id, h]))
-  
-  // Generate daily timestamps
-  const dailyTimestamps: number[] = []
-  for (let dayTs = getDayStart(minTs); dayTs <= getDayStart(maxTs); dayTs += 24 * 60 * 60_000) {
-    dailyTimestamps.push(dayTs)
-  }
-  
-  for (const habitId of visibleHabitIds) {
-    const habit = habitMap.get(habitId)
-    if (!habit || !isRecurring(habit.repeat)) continue
-    
-    // Get habit creation date
-    const habitCreatedTs = habit.createdAt ? new Date(habit.createdAt).getTime() : minTs
-    const effectiveStartTs = Math.max(habitCreatedTs, minTs)
-    
-    // Calculate expected total for the range (from habit creation or range start to range end)
-    let totalExpectedForRange = 0
-    
-    // Check if habit has workload total
-    const workloadTotalDay = (typeof habit.workloadTotal === 'number' && Number.isFinite(habit.workloadTotal))
-      ? habit.workloadTotal
-      : ((typeof habit.must === 'number' && Number.isFinite(habit.must)) ? habit.must : null)
-    
-    if (workloadTotalDay && workloadTotalDay > 0) {
-      // Use existing planned series logic for habits with workload total
-      const plannedSeries = buildPlannedSeriesForHabit(habit, effectiveStartTs, maxTs)
-      totalExpectedForRange = plannedSeries.length > 0 ? Math.max(0, ...plannedSeries.map(p => p.v)) : 0
-    } else {
-      // For habits without workload total, calculate based on daily occurrences
-      // Count expected occurrences from habit creation to range end
-      const daysInRange = Math.ceil((maxTs - effectiveStartTs) / (24 * 60 * 60_000))
-      
-      // Assume 1 unit per day for habits without specific workload
-      let timings = (Array.isArray((habit as any).timings) ? ((habit as any).timings as any[]) : [])
-      if (!timings.length) {
-        // Default to daily if no timings specified
-        totalExpectedForRange = daysInRange
-      } else {
-        // Count expected occurrences based on timing rules
-        let expectedOccurrences = 0
-        for (let dayTs = getDayStart(effectiveStartTs); dayTs <= getDayStart(maxTs); dayTs += 24 * 60 * 60_000) {
-          const day = new Date(dayTs)
-          for (const timing of timings) {
-            if (timingAppliesOnDay(timing, day)) {
-              expectedOccurrences++
-              break // Count each day only once regardless of multiple timings
-            }
-          }
-        }
-        totalExpectedForRange = expectedOccurrences
-      }
-    }
-    
-    if (totalExpectedForRange <= 0) continue
-    
-    // Group actual points by day
-    const actualPointsByDay = new Map<number, EventPoint[]>()
-    for (const point of points) {
-      if (point.habitId !== habitId) continue
-      if (point.ts < minTs || point.ts > maxTs) continue
-      
-      const dayStart = getDayStart(point.ts)
-      const dayPoints = actualPointsByDay.get(dayStart) ?? []
-      dayPoints.push(point)
-      actualPointsByDay.set(dayStart, dayPoints)
-    }
-    
-    // Build daily series
-    const actualDailySeries: Array<{ ts: number; ratio: number; cum: number; total: number }> = []
-    const plannedDailySeries: Array<{ ts: number; ratio: number; cum: number; total: number }> = []
-    
-    let cumulativeActual = 0
-    let cumulativePlanned = 0
-    
-    for (const dayStart of dailyTimestamps) {
-      const dayEnd = getDayEnd(dayStart)
-      
-      // Skip days before habit creation
-      if (dayEnd < habitCreatedTs) continue
-      
-      // Calculate actual progress for this day
-      const dayPoints = actualPointsByDay.get(dayStart) ?? []
-      let dailyActual = 0
-      for (const point of dayPoints) {
-        if (workloadTotalDay && workloadTotalDay > 0) {
-          dailyActual += point.workloadDelta
-        } else {
-          // For habits without workload total, count occurrences
-          dailyActual += (point.kind === 'complete' ? 1 : 0)
-        }
-      }
-      cumulativeActual += dailyActual
-      
-      // Calculate planned progress for this day
-      if (workloadTotalDay && workloadTotalDay > 0) {
-        // Use existing planned series logic
-        const plannedSeries = buildPlannedSeriesForHabit(habit, effectiveStartTs, dayEnd)
-        cumulativePlanned = plannedSeries.length > 0 ? Math.max(0, ...plannedSeries.map(p => p.v)) : 0
-      } else {
-        // For habits without workload total, calculate expected occurrences up to this day
-        const day = new Date(dayStart)
-        let timings = (Array.isArray((habit as any).timings) ? ((habit as any).timings as any[]) : [])
-        if (!timings.length) {
-          // Default daily occurrence
-          cumulativePlanned += 1
-        } else {
-          // Check if this day should have an occurrence
-          for (const timing of timings) {
-            if (timingAppliesOnDay(timing, day)) {
-              cumulativePlanned += 1
-              break // Count each day only once
-            }
-          }
-        }
-      }
-      
-      // Use end of day as timestamp for consistent plotting
-      const plotTs = dayEnd
-      
-      actualDailySeries.push({
-        ts: plotTs,
-        ratio: Math.max(0, Math.min(1, cumulativeActual / totalExpectedForRange)),
-        cum: cumulativeActual,
-        total: totalExpectedForRange
-      })
-      
-      plannedDailySeries.push({
-        ts: plotTs,
-        ratio: Math.max(0, Math.min(1, cumulativePlanned / totalExpectedForRange)),
-        cum: cumulativePlanned,
-        total: totalExpectedForRange
-      })
-    }
-    
-    if (actualDailySeries.length) {
-      actualSeriesByHabit.set(habitId, actualDailySeries)
-    }
-    if (plannedDailySeries.length) {
-      plannedSeriesByHabit.set(habitId, plannedDailySeries)
-    }
-  }
-  
-  return { actualSeriesByHabit, plannedSeriesByHabit }
-}
-
-function isRecurring(repeat: string | null | undefined) {
-  if (!repeat) return false
-  const r = repeat.trim().toLowerCase()
-  if (!r) return false
-  // Treat explicit "none" values as non-recurring.
-  return r !== 'none' && r !== 'no' && r !== 'false' && r !== '0' && r !== 'does not repeat'
-}
-
-function palette(i: number) {
-  // Tailwind-ish colors (no dependency)
-  const colors = ['#2563eb', '#16a34a', '#dc2626', '#7c3aed', '#ea580c', '#0891b2', '#db2777', '#4b5563']
-  return colors[i % colors.length]
 }
 
 export default function MultiEventChart({

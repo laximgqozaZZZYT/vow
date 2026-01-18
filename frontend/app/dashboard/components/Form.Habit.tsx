@@ -6,7 +6,7 @@ import { DayPicker } from "react-day-picker"
 import "react-day-picker/dist/style.css"
 import TagSelector from './Widget.TagSelector'
 import { supabaseDirectClient } from '../../../lib/supabase-direct'
-import { useLocale } from '../../contexts/LocaleContext'
+import { useLocale } from '@/contexts/LocaleContext'
 
 // Helper functions
 function formatLocalDate(d: Date) {

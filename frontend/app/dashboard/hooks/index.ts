@@ -27,4 +27,3 @@ export { useMindmapEvents } from './useMindmapEvents';
 
 // Persistence
 export { useMindmapPersistence } from './useMindmapPersistence';
-export type { MindmapSaveData } from './useMindmapPersistence';

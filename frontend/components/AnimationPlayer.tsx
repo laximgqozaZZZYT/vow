@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from 'react';
-import type { AnimationSequence, AnimationStep } from '../dashboard/utils/animationCapture';
+import type { AnimationSequence, AnimationStep } from '@/app/dashboard/utils/animationCapture';
 
 interface AnimationPlayerProps {
   sequence: AnimationSequence;

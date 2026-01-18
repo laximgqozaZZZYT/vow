@@ -8,7 +8,7 @@ import { DayPicker } from "react-day-picker"
 import "react-day-picker/dist/style.css"
 import TagSelector from './Widget.TagSelector'
 import { useLocalStorage } from '../hooks/useLocalStorage'
-import { useLocale } from '../../contexts/LocaleContext'
+import { useLocale } from '@/contexts/LocaleContext'
 
 // Helper: format a Date to local YYYY-MM-DD (avoid toISOString which uses UTC)
 function formatLocalDate(d: Date) {

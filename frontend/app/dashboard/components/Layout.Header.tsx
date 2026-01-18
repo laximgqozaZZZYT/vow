@@ -4,7 +4,7 @@ import { useAuth } from '../hooks/useAuth';
 import api from '../../../lib/api';
 import type { DashboardHeaderProps } from '../types';
 import { useHandedness } from '../contexts/HandednessContext';
-import { useLocale } from '../../contexts/LocaleContext';
+import { useLocale } from '@/contexts/LocaleContext';
 
 export default function DashboardHeader({ 
   onToggleSidebar, 

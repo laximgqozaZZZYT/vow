@@ -114,23 +114,23 @@ export function useGoalManager({
     // Optimistically update local state first.
     const subtree = new Set(collectGoalSubtreeIds(goalId));
     const now = new Date().toISOString();
-    setGoals((s) => s.map(g => subtree.has(g.id) ? ({ ...g, isCompleted: true, updatedAt: now } as any) : g));
+    setGoals((s) => s.map(g => subtree.has(g.id) ? { ...g, isCompleted: true, updatedAt: now } : g));
     // Treat descendant habits as "not to be done": inactive + completed.
-    setHabits((s) => s.map(h => subtree.has(h.goalId) ? ({ ...h, active: false, completed: true, updatedAt: now } as any) : h));
+    setHabits((s) => s.map(h => subtree.has(h.goalId) ? { ...h, active: false, completed: true, updatedAt: now } : h));
 
     // Persist
     try {
       await api.updateGoal(goalId, { isCompleted: true, cascade: true });
     } catch (e) {
       // Surface backend error details to make debugging actionable.
-      const anyErr: any = e;
+      const err = e as Error & { url?: string; status?: number; body?: unknown };
       const details = {
-        name: anyErr?.name,
-        message: anyErr?.message ?? String(anyErr),
-        url: anyErr?.url,
-        status: anyErr?.status,
-        body: anyErr?.body,
-        keys: anyErr && typeof anyErr === 'object' ? Object.keys(anyErr) : undefined,
+        name: err?.name,
+        message: err?.message ?? String(err),
+        url: err?.url,
+        status: err?.status,
+        body: err?.body,
+        keys: err && typeof err === 'object' ? Object.keys(err) : undefined,
       };
       console.error('[completeGoalCascade] error', details);
       // If persistence fails, we keep optimistic state; user can refresh.

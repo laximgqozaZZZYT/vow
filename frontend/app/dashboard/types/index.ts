@@ -25,6 +25,8 @@ export interface Goal {
   updatedAt: string;
 }
 
+import type { Timing } from './shared';
+
 export interface Habit {
   id: string;
   goalId: string;
@@ -47,7 +49,8 @@ export interface Habit {
   workloadUnit?: string;
   workloadTotal?: number;
   workloadPerCount?: number;
-  timings?: any[];
+  timings?: Timing[];
+  outdates?: Timing[];
   createdAt: string;
   updatedAt: string;
 }
@@ -100,7 +103,7 @@ export interface CreateHabitPayload {
   time?: string;
   endTime?: string;
   repeat?: string;
-  timings?: any[];
+  timings?: Timing[];
   allDay?: boolean;
   notes?: string;
   workloadUnit?: string;
@@ -117,8 +120,21 @@ export interface GuestDataMigrationResult {
   errors: string[];
 }
 
+/** User type from Supabase Auth */
+export interface AuthUser {
+  id: string;
+  email?: string;
+  phone?: string;
+  created_at?: string;
+  updated_at?: string;
+  app_metadata?: Record<string, unknown>;
+  user_metadata?: Record<string, unknown>;
+  aud?: string;
+  role?: string;
+}
+
 export interface AuthContext {
-  user: any; // TODO: implement proper user type
+  user: AuthUser | null;
   signOut: () => Promise<void>;
   isAuthed: boolean | null;
   actorLabel: string;
