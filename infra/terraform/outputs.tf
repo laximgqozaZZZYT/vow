@@ -102,3 +102,50 @@ output "lambda_function_name" {
   description = "Lambda function name"
   value       = var.lambda_s3_bucket != "" ? aws_lambda_function.api[0].function_name : null
 }
+
+# =================================================================
+# DMS Outputs (条件付き)
+# =================================================================
+
+output "dms_replication_instance_arn" {
+  description = "DMS Replication Instance ARN"
+  value       = var.enable_dms ? aws_dms_replication_instance.main[0].replication_instance_arn : null
+}
+
+output "dms_replication_task_arn" {
+  description = "DMS Replication Task ARN"
+  value       = var.enable_dms && var.supabase_host != "" ? aws_dms_replication_task.main[0].replication_task_arn : null
+}
+
+# =================================================================
+# Amplify Outputs (本番環境のみ)
+# =================================================================
+
+output "amplify_app_id" {
+  description = "Amplify App ID"
+  value       = var.environment == "production" && var.github_access_token != "" ? aws_amplify_app.frontend[0].id : null
+}
+
+output "amplify_default_domain" {
+  description = "Amplify default domain"
+  value       = var.environment == "production" && var.github_access_token != "" ? aws_amplify_app.frontend[0].default_domain : null
+}
+
+output "amplify_production_url" {
+  description = "Amplify production URL"
+  value       = var.environment == "production" && var.github_access_token != "" ? "https://main.${aws_amplify_app.frontend[0].default_domain}" : null
+}
+
+# =================================================================
+# Monitoring Outputs (本番環境のみ)
+# =================================================================
+
+output "sns_alerts_topic_arn" {
+  description = "SNS Alerts Topic ARN"
+  value       = var.environment == "production" ? aws_sns_topic.alerts[0].arn : null
+}
+
+output "cloudwatch_dashboard_url" {
+  description = "CloudWatch Dashboard URL"
+  value       = var.environment == "production" ? "https://${var.aws_region}.console.aws.amazon.com/cloudwatch/home?region=${var.aws_region}#dashboards:name=${var.project_name}-${var.environment}" : null
+}

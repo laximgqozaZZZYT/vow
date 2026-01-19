@@ -14,9 +14,8 @@ variable "environment" {
   default     = "development"
 
   validation {
-    condition     = contains(["development", "staging"], var.environment)
-    # 本番環境は将来追加: ["development", "staging", "production"]
-    error_message = "Environment must be development or staging."
+    condition     = contains(["development", "staging", "production"], var.environment)
+    error_message = "Environment must be development, staging, or production."
   }
 }
 
@@ -134,6 +133,77 @@ variable "lambda_s3_bucket" {
 
 variable "lambda_s3_key" {
   description = "S3 key for Lambda deployment package"
+  type        = string
+  default     = ""
+}
+
+
+# =================================================================
+# DMS Variables (for Supabase to Aurora migration)
+# =================================================================
+
+variable "enable_dms" {
+  description = "Enable DMS for database migration"
+  type        = bool
+  default     = false
+}
+
+variable "supabase_host" {
+  description = "Supabase PostgreSQL host"
+  type        = string
+  default     = ""
+  sensitive   = true
+}
+
+variable "supabase_database" {
+  description = "Supabase database name"
+  type        = string
+  default     = "postgres"
+}
+
+variable "supabase_username" {
+  description = "Supabase database username"
+  type        = string
+  default     = "postgres"
+  sensitive   = true
+}
+
+variable "supabase_password" {
+  description = "Supabase database password"
+  type        = string
+  default     = ""
+  sensitive   = true
+}
+
+# =================================================================
+# Amplify Variables
+# =================================================================
+
+variable "github_repository_url" {
+  description = "GitHub repository URL for Amplify"
+  type        = string
+  default     = ""
+}
+
+variable "github_access_token" {
+  description = "GitHub access token for Amplify"
+  type        = string
+  default     = ""
+  sensitive   = true
+}
+
+variable "custom_domain" {
+  description = "Custom domain for Amplify (optional)"
+  type        = string
+  default     = ""
+}
+
+# =================================================================
+# Monitoring Variables
+# =================================================================
+
+variable "alert_email" {
+  description = "Email address for CloudWatch alerts"
   type        = string
   default     = ""
 }

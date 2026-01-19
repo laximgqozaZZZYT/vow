@@ -42,10 +42,14 @@ resource "aws_rds_cluster" "aurora" {
   }
 
   storage_encrypted       = true
-  backup_retention_period = 7
-  skip_final_snapshot     = var.environment == "development" ? true : false
-  # 本番環境では false に変更
-  deletion_protection = false
+  backup_retention_period = var.environment == "production" ? 14 : 7
+  
+  # 本番環境ではスナップショットを保持
+  skip_final_snapshot       = var.environment == "production" ? false : true
+  final_snapshot_identifier = var.environment == "production" ? "${var.project_name}-${var.environment}-final-snapshot" : null
+  
+  # 本番環境では削除保護を有効化
+  deletion_protection = var.environment == "production" ? true : false
 
   enabled_cloudwatch_logs_exports = ["postgresql"]
 

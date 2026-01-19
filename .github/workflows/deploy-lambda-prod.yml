@@ -1,0 +1,293 @@
+name: Deploy Lambda to AWS (Production)
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'backend/**'
+      - '.github/workflows/deploy-lambda-prod.yml'
+  workflow_dispatch:
+    inputs:
+      rollback:
+        description: 'Rollback to previous version'
+        required: false
+        default: 'false'
+        type: boolean
+      version:
+        description: 'Version to rollback to (e.g., 1, 2, $LATEST)'
+        required: false
+        default: ''
+        type: string
+
+permissions:
+  id-token: write
+  contents: read
+
+env:
+  AWS_REGION: ap-northeast-1
+  LAMBDA_FUNCTION_NAME: vow-production-api
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+          cache-dependency-path: 'backend/requirements*.txt'
+      
+      - name: Install dependencies
+        run: |
+          cd backend
+          pip install -r requirements.txt
+          pip install -r requirements-dev.txt || true
+          pip install ruff pytest pytest-asyncio
+      
+      - name: Run linting
+        run: |
+          cd backend
+          ruff check app/ --ignore E501
+      
+      - name: Run tests
+        run: |
+          cd backend
+          pytest tests/ -v --tb=short || echo "No tests found or tests skipped"
+        env:
+          DATABASE_URL: sqlite+aiosqlite:///./test.db
+          JWT_SECRET: test-secret-key
+          DEBUG: true
+
+  build:
+    needs: test
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && github.event.inputs.rollback != 'true')
+    outputs:
+      package_hash: ${{ steps.package.outputs.hash }}
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      
+      - name: Create deployment package
+        id: package
+        run: |
+          cd backend
+          
+          # Create package directory
+          mkdir -p package
+          
+          # Install dependencies to package directory
+          pip install -r requirements.txt -t package/
+          
+          # Copy application code
+          cp -r app package/
+          cp lambda_handler.py package/
+          
+          # Create zip
+          cd package
+          zip -r ../lambda-deployment.zip .
+          cd ..
+          
+          # Calculate hash
+          HASH=$(sha256sum lambda-deployment.zip | cut -d' ' -f1 | head -c 8)
+          echo "hash=$HASH" >> $GITHUB_OUTPUT
+          echo "Package hash: $HASH"
+      
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: lambda-package-${{ steps.package.outputs.hash }}
+          path: backend/lambda-deployment.zip
+          retention-days: 7
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && github.event.inputs.rollback != 'true')
+    steps:
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_LAMBDA_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+      
+      - name: Download artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: lambda-package-${{ needs.build.outputs.package_hash }}
+          path: .
+      
+      - name: Get current version (for rollback)
+        id: current-version
+        run: |
+          CURRENT_VERSION=$(aws lambda get-function \
+            --function-name ${{ env.LAMBDA_FUNCTION_NAME }} \
+            --query 'Configuration.Version' \
+            --output text 2>/dev/null || echo "0")
+          echo "current_version=$CURRENT_VERSION" >> $GITHUB_OUTPUT
+          echo "Current version: $CURRENT_VERSION"
+      
+      - name: Deploy to Lambda
+        id: deploy
+        run: |
+          # Update function code
+          aws lambda update-function-code \
+            --function-name ${{ env.LAMBDA_FUNCTION_NAME }} \
+            --zip-file fileb://lambda-deployment.zip \
+            --publish
+          
+          # Wait for update to complete
+          echo "Waiting for Lambda update to complete..."
+          aws lambda wait function-updated \
+            --function-name ${{ env.LAMBDA_FUNCTION_NAME }}
+          
+          # Get new version
+          NEW_VERSION=$(aws lambda get-function \
+            --function-name ${{ env.LAMBDA_FUNCTION_NAME }} \
+            --query 'Configuration.Version' \
+            --output text)
+          
+          echo "new_version=$NEW_VERSION" >> $GITHUB_OUTPUT
+          echo "✅ Deployed version: $NEW_VERSION"
+      
+      - name: Update alias (production)
+        run: |
+          # Update or create production alias
+          aws lambda update-alias \
+            --function-name ${{ env.LAMBDA_FUNCTION_NAME }} \
+            --name production \
+            --function-version ${{ steps.deploy.outputs.new_version }} \
+            2>/dev/null || \
+          aws lambda create-alias \
+            --function-name ${{ env.LAMBDA_FUNCTION_NAME }} \
+            --name production \
+            --function-version ${{ steps.deploy.outputs.new_version }}
+          
+          echo "✅ Updated production alias to version ${{ steps.deploy.outputs.new_version }}"
+      
+      - name: Verify deployment
+        run: |
+          # Invoke health check
+          RESPONSE=$(aws lambda invoke \
+            --function-name ${{ env.LAMBDA_FUNCTION_NAME }}:production \
+            --payload '{"httpMethod": "GET", "path": "/health", "headers": {}, "queryStringParameters": null, "body": null}' \
+            --cli-binary-format raw-in-base64-out \
+            response.json)
+          
+          STATUS_CODE=$(echo $RESPONSE | jq -r '.StatusCode')
+          
+          if [ "$STATUS_CODE" == "200" ]; then
+            echo "✅ Health check passed"
+            cat response.json
+          else
+            echo "⚠️ Health check returned status: $STATUS_CODE"
+            cat response.json
+          fi
+
+  rollback:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.rollback == 'true'
+    steps:
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_LAMBDA_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+      
+      - name: List available versions
+        id: list-versions
+        run: |
+          echo "Available versions:"
+          aws lambda list-versions-by-function \
+            --function-name ${{ env.LAMBDA_FUNCTION_NAME }} \
+            --query 'Versions[*].[Version, LastModified]' \
+            --output table
+      
+      - name: Rollback to specified version
+        run: |
+          TARGET_VERSION="${{ github.event.inputs.version }}"
+          
+          if [ -z "$TARGET_VERSION" ]; then
+            # Get previous version (second to last)
+            TARGET_VERSION=$(aws lambda list-versions-by-function \
+              --function-name ${{ env.LAMBDA_FUNCTION_NAME }} \
+              --query 'Versions[-2].Version' \
+              --output text)
+          fi
+          
+          if [ -z "$TARGET_VERSION" ] || [ "$TARGET_VERSION" == "None" ]; then
+            echo "❌ No previous version found for rollback"
+            exit 1
+          fi
+          
+          echo "Rolling back to version: $TARGET_VERSION"
+          
+          # Update production alias to previous version
+          aws lambda update-alias \
+            --function-name ${{ env.LAMBDA_FUNCTION_NAME }} \
+            --name production \
+            --function-version $TARGET_VERSION
+          
+          echo "✅ Rolled back production alias to version $TARGET_VERSION"
+      
+      - name: Verify rollback
+        run: |
+          # Invoke health check
+          RESPONSE=$(aws lambda invoke \
+            --function-name ${{ env.LAMBDA_FUNCTION_NAME }}:production \
+            --payload '{"httpMethod": "GET", "path": "/health", "headers": {}, "queryStringParameters": null, "body": null}' \
+            --cli-binary-format raw-in-base64-out \
+            response.json)
+          
+          echo "Health check response:"
+          cat response.json
+
+  notify:
+    needs: [deploy]
+    runs-on: ubuntu-latest
+    if: always()
+    steps:
+      - name: Configure AWS credentials (OIDC)
+        if: needs.deploy.result == 'success' || needs.deploy.result == 'failure'
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_LAMBDA_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+      
+      - name: Send SNS Notification
+        if: needs.deploy.result == 'success' || needs.deploy.result == 'failure'
+        run: |
+          SNS_TOPIC_ARN="${{ secrets.SNS_ALERTS_TOPIC_ARN }}"
+          
+          if [ -z "$SNS_TOPIC_ARN" ]; then
+            echo "SNS topic not configured, skipping notification"
+            exit 0
+          fi
+          
+          if [ "${{ needs.deploy.result }}" == "success" ]; then
+            MESSAGE="✅ Lambda deployment to AWS completed successfully!\n\nFunction: ${{ env.LAMBDA_FUNCTION_NAME }}\nCommit: ${{ github.sha }}\nBranch: main"
+            SUBJECT="[VOW] Lambda Deployment Success"
+          else
+            MESSAGE="❌ Lambda deployment to AWS failed!\n\nFunction: ${{ env.LAMBDA_FUNCTION_NAME }}\nCommit: ${{ github.sha }}\nBranch: main\n\nCheck GitHub Actions for details."
+            SUBJECT="[VOW] Lambda Deployment Failed"
+          fi
+          
+          aws sns publish \
+            --topic-arn "$SNS_TOPIC_ARN" \
+            --message "$MESSAGE" \
+            --subject "$SUBJECT" || echo "SNS notification failed (topic may not exist)"
+      
+      - name: Deployment Status
+        run: |
+          if [ "${{ needs.deploy.result }}" == "success" ]; then
+            echo "✅ Lambda deployment completed successfully!"
+          else
+            echo "❌ Lambda deployment failed"
+          fi

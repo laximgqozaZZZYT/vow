@@ -1,0 +1,211 @@
+name: Deploy Frontend to AWS Amplify (Production)
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'frontend/**'
+      - '.github/workflows/deploy-frontend-prod.yml'
+  workflow_dispatch:
+    inputs:
+      rollback:
+        description: 'Rollback to previous version'
+        required: false
+        default: 'false'
+        type: boolean
+
+permissions:
+  id-token: write
+  contents: read
+
+env:
+  AWS_REGION: ap-northeast-1
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: 'frontend/package-lock.json'
+      
+      - name: Install dependencies
+        run: cd frontend && npm ci
+      
+      - name: Run linting
+        run: cd frontend && npm run lint --if-present
+      
+      - name: Run type check
+        run: cd frontend && npm run type-check --if-present
+      
+      - name: Run tests
+        run: cd frontend && npm test --if-present -- --passWithNoTests
+        env:
+          CI: true
+      
+      - name: Build check
+        run: cd frontend && npm run build
+        env:
+          CI: true
+          NEXT_PUBLIC_API_URL: https://api.example.com
+          NEXT_PUBLIC_COGNITO_USER_POOL_ID: test-pool-id
+          NEXT_PUBLIC_COGNITO_CLIENT_ID: test-client-id
+          NEXT_PUBLIC_COGNITO_DOMAIN: test-domain
+          NEXT_PUBLIC_COGNITO_REGION: ap-northeast-1
+
+  deploy:
+    needs: test
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && github.event.inputs.rollback != 'true')
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_AMPLIFY_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+      
+      - name: Trigger Amplify Build
+        id: amplify-build
+        run: |
+          # Get Amplify App ID
+          APP_ID="${{ secrets.AMPLIFY_APP_ID }}"
+          BRANCH_NAME="main"
+          
+          # Start build
+          BUILD_ID=$(aws amplify start-job \
+            --app-id $APP_ID \
+            --branch-name $BRANCH_NAME \
+            --job-type RELEASE \
+            --query 'jobSummary.jobId' \
+            --output text)
+          
+          echo "build_id=$BUILD_ID" >> $GITHUB_OUTPUT
+          echo "🚀 Started Amplify build: $BUILD_ID"
+      
+      - name: Wait for Amplify Build
+        run: |
+          APP_ID="${{ secrets.AMPLIFY_APP_ID }}"
+          BRANCH_NAME="main"
+          BUILD_ID="${{ steps.amplify-build.outputs.build_id }}"
+          
+          echo "Waiting for build $BUILD_ID to complete..."
+          
+          for i in {1..60}; do
+            STATUS=$(aws amplify get-job \
+              --app-id $APP_ID \
+              --branch-name $BRANCH_NAME \
+              --job-id $BUILD_ID \
+              --query 'job.summary.status' \
+              --output text)
+            
+            echo "Build status: $STATUS"
+            
+            if [ "$STATUS" == "SUCCEED" ]; then
+              echo "✅ Build completed successfully!"
+              exit 0
+            elif [ "$STATUS" == "FAILED" ] || [ "$STATUS" == "CANCELLED" ]; then
+              echo "❌ Build failed with status: $STATUS"
+              exit 1
+            fi
+            
+            sleep 30
+          done
+          
+          echo "❌ Build timed out"
+          exit 1
+
+  rollback:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.rollback == 'true'
+    steps:
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_AMPLIFY_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+      
+      - name: Get Previous Build
+        id: get-previous
+        run: |
+          APP_ID="${{ secrets.AMPLIFY_APP_ID }}"
+          BRANCH_NAME="main"
+          
+          # Get last 2 successful builds
+          PREVIOUS_BUILD=$(aws amplify list-jobs \
+            --app-id $APP_ID \
+            --branch-name $BRANCH_NAME \
+            --max-results 10 \
+            --query "jobSummaries[?status=='SUCCEED'][1].jobId" \
+            --output text)
+          
+          if [ -z "$PREVIOUS_BUILD" ] || [ "$PREVIOUS_BUILD" == "None" ]; then
+            echo "❌ No previous successful build found"
+            exit 1
+          fi
+          
+          echo "previous_build=$PREVIOUS_BUILD" >> $GITHUB_OUTPUT
+          echo "Found previous build: $PREVIOUS_BUILD"
+      
+      - name: Rollback to Previous Build
+        run: |
+          APP_ID="${{ secrets.AMPLIFY_APP_ID }}"
+          BRANCH_NAME="main"
+          
+          # Note: Amplify doesn't have direct rollback, redeploy from previous commit
+          echo "⚠️ Manual rollback required:"
+          echo "1. Go to AWS Amplify Console"
+          echo "2. Select app: $APP_ID"
+          echo "3. Redeploy from previous commit"
+          echo ""
+          echo "Or revert the commit and push to trigger new deployment"
+
+  notify:
+    needs: [deploy]
+    runs-on: ubuntu-latest
+    if: always()
+    steps:
+      - name: Configure AWS credentials (OIDC)
+        if: needs.deploy.result == 'success' || needs.deploy.result == 'failure'
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_AMPLIFY_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+      
+      - name: Send SNS Notification
+        if: needs.deploy.result == 'success' || needs.deploy.result == 'failure'
+        run: |
+          SNS_TOPIC_ARN="${{ secrets.SNS_ALERTS_TOPIC_ARN }}"
+          
+          if [ -z "$SNS_TOPIC_ARN" ]; then
+            echo "SNS topic not configured, skipping notification"
+            exit 0
+          fi
+          
+          if [ "${{ needs.deploy.result }}" == "success" ]; then
+            MESSAGE="✅ Frontend deployment to AWS Amplify completed successfully!\n\nCommit: ${{ github.sha }}\nBranch: main\nWorkflow: ${{ github.workflow }}"
+            SUBJECT="[VOW] Frontend Deployment Success"
+          else
+            MESSAGE="❌ Frontend deployment to AWS Amplify failed!\n\nCommit: ${{ github.sha }}\nBranch: main\nWorkflow: ${{ github.workflow }}\n\nCheck GitHub Actions for details."
+            SUBJECT="[VOW] Frontend Deployment Failed"
+          fi
+          
+          aws sns publish \
+            --topic-arn "$SNS_TOPIC_ARN" \
+            --message "$MESSAGE" \
+            --subject "$SUBJECT" || echo "SNS notification failed (topic may not exist)"
+      
+      - name: Deployment Status
+        run: |
+          if [ "${{ needs.deploy.result }}" == "success" ]; then
+            echo "✅ Frontend deployment completed successfully!"
+            echo "🌐 Production URL: https://${{ secrets.AMPLIFY_DOMAIN }}"
+          else
+            echo "❌ Frontend deployment failed"
+          fi
