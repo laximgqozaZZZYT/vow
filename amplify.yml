@@ -1,0 +1,28 @@
+# amplify.yml
+# AWS Amplify Hosting build configuration for Next.js SSR (Monorepo)
+
+version: 1
+applications:
+  - appRoot: frontend
+    frontend:
+      phases:
+        preBuild:
+          commands:
+            # Install dependencies using npm ci for reproducible builds
+            - npm ci
+        build:
+          commands:
+            # Build Next.js application
+            - npm run build
+      artifacts:
+        # Base directory for Next.js SSR output
+        baseDirectory: .next
+        files:
+          - '**/*'
+      cache:
+        paths:
+          # Cache node_modules for faster builds
+          - node_modules/**/*
+
+# Environment variables are configured in Amplify Console or CDK
+# Do not hardcode sensitive values here
