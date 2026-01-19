@@ -3,8 +3,9 @@ import type { NextSectionProps, Habit } from '../types';
 import { useState } from 'react';
 import './HabitNameScroll.css';
 import { useHandedness } from '../contexts/HandednessContext';
+import { isHabitCumulativelyCompleted } from '../utils/habitCompletionUtils';
 
-export default function NextSection({ habits, onHabitAction, onHabitEdit }: NextSectionProps) {
+export default function NextSection({ habits, activities, onHabitAction, onHabitEdit }: NextSectionProps) {
   const [inputValues, setInputValues] = useState<Record<string, string>>({});
   const { isLeftHanded } = useHandedness();
   
@@ -15,6 +16,10 @@ export default function NextSection({ habits, onHabitAction, onHabitEdit }: Next
   for (const h of habits) {
     if (h.completed) continue;
     if (h.type === 'avoid') continue;
+    
+    // 累積完了チェック: Requirements 4.1
+    if (isHabitCumulativelyCompleted(h, activities)) continue;
+    
     const timings = (h as any).timings ?? [];
     let found: Date | null = null;
 

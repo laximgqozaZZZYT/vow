@@ -2,12 +2,14 @@
 
 import { useState, useMemo, useRef, useEffect } from "react";
 import { debug } from '../../../lib/debug';
-import type { Goal, Habit } from '../types';
+import type { Activity, Goal, Habit } from '../types';
 import CalendarControls, { type CalendarViewType } from './calendar/CalendarControls';
+import { isHabitCumulativelyCompleted } from '../utils/habitCompletionUtils';
 
 interface CalendarWidgetProps {
   habits: Habit[];
   goals: Goal[];
+  activities?: Activity[];
   onEventClick?: (id: string) => void;
   onSlotSelect?: (isoDate: string, time?: string, endTime?: string) => void;
   onEventChange?: (id: string, updated: { start?: string; end?: string; timingIndex?: number }) => void;
@@ -18,6 +20,7 @@ interface CalendarWidgetProps {
 export default function CalendarWidget({ 
   habits, 
   goals, 
+  activities,
   onEventClick, 
   onSlotSelect, 
   onEventChange, 
@@ -310,6 +313,12 @@ export default function CalendarWidget({
         continue;
       }
       
+      // 累積完了チェック: 累積完了したHabitはイベントを生成しない
+      // Requirements 5.1, 5.2, 5.3
+      if (isHabitCumulativelyCompleted(h, activities ?? [])) {
+        continue;
+      }
+      
       const timings = (h as any).timings ?? [];
       const outdates = (h as any).outdates ?? [];
       
@@ -524,7 +533,7 @@ export default function CalendarWidget({
       }
     }
     return ev;
-  }, [habits, goals]);
+  }, [habits, goals, activities]);
 
   return (
     <section className="mt-6 rounded-lg border border-border bg-card text-card-foreground shadow-sm p-4 sm:p-6 w-full overflow-hidden">

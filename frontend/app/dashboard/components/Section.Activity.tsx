@@ -2,6 +2,7 @@ import { useMemo } from 'react';
 import { debug } from '../../../lib/debug';
 import type { ActivitySectionProps, Habit, Activity } from '../types';
 import { useHandedness } from '../contexts/HandednessContext';
+import { isHabitCumulativelyCompleted } from '../utils/habitCompletionUtils';
 
 interface HabitProgress {
   habitId: string;
@@ -69,9 +70,14 @@ export default function ActivitySection({
   const habitProgress = useMemo((): HabitProgress[] => {
     const progressMap = new Map<string, HabitProgress>();
     
-    // 全てのHabitを初期化
+    // 全てのHabitを初期化（累積完了Habitは除外）
     habits.forEach(habit => {
       if (habit.active && habit.type === 'do') {
+        // 累積完了チェック: workloadTotalEndに達したHabitは表示しない
+        if (isHabitCumulativelyCompleted(habit, activities)) {
+          return; // 累積完了Habitはスキップ
+        }
+        
         const totalCount = (habit as any).workloadTotal || habit.must || 1;
         
         // JST 0:00-23:59の同一Habitに関するworkload合計を計算

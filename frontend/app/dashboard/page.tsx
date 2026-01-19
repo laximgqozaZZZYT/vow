@@ -662,7 +662,8 @@ function DashboardLayout(props: any) {
             sec === 'next' ? (
               <NextSection 
                 key="next" 
-                habits={habits} 
+                habits={habits}
+                activities={activities}
                 onHabitAction={handleHabitAction}
                 onHabitEdit={(habitId) => {
                   setSelectedHabitId(habitId);
@@ -682,6 +683,7 @@ function DashboardLayout(props: any) {
                 key="calendar"
                 habits={habits}
                 goals={goals}
+                activities={activities}
                 onEventClick={(id: string) => { setSelectedHabitId(id); setOpenHabitModal(true); }}
                 onSlotSelect={(isoDate: string, time?: string, endTime?: string) => {
                   const dateOnly = (isoDate || '').slice(0, 10);

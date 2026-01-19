@@ -48,6 +48,7 @@ export interface Habit {
   tags?: Tag[];
   workloadUnit?: string;
   workloadTotal?: number;
+  workloadTotalEnd?: number;
   workloadPerCount?: number;
   timings?: Timing[];
   outdates?: Timing[];
@@ -173,6 +174,7 @@ export interface GoalTreeProps {
 
 export interface NextSectionProps {
   habits: Habit[];
+  activities: Activity[];
   onHabitAction: (habitId: string, action: HabitAction, amount?: number) => void;
   onHabitEdit: (habitId: string) => void;
 }

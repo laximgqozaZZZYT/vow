@@ -7,6 +7,7 @@ import HeatmapWidget from './Widget.Heatmap'
 import { HabitRelationMap } from './Widget.HabitRelationMap'
 import type { Goal as SharedGoal, Habit, Activity } from '../types'
 import { useHandedness } from '../contexts/HandednessContext'
+import { isHabitCumulativelyCompleted } from '../utils/habitCompletionUtils'
 
 type TimingType = 'Date' | 'Daily' | 'Weekly' | 'Monthly'
 type Timing = {
@@ -634,9 +635,15 @@ export default function StaticsSection({ habits, activities, goals }: { habits: 
 
     const visible = new Set(visibleHabitIds)
     const recurringVisibleHabits = habits.filter(h => visible.has(h.id) && isRecurring(h.repeat))
+    
+    // 累積完了していないHabitのみを対象とする（Daily Progress用）
+    const activeRecurringHabits = recurringVisibleHabits.filter(h => 
+      !isHabitCumulativelyCompleted(h, activities)
+    )
 
     // progress ratio is based on planned-total denominator (same logic as chart)
-    const progressByHabit = recurringVisibleHabits
+    // 累積完了Habitは除外
+    const progressByHabit = activeRecurringHabits
       .map((h) => {
         const series = buildPlannedSeriesForHabit(h as any, todayStartTs, todayEndTs)
         const total = series.length ? series[series.length - 1].v : 0
@@ -660,6 +667,7 @@ export default function StaticsSection({ habits, activities, goals }: { habits: 
 
     // Habit achievement rate
     // Today: ratio >= 1 at end of day window based on recorded progress
+    // 累積完了Habitは除外済みなので、単純にratio >= 1のものをカウント
     const todayAchieved = progressByHabit.filter(x => x.ratio >= 1).length
     const todayTotal = progressByHabit.length
 
@@ -687,6 +695,36 @@ export default function StaticsSection({ habits, activities, goals }: { habits: 
     const cumulativeAchieved = cumulativeProgressByHabit.filter(x => x.ratio >= 1).length
     const cumulativeTotal = cumulativeProgressByHabit.length
 
+    // 累積完了Habitのカウント (Requirements 6.1, 6.2, 6.4)
+    // workloadTotalEndに達したHabitを達成済みとしてカウント
+    const cumulativelyCompletedHabits = recurringVisibleHabits.filter(h => 
+      isHabitCumulativelyCompleted(h, activities)
+    )
+    const cumulativelyCompletedCount = cumulativelyCompletedHabits.length
+
+    // 累積完了Habitの詳細情報を取得 (Requirements 6.3)
+    // 累積Load CountとworkloadTotalEndの両方を表示するため
+    const cumulativelyCompletedDetails = cumulativelyCompletedHabits.map(h => {
+      const cumulativeLoadCount = activities
+        .filter(a => a.habitId === h.id && a.kind === 'complete')
+        .reduce((sum, a) => sum + (a.amount ?? 0), 0)
+      return {
+        habit: h,
+        cumulativeLoadCount,
+        workloadTotalEnd: h.workloadTotalEnd ?? 0,
+      }
+    })
+
+    // 達成率計算に累積完了Habitを含める
+    // 累積完了Habitは既にcumulativeProgressByHabitに含まれている可能性があるため、
+    // 重複を避けて追加する
+    const cumulativelyCompletedNotInProgress = cumulativelyCompletedHabits.filter(h => {
+      const inProgress = cumulativeProgressByHabit.find(x => x.habit.id === h.id)
+      // ratio < 1 の場合は累積完了として追加カウント
+      return !inProgress || inProgress.ratio < 1
+    })
+    const adjustedCumulativeAchieved = cumulativeAchieved + cumulativelyCompletedNotInProgress.length
+
     const goalsArr = goals ?? []
     // Goal achievement rate: based on isCompleted; "today" uses updatedAt local date.
     const goalsCompleted = goalsArr.filter(g => !!g.isCompleted)
@@ -700,9 +738,11 @@ export default function StaticsSection({ habits, activities, goals }: { habits: 
       top3,
       worst3,
       habitRateToday: { achieved: todayAchieved, total: todayTotal, pct: safePct(todayAchieved, todayTotal) },
-      habitRateTotal: { achieved: cumulativeAchieved, total: cumulativeTotal, pct: safePct(cumulativeAchieved, cumulativeTotal) },
+      habitRateTotal: { achieved: adjustedCumulativeAchieved, total: cumulativeTotal, pct: safePct(adjustedCumulativeAchieved, cumulativeTotal) },
       goalRateToday: { achieved: goalsCompletedToday.length, total: goalsArr.length, pct: safePct(goalsCompletedToday.length, goalsArr.length) },
       goalRateTotal: { achieved: goalsCompleted.length, total: goalsArr.length, pct: safePct(goalsCompleted.length, goalsArr.length) },
+      cumulativelyCompletedCount,
+      cumulativelyCompletedDetails,
     }
   }, [habits, activities, visibleHabitIds, range, activeWindow, goals])
 
@@ -788,6 +828,35 @@ export default function StaticsSection({ habits, activities, goals }: { habits: 
                     <div className="text-sm text-zinc-500">No recurring habits.</div>
                   )}
                 </div>
+              </div>
+
+              {/* 累積完了Habit情報 (Requirements 6.3) */}
+              <div className="rounded border border-zinc-100 p-3 dark:border-slate-800 sm:col-span-2 lg:col-span-3">
+                <div className="text-xs text-zinc-500">累積完了Habit</div>
+                <div className="mt-1 text-2xl font-semibold">{stats.cumulativelyCompletedCount}件</div>
+                {stats.cumulativelyCompletedDetails.length > 0 ? (
+                  <div className="mt-3 space-y-2">
+                    {stats.cumulativelyCompletedDetails.map((detail) => (
+                      <div key={detail.habit.id} className="rounded bg-zinc-50 p-2 dark:bg-slate-900/40">
+                        <div className="text-sm font-medium truncate">{detail.habit.name}</div>
+                        <div className="mt-1 flex items-center gap-2 text-xs text-zinc-500">
+                          <span>累積Load: {detail.cumulativeLoadCount}</span>
+                          <span>/</span>
+                          <span>目標: {detail.workloadTotalEnd}</span>
+                          <span className="ml-auto text-green-600 dark:text-green-400">✓ 達成</span>
+                        </div>
+                        <div className="mt-1 h-1.5 w-full rounded-full bg-zinc-200 dark:bg-slate-700 overflow-hidden">
+                          <div 
+                            className="h-full bg-green-500 dark:bg-green-400 rounded-full"
+                            style={{ width: `${Math.min(100, (detail.cumulativeLoadCount / detail.workloadTotalEnd) * 100)}%` }}
+                          />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="mt-2 text-xs text-zinc-500">累積完了したHabitはありません</div>
+                )}
               </div>
               </div>
             </div>

@@ -1,6 +1,7 @@
 import { useState, useMemo, useEffect } from 'react';
 import type { Goal, Habit, Activity } from '../types';
 import { useDragAndDrop } from '../hooks/useDragAndDrop';
+import { isHabitCumulativelyCompleted } from '../utils/habitCompletionUtils';
 import './DragAndDrop.css';
 import './HabitNameScroll.css';
 
@@ -75,6 +76,7 @@ interface HabitItemProps {
   habit: Habit;
   activities: Activity[];
   goalCompleted: boolean;
+  isCumulativelyCompleted: boolean; // 新規追加: 累積完了状態
   inputValue: string;
   onInputChange: (value: string) => void;
   onComplete: () => void;
@@ -93,6 +95,7 @@ function HabitItem({
   habit,
   activities,
   goalCompleted,
+  isCumulativelyCompleted, // 新規追加
   inputValue,
   onInputChange,
   onComplete,
@@ -105,7 +108,11 @@ function HabitItem({
   onTouchMove,
   onTouchEnd
 }: HabitItemProps) {
-  const isCompleted = isHabitCompletedToday(habit, activities) || goalCompleted || !habit.active;
+  // 日次完了 OR Goal完了 OR 非アクティブ OR 累積完了
+  const isCompleted = isHabitCompletedToday(habit, activities) 
+    || goalCompleted 
+    || !habit.active
+    || isCumulativelyCompleted;
   
   return (
     <div
@@ -246,12 +253,14 @@ function GoalNode({
   /** Render a single habit item */
   const renderHabitItem = (h: Habit) => {
     const isDraggedHabit = draggedItem?.type === 'habit' && draggedItem?.id === h.id;
+    const isCumulativelyCompletedHabit = isHabitCumulativelyCompleted(h, activities);
     return (
       <HabitItem
         key={h.id}
         habit={h}
         activities={activities}
         goalCompleted={goalCompleted}
+        isCumulativelyCompleted={isCumulativelyCompletedHabit}
         inputValue={getInputValue(h.id)}
         onInputChange={(value) => setInputValue(h.id, value)}
         onComplete={() => handleCompleteWithAmount(h.id)}
