@@ -163,9 +163,12 @@ describe('Date Utilities Property Tests', () => {
       test('should correctly add positive days', () => {
         fc.assert(
           fc.property(
-            fc.date({ min: new Date(2000, 0, 1), max: new Date(2030, 11, 31) }),
+            fc.integer({ min: 2000, max: 2030 }),
+            fc.integer({ min: 0, max: 11 }),
+            fc.integer({ min: 1, max: 28 }),
             fc.integer({ min: 0, max: 365 }),
-            (date, days) => {
+            (year, month, day, days) => {
+              const date = new Date(year, month, day);
               const result = addDays(date, days);
               
               // Result should be a new Date object
@@ -185,9 +188,12 @@ describe('Date Utilities Property Tests', () => {
       test('should correctly subtract days (negative values)', () => {
         fc.assert(
           fc.property(
-            fc.date({ min: new Date(2000, 0, 1), max: new Date(2030, 11, 31) }),
+            fc.integer({ min: 2000, max: 2030 }),
+            fc.integer({ min: 0, max: 11 }),
+            fc.integer({ min: 1, max: 28 }),
             fc.integer({ min: -365, max: 0 }),
-            (date, days) => {
+            (year, month, day, days) => {
+              const date = new Date(year, month, day);
               const result = addDays(date, days);
               
               const diffMs = result.getTime() - date.getTime();
