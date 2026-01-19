@@ -1,503 +1,366 @@
-# Amazon CodeCatalyst クラウド開発環境セットアップガイド
+# AWS クラウド開発環境セットアップガイド
 
-このドキュメントでは、習慣管理ダッシュボードアプリケーションのクラウド開発環境をAmazon CodeCatalystを使用して構築する手順を説明します。
+このドキュメントでは、習慣管理ダッシュボードアプリケーションの開発環境をAWSクラウドに構築する手順を説明します。
 
 ## 目次
 
 1. [概要](#概要)
 2. [前提条件](#前提条件)
-3. [Builder IDの作成](#builder-idの作成)
-4. [Spaceの作成](#spaceの作成)
-5. [Projectの作成とGitHub連携](#projectの作成とgithub連携)
-6. [Dev Environmentの作成](#dev-environmentの作成)
-7. [環境変数の設定](#環境変数の設定)
-8. [Kiro IDEの使用方法](#kiro-ideの使用方法)
-9. [ローカルVS Codeからの接続（オプション）](#ローカルvs-codeからの接続オプション)
-10. [無料枠の管理](#無料枠の管理)
+3. [ローカルDocker開発環境](#ローカルdocker開発環境)
+4. [AWS CDKデプロイ](#aws-cdkデプロイ)
+5. [Amplify Hosting設定](#amplify-hosting設定)
+6. [トラブルシューティング](#トラブルシューティング)
 
 ---
 
 ## 概要
 
-### CodeCatalystとは
-
-Amazon CodeCatalystは、AWSが提供するクラウドベースの統合開発プラットフォームです。以下の特徴があります：
-
-- **Kiro IDE**: ブラウザベースのVS Code互換IDE
-- **Dev Environments**: クラウド上の開発環境
-- **GitHub連携**: 既存リポジトリとのシームレスな統合
-- **無料枠**: 月60時間の開発環境使用が無料
-
-### このセットアップで実現できること
-
-| 機能 | 説明 |
-|------|------|
-| ブラウザ開発 | PCブラウザからKiro IDEにアクセスして開発 |
-| モバイルアクセス | スマートフォンからもコード編集が可能 |
-| ローカルVS Code連携 | 慣れたローカル環境からリモート接続 |
-| 自動環境構築 | Devfileによる一貫した開発環境 |
-| コスト最適化 | 無料枠内での運用が可能 |
-
 ### アーキテクチャ
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                    開発者アクセス                            │
-├─────────────────┬─────────────────┬─────────────────────────┤
-│   PCブラウザ    │  スマートフォン  │    ローカルVS Code      │
-│   (Kiro IDE)    │   (Kiro IDE)    │    (Remote SSH)        │
-└────────┬────────┴────────┬────────┴───────────┬─────────────┘
-         │                 │                    │
-         └─────────────────┼────────────────────┘
-                           │ HTTPS
-                           ▼
-┌─────────────────────────────────────────────────────────────┐
-│              Amazon CodeCatalyst                            │
-│  ┌───────────────────────────────────────────────────────┐  │
-│  │  Space: vow-dev-space                                 │  │
-│  │  ┌─────────────────────────────────────────────────┐  │  │
-│  │  │  Project: vow-app                               │  │  │
-│  │  │  ┌───────────────────────────────────────────┐  │  │  │
-│  │  │  │  Dev Environment                          │  │  │  │
-│  │  │  │  - 2-core CPU, 4GB RAM, 16GB Storage     │  │  │  │
-│  │  │  │  - Node.js 20 LTS                        │  │  │  │
-│  │  │  │  - Next.js Dev Server (:3000)            │  │  │  │
-│  │  │  └───────────────────────────────────────────┘  │  │  │
-│  │  └─────────────────────────────────────────────────┘  │  │
-│  └───────────────────────────────────────────────────────┘  │
-└─────────────────────────────────────────────────────────────┘
-                           │
-         ┌─────────────────┼─────────────────┐
-         │                 │                 │
-         ▼                 ▼                 ▼
-    ┌─────────┐      ┌──────────┐      ┌─────────┐
-    │ GitHub  │      │ Supabase │      │ Vercel  │
-    │ (ソース) │      │ (DB/認証) │      │ (本番)  │
-    └─────────┘      └──────────┘      └─────────┘
+ローカル開発 → docker-compose up
+     ↓ push
+GitHub → Amplify Hosting → 開発環境URL (HTTPS)
+                ↓
+           Supabase (DB/認証)
 ```
+
+### 使用サービス
+
+| サービス | 用途 | コスト |
+|---------|------|--------|
+| AWS Amplify Hosting | Next.js SSRホスティング | 無料枠あり |
+| AWS Secrets Manager | GitHubトークン管理 | 無料枠あり |
+| AWS CDK | インフラのコード化 | 無料 |
+| Docker | ローカル開発 | 無料 |
 
 ---
 
 ## 前提条件
 
-セットアップを開始する前に、以下を準備してください：
+### 必要なツール
 
-- [ ] **メールアドレス**: Builder ID作成用
-- [ ] **GitHubアカウント**: リポジトリ連携用
-- [ ] **モダンブラウザ**: Chrome, Firefox, Safari, Edge のいずれか
-- [ ] **Supabase認証情報**: 環境変数設定用（既存プロジェクトから取得）
+```bash
+# Node.js 20 LTS
+node --version  # v20.x.x
 
----
+# Docker Desktop
+docker --version  # Docker version 24.x.x
 
-## Builder IDの作成
+# Python 3.9以上
+python3 --version  # Python 3.9+
 
-AWS Builder IDは、CodeCatalystへのサインインに使用する個人IDです。
+# AWS CLI
+aws --version  # aws-cli/2.x.x
 
-### 手順
+# AWS CDK
+npm install -g aws-cdk
+cdk --version  # 2.x.x
+```
 
-1. **CodeCatalystにアクセス**
-   
-   ブラウザで [https://codecatalyst.aws/](https://codecatalyst.aws/) を開きます。
+### AWSアカウント設定
 
-2. **サインアップを開始**
-   
-   「Sign up」ボタンをクリックします。
+1. AWSアカウントを作成（または既存のアカウントを使用）
+2. IAMユーザーを作成し、AdministratorAccessポリシーを付与
+3. AWS CLIを設定:
 
-   ![Sign up button](https://docs.aws.amazon.com/images/codecatalyst/latest/userguide/images/sign-up-button.png)
-
-3. **メールアドレスを入力**
-   
-   - 使用するメールアドレスを入力
-   - 「Next」をクリック
-
-4. **名前を入力**
-   
-   - 表示名（Display name）を入力
-   - 「Next」をクリック
-
-5. **メール認証**
-   
-   - 入力したメールアドレスに認証コードが送信されます
-   - 認証コードを入力して「Verify」をクリック
-
-6. **パスワード設定**
-   
-   - 安全なパスワードを設定
-   - 「Create Builder ID」をクリック
-
-### 確認
-
-Builder IDの作成が完了すると、CodeCatalystのダッシュボードが表示されます。
-
-> **💡 ヒント**: AWSアカウントとの連携はオプションです。Free Tierのみ使用する場合は連携不要です。
+```bash
+aws configure
+# AWS Access Key ID: YOUR_ACCESS_KEY
+# AWS Secret Access Key: YOUR_SECRET_KEY
+# Default region name: ap-northeast-1
+# Default output format: json
+```
 
 ---
 
-## Spaceの作成
+## ローカルDocker開発環境
 
-Spaceは、CodeCatalystのワークスペースで、プロジェクトのコンテナとなります。
+### クイックスタート
 
-### 手順
+```bash
+# 1. 環境変数ファイルを作成
+cp frontend/.env.example frontend/.env.local
+# .env.localを編集してSupabase認証情報を設定
 
-1. **Space作成を開始**
-   
-   CodeCatalystダッシュボードで「Create Space」をクリックします。
+# 2. Docker開発環境を起動
+docker-compose up
 
-2. **Space名を入力**
-   
-   ```
-   Space name: vow-dev-space
-   ```
-   
-   > **📝 命名規則**: 小文字、数字、ハイフンのみ使用可能
+# 3. ブラウザでアクセス
+open http://localhost:3000
+```
 
-3. **Billing設定**
-   
-   ⚠️ **重要**: 必ず「**Free Tier**」を選択してください。
-   
-   - Free Tierを選択（クレジットカード不要）
-   - 月60時間のDev Environment使用が無料
+### docker-compose コマンド
 
-4. **Spaceを作成**
-   
-   「Create Space」をクリックして完了します。
+```bash
+# 開発環境を起動（バックグラウンド）
+docker-compose up -d
 
-### 確認
+# ログを確認
+docker-compose logs -f frontend
 
-Space作成後、以下が表示されることを確認：
-- Space名: `vow-dev-space`
-- Billing: Free Tier
+# 開発環境を停止
+docker-compose down
 
----
+# イメージを再ビルド
+docker-compose build --no-cache
 
-## Projectの作成とGitHub連携
+# 本番環境をテスト（ポート3001）
+docker-compose --profile prod up frontend-prod
+```
 
-### Projectの作成
+### ホットリロード
 
-1. **Project作成を開始**
-   
-   Space内で「Create Project」をクリックします。
-
-2. **プロジェクトタイプを選択**
-   
-   「Start from scratch」を選択します。
-
-3. **Project名を入力**
-   
-   ```
-   Project name: vow-app
-   ```
-
-4. **Projectを作成**
-   
-   「Create Project」をクリックします。
-
-### GitHubリポジトリの連携
-
-1. **Source repositoriesに移動**
-   
-   Project内の「Source repositories」セクションを開きます。
-
-2. **リポジトリをリンク**
-   
-   「Link repository」をクリックします。
-
-3. **GitHubを選択**
-   
-   - 「GitHub」を選択
-   - GitHubアカウントで認証
-   - 必要な権限を許可
-
-4. **リポジトリを選択**
-   
-   連携したいリポジトリ（vow-appリポジトリ）を選択します。
-
-5. **連携を完了**
-   
-   「Link」をクリックして連携を完了します。
-
-### 確認
-
-- Source repositoriesにGitHubリポジトリが表示されること
-- リポジトリのブランチが確認できること
+ソースコードを変更すると、自動的にブラウザに反映されます。
+- `frontend/` ディレクトリ内のファイルを編集
+- 変更が即座に反映されることを確認
 
 ---
 
-## Dev Environmentの作成
+## AWS CDKデプロイ
 
-Dev Environmentは、クラウド上の開発環境です。
+### 1. CDK環境のセットアップ
 
-### 手順
+```bash
+# infraディレクトリに移動
+cd infra
 
-1. **Dev Environments画面に移動**
-   
-   Project内の「Dev Environments」をクリックします。
+# Python仮想環境を作成
+python3 -m venv .venv
+source .venv/bin/activate  # Linux/Mac
+# .venv\Scripts\activate  # Windows
 
-2. **Dev Environment作成を開始**
-   
-   「Create Dev Environment」をクリックします。
+# 依存関係をインストール
+pip install -r requirements.txt
+```
 
-3. **IDEを選択**
-   
-   「**Kiro IDE**」を選択します。
-   
-   > **💡 ヒント**: VS Codeを選択することも可能ですが、Kiro IDEはブラウザで直接使用できます。
+### 2. GitHub OAuthトークンの作成
 
-4. **リポジトリを選択**
-   
-   連携済みのGitHubリポジトリを選択します。
+1. GitHub → Settings → Developer settings → Personal access tokens → Tokens (classic)
+2. 「Generate new token (classic)」をクリック
+3. 以下の権限を付与:
+   - `repo` (Full control of private repositories)
+   - `admin:repo_hook` (Full control of repository hooks)
+4. トークンをコピー
 
-5. **ブランチを選択**
-   
-   開発に使用するブランチ（通常は `main` または `develop`）を選択します。
+5. AWS Secrets Managerに保存:
 
-6. **Compute設定**
-   
-   | 設定項目 | 推奨値 |
-   |---------|--------|
-   | Compute | 2-core, 4GB RAM |
-   | Storage | 16GB |
-   
-   > **⚠️ 注意**: より大きなインスタンスは無料枠を早く消費します。
+```bash
+aws secretsmanager create-secret \
+  --name "github-token" \
+  --secret-string '{"token":"YOUR_GITHUB_TOKEN"}' \
+  --region ap-northeast-1
+```
 
-7. **タイムアウト設定**
-   
-   ```
-   Idle timeout: 15 minutes
-   ```
-   
-   > **💡 コスト最適化**: 15分のアイドルタイムアウトで無駄な稼働を防止します。
+### 3. CDKデプロイ
 
-8. **Dev Environmentを作成**
-   
-   「Create」をクリックします。
+```bash
+# CDK Bootstrap（初回のみ）
+cdk bootstrap aws://YOUR_ACCOUNT_ID/ap-northeast-1
 
-### 起動確認
+# CloudFormationテンプレートを生成（確認用）
+cdk synth -c github_repo="https://github.com/YOUR_USERNAME/YOUR_REPO"
 
-- Dev Environmentのプロビジョニングが開始されます（約30秒〜2分）
-- ステータスが「Running」になったら準備完了
-- 「Open in Kiro IDE」をクリックしてIDEを開きます
+# デプロイ（必須: github_repo、オプション: supabase_url, supabase_anon_key）
+cdk deploy \
+  -c github_repo="https://github.com/YOUR_USERNAME/YOUR_REPO" \
+  -c supabase_url="https://YOUR_PROJECT.supabase.co" \
+  -c supabase_anon_key="YOUR_SUPABASE_ANON_KEY"
 
----
+# または、環境変数はAmplifyコンソールで後から設定する場合
+cdk deploy -c github_repo="https://github.com/YOUR_USERNAME/YOUR_REPO"
 
-## 環境変数の設定
+# デプロイ後の出力を確認
+# AmplifyAppUrl: https://develop.xxxxx.amplifyapp.com
+```
 
-### Dev Environment環境変数
-
-Dev Environment内で環境変数を設定します。
-
-1. **Kiro IDEのターミナルを開く**
-   
-   `Ctrl + `` または メニューから「Terminal」→「New Terminal」
-
-2. **.env.localファイルを作成**
-   
-   ```bash
-   cd frontend
-   touch .env.local
-   ```
-
-3. **環境変数を設定**
-   
-   `.env.local` ファイルに以下を記述：
-   
-   ```bash
-   # Supabase接続設定
-   NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
-   NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
-   NEXT_PUBLIC_API_URL=https://your-project.supabase.co/rest/v1
-   NEXT_PUBLIC_USE_SUPABASE_API=true
-   
-   # 開発環境設定
-   NODE_ENV=development
-   NEXT_PUBLIC_SITE_URL=http://localhost:3000
-   ```
-   
-   > **⚠️ セキュリティ**: `.env.local` はGitにコミットしないでください（.gitignoreに含まれています）。
-
-### 環境変数の取得方法
-
-Supabaseの認証情報は以下から取得できます：
-
-1. [Supabase Dashboard](https://supabase.com/dashboard) にログイン
-2. プロジェクトを選択
-3. 「Settings」→「API」
-4. 以下の値をコピー：
-   - Project URL → `NEXT_PUBLIC_SUPABASE_URL`
-   - anon public key → `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+**注意**: `github_repo` は必須パラメータです。Supabase認証情報はデプロイ時に指定するか、Amplifyコンソールで後から設定できます。
 
 ---
 
-## Kiro IDEの使用方法
+## Amplify Hosting設定
 
-### 基本操作
+### 自動デプロイの確認
 
-| 操作 | ショートカット |
-|------|---------------|
-| ファイル検索 | `Ctrl + P` |
-| コマンドパレット | `Ctrl + Shift + P` |
-| ターミナル表示 | `Ctrl + `` |
-| ファイル保存 | `Ctrl + S` |
-| 検索 | `Ctrl + Shift + F` |
+1. [Amplify Console](https://ap-northeast-1.console.aws.amazon.com/amplify/home?region=ap-northeast-1) を開く
+2. 「vow-dev」アプリを選択
+3. 「develop」ブランチを確認
+4. GitHubにpushして自動ビルドを確認
 
-### 開発サーバーの起動
+### 環境変数の追加（コンソールから）
 
-1. **ターミナルを開く**
+1. Amplify Console → アプリ → ホスティング → 環境変数
+2. 「変数を管理」をクリック
+3. **必須**の環境変数を追加:
 
-2. **frontendディレクトリに移動**
-   
-   ```bash
-   cd frontend
-   ```
+| 変数名 | 値 | 説明 |
+|--------|-----|------|
+| `AMPLIFY_MONOREPO_APP_ROOT` | `frontend` | モノレポのアプリルート（必須） |
+| `NEXT_PUBLIC_SUPABASE_URL` | `https://xxx.supabase.co` | Supabase URL |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | `eyJ...` | Supabase Anon Key |
+| `NEXT_PUBLIC_USE_SUPABASE_API` | `true` | Supabase API使用フラグ |
 
-3. **依存関係をインストール**（初回のみ）
-   
-   ```bash
-   npm install
-   ```
+**重要**: 環境変数を追加・変更した後は、ビルドを再実行してください。
 
-4. **開発サーバーを起動**
-   
-   ```bash
-   npm run dev
-   ```
+### カスタムドメイン（オプション）
 
-5. **プレビューにアクセス**
-   
-   - ポートフォワーディングが自動的に設定されます
-   - 表示されるURLをクリックしてプレビューを開きます
-   - または「Ports」タブから3000番ポートのURLを確認
-
-### Git操作
-
-Kiro IDEでは、VS Codeと同様のGit操作が可能です：
-
-1. **Source Controlパネルを開く**
-   
-   左サイドバーの「Source Control」アイコンをクリック
-
-2. **変更をステージング**
-   
-   変更ファイルの「+」をクリック
-
-3. **コミット**
-   
-   コミットメッセージを入力して「✓」をクリック
-
-4. **プッシュ**
-   
-   「...」メニューから「Push」を選択
-
-### モバイルからのアクセス
-
-スマートフォンからもKiro IDEにアクセスできます：
-
-1. スマートフォンのブラウザで [https://codecatalyst.aws/](https://codecatalyst.aws/) を開く
-2. Builder IDでサインイン
-3. Space → Project → Dev Environments に移動
-4. 「Open in Kiro IDE」をタップ
-
-> **💡 ヒント**: モバイルでは主にコードレビューや軽微な修正に適しています。
+1. Amplify Console → ドメイン管理
+2. 「ドメインを追加」をクリック
+3. Route 53またはサードパーティドメインを設定
 
 ---
 
-## ローカルVS Codeからの接続（オプション）
+## トラブルシューティング
 
-ローカルのVS CodeからDev Environmentに接続することも可能です。
+### Docker関連
 
-### 前提条件
+#### コンテナが起動しない
 
-- VS Code がインストールされていること
-- 「Remote - SSH」拡張機能がインストールされていること
+```bash
+# ログを確認
+docker-compose logs frontend
 
-### 手順
+# コンテナを再ビルド
+docker-compose build --no-cache
+docker-compose up
+```
 
-1. **CodeCatalyst拡張機能をインストール**
-   
-   VS Codeの拡張機能マーケットプレイスで「AWS Toolkit」を検索してインストール
+#### ポート3000が使用中
 
-2. **AWS Toolkitでサインイン**
-   
-   - コマンドパレット（`Ctrl + Shift + P`）を開く
-   - 「AWS: Sign in to AWS Builder ID」を選択
-   - ブラウザで認証を完了
+```bash
+# 使用中のプロセスを確認
+lsof -i :3000
 
-3. **Dev Environmentに接続**
-   
-   - AWS Toolkitのサイドバーを開く
-   - 「CodeCatalyst」セクションを展開
-   - Dev Environmentを右クリック
-   - 「Open in VS Code」を選択
+# プロセスを終了
+kill -9 <PID>
+```
 
-### 接続後の操作
+### CDK関連
 
-接続後は、ローカルVS Codeの全機能が使用可能です：
-- 拡張機能
-- デバッグ
-- ターミナル
-- Git操作
+#### cdk bootstrap エラー
+
+```bash
+# AWS認証情報を確認
+aws sts get-caller-identity
+
+# 正しいリージョンを指定
+cdk bootstrap aws://ACCOUNT_ID/ap-northeast-1
+```
+
+#### github_repo パラメータエラー
+
+```bash
+# github_repo は必須パラメータです
+cdk deploy -c github_repo="https://github.com/YOUR_USERNAME/YOUR_REPO"
+```
+
+### Amplify関連
+
+#### ビルドが失敗する
+
+1. Amplify Console → ビルドログを確認
+2. よくある原因:
+   - `npm ci` の失敗 → package-lock.jsonを確認
+   - 環境変数の不足 → Amplify Consoleで設定
+   - メモリ不足 → ビルド設定でメモリを増加
+
+#### モノレポエラー: "Cannot read 'next' version in package.json"
+
+このエラーはAmplifyがNext.jsアプリのルートを見つけられない場合に発生します。
+
+**解決方法**:
+1. Amplifyコンソール → 環境変数で `AMPLIFY_MONOREPO_APP_ROOT` を `frontend` に設定
+2. `amplify.yml` がモノレポ形式（`applications`キーを使用）になっていることを確認
+
+```yaml
+# 正しいモノレポ形式
+version: 1
+applications:
+  - appRoot: frontend
+    frontend:
+      phases:
+        preBuild:
+          commands:
+            - npm ci
+        build:
+          commands:
+            - npm run build
+      artifacts:
+        baseDirectory: .next
+        files:
+          - '**/*'
+```
+
+#### モノレポエラー: "Monorepo spec provided without 'applications' key"
+
+`AMPLIFY_MONOREPO_APP_ROOT` 環境変数が設定されているのに、`amplify.yml` が通常形式の場合に発生します。
+
+**解決方法**:
+- `amplify.yml` を `applications` キーを使ったモノレポ形式に変更する
+- または `AMPLIFY_MONOREPO_APP_ROOT` 環境変数を削除する（非推奨）
+
+#### 環境変数エラー: "Supabase is not configured"
+
+アプリケーションが起動しても「Supabase is not configured」と表示される場合。
+
+**解決方法**:
+1. Amplifyコンソール → ホスティング → 環境変数を確認
+2. 以下の変数がすべて設定されていることを確認:
+   - `NEXT_PUBLIC_SUPABASE_URL`
+   - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+   - `NEXT_PUBLIC_USE_SUPABASE_API`: `true`
+   - `AMPLIFY_MONOREPO_APP_ROOT`: `frontend`
+3. 環境変数を追加・変更した後は**ビルドを再実行**する必要があります
+
+#### GitHub連携エラー
+
+1. GitHub OAuthトークンの有効期限を確認
+2. トークンに `admin:repo_hook` 権限があることを確認（Webhook作成に必要）
+3. Secrets Managerのトークンを更新:
+
+```bash
+aws secretsmanager update-secret \
+  --secret-id "github-token" \
+  --secret-string '{"token":"NEW_GITHUB_TOKEN"}' \
+  --region ap-northeast-1
+```
+
+#### OAuth認証が動作しない
+
+Supabaseの認証リダイレクトURLにAmplifyのURLを追加する必要があります。
+
+**解決方法**:
+1. Supabaseダッシュボード → Authentication → URL Configuration
+2. 「Redirect URLs」に追加:
+   ```
+   https://develop.YOUR_APP_ID.amplifyapp.com/**
+   ```
 
 ---
 
-## 無料枠の管理
+## コスト管理
 
-### 無料枠の内容
+### Amplify Hosting無料枠
 
-| 項目 | 無料枠 | 超過料金 |
-|------|--------|---------|
-| Dev Environment時間 | 60時間/月 | $0.018/分 |
-| ストレージ | 64GB | $0.08/GB/月 |
-| ビルド時間 | 60分/月 | $0.01/分 |
+| 項目 | 無料枠 |
+|------|--------|
+| ビルド時間 | 1000分/月 |
+| データ転送 | 15GB/月 |
+| リクエスト | 500,000/月 |
 
-### 使用量の確認
+### コスト最適化のヒント
 
-1. CodeCatalystダッシュボードにアクセス
-2. Space設定を開く
-3. 「Billing」セクションで使用量を確認
-
-### コスト最適化のベストプラクティス
-
-1. **アイドルタイムアウトを設定**
-   
-   15分のタイムアウトで無駄な稼働を防止
-
-2. **作業終了時にDev Environmentを停止**
-   
-   ```
-   Dev Environments → 対象環境 → Stop
-   ```
-
-3. **使用パターンを把握**
-   
-   | シナリオ | 週間使用時間 | 月間使用時間 | コスト |
-   |---------|-------------|-------------|--------|
-   | 軽量利用 | 10時間 | 40時間 | **$0** |
-   | 標準利用 | 15時間 | 60時間 | **$0** |
-   | ヘビー利用 | 20時間 | 80時間 | ~$22 |
-
-4. **不要なDev Environmentを削除**
-   
-   使用しないDev Environmentは削除してストレージを節約
-
----
-
-## 次のステップ
-
-セットアップが完了したら、以下を試してみてください：
-
-1. [ ] Kiro IDEでファイルを編集して保存
-2. [ ] `npm run dev` で開発サーバーを起動
-3. [ ] プレビューURLでアプリケーションを確認
-4. [ ] 変更をコミットしてGitHubにプッシュ
-5. [ ] スマートフォンからKiro IDEにアクセス
+1. **不要なビルドを避ける**: 頻繁なpushを避け、まとめてpush
+2. **ブランチを削除**: 使用しないブランチは削除
+3. **使用量を監視**: AWS Cost Explorerで確認
 
 ---
 
 ## 関連ドキュメント
 
-- [トラブルシューティングガイド](./troubleshooting.md)
-- [セットアップガイド（ローカル開発）](./SETUP.md)
-- [Amazon CodeCatalyst公式ドキュメント](https://docs.aws.amazon.com/codecatalyst/)
+- [AWS Amplify Hosting ドキュメント](https://docs.aws.amazon.com/amplify/latest/userguide/)
+- [AWS CDK Python リファレンス](https://docs.aws.amazon.com/cdk/api/v2/python/)
+- [Next.js デプロイガイド](https://nextjs.org/docs/deployment)
 
 ---
 
@@ -505,4 +368,5 @@ Kiro IDEでは、VS Codeと同様のGit操作が可能です：
 
 | 日付 | 内容 |
 |------|------|
-| 2024-XX-XX | 初版作成 |
+| 2026-01-19 | トラブルシューティング追加 - モノレポエラー、環境変数エラー、OAuth設定 |
+| 2026-01-18 | 初版作成 - Docker + Amplify Hosting構成 |
