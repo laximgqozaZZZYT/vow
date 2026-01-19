@@ -1,0 +1,16 @@
+# AWS CDK dependencies for Vow Dev Infrastructure
+
+# Core CDK library
+aws-cdk-lib>=2.170.0
+
+# Constructs library
+constructs>=10.0.0
+
+# Amplify alpha module (for L2 constructs)
+aws-cdk.aws-amplify-alpha>=2.170.0a0
+
+# App Runner alpha module (for L2 constructs)
+aws-cdk.aws-apprunner-alpha>=2.170.0a0
+
+# Testing
+pytest>=7.0.0

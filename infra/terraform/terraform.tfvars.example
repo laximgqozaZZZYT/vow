@@ -1,0 +1,39 @@
+# =================================================================
+# Terraform Variables Example
+# Copy this file to terraform.tfvars and fill in your values
+# =================================================================
+
+# Environment
+environment = "development"
+aws_region  = "ap-northeast-1"
+
+# Aurora Settings
+aurora_min_capacity = 0.5  # ~$44/month
+aurora_max_capacity = 2.0
+database_name       = "vow"
+
+# Cognito OAuth (optional - leave empty to skip OAuth providers)
+# google_client_id     = "your-google-client-id"
+# google_client_secret = "your-google-client-secret"
+# github_client_id     = "your-github-client-id"
+# github_client_secret = "your-github-client-secret"
+
+# OAuth URLs (開発環境用)
+callback_urls = ["http://localhost:3000/auth/callback"]
+logout_urls   = ["http://localhost:3000"]
+
+# 本番環境では以下を追加:
+# callback_urls = [
+#   "http://localhost:3000/auth/callback",
+#   "https://your-domain.com/auth/callback"
+# ]
+# logout_urls = [
+#   "http://localhost:3000",
+#   "https://your-domain.com"
+# ]
+
+# Lambda Settings (optional - leave empty to skip Lambda deployment)
+# lambda_s3_bucket = "your-deployment-bucket"
+# lambda_s3_key    = "lambda/vow-api.zip"
+lambda_memory_size = 512
+lambda_timeout     = 30

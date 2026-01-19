@@ -3,10 +3,15 @@ import type { NextConfig } from "next";
 // 環境に応じた設定の切り替え
 const isVercelDeployment = process.env.VERCEL === '1';
 const isStaticExport = process.env.NEXT_STATIC_EXPORT === 'true';
+const isDockerBuild = process.env.DOCKER_BUILD === 'true';
 
 const nextConfig: NextConfig = {
-  // Vercel環境では通常のビルド、静的エクスポート環境では export
-  ...(isStaticExport && !isVercelDeployment ? { output: 'export' } : {}),
+  // 出力モードの設定:
+  // - Docker/Amplify: standalone (最適化されたサーバー出力)
+  // - 静的エクスポート: export
+  // - Vercel: デフォルト (Vercelが最適化)
+  ...(isDockerBuild ? { output: 'standalone' } : 
+      isStaticExport && !isVercelDeployment ? { output: 'export' } : {}),
   
   // 静的エクスポート時のみ trailingSlash を有効化
   trailingSlash: isStaticExport && !isVercelDeployment,

@@ -1,0 +1,139 @@
+# =================================================================
+# Variables
+# =================================================================
+
+variable "aws_region" {
+  description = "AWS region"
+  type        = string
+  default     = "ap-northeast-1"
+}
+
+variable "environment" {
+  description = "Environment name"
+  type        = string
+  default     = "development"
+
+  validation {
+    condition     = contains(["development", "staging"], var.environment)
+    # 本番環境は将来追加: ["development", "staging", "production"]
+    error_message = "Environment must be development or staging."
+  }
+}
+
+variable "project_name" {
+  description = "Project name"
+  type        = string
+  default     = "vow"
+}
+
+# =================================================================
+# Network Variables
+# =================================================================
+
+variable "vpc_cidr" {
+  description = "VPC CIDR block"
+  type        = string
+  default     = "10.0.0.0/16"
+}
+
+variable "availability_zones" {
+  description = "Availability zones"
+  type        = list(string)
+  default     = ["ap-northeast-1a", "ap-northeast-1c"]
+}
+
+# =================================================================
+# Aurora Variables
+# =================================================================
+
+variable "aurora_min_capacity" {
+  description = "Aurora Serverless v2 minimum ACU (0.5 = ~$44/month)"
+  type        = number
+  default     = 0.5
+}
+
+variable "aurora_max_capacity" {
+  description = "Aurora Serverless v2 maximum ACU"
+  type        = number
+  default     = 2.0
+}
+
+variable "database_name" {
+  description = "Database name"
+  type        = string
+  default     = "vow"
+}
+
+# =================================================================
+# Cognito Variables
+# =================================================================
+
+variable "google_client_id" {
+  description = "Google OAuth Client ID"
+  type        = string
+  sensitive   = true
+  default     = ""
+}
+
+variable "google_client_secret" {
+  description = "Google OAuth Client Secret"
+  type        = string
+  sensitive   = true
+  default     = ""
+}
+
+variable "github_client_id" {
+  description = "GitHub OAuth Client ID"
+  type        = string
+  sensitive   = true
+  default     = ""
+}
+
+variable "github_client_secret" {
+  description = "GitHub OAuth Client Secret"
+  type        = string
+  sensitive   = true
+  default     = ""
+}
+
+variable "callback_urls" {
+  description = "OAuth callback URLs"
+  type        = list(string)
+  default     = ["http://localhost:3000/auth/callback"]
+  # 本番環境では追加: "https://your-domain.com/auth/callback"
+}
+
+variable "logout_urls" {
+  description = "OAuth logout URLs"
+  type        = list(string)
+  default     = ["http://localhost:3000"]
+  # 本番環境では追加: "https://your-domain.com"
+}
+
+# =================================================================
+# Lambda Variables
+# =================================================================
+
+variable "lambda_memory_size" {
+  description = "Lambda memory size in MB"
+  type        = number
+  default     = 512
+}
+
+variable "lambda_timeout" {
+  description = "Lambda timeout in seconds"
+  type        = number
+  default     = 30
+}
+
+variable "lambda_s3_bucket" {
+  description = "S3 bucket for Lambda deployment package"
+  type        = string
+  default     = ""
+}
+
+variable "lambda_s3_key" {
+  description = "S3 key for Lambda deployment package"
+  type        = string
+  default     = ""
+}

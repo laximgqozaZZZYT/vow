@@ -13,6 +13,19 @@ __pycache__/
 .pytest_cache/
 *.pyc
 
+# AWS CDK
+infra/.venv/
+infra/cdk.out/
+*.js.map
+
+# Terraform
+infra/terraform/.terraform/
+infra/terraform/*.tfstate
+infra/terraform/*.tfstate.*
+infra/terraform/.terraform.lock.hcl
+infra/terraform/terraform.tfvars
+infra/terraform/*.tfplan
+
 # OS files
 .DS_Store
 Thumbs.db
