@@ -5,22 +5,19 @@ Handles OAuth 2.0 flow for connecting Slack workspaces.
 """
 
 import os
-import json
 import time
 import secrets
 import logging
 from typing import Optional
-from urllib.parse import urlencode
 
 from fastapi import APIRouter, HTTPException, Query, Request, Depends
 from fastapi.responses import RedirectResponse
 from jose import jwt, JWTError
 
-from ..services.slack_service import get_slack_service, SlackIntegrationService
-from ..services.encryption import encrypt_token, decrypt_token
+from ..services.slack_service import get_slack_service
+from ..services.encryption import decrypt_token
 from ..repositories.slack import SlackRepository
 from ..schemas.slack import (
-    SlackConnectionResponse,
     SlackConnectionStatus,
     SlackPreferencesResponse,
     SlackPreferencesUpdate,

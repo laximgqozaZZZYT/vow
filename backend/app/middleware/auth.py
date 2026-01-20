@@ -12,7 +12,6 @@ from urllib.request import urlopen
 from fastapi import Request, HTTPException
 from starlette.middleware.base import BaseHTTPMiddleware
 from jose import jwt, JWTError, ExpiredSignatureError, jwk
-from jose.utils import base64url_decode
 
 from app.config import settings
 
@@ -124,7 +123,7 @@ class JWTAuthMiddleware(BaseHTTPMiddleware):
                 status_code=401,
                 detail="Token has expired"
             )
-        except JWTError as e:
+        except JWTError:
             raise HTTPException(
                 status_code=401,
                 detail="Invalid authentication token"
