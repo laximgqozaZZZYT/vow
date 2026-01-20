@@ -46,7 +46,7 @@ jobs:
       - name: Run tests
         run: |
           cd backend
-          pytest tests/ -v --tb=short || echo "No tests found or tests skipped"
+          pytest tests/ -v --tb=short
         env:
           DATABASE_URL: sqlite+aiosqlite:///./test.db
           JWT_SECRET: test-secret-key
