@@ -36,12 +36,12 @@ github_client_secret = ""  # Set via environment variable or secrets
 
 # OAuth Callback URLs (include both old and new for migration)
 callback_urls = [
-  "https://main.d1zmna50iwo9dv.amplifyapp.com/auth/callback",  # Amplify production
-  "http://localhost:3000/auth/callback"                         # Local development
+  "https://main.do1k9oyyorn24.amplifyapp.com/auth/callback",  # Amplify production (correct app)
+  "http://localhost:3000/auth/callback"                        # Local development
 ]
 
 logout_urls = [
-  "https://main.d1zmna50iwo9dv.amplifyapp.com",
+  "https://main.do1k9oyyorn24.amplifyapp.com",
   "http://localhost:3000"
 ]
 
