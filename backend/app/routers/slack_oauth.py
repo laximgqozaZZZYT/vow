@@ -27,14 +27,77 @@ from ..config import settings
 router = APIRouter(prefix="/api/slack", tags=["slack"])
 logger = logging.getLogger(__name__)
 
-# In-memory state storage (use Redis in production)
-_oauth_states: dict = {}
-
 
 def get_supabase():
     """Get Supabase client - implement based on your setup."""
     from ..config import get_supabase_client
     return get_supabase_client()
+
+
+def save_oauth_state(state: str, owner_type: str, owner_id: str, redirect_uri: str) -> bool:
+    """Save OAuth state to Supabase for Lambda stateless environment."""
+    try:
+        supabase = get_supabase()
+        supabase.table("slack_oauth_states").insert({
+            "state": state,
+            "owner_type": owner_type,
+            "owner_id": owner_id,
+            "redirect_uri": redirect_uri,
+        }).execute()
+        logger.info(f"OAuth state saved to database: {state[:8]}...")
+        return True
+    except Exception as e:
+        logger.error(f"Failed to save OAuth state: {str(e)}")
+        return False
+
+
+def get_and_delete_oauth_state(state: str) -> Optional[dict]:
+    """Get and delete OAuth state from Supabase (atomic operation)."""
+    try:
+        supabase = get_supabase()
+        
+        # Get the state
+        result = supabase.table("slack_oauth_states").select("*").eq("state", state).execute()
+        
+        if not result.data:
+            logger.warning(f"OAuth state not found: {state[:8]}...")
+            return None
+        
+        state_data = result.data[0]
+        
+        # Check expiration
+        from datetime import datetime, timezone
+        expires_at = datetime.fromisoformat(state_data["expires_at"].replace("Z", "+00:00"))
+        if datetime.now(timezone.utc) > expires_at:
+            logger.warning(f"OAuth state expired: {state[:8]}...")
+            # Delete expired state
+            supabase.table("slack_oauth_states").delete().eq("state", state).execute()
+            return None
+        
+        # Delete the state (one-time use)
+        supabase.table("slack_oauth_states").delete().eq("state", state).execute()
+        logger.info(f"OAuth state retrieved and deleted: {state[:8]}...")
+        
+        return {
+            "owner_type": state_data["owner_type"],
+            "owner_id": state_data["owner_id"],
+            "redirect_uri": state_data.get("redirect_uri", ""),
+            "timestamp": datetime.fromisoformat(state_data["created_at"].replace("Z", "+00:00")).timestamp(),
+        }
+    except Exception as e:
+        logger.error(f"Failed to get OAuth state: {str(e)}")
+        return None
+
+
+def cleanup_expired_oauth_states():
+    """Clean up expired OAuth states from database."""
+    try:
+        supabase = get_supabase()
+        from datetime import datetime, timezone
+        now = datetime.now(timezone.utc).isoformat()
+        supabase.table("slack_oauth_states").delete().lt("expires_at", now).execute()
+    except Exception as e:
+        logger.warning(f"Failed to cleanup expired OAuth states: {str(e)}")
 
 
 def get_current_user(request: Request) -> dict:
@@ -52,14 +115,32 @@ def get_current_user(request: Request) -> dict:
 
 
 def verify_jwt_token(token: str) -> dict:
-    """Verify JWT token and extract user info."""
+    """Verify JWT token and extract user info.
+    
+    Supports both:
+    - ES256 (asymmetric): Uses JWKS endpoint to get public key
+    - HS256 (symmetric): Uses JWT_SECRET for verification
+    """
     try:
-        payload = jwt.decode(
-            token,
-            settings.jwt_secret,
-            algorithms=[settings.jwt_algorithm],
-            audience=settings.jwt_audience,
-        )
+        # Get token header to check algorithm
+        headers = jwt.get_unverified_headers(token)
+        token_alg = headers.get("alg", "unknown")
+        token_kid = headers.get("kid")
+        logger.info(f"Token algorithm: {token_alg}, kid: {token_kid}")
+        
+        # Determine verification method based on algorithm
+        if token_alg in ["ES256", "ES384", "ES512", "RS256", "RS384", "RS512"]:
+            # Asymmetric algorithm - use JWKS
+            payload = _verify_with_jwks(token, token_alg, token_kid)
+        else:
+            # Symmetric algorithm (HS256, etc.) - use JWT_SECRET
+            payload = jwt.decode(
+                token,
+                settings.jwt_secret,
+                algorithms=["HS256", "HS384", "HS512"],
+                audience=settings.jwt_audience,
+            )
+        
         user_id = payload.get("sub")
         if not user_id:
             raise HTTPException(status_code=401, detail="Invalid token: no user ID")
@@ -67,6 +148,75 @@ def verify_jwt_token(token: str) -> dict:
     except JWTError as e:
         logger.error(f"JWT verification failed: {str(e)}")
         raise HTTPException(status_code=401, detail="Invalid or expired token")
+    except Exception as e:
+        logger.error(f"Unexpected error during JWT verification: {str(e)}")
+        raise HTTPException(status_code=401, detail="Invalid or expired token")
+
+
+# Cache for JWKS
+_supabase_jwks_cache: dict = {}
+_supabase_jwks_cache_time: float = 0
+JWKS_CACHE_TTL = 3600  # 1 hour
+
+
+def _get_supabase_jwks() -> dict:
+    """Fetch and cache Supabase JWKS."""
+    import time
+    import json
+    from urllib.request import urlopen
+    
+    global _supabase_jwks_cache, _supabase_jwks_cache_time
+    
+    current_time = time.time()
+    if _supabase_jwks_cache and (current_time - _supabase_jwks_cache_time) < JWKS_CACHE_TTL:
+        return _supabase_jwks_cache
+    
+    if not settings.supabase_url:
+        raise ValueError("SUPABASE_URL is not configured")
+    
+    jwks_url = f"{settings.supabase_url}/auth/v1/.well-known/jwks.json"
+    logger.info(f"Fetching JWKS from: {jwks_url}")
+    
+    with urlopen(jwks_url, timeout=10) as response:
+        _supabase_jwks_cache = json.loads(response.read().decode("utf-8"))
+        _supabase_jwks_cache_time = current_time
+    
+    logger.info(f"JWKS fetched, keys count: {len(_supabase_jwks_cache.get('keys', []))}")
+    return _supabase_jwks_cache
+
+
+def _verify_with_jwks(token: str, alg: str, kid: str) -> dict:
+    """Verify JWT using JWKS public key."""
+    from jose import jwk
+    
+    jwks = _get_supabase_jwks()
+    
+    # Find the key with matching kid
+    public_key = None
+    for key in jwks.get("keys", []):
+        if key.get("kid") == kid:
+            public_key = jwk.construct(key).to_pem().decode("utf-8")
+            break
+    
+    if not public_key:
+        # If no kid match, try the first key
+        if jwks.get("keys"):
+            logger.warning(f"No key found with kid={kid}, using first available key")
+            public_key = jwk.construct(jwks["keys"][0]).to_pem().decode("utf-8")
+        else:
+            raise JWTError("No public keys available in JWKS")
+    
+    # Verify token with public key
+    return jwt.decode(
+        token,
+        public_key,
+        algorithms=[alg],
+        audience=settings.jwt_audience,
+        options={
+            "verify_aud": True,
+            "verify_exp": True,
+        }
+    )
 
 
 @router.get("/connect")
@@ -108,22 +258,16 @@ async def initiate_oauth(
     # Generate state token
     state = secrets.token_urlsafe(32)
     
-    # Store state with user info (expires in 10 minutes)
-    _oauth_states[state] = {
-        "owner_type": current_user["type"],
-        "owner_id": current_user["id"],
-        "redirect_uri": redirect_uri or os.environ.get("SLACK_REDIRECT_URI", ""),
-        "timestamp": time.time(),
-    }
+    # Store state in database (for Lambda stateless environment)
+    redirect_uri_value = redirect_uri or os.environ.get("SLACK_REDIRECT_URI", "")
+    if not save_oauth_state(state, current_user["type"], current_user["id"], redirect_uri_value):
+        raise HTTPException(
+            status_code=500,
+            detail="Failed to initialize OAuth flow. Please try again."
+        )
     
-    # Clean up old states
-    current_time = time.time()
-    expired_states = [
-        s for s, data in _oauth_states.items()
-        if current_time - data["timestamp"] > 600
-    ]
-    for s in expired_states:
-        del _oauth_states[s]
+    # Clean up expired states in background
+    cleanup_expired_oauth_states()
     
     # Get OAuth URL
     callback_uri = os.environ.get(
@@ -161,10 +305,10 @@ async def oauth_callback(
             url=get_error_redirect("slack_oauth_denied", error)
         )
     
-    # Validate state
-    state_data = _oauth_states.pop(state, None)
+    # Validate state from database
+    state_data = get_and_delete_oauth_state(state)
     if not state_data:
-        logger.warning(f"Invalid OAuth state: {state}")
+        logger.warning(f"Invalid OAuth state: {state[:8]}...")
         return RedirectResponse(
             url=get_error_redirect("invalid_state", "OAuth+state+invalid+or+expired")
         )
@@ -178,13 +322,6 @@ async def oauth_callback(
         frontend_base = f"{parsed.scheme}://{parsed.netloc}" if parsed.scheme and parsed.netloc else None
     else:
         frontend_base = None
-    
-    # Check state expiration
-    if time.time() - state_data["timestamp"] > 600:
-        logger.warning("OAuth state expired")
-        return RedirectResponse(
-            url=get_error_redirect("state_expired", "OAuth+session+expired", frontend_base)
-        )
     
     slack_service = get_slack_service()
     supabase = get_supabase()

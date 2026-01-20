@@ -42,11 +42,30 @@ class Settings(BaseSettings):
     cognito_region: str = "ap-northeast-1"
     auth_provider: str = "supabase"  # "supabase" or "cognito"
     
-    # CORS
+    # CORS - can be set via CORS_ORIGINS env var as comma-separated string
     cors_origins: List[str] = [
         "http://localhost:3000",
         "https://main.do1k9oyyorn24.amplifyapp.com",
     ]
+    
+    @property
+    def cors_origins_list(self) -> List[str]:
+        """Get CORS origins, supporting both JSON array and comma-separated env var."""
+        import os
+        import json
+        env_origins = os.environ.get("CORS_ORIGINS", "")
+        if env_origins:
+            # Try to parse as JSON array first (Terraform jsonencode format)
+            if env_origins.startswith("["):
+                try:
+                    origins = json.loads(env_origins)
+                    if isinstance(origins, list):
+                        return [o.strip() for o in origins if o.strip()]
+                except json.JSONDecodeError:
+                    pass
+            # Fall back to comma-separated format
+            return [o.strip() for o in env_origins.split(",") if o.strip()]
+        return self.cors_origins
     
     # Slack Integration
     slack_webhook_url: Optional[str] = None
@@ -78,6 +97,40 @@ class Settings(BaseSettings):
         
         if errors:
             raise ValueError(f"Configuration errors: {', '.join(errors)}")
+    
+    def validate_slack_settings(self) -> list:
+        """Validate Slack-related settings and return list of missing variables."""
+        errors = []
+        
+        if not self.slack_client_id:
+            errors.append("SLACK_CLIENT_ID is required for Slack integration")
+        if not self.slack_client_secret:
+            errors.append("SLACK_CLIENT_SECRET is required for Slack integration")
+        if not self.slack_signing_secret:
+            errors.append("SLACK_SIGNING_SECRET is required for Slack integration")
+        if not self.token_encryption_key:
+            errors.append("TOKEN_ENCRYPTION_KEY is required for Slack integration")
+        if not self.supabase_url:
+            errors.append("SUPABASE_URL is required for Slack connection storage")
+        if not self.supabase_anon_key:
+            errors.append("SUPABASE_ANON_KEY is required for Slack connection storage")
+        
+        return errors
+    
+    def validate_on_startup(self) -> None:
+        """Validate all required settings on startup with logging."""
+        import logging
+        logger = logging.getLogger(__name__)
+        
+        # Validate required settings (raises exception if missing)
+        self.validate_required_settings()
+        
+        # Validate Slack settings (warnings only - Slack is optional)
+        slack_errors = self.validate_slack_settings()
+        if slack_errors:
+            for error in slack_errors:
+                logger.warning(f"Slack configuration warning: {error}")
+            logger.warning("Slack integration will not be available until all required variables are set")
 
 
 # Global settings instance

@@ -87,14 +87,35 @@ resource "aws_lambda_function" "api" {
 
   environment {
     variables = {
+      # Core settings
       ENV                 = var.environment
       DATABASE_SECRET_ARN = aws_rds_cluster.aurora.master_user_secret[0].secret_arn
       DATABASE_HOST       = aws_rds_cluster.aurora.endpoint
       DATABASE_PORT       = aws_rds_cluster.aurora.port
       DATABASE_NAME       = var.database_name
+      
+      # Cognito Authentication
       COGNITO_USER_POOL_ID = aws_cognito_user_pool.main.id
       COGNITO_CLIENT_ID    = aws_cognito_user_pool_client.main.id
       COGNITO_REGION       = var.aws_region
+      AUTH_PROVIDER        = "cognito"
+      
+      # Slack Integration
+      SLACK_CLIENT_ID      = var.slack_client_id
+      SLACK_CLIENT_SECRET  = var.slack_client_secret
+      SLACK_SIGNING_SECRET = var.slack_signing_secret
+      SLACK_CALLBACK_URI   = "https://${aws_api_gateway_rest_api.main[0].id}.execute-api.${var.aws_region}.amazonaws.com/${var.environment}/api/slack/callback"
+      TOKEN_ENCRYPTION_KEY = var.token_encryption_key
+      
+      # Supabase (for Slack connection storage)
+      SUPABASE_URL      = var.supabase_url
+      SUPABASE_ANON_KEY = var.supabase_anon_key
+      
+      # Frontend URL (for OAuth redirects)
+      FRONTEND_URL = var.frontend_url
+      
+      # CORS
+      CORS_ORIGINS = jsonencode(var.cors_origins)
     }
   }
 

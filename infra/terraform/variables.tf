@@ -149,7 +149,14 @@ variable "enable_dms" {
 }
 
 variable "supabase_host" {
-  description = "Supabase PostgreSQL host"
+  description = "Supabase PostgreSQL host (direct, IPv6 only)"
+  type        = string
+  default     = ""
+  sensitive   = true
+}
+
+variable "supabase_pooler_host" {
+  description = "Supabase Pooler host (IPv4 compatible, required for DMS)"
   type        = string
   default     = ""
   sensitive   = true
@@ -170,6 +177,20 @@ variable "supabase_username" {
 
 variable "supabase_password" {
   description = "Supabase database password"
+  type        = string
+  default     = ""
+  sensitive   = true
+}
+
+variable "aurora_master_username" {
+  description = "Aurora master username (for DMS target)"
+  type        = string
+  default     = "vowadmin"
+  sensitive   = true
+}
+
+variable "aurora_master_password" {
+  description = "Aurora master password (from Secrets Manager)"
   type        = string
   default     = ""
   sensitive   = true
@@ -206,4 +227,72 @@ variable "alert_email" {
   description = "Email address for CloudWatch alerts"
   type        = string
   default     = ""
+}
+
+# =================================================================
+# Slack Integration Variables
+# =================================================================
+
+variable "slack_client_id" {
+  description = "Slack App Client ID"
+  type        = string
+  default     = ""
+  sensitive   = true
+}
+
+variable "slack_client_secret" {
+  description = "Slack App Client Secret"
+  type        = string
+  default     = ""
+  sensitive   = true
+}
+
+variable "slack_signing_secret" {
+  description = "Slack Signing Secret for request verification"
+  type        = string
+  default     = ""
+  sensitive   = true
+}
+
+variable "token_encryption_key" {
+  description = "Fernet key for encrypting Slack tokens"
+  type        = string
+  default     = ""
+  sensitive   = true
+}
+
+# =================================================================
+# Supabase Variables (for Slack connection storage)
+# =================================================================
+
+variable "supabase_url" {
+  description = "Supabase project URL"
+  type        = string
+  default     = ""
+}
+
+variable "supabase_anon_key" {
+  description = "Supabase anonymous key"
+  type        = string
+  default     = ""
+  sensitive   = true
+}
+
+# =================================================================
+# CORS Variables
+# =================================================================
+
+variable "cors_origins" {
+  description = "Allowed CORS origins"
+  type        = list(string)
+  default     = [
+    "http://localhost:3000",
+    "https://main.do1k9oyyorn24.amplifyapp.com"
+  ]
+}
+
+variable "frontend_url" {
+  description = "Frontend URL for OAuth redirects"
+  type        = string
+  default     = "https://main.do1k9oyyorn24.amplifyapp.com"
 }
