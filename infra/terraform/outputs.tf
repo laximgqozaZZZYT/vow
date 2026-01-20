@@ -115,6 +115,7 @@ output "dms_replication_instance_arn" {
 output "dms_replication_task_arn" {
   description = "DMS Replication Task ARN"
   value       = var.enable_dms && var.supabase_host != "" ? aws_dms_replication_task.main[0].replication_task_arn : null
+  sensitive   = true
 }
 
 # =================================================================
@@ -124,16 +125,19 @@ output "dms_replication_task_arn" {
 output "amplify_app_id" {
   description = "Amplify App ID"
   value       = var.environment == "production" && var.github_access_token != "" ? aws_amplify_app.frontend[0].id : null
+  sensitive   = true
 }
 
 output "amplify_default_domain" {
   description = "Amplify default domain"
   value       = var.environment == "production" && var.github_access_token != "" ? aws_amplify_app.frontend[0].default_domain : null
+  sensitive   = true
 }
 
 output "amplify_production_url" {
   description = "Amplify production URL"
   value       = var.environment == "production" && var.github_access_token != "" ? "https://main.${aws_amplify_app.frontend[0].default_domain}" : null
+  sensitive   = true
 }
 
 # =================================================================

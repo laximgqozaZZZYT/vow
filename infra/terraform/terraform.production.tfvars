@@ -51,14 +51,14 @@ logout_urls = [
 
 lambda_memory_size = 512
 lambda_timeout     = 30
-lambda_s3_bucket   = ""  # Set when deploying Lambda
-lambda_s3_key      = ""  # Set when deploying Lambda
+lambda_s3_bucket   = "vow-lambda-deployments-ap-northeast-1"
+lambda_s3_key      = "lambda/vow-api.zip"
 
 # =================================================================
 # DMS Configuration (for Supabase to Aurora migration)
 # =================================================================
 
-enable_dms = true
+enable_dms = false  # Disabled - using manual pg_dump/pg_restore instead
 
 # Supabase connection details (set via environment variables for security)
 # supabase_host     = "db.jamiyzsyclvlvstmeeir.supabase.co"
@@ -81,3 +81,30 @@ custom_domain = ""
 # =================================================================
 
 alert_email = ""  # Set to receive CloudWatch alerts
+
+# =================================================================
+# Slack Integration Configuration
+# Set these via environment variables for security:
+# TF_VAR_slack_client_id, TF_VAR_slack_client_secret, etc.
+# =================================================================
+
+slack_client_id      = ""  # Set via TF_VAR_slack_client_id
+slack_client_secret  = ""  # Set via TF_VAR_slack_client_secret
+slack_signing_secret = ""  # Set via TF_VAR_slack_signing_secret
+token_encryption_key = ""  # Set via TF_VAR_token_encryption_key
+
+# =================================================================
+# Supabase Configuration (for Slack connection storage)
+# =================================================================
+
+supabase_url      = ""  # Set via TF_VAR_supabase_url
+supabase_anon_key = ""  # Set via TF_VAR_supabase_anon_key
+
+# =================================================================
+# CORS Configuration
+# =================================================================
+
+cors_origins = [
+  "https://main.do1k9oyyorn24.amplifyapp.com",
+  "http://localhost:3000"
+]

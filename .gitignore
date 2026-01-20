@@ -25,6 +25,12 @@ infra/terraform/*.tfstate.*
 infra/terraform/.terraform.lock.hcl
 infra/terraform/terraform.tfvars
 infra/terraform/*.tfplan
+infra/terraform/tfplan
+infra/terraform/.env.terraform
+!infra/terraform/.env.terraform.example
+
+# Postman
+.postman.json
 
 # OS files
 .DS_Store
@@ -73,6 +79,8 @@ backend/.lambda-artifact/
 backend/.lambda-artifact-api/
 backend/.lambda-artifact-migrate/
 backend/lambda-*.zip
+backend/lambda_package/
+lambda_package.zip
 .vercel/
 
 # IDE

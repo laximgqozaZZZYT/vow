@@ -4,6 +4,40 @@
 # =================================================================
 
 # =================================================================
+# DMS Service-Linked Role (Required for VPC access)
+# =================================================================
+
+resource "aws_iam_role" "dms_vpc_role" {
+  count = var.enable_dms ? 1 : 0
+
+  name = "dms-vpc-role"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Action = "sts:AssumeRole"
+        Effect = "Allow"
+        Principal = {
+          Service = "dms.amazonaws.com"
+        }
+      }
+    ]
+  })
+
+  tags = {
+    Name = "dms-vpc-role"
+  }
+}
+
+resource "aws_iam_role_policy_attachment" "dms_vpc_role" {
+  count = var.enable_dms ? 1 : 0
+
+  role       = aws_iam_role.dms_vpc_role[0].name
+  policy_arn = "arn:aws:iam::aws:policy/service-role/AmazonDMSVPCManagementRole"
+}
+
+# =================================================================
 # DMS Replication Subnet Group
 # =================================================================
 
@@ -17,6 +51,8 @@ resource "aws_dms_replication_subnet_group" "main" {
   tags = {
     Name = "${var.project_name}-${var.environment}-dms-subnet-group"
   }
+
+  depends_on = [aws_iam_role_policy_attachment.dms_vpc_role]
 }
 
 # =================================================================
@@ -116,7 +152,10 @@ resource "aws_iam_role" "dms_secrets_access" {
         Action = "sts:AssumeRole"
         Effect = "Allow"
         Principal = {
-          Service = "dms.amazonaws.com"
+          Service = [
+            "dms.amazonaws.com",
+            "dms.${var.aws_region}.amazonaws.com"
+          ]
         }
       }
     ]
@@ -150,16 +189,18 @@ resource "aws_iam_role_policy" "dms_secrets_access" {
 
 # =================================================================
 # DMS Source Endpoint (Supabase PostgreSQL)
+# Using Supavisor pooler for IPv4 connectivity (direct DB is IPv6 only)
 # =================================================================
 
 resource "aws_dms_endpoint" "source" {
-  count = var.enable_dms && var.supabase_host != "" ? 1 : 0
+  count = var.enable_dms && var.supabase_pooler_host != "" ? 1 : 0
 
   endpoint_id   = "${var.project_name}-${var.environment}-supabase-source"
   endpoint_type = "source"
   engine_name   = "postgres"
 
-  server_name   = var.supabase_host
+  # Use Supabase pooler (IPv4) instead of direct DB (IPv6 only)
+  server_name   = var.supabase_pooler_host
   port          = 5432
   database_name = var.supabase_database
   username      = var.supabase_username
@@ -173,6 +214,7 @@ resource "aws_dms_endpoint" "source" {
 
 # =================================================================
 # DMS Target Endpoint (Aurora Serverless v2)
+# Using direct authentication (Secrets Manager format incompatible)
 # =================================================================
 
 resource "aws_dms_endpoint" "target" {
@@ -183,17 +225,16 @@ resource "aws_dms_endpoint" "target" {
   engine_name   = "aurora-postgresql"
 
   server_name   = aws_rds_cluster.aurora.endpoint
-  port          = 5432
+  port          = aws_rds_cluster.aurora.port
   database_name = var.database_name
+  username      = var.aurora_master_username
+  password      = var.aurora_master_password
 
-  secrets_manager_arn             = aws_rds_cluster.aurora.master_user_secret[0].secret_arn
-  secrets_manager_access_role_arn = aws_iam_role.dms_secrets_access[0].arn
+  ssl_mode = "require"
 
   tags = {
     Name = "${var.project_name}-${var.environment}-dms-target"
   }
-
-  depends_on = [aws_iam_role_policy.dms_secrets_access]
 }
 
 # =================================================================
