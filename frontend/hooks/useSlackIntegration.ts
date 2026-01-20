@@ -11,7 +11,8 @@ import type {
   SlackPreferencesUpdate,
 } from '@/lib/types/slack';
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || '';
+// Slack API endpoint (AWS Lambda)
+const SLACK_API_URL = process.env.NEXT_PUBLIC_SLACK_API_URL || '';
 
 interface UseSlackIntegrationReturn {
   // State
@@ -40,7 +41,7 @@ export function useSlackIntegration(): UseSlackIntegrationReturn {
       setLoading(true);
       setError(null);
       
-      const response = await fetch(`${API_BASE}/api/slack/status`, {
+      const response = await fetch(`${SLACK_API_URL}/api/slack/status`, {
         credentials: 'include',
       });
       
@@ -67,7 +68,7 @@ export function useSlackIntegration(): UseSlackIntegrationReturn {
    */
   const connectSlack = useCallback(() => {
     const redirectUri = encodeURIComponent(window.location.origin + '/settings');
-    window.location.href = `${API_BASE}/api/slack/connect?redirect_uri=${redirectUri}`;
+    window.location.href = `${SLACK_API_URL}/api/slack/connect?redirect_uri=${redirectUri}`;
   }, []);
 
   /**
@@ -78,7 +79,7 @@ export function useSlackIntegration(): UseSlackIntegrationReturn {
       setLoading(true);
       setError(null);
       
-      const response = await fetch(`${API_BASE}/api/slack/disconnect`, {
+      const response = await fetch(`${SLACK_API_URL}/api/slack/disconnect`, {
         method: 'POST',
         credentials: 'include',
       });
@@ -107,7 +108,7 @@ export function useSlackIntegration(): UseSlackIntegrationReturn {
     try {
       setError(null);
       
-      const response = await fetch(`${API_BASE}/api/slack/preferences`, {
+      const response = await fetch(`${SLACK_API_URL}/api/slack/preferences`, {
         method: 'PUT',
         credentials: 'include',
         headers: {
@@ -143,7 +144,7 @@ export function useSlackIntegration(): UseSlackIntegrationReturn {
     try {
       setError(null);
       
-      const response = await fetch(`${API_BASE}/api/slack/test`, {
+      const response = await fetch(`${SLACK_API_URL}/api/slack/test`, {
         method: 'POST',
         credentials: 'include',
       });
