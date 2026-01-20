@@ -2,20 +2,83 @@
 JWT Authentication Middleware
 
 Provides JWT token validation for protected endpoints.
-Compatible with Supabase JWT format.
+Supports both Supabase JWT and AWS Cognito JWT formats.
 """
-from typing import Optional, List
+import json
+import time
+from typing import Optional, List, Dict, Any
+from urllib.request import urlopen
+
 from fastapi import Request, HTTPException
 from starlette.middleware.base import BaseHTTPMiddleware
-from jose import jwt, JWTError, ExpiredSignatureError
+from jose import jwt, JWTError, ExpiredSignatureError, jwk
+from jose.utils import base64url_decode
 
 from app.config import settings
 
 
+# Cache for Cognito JWKS
+_jwks_cache: Dict[str, Any] = {}
+_jwks_cache_time: float = 0
+JWKS_CACHE_TTL = 3600  # 1 hour
+
+
+def get_cognito_jwks() -> Dict[str, Any]:
+    """
+    Fetch and cache Cognito JWKS (JSON Web Key Set).
+    
+    Returns cached keys if available and not expired.
+    """
+    global _jwks_cache, _jwks_cache_time
+    
+    current_time = time.time()
+    if _jwks_cache and (current_time - _jwks_cache_time) < JWKS_CACHE_TTL:
+        return _jwks_cache
+    
+    if not settings.cognito_user_pool_id or not settings.cognito_region:
+        raise ValueError("Cognito configuration is missing")
+    
+    jwks_url = (
+        f"https://cognito-idp.{settings.cognito_region}.amazonaws.com/"
+        f"{settings.cognito_user_pool_id}/.well-known/jwks.json"
+    )
+    
+    with urlopen(jwks_url, timeout=10) as response:
+        _jwks_cache = json.loads(response.read().decode("utf-8"))
+        _jwks_cache_time = current_time
+    
+    return _jwks_cache
+
+
+def get_cognito_public_key(token: str) -> Optional[str]:
+    """
+    Get the public key for verifying a Cognito JWT.
+    
+    Matches the key ID (kid) from the token header with JWKS.
+    """
+    try:
+        headers = jwt.get_unverified_headers(token)
+        kid = headers.get("kid")
+        
+        if not kid:
+            return None
+        
+        jwks = get_cognito_jwks()
+        
+        for key in jwks.get("keys", []):
+            if key.get("kid") == kid:
+                return jwk.construct(key).to_pem().decode("utf-8")
+        
+        return None
+    except Exception:
+        return None
+
+
 class JWTAuthMiddleware(BaseHTTPMiddleware):
     """
-    JWT Authentication Middleware (Supabase JWT compatible).
+    JWT Authentication Middleware.
     
+    Supports both Supabase JWT (HS256) and Cognito JWT (RS256).
     Validates JWT tokens from Authorization header and attaches
     user information to request state.
     """
@@ -26,7 +89,12 @@ class JWTAuthMiddleware(BaseHTTPMiddleware):
         "/docs",
         "/redoc",
         "/openapi.json",
-        "/"
+        "/",
+        "/api/slack/connect",  # OAuth initiation - token passed via query param
+        "/api/slack/commands",
+        "/api/slack/interactions",
+        "/api/slack/events",
+        "/api/slack/callback",  # OAuth callback doesn't have auth header
     ]
     
     async def dispatch(self, request: Request, call_next):
@@ -45,7 +113,11 @@ class JWTAuthMiddleware(BaseHTTPMiddleware):
         
         # Verify token and extract user info
         try:
-            payload = self._verify_token(token)
+            if settings.auth_provider == "cognito":
+                payload = self._verify_cognito_token(token)
+            else:
+                payload = self._verify_supabase_token(token)
+            
             request.state.user = payload
         except ExpiredSignatureError:
             raise HTTPException(
@@ -57,12 +129,16 @@ class JWTAuthMiddleware(BaseHTTPMiddleware):
                 status_code=401,
                 detail="Invalid authentication token"
             )
+        except Exception as e:
+            raise HTTPException(
+                status_code=401,
+                detail=f"Authentication error: {str(e)}"
+            )
         
         return await call_next(request)
     
     def _is_excluded_path(self, path: str) -> bool:
         """Check if path is excluded from authentication."""
-        # Exact match or prefix match for paths like /health/detailed
         for excluded in self.EXCLUDED_PATHS:
             if path == excluded or path.startswith(f"{excluded}/"):
                 return True
@@ -75,11 +151,11 @@ class JWTAuthMiddleware(BaseHTTPMiddleware):
             return auth_header[7:]
         return None
     
-    def _verify_token(self, token: str) -> dict:
+    def _verify_supabase_token(self, token: str) -> dict:
         """
-        Verify JWT token and return payload.
+        Verify Supabase JWT token (HS256).
         
-        Supports both Supabase JWT format and custom JWT issuers.
+        Uses shared secret for verification.
         """
         options = {
             "verify_aud": True,
@@ -95,6 +171,44 @@ class JWTAuthMiddleware(BaseHTTPMiddleware):
             issuer=settings.jwt_issuer,
             options=options
         )
+    
+    def _verify_cognito_token(self, token: str) -> dict:
+        """
+        Verify Cognito JWT token (RS256).
+        
+        Uses public key from JWKS for verification.
+        """
+        # Get public key for this token
+        public_key = get_cognito_public_key(token)
+        if not public_key:
+            raise JWTError("Unable to find public key for token")
+        
+        # Expected issuer
+        issuer = (
+            f"https://cognito-idp.{settings.cognito_region}.amazonaws.com/"
+            f"{settings.cognito_user_pool_id}"
+        )
+        
+        # Verify token
+        payload = jwt.decode(
+            token,
+            public_key,
+            algorithms=["RS256"],
+            audience=settings.cognito_client_id,
+            issuer=issuer,
+            options={
+                "verify_aud": True,
+                "verify_exp": True,
+                "verify_iss": True,
+            }
+        )
+        
+        # Verify token_use claim
+        token_use = payload.get("token_use")
+        if token_use not in ["id", "access"]:
+            raise JWTError("Invalid token_use claim")
+        
+        return payload
 
 
 def get_current_user(request: Request) -> dict:
@@ -119,6 +233,8 @@ def get_user_id(request: Request) -> str:
     """
     Dependency to get current user's ID from request state.
     
+    Works with both Supabase and Cognito tokens.
+    
     Usage:
         @router.get("/my-data")
         async def my_data(user_id: str = Depends(get_user_id)):
@@ -132,3 +248,13 @@ def get_user_id(request: Request) -> str:
             detail="User ID not found in token"
         )
     return user_id
+
+
+def get_user_email(request: Request) -> Optional[str]:
+    """
+    Dependency to get current user's email from request state.
+    
+    Works with both Supabase and Cognito tokens.
+    """
+    user = get_current_user(request)
+    return user.get("email")
