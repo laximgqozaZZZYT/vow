@@ -93,7 +93,7 @@ def get_supabase_client():
     global _supabase_client
     
     if _supabase_client is None:
-        from supabase import create_client, Client
+        from supabase import create_client
         
         if not settings.supabase_url or not settings.supabase_anon_key:
             raise ValueError("SUPABASE_URL and SUPABASE_ANON_KEY are required for Supabase client")
