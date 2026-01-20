@@ -5,6 +5,7 @@
  */
 
 import { useState, useCallback, useEffect } from 'react';
+import { supabase } from '@/lib/supabaseClient';
 import type {
   SlackConnectionStatus,
   SlackPreferences,
@@ -34,6 +35,23 @@ export function useSlackIntegration(): UseSlackIntegrationReturn {
   const [error, setError] = useState<string | null>(null);
 
   /**
+   * Get authentication headers with Supabase JWT token
+   */
+  const getAuthHeaders = useCallback(async (): Promise<HeadersInit> => {
+    if (!supabase) {
+      throw new Error('Supabase client not initialized');
+    }
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session?.access_token) {
+      throw new Error('Not authenticated');
+    }
+    return {
+      'Authorization': `Bearer ${session.access_token}`,
+      'Content-Type': 'application/json',
+    };
+  }, []);
+
+  /**
    * Fetch current Slack connection status
    */
   const refreshStatus = useCallback(async () => {
@@ -41,7 +59,9 @@ export function useSlackIntegration(): UseSlackIntegrationReturn {
       setLoading(true);
       setError(null);
       
+      const headers = await getAuthHeaders();
       const response = await fetch(`${SLACK_API_URL}/api/slack/status`, {
+        headers,
         credentials: 'include',
       });
       
@@ -61,14 +81,38 @@ export function useSlackIntegration(): UseSlackIntegrationReturn {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [getAuthHeaders]);
 
   /**
    * Initiate Slack OAuth flow
+   * Token is passed via query parameter since redirect cannot use Authorization header
    */
-  const connectSlack = useCallback(() => {
-    const redirectUri = encodeURIComponent(window.location.origin + '/settings');
-    window.location.href = `${SLACK_API_URL}/api/slack/connect?redirect_uri=${redirectUri}`;
+  const connectSlack = useCallback(async () => {
+    try {
+      if (!SLACK_API_URL) {
+        setError('Slack API URL is not configured');
+        return;
+      }
+      
+      if (!supabase) {
+        setError('Supabase client not initialized');
+        return;
+      }
+      
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.access_token) {
+        setError('Please log in to connect Slack');
+        return;
+      }
+      
+      const redirectUri = encodeURIComponent(window.location.origin + '/settings');
+      const token = encodeURIComponent(session.access_token);
+      
+      // Token is passed via query parameter since redirect cannot use Authorization header
+      window.location.href = `${SLACK_API_URL}/api/slack/connect?redirect_uri=${redirectUri}&token=${token}`;
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to initiate Slack connection');
+    }
   }, []);
 
   /**
@@ -79,8 +123,10 @@ export function useSlackIntegration(): UseSlackIntegrationReturn {
       setLoading(true);
       setError(null);
       
+      const headers = await getAuthHeaders();
       const response = await fetch(`${SLACK_API_URL}/api/slack/disconnect`, {
         method: 'POST',
+        headers,
         credentials: 'include',
       });
       
@@ -97,7 +143,7 @@ export function useSlackIntegration(): UseSlackIntegrationReturn {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [getAuthHeaders]);
 
   /**
    * Update Slack notification preferences
@@ -108,12 +154,11 @@ export function useSlackIntegration(): UseSlackIntegrationReturn {
     try {
       setError(null);
       
+      const headers = await getAuthHeaders();
       const response = await fetch(`${SLACK_API_URL}/api/slack/preferences`, {
         method: 'PUT',
+        headers,
         credentials: 'include',
-        headers: {
-          'Content-Type': 'application/json',
-        },
         body: JSON.stringify(prefs),
       });
       
@@ -135,7 +180,7 @@ export function useSlackIntegration(): UseSlackIntegrationReturn {
       setError(err instanceof Error ? err.message : 'Unknown error');
       return false;
     }
-  }, []);
+  }, [getAuthHeaders]);
 
   /**
    * Send a test message to verify connection
@@ -144,8 +189,10 @@ export function useSlackIntegration(): UseSlackIntegrationReturn {
     try {
       setError(null);
       
+      const headers = await getAuthHeaders();
       const response = await fetch(`${SLACK_API_URL}/api/slack/test`, {
         method: 'POST',
+        headers,
         credentials: 'include',
       });
       
@@ -159,7 +206,7 @@ export function useSlackIntegration(): UseSlackIntegrationReturn {
       setError(err instanceof Error ? err.message : 'Unknown error');
       return false;
     }
-  }, []);
+  }, [getAuthHeaders]);
 
   // Fetch status on mount
   useEffect(() => {
