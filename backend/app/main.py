@@ -15,7 +15,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import settings
 from app.routers import health
-from app.routers import slack_oauth, slack_webhook
+from app.routers import slack_oauth, slack_webhook, slack_interactions
 from app.middleware.auth import JWTAuthMiddleware
 
 # Check if running in Lambda environment
@@ -60,6 +60,7 @@ app.add_middleware(JWTAuthMiddleware)
 app.include_router(health.router, tags=["health"])
 app.include_router(slack_oauth.router, tags=["slack"])
 app.include_router(slack_webhook.router, tags=["slack"])
+app.include_router(slack_interactions.router, tags=["slack-interactions"])
 
 
 @app.get("/")

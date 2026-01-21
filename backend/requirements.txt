@@ -34,3 +34,6 @@ openai==1.51.0
 
 # Utilities
 python-dotenv==1.0.1
+
+# Timezone support
+pytz==2024.1

@@ -118,24 +118,24 @@ class SlackBlockBuilder:
         Returns:
             List of Block Kit blocks
         """
-        message = trigger_message or f"Time for your habit: *{habit_name}*"
+        message = trigger_message or f"習慣の時間です: *{habit_name}*"
         
         return [
             SlackBlockBuilder._section(f"⏰ {message}"),
             SlackBlockBuilder._actions([
                 SlackBlockBuilder._button(
-                    "Done ✓",
+                    "完了 ✓",
                     f"habit_done_{habit_id}",
                     habit_id,
                     style="primary",
                 ),
                 SlackBlockBuilder._button(
-                    "Skip today",
+                    "今日はスキップ",
                     f"habit_skip_{habit_id}",
                     habit_id,
                 ),
                 SlackBlockBuilder._button(
-                    "Remind me later",
+                    "後でリマインド",
                     f"habit_later_{habit_id}",
                     habit_id,
                 ),
@@ -161,23 +161,23 @@ class SlackBlockBuilder:
         """
         return [
             SlackBlockBuilder._section(
-                f"👋 Hey! Did you complete *{habit_name}*?\n"
-                f"It's been {hours_since_trigger} hours since your scheduled time."
+                f"👋 *{habit_name}* は完了しましたか？\n"
+                f"予定時刻から{hours_since_trigger}時間が経過しています。"
             ),
             SlackBlockBuilder._actions([
                 SlackBlockBuilder._button(
-                    "Done ✓",
+                    "完了 ✓",
                     f"habit_done_{habit_id}",
                     habit_id,
                     style="primary",
                 ),
                 SlackBlockBuilder._button(
-                    "Skip today",
+                    "今日はスキップ",
                     f"habit_skip_{habit_id}",
                     habit_id,
                 ),
                 SlackBlockBuilder._button(
-                    "Remind me later",
+                    "後でリマインド",
                     f"habit_later_{habit_id}",
                     habit_id,
                 ),
@@ -204,11 +204,11 @@ class SlackBlockBuilder:
             List of Block Kit blocks
         """
         streak_emoji = "🔥" if streak >= 7 else "✨" if streak >= 3 else "👍"
-        streak_text = f"{streak_emoji} {streak} day streak!" if streak > 1 else ""
+        streak_text = f"{streak_emoji} {streak}日連続達成！" if streak > 1 else ""
         
         return [
             SlackBlockBuilder._section(
-                f"✅ *{habit_name}* completed! {streak_text}"
+                f"✅ *{habit_name}* を完了しました！ {streak_text}"
             ),
         ]
 
@@ -217,7 +217,7 @@ class SlackBlockBuilder:
         """Build message for already completed habit."""
         return [
             SlackBlockBuilder._section(
-                f"ℹ️ *{habit_name}* was already completed today. Keep it up!"
+                f"ℹ️ *{habit_name}* は今日すでに完了しています。その調子で頑張りましょう！"
             ),
         ]
 
@@ -226,7 +226,7 @@ class SlackBlockBuilder:
         """Build message for skipped habit."""
         return [
             SlackBlockBuilder._section(
-                f"⏭️ *{habit_name}* skipped for today. No more reminders."
+                f"⏭️ *{habit_name}* を今日はスキップしました。これ以上リマインドしません。"
             ),
         ]
 
@@ -235,7 +235,7 @@ class SlackBlockBuilder:
         """Build message for remind later."""
         return [
             SlackBlockBuilder._section(
-                f"⏰ Got it! I'll remind you about *{habit_name}* in {minutes} minutes."
+                f"⏰ 了解しました！{minutes}分後に *{habit_name}* をリマインドします。"
             ),
         ]
 
@@ -261,17 +261,17 @@ class SlackBlockBuilder:
         if not habits:
             return [
                 SlackBlockBuilder._section(
-                    "📝 You don't have any habits yet. "
-                    "Add some in the app to get started!"
+                    "📝 まだ習慣が登録されていません。"
+                    "アプリで習慣を追加して始めましょう！"
                 ),
             ]
 
-        blocks = [SlackBlockBuilder._header("📋 Your Habits")]
+        blocks = [SlackBlockBuilder._header("📋 あなたの習慣")]
         
         # Group by goal
         goals: Dict[str, List[Dict]] = {}
         for habit in habits:
-            goal = habit.get("goal_name", "No Goal")
+            goal = habit.get("goal_name", "ゴールなし")
             if goal not in goals:
                 goals[goal] = []
             goals[goal].append(habit)
@@ -282,7 +282,7 @@ class SlackBlockBuilder:
             for habit in goal_habits:
                 status = "✅" if habit.get("completed") else "⬜"
                 streak = habit.get("streak", 0)
-                streak_text = f" 🔥{streak}" if streak > 0 else ""
+                streak_text = f" 🔥{streak}日" if streak > 0 else ""
                 
                 text = f"{status} {habit['name']}{streak_text}"
                 
@@ -291,7 +291,7 @@ class SlackBlockBuilder:
                         SlackBlockBuilder._section(
                             text,
                             accessory=SlackBlockBuilder._button(
-                                "Done",
+                                "完了",
                                 f"habit_done_{habit['id']}",
                                 habit["id"],
                                 style="primary",
@@ -329,9 +329,9 @@ class SlackBlockBuilder:
         progress = "█" * filled + "░" * (10 - filled)
         
         blocks = [
-            SlackBlockBuilder._header("📊 Today's Progress"),
+            SlackBlockBuilder._header("📊 今日の進捗"),
             SlackBlockBuilder._section(
-                f"*{completed}/{total}* habits completed ({percentage:.0f}%)\n"
+                f"*{completed}/{total}* 習慣を完了 ({percentage:.0f}%)\n"
                 f"`{progress}`"
             ),
             SlackBlockBuilder._divider(),
@@ -340,13 +340,13 @@ class SlackBlockBuilder:
         # List incomplete habits
         incomplete = [h for h in habits if not h.get("completed")]
         if incomplete:
-            blocks.append(SlackBlockBuilder._section("*Remaining today:*"))
+            blocks.append(SlackBlockBuilder._section("*今日の残り:*"))
             for habit in incomplete[:5]:  # Limit to 5
                 blocks.append(
                     SlackBlockBuilder._section(
                         f"⬜ {habit['name']}",
                         accessory=SlackBlockBuilder._button(
-                            "Done",
+                            "完了",
                             f"habit_done_{habit['id']}",
                             habit["id"],
                             style="primary",
@@ -355,7 +355,7 @@ class SlackBlockBuilder:
                 )
             if len(incomplete) > 5:
                 blocks.append(
-                    SlackBlockBuilder._context([f"...and {len(incomplete) - 5} more"])
+                    SlackBlockBuilder._context([f"...他{len(incomplete) - 5}件"])
                 )
 
         return blocks
@@ -382,28 +382,28 @@ class SlackBlockBuilder:
         # Determine emoji based on completion rate
         if report.completion_rate >= 80:
             emoji = "🏆"
-            message = "Amazing week!"
+            message = "素晴らしい一週間でした！"
         elif report.completion_rate >= 60:
             emoji = "💪"
-            message = "Good progress!"
+            message = "良い進捗です！"
         elif report.completion_rate >= 40:
             emoji = "📈"
-            message = "Keep building momentum!"
+            message = "勢いをつけていきましょう！"
         else:
             emoji = "🌱"
-            message = "Every step counts!"
+            message = "一歩一歩が大切です！"
 
         blocks = [
-            SlackBlockBuilder._header(f"{emoji} Weekly Report"),
+            SlackBlockBuilder._header(f"{emoji} 週次レポート"),
             SlackBlockBuilder._section(
-                f"*{report.week_start.strftime('%b %d')} - {report.week_end.strftime('%b %d')}*\n"
+                f"*{report.week_start.strftime('%m/%d')} - {report.week_end.strftime('%m/%d')}*\n"
                 f"{message}"
             ),
             SlackBlockBuilder._divider(),
             SlackBlockBuilder._section(
-                f"*📊 Completion Rate:* {report.completion_rate:.0f}%\n"
-                f"*✅ Habits Completed:* {report.completed_habits}/{report.total_habits}\n"
-                f"*🔥 Best Streak:* {report.best_streak} days ({report.best_streak_habit})"
+                f"*📊 達成率:* {report.completion_rate:.0f}%\n"
+                f"*✅ 完了した習慣:* {report.completed_habits}/{report.total_habits}\n"
+                f"*🔥 最長ストリーク:* {report.best_streak}日 ({report.best_streak_habit})"
             ),
         ]
 
@@ -414,7 +414,7 @@ class SlackBlockBuilder:
             blocks.extend([
                 SlackBlockBuilder._divider(),
                 SlackBlockBuilder._section(
-                    f"*⚠️ Needs Attention:*\n{attention_list}"
+                    f"*⚠️ 注意が必要な習慣:*\n{attention_list}"
                 ),
             ])
 
@@ -425,7 +425,7 @@ class SlackBlockBuilder:
                     "type": "button",
                     "text": {
                         "type": "plain_text",
-                        "text": "View Full Report",
+                        "text": "詳細レポートを見る",
                         "emoji": True,
                     },
                     "url": app_url,
@@ -440,17 +440,17 @@ class SlackBlockBuilder:
     def weekly_report_no_activity(app_url: str) -> List[Dict[str, Any]]:
         """Build message for users with no activity."""
         return [
-            SlackBlockBuilder._header("📊 Weekly Report"),
+            SlackBlockBuilder._header("📊 週次レポート"),
             SlackBlockBuilder._section(
-                "You didn't track any habits this week. "
-                "That's okay - every week is a fresh start! 🌱"
+                "今週は習慣を記録していませんでした。"
+                "大丈夫です - 毎週が新しいスタートです！🌱"
             ),
             SlackBlockBuilder._actions([
                 {
                     "type": "button",
                     "text": {
                         "type": "plain_text",
-                        "text": "Add Habits",
+                        "text": "習慣を追加",
                         "emoji": True,
                     },
                     "url": app_url,
@@ -487,7 +487,7 @@ class SlackBlockBuilder:
             suggestion_text = "\n".join(f"• {s}" for s in suggestions)
             blocks.append(
                 SlackBlockBuilder._section(
-                    f"*Did you mean:*\n{suggestion_text}"
+                    f"*もしかして:*\n{suggestion_text}"
                 )
             )
 
@@ -500,7 +500,7 @@ class SlackBlockBuilder:
     ) -> List[Dict[str, Any]]:
         """Build message for habit not found."""
         return SlackBlockBuilder.error_message(
-            f"Couldn't find a habit named *{habit_name}*",
+            f"*{habit_name}* という名前の習慣が見つかりませんでした",
             suggestions=similar_habits,
         )
 
@@ -509,8 +509,8 @@ class SlackBlockBuilder:
         """Build message for user not connected to Slack."""
         return [
             SlackBlockBuilder._section(
-                "🔗 Your Slack account isn't connected to VOW yet.\n"
-                "Connect it in Settings to use Slack commands!"
+                "🔗 SlackアカウントがまだVOWに接続されていません。\n"
+                "設定画面から接続して、Slackコマンドを使えるようにしましょう！"
             ),
         ]
 
@@ -518,17 +518,17 @@ class SlackBlockBuilder:
     def available_commands() -> List[Dict[str, Any]]:
         """Build help message with available commands."""
         return [
-            SlackBlockBuilder._header("📚 Available Commands"),
+            SlackBlockBuilder._header("📚 利用可能なコマンド"),
             SlackBlockBuilder._section(
-                "*`/habit-done [name]`*\n"
-                "Mark a habit as complete. Without a name, shows a list to choose from."
+                "*`/habit-done [名前]`*\n"
+                "習慣を完了としてマークします。名前を省略すると、選択リストが表示されます。"
             ),
             SlackBlockBuilder._section(
                 "*`/habit-status`*\n"
-                "See today's progress and remaining habits."
+                "今日の進捗と残りの習慣を確認します。"
             ),
             SlackBlockBuilder._section(
                 "*`/habit-list`*\n"
-                "View all your habits grouped by goal."
+                "ゴール別にグループ化された習慣一覧を表示します。"
             ),
         ]

@@ -2,11 +2,21 @@
 Weekly Report Generator
 
 Compiles and sends weekly summary reports via Slack.
+Supports timezone-aware report scheduling.
+
+Requirements:
+- 4.1: Send weekly report when user's weekly_report_day and weekly_report_time arrive
+- 4.2: Include completion rate, completed/total count, best streak, habits needing attention
+- 4.3: Do not send report if weekly_slack_report_enabled is false
+- 4.4: Include link button to detailed report in app
+- 4.5: Send encouragement message if user has no habits tracked this week
+- 7.3: Calculate weekly report send time based on user's timezone
 """
 
 from typing import List, Dict, Any, Optional
 from datetime import date, datetime, timedelta
 from collections import defaultdict
+import pytz
 from supabase import Client
 
 from .slack_service import SlackIntegrationService, get_slack_service
@@ -176,59 +186,108 @@ class WeeklyReportGenerator:
         """
         Send weekly reports to all users with enabled preference.
         
+        This method checks each user's timezone and sends reports
+        when the user's local time matches their configured weekly_report_day
+        and weekly_report_time.
+        
+        Requirement 7.3: Calculate weekly report send time based on user's timezone.
+        
         Returns:
             Count of reports sent
         """
-        current_time = datetime.now()
-        current_day = current_time.weekday()  # 0 = Monday, 6 = Sunday
-        # Convert to our format (0 = Sunday)
-        report_day = (current_day + 1) % 7
-
         sent_count = 0
 
-        # Get all valid Slack connections
-        connections = await self.slack_repo.get_valid_connections_for_reports(
-            report_day, current_time.strftime("%H:%M")
-        )
+        # Get all valid Slack connections with report preferences
+        connections = await self._get_connections_for_weekly_reports()
 
         for connection in connections:
             owner_type = connection.get("owner_type", "user")
             owner_id = connection["owner_id"]
 
-            # Check preferences
-            prefs = await self.slack_repo.get_preferences(owner_type, owner_id)
-            if not prefs:
-                continue
-
-            if not prefs.weekly_slack_report_enabled:
-                continue
-
-            # Check if it's the right day and time
-            if prefs.weekly_report_day != report_day:
-                continue
-
-            # Check time (within 15 minute window)
-            report_time = prefs.weekly_report_time
             try:
-                report_hour, report_minute = map(int, report_time.split(":"))
-                current_hour = current_time.hour
-                current_minute = current_time.minute
-
-                # Check if within 15 minute window
-                report_minutes = report_hour * 60 + report_minute
-                current_minutes = current_hour * 60 + current_minute
-
-                if abs(current_minutes - report_minutes) > 15:
+                # Check preferences
+                prefs = await self.slack_repo.get_preferences(owner_type, owner_id)
+                if not prefs:
                     continue
-            except (ValueError, AttributeError):
-                continue
 
-            # Send report
-            success = await self.send_weekly_report(owner_id, owner_type)
-            if success:
-                sent_count += 1
+                if not prefs.weekly_slack_report_enabled:
+                    continue
+
+                # Get user's timezone (Requirement 7.3)
+                user_tz = await self._get_user_timezone(owner_id)
+                user_timezone = pytz.timezone(user_tz)
+                
+                # Calculate current time in user's timezone
+                current_time_utc = datetime.now(pytz.UTC)
+                current_time_local = current_time_utc.astimezone(user_timezone)
+                
+                # Get current day in user's timezone
+                # Convert Python weekday (0=Monday) to our format (0=Sunday)
+                current_day = (current_time_local.weekday() + 1) % 7
+
+                # Check if it's the right day
+                if prefs.weekly_report_day != current_day:
+                    continue
+
+                # Check time (within 15 minute window)
+                report_time = prefs.weekly_report_time
+                try:
+                    report_hour, report_minute = map(int, report_time.split(":"))
+                    current_hour = current_time_local.hour
+                    current_minute = current_time_local.minute
+
+                    # Check if within 15 minute window
+                    report_minutes = report_hour * 60 + report_minute
+                    current_minutes = current_hour * 60 + current_minute
+
+                    if abs(current_minutes - report_minutes) > 15:
+                        continue
+                except (ValueError, AttributeError):
+                    continue
+
+                # Send report
+                success = await self.send_weekly_report(owner_id, owner_type)
+                if success:
+                    sent_count += 1
+
+            except Exception as e:
+                print(f"Error processing weekly report for {owner_id}: {e}")
+                continue
 
         return sent_count
+
+    async def _get_user_timezone(self, user_id: str) -> str:
+        """
+        Get user's timezone setting.
+        
+        Requirement 7.2: Use Asia/Tokyo as default timezone if not set.
+        
+        Args:
+            user_id: User ID to look up
+            
+        Returns:
+            Timezone string (defaults to 'Asia/Tokyo' if not set)
+        """
+        result = self.supabase.table("users").select("timezone").eq(
+            "id", user_id
+        ).execute()
+        
+        if result.data and result.data[0].get("timezone"):
+            return result.data[0]["timezone"]
+        return "Asia/Tokyo"
+
+    async def _get_connections_for_weekly_reports(self) -> List[Dict[str, Any]]:
+        """
+        Get all valid Slack connections for weekly report processing.
+        
+        Returns:
+            List of connection dictionaries with owner_type and owner_id
+        """
+        result = self.supabase.table("slack_connections").select(
+            "owner_type, owner_id"
+        ).eq("is_valid", True).execute()
+        
+        return result.data if result.data else []
 
     # ========================================================================
     # Private Helper Methods

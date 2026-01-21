@@ -142,6 +142,7 @@ CREATE TABLE IF NOT EXISTS users (
     password_hash TEXT NOT NULL,
     name TEXT,
     supabase_user_id UUID REFERENCES auth.users(id) UNIQUE,
+    timezone TEXT DEFAULT 'Asia/Tokyo',
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
