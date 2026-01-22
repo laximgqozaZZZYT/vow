@@ -561,12 +561,15 @@ class TestWithRetryLogging:
     """Tests for with_retry decorator logging behavior."""
 
     @pytest.mark.asyncio
-    async def test_logs_retry_attempts(self, caplog):
+    async def test_logs_retry_attempts(self):
         """Test that retry attempts are logged."""
-        import logging
-        caplog.set_level(logging.WARNING)
-        
         call_count = 0
+        warning_calls = []
+        
+        # Mock the logger to capture calls
+        mock_logger = MagicMock()
+        mock_logger.warning = MagicMock(side_effect=lambda msg, **kwargs: warning_calls.append((msg, kwargs)))
+        mock_logger.error = MagicMock()
         
         @with_retry()
         async def flaky_func():
@@ -577,54 +580,74 @@ class TestWithRetryLogging:
             return "success"
         
         with patch("app.utils.retry.asyncio.sleep", new_callable=AsyncMock):
-            result = await flaky_func()
+            with patch("app.utils.retry.get_logger", return_value=mock_logger):
+                # Re-create the decorator with mocked logger
+                config = RetryConfig()
+                
+                async def test_func():
+                    nonlocal call_count
+                    call_count += 1
+                    if call_count < 3:
+                        raise ConnectionError("Temporary failure")
+                    return "success"
+                
+                call_count = 0
+                decorated = with_retry()(test_func)
+                result = await decorated()
         
         assert result == "success"
         # Should have logged 2 warning messages for the 2 retries
-        warning_logs = [r for r in caplog.records if r.levelname == "WARNING"]
-        assert len(warning_logs) == 2
-        assert "Retryable error" in warning_logs[0].message
-        assert "100ms" in warning_logs[0].message
-        assert "200ms" in warning_logs[1].message
+        assert mock_logger.warning.call_count == 2
+        # Check that the warning messages contain expected content
+        first_call_args = mock_logger.warning.call_args_list[0]
+        second_call_args = mock_logger.warning.call_args_list[1]
+        assert "Retryable error" in first_call_args[0][0]
+        assert first_call_args[1]["extra"]["delay_ms"] == 100
+        assert second_call_args[1]["extra"]["delay_ms"] == 200
 
     @pytest.mark.asyncio
-    async def test_logs_final_failure(self, caplog):
+    async def test_logs_final_failure(self):
         """Test that final failure is logged as error."""
-        import logging
-        caplog.set_level(logging.WARNING)
+        mock_logger = MagicMock()
         
         @with_retry()
         async def always_fails():
             raise ConnectionError("Always fails")
         
         with patch("app.utils.retry.asyncio.sleep", new_callable=AsyncMock):
-            with pytest.raises(ConnectionError):
-                await always_fails()
+            with patch("app.utils.retry.get_logger", return_value=mock_logger):
+                async def test_func():
+                    raise ConnectionError("Always fails")
+                
+                decorated = with_retry()(test_func)
+                with pytest.raises(ConnectionError):
+                    await decorated()
         
         # Should have logged 3 warnings (for retries) and 1 error (final failure)
-        warning_logs = [r for r in caplog.records if r.levelname == "WARNING"]
-        error_logs = [r for r in caplog.records if r.levelname == "ERROR"]
-        assert len(warning_logs) == 3
-        assert len(error_logs) == 1
-        assert "All retries exhausted" in error_logs[0].message
+        assert mock_logger.warning.call_count == 3
+        assert mock_logger.error.call_count == 1
+        # Check that the error message contains expected content
+        error_call_args = mock_logger.error.call_args
+        assert "All retries exhausted" in error_call_args[0][0]
 
     @pytest.mark.asyncio
-    async def test_logs_non_retryable_error(self, caplog):
+    async def test_logs_non_retryable_error(self):
         """Test that non-retryable errors are logged as warning."""
-        import logging
-        caplog.set_level(logging.WARNING)
+        mock_logger = MagicMock()
         
-        @with_retry()
-        async def raises_value_error():
-            raise ValueError("Not retryable")
-        
-        with pytest.raises(ValueError):
-            await raises_value_error()
+        with patch("app.utils.retry.get_logger", return_value=mock_logger):
+            async def test_func():
+                raise ValueError("Not retryable")
+            
+            decorated = with_retry()(test_func)
+            with pytest.raises(ValueError):
+                await decorated()
         
         # Should have logged 1 warning for non-retryable error
-        warning_logs = [r for r in caplog.records if r.levelname == "WARNING"]
-        assert len(warning_logs) == 1
-        assert "Non-retryable error" in warning_logs[0].message
+        assert mock_logger.warning.call_count == 1
+        # Check that the warning message contains expected content
+        warning_call_args = mock_logger.warning.call_args
+        assert "Non-retryable error" in warning_call_args[0][0]
 
 
 # =============================================================================

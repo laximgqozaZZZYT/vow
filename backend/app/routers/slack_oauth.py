@@ -2,19 +2,30 @@
 Slack OAuth Router
 
 Handles OAuth 2.0 flow for connecting Slack workspaces.
+
+This router uses FastAPI's dependency injection for all services and repositories,
+following the dependency injection pattern for testability and separation of concerns.
+
+Requirements:
+- 1.3: THE Backend_API SHALL separate business logic from HTTP handling in routers
 """
 
 import os
-import time
 import secrets
-import logging
 from typing import Optional
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, HTTPException, Query, Request, Depends
 from fastapi.responses import RedirectResponse
 from jose import jwt, JWTError
+from supabase import Client
 
-from ..services.slack_service import get_slack_service
+from ..dependencies import (
+    get_supabase,
+    get_slack_repository,
+    get_slack_service,
+)
+from ..services.slack_service import SlackIntegrationService
 from ..services.encryption import decrypt_token
 from ..repositories.slack import SlackRepository
 from ..schemas.slack import (
@@ -23,21 +34,37 @@ from ..schemas.slack import (
     SlackPreferencesUpdate,
 )
 from ..config import settings
+from ..utils.structured_logger import get_logger
 
 router = APIRouter(prefix="/api/slack", tags=["slack"])
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
-def get_supabase():
-    """Get Supabase client - implement based on your setup."""
-    from ..config import get_supabase_client
-    return get_supabase_client()
+# =============================================================================
+# OAuth State Management Helper Functions
+# =============================================================================
 
-
-def save_oauth_state(state: str, owner_type: str, owner_id: str, redirect_uri: str) -> bool:
-    """Save OAuth state to Supabase for Lambda stateless environment."""
+def save_oauth_state(
+    supabase: Client,
+    state: str,
+    owner_type: str,
+    owner_id: str,
+    redirect_uri: str,
+) -> bool:
+    """
+    Save OAuth state to Supabase for Lambda stateless environment.
+    
+    Args:
+        supabase: Supabase client instance.
+        state: OAuth state token.
+        owner_type: Type of owner (e.g., "user").
+        owner_id: ID of the owner.
+        redirect_uri: URI to redirect after OAuth completion.
+        
+    Returns:
+        True if state was saved successfully, False otherwise.
+    """
     try:
-        supabase = get_supabase()
         supabase.table("slack_oauth_states").insert({
             "state": state,
             "owner_type": owner_type,
@@ -51,11 +78,18 @@ def save_oauth_state(state: str, owner_type: str, owner_id: str, redirect_uri: s
         return False
 
 
-def get_and_delete_oauth_state(state: str) -> Optional[dict]:
-    """Get and delete OAuth state from Supabase (atomic operation)."""
-    try:
-        supabase = get_supabase()
+def get_and_delete_oauth_state(supabase: Client, state: str) -> Optional[dict]:
+    """
+    Get and delete OAuth state from Supabase (atomic operation).
+    
+    Args:
+        supabase: Supabase client instance.
+        state: OAuth state token to retrieve and delete.
         
+    Returns:
+        State data dict if found and valid, None otherwise.
+    """
+    try:
         # Get the state
         result = supabase.table("slack_oauth_states").select("*").eq("state", state).execute()
         
@@ -66,7 +100,6 @@ def get_and_delete_oauth_state(state: str) -> Optional[dict]:
         state_data = result.data[0]
         
         # Check expiration
-        from datetime import datetime, timezone
         expires_at = datetime.fromisoformat(state_data["expires_at"].replace("Z", "+00:00"))
         if datetime.now(timezone.utc) > expires_at:
             logger.warning(f"OAuth state expired: {state[:8]}...")
@@ -89,19 +122,37 @@ def get_and_delete_oauth_state(state: str) -> Optional[dict]:
         return None
 
 
-def cleanup_expired_oauth_states():
-    """Clean up expired OAuth states from database."""
+def cleanup_expired_oauth_states(supabase: Client) -> None:
+    """
+    Clean up expired OAuth states from database.
+    
+    Args:
+        supabase: Supabase client instance.
+    """
     try:
-        supabase = get_supabase()
-        from datetime import datetime, timezone
         now = datetime.now(timezone.utc).isoformat()
         supabase.table("slack_oauth_states").delete().lt("expires_at", now).execute()
     except Exception as e:
         logger.warning(f"Failed to cleanup expired OAuth states: {str(e)}")
 
 
+# =============================================================================
+# JWT Verification Functions (no DI needed - stateless utilities)
+# =============================================================================
+
 def get_current_user(request: Request) -> dict:
-    """Get current authenticated user from JWT middleware."""
+    """
+    Get current authenticated user from JWT middleware.
+    
+    Args:
+        request: The incoming FastAPI request.
+        
+    Returns:
+        Dict with user id and type.
+        
+    Raises:
+        HTTPException: If user is not authenticated or user ID not found.
+    """
     user = getattr(request.state, "user", None)
     if not user:
         raise HTTPException(status_code=401, detail="Not authenticated")
@@ -115,11 +166,21 @@ def get_current_user(request: Request) -> dict:
 
 
 def verify_jwt_token(token: str) -> dict:
-    """Verify JWT token and extract user info.
+    """
+    Verify JWT token and extract user info.
     
     Supports both:
     - ES256 (asymmetric): Uses JWKS endpoint to get public key
     - HS256 (symmetric): Uses JWT_SECRET for verification
+    
+    Args:
+        token: JWT token string.
+        
+    Returns:
+        Dict with user id and type.
+        
+    Raises:
+        HTTPException: If token is invalid or expired.
     """
     try:
         # Get token header to check algorithm
@@ -219,11 +280,17 @@ def _verify_with_jwks(token: str, alg: str, kid: str) -> dict:
     )
 
 
+# =============================================================================
+# Route Handlers with Dependency Injection
+# =============================================================================
+
 @router.get("/connect")
 async def initiate_oauth(
     request: Request,
     redirect_uri: Optional[str] = Query(None),
     token: Optional[str] = Query(None),  # Accept token via query parameter for redirect
+    supabase: Client = Depends(get_supabase),
+    slack_service: SlackIntegrationService = Depends(get_slack_service),
 ) -> RedirectResponse:
     """
     Initiate Slack OAuth flow.
@@ -232,6 +299,19 @@ async def initiate_oauth(
     Token can be passed via:
     1. Query parameter (for redirect-based flow)
     2. Authorization header (via middleware)
+    
+    Args:
+        request: The incoming FastAPI request.
+        redirect_uri: Optional redirect URI after OAuth completion.
+        token: Optional JWT token via query parameter.
+        supabase: Supabase client (injected via Depends).
+        slack_service: SlackIntegrationService (injected via Depends).
+        
+    Returns:
+        RedirectResponse to Slack OAuth URL.
+        
+    Raises:
+        HTTPException: If not authenticated or Slack not configured.
     """
     # Get user from token (query param) or middleware
     if token:
@@ -244,8 +324,6 @@ async def initiate_oauth(
         if not user_id:
             raise HTTPException(status_code=401, detail="User ID not found in token")
         current_user = {"id": user_id, "type": "user"}
-    
-    slack_service = get_slack_service()
     
     # Validate Slack configuration
     if not slack_service.client_id:
@@ -260,14 +338,14 @@ async def initiate_oauth(
     
     # Store state in database (for Lambda stateless environment)
     redirect_uri_value = redirect_uri or os.environ.get("SLACK_REDIRECT_URI", "")
-    if not save_oauth_state(state, current_user["type"], current_user["id"], redirect_uri_value):
+    if not save_oauth_state(supabase, state, current_user["type"], current_user["id"], redirect_uri_value):
         raise HTTPException(
             status_code=500,
             detail="Failed to initialize OAuth flow. Please try again."
         )
     
     # Clean up expired states in background
-    cleanup_expired_oauth_states()
+    cleanup_expired_oauth_states(supabase)
     
     # Get OAuth URL
     callback_uri = os.environ.get(
@@ -288,10 +366,24 @@ async def oauth_callback(
     code: str = Query(...),
     state: str = Query(...),
     error: Optional[str] = Query(None),
+    supabase: Client = Depends(get_supabase),
+    slack_repo: SlackRepository = Depends(get_slack_repository),
+    slack_service: SlackIntegrationService = Depends(get_slack_service),
 ) -> RedirectResponse:
     """
     Handle OAuth callback from Slack.
     Exchanges code for tokens and stores connection.
+    
+    Args:
+        code: Authorization code from Slack.
+        state: OAuth state token.
+        error: Optional error from Slack.
+        supabase: Supabase client (injected via Depends).
+        slack_repo: SlackRepository (injected via Depends).
+        slack_service: SlackIntegrationService (injected via Depends).
+        
+    Returns:
+        RedirectResponse to frontend with success or error.
     """
     # Get frontend URL from state data or use default
     def get_error_redirect(error_code: str, message: str, redirect_base: str = None) -> str:
@@ -306,7 +398,7 @@ async def oauth_callback(
         )
     
     # Validate state from database
-    state_data = get_and_delete_oauth_state(state)
+    state_data = get_and_delete_oauth_state(supabase, state)
     if not state_data:
         logger.warning(f"Invalid OAuth state: {state[:8]}...")
         return RedirectResponse(
@@ -322,10 +414,6 @@ async def oauth_callback(
         frontend_base = f"{parsed.scheme}://{parsed.netloc}" if parsed.scheme and parsed.netloc else None
     else:
         frontend_base = None
-    
-    slack_service = get_slack_service()
-    supabase = get_supabase()
-    slack_repo = SlackRepository(supabase)
     
     # Exchange code for tokens
     callback_uri = os.environ.get("SLACK_CALLBACK_URI", "")
@@ -367,14 +455,23 @@ async def oauth_callback(
 @router.post("/disconnect")
 async def disconnect_slack(
     current_user: dict = Depends(get_current_user),
+    slack_repo: SlackRepository = Depends(get_slack_repository),
+    slack_service: SlackIntegrationService = Depends(get_slack_service),
 ) -> dict:
     """
     Revoke tokens and remove Slack connection.
-    """
-    supabase = get_supabase()
-    slack_repo = SlackRepository(supabase)
-    slack_service = get_slack_service()
     
+    Args:
+        current_user: Current authenticated user (injected via Depends).
+        slack_repo: SlackRepository (injected via Depends).
+        slack_service: SlackIntegrationService (injected via Depends).
+        
+    Returns:
+        Success response dict.
+        
+    Raises:
+        HTTPException: If no Slack connection found.
+    """
     # Get current connection
     connection = await slack_repo.get_connection_with_tokens(
         current_user["type"],
@@ -403,13 +500,18 @@ async def disconnect_slack(
 @router.get("/status")
 async def get_connection_status(
     current_user: dict = Depends(get_current_user),
+    slack_repo: SlackRepository = Depends(get_slack_repository),
 ) -> SlackConnectionStatus:
     """
     Get current Slack connection status.
-    """
-    supabase = get_supabase()
-    slack_repo = SlackRepository(supabase)
     
+    Args:
+        current_user: Current authenticated user (injected via Depends).
+        slack_repo: SlackRepository (injected via Depends).
+        
+    Returns:
+        SlackConnectionStatus with connection and preferences info.
+    """
     connection = await slack_repo.get_connection(
         current_user["type"],
         current_user["id"],
@@ -430,13 +532,18 @@ async def get_connection_status(
 @router.get("/preferences")
 async def get_preferences(
     current_user: dict = Depends(get_current_user),
+    slack_repo: SlackRepository = Depends(get_slack_repository),
 ) -> SlackPreferencesResponse:
     """
     Get Slack notification preferences.
-    """
-    supabase = get_supabase()
-    slack_repo = SlackRepository(supabase)
     
+    Args:
+        current_user: Current authenticated user (injected via Depends).
+        slack_repo: SlackRepository (injected via Depends).
+        
+    Returns:
+        SlackPreferencesResponse with notification preferences.
+    """
     preferences = await slack_repo.get_preferences(
         current_user["type"],
         current_user["id"],
@@ -452,13 +559,19 @@ async def get_preferences(
 async def update_preferences(
     preferences: SlackPreferencesUpdate,
     current_user: dict = Depends(get_current_user),
+    slack_repo: SlackRepository = Depends(get_slack_repository),
 ) -> SlackPreferencesResponse:
     """
     Update Slack notification preferences.
-    """
-    supabase = get_supabase()
-    slack_repo = SlackRepository(supabase)
     
+    Args:
+        preferences: New preferences to update.
+        current_user: Current authenticated user (injected via Depends).
+        slack_repo: SlackRepository (injected via Depends).
+        
+    Returns:
+        Updated SlackPreferencesResponse.
+    """
     updated = await slack_repo.update_preferences(
         current_user["type"],
         current_user["id"],
@@ -471,14 +584,23 @@ async def update_preferences(
 @router.post("/test")
 async def test_connection(
     current_user: dict = Depends(get_current_user),
+    slack_repo: SlackRepository = Depends(get_slack_repository),
+    slack_service: SlackIntegrationService = Depends(get_slack_service),
 ) -> dict:
     """
     Send a test message to verify Slack connection.
-    """
-    supabase = get_supabase()
-    slack_repo = SlackRepository(supabase)
-    slack_service = get_slack_service()
     
+    Args:
+        current_user: Current authenticated user (injected via Depends).
+        slack_repo: SlackRepository (injected via Depends).
+        slack_service: SlackIntegrationService (injected via Depends).
+        
+    Returns:
+        Success response dict.
+        
+    Raises:
+        HTTPException: If no connection found, connection invalid, or message fails.
+    """
     # Get connection
     connection = await slack_repo.get_connection_with_tokens(
         current_user["type"],

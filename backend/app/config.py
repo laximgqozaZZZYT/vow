@@ -9,7 +9,43 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
-    """Application settings loaded from environment variables."""
+    """
+    Application settings loaded from environment variables.
+    
+    This class uses Pydantic Settings to load configuration from environment
+    variables and .env files. All sensitive values should be provided via
+    environment variables in production.
+    
+    Attributes:
+        app_name: Name of the application.
+        app_version: Version string for the application.
+        debug: Enable debug mode (should be False in production).
+        database_url: Primary database connection URL.
+        supabase_url: Supabase project URL.
+        supabase_database_url: Direct Supabase database connection URL.
+        migration_mode: Enable dual-write to both databases during migration.
+        jwt_secret: Secret key for JWT token signing (HS256).
+        jwt_algorithm: JWT signing algorithm.
+        jwt_audience: Expected JWT audience claim.
+        jwt_issuer: Expected JWT issuer claim.
+        cognito_user_pool_id: AWS Cognito User Pool ID.
+        cognito_client_id: AWS Cognito Client ID.
+        cognito_region: AWS region for Cognito.
+        auth_provider: Authentication provider ("supabase" or "cognito").
+        cors_origins: List of allowed CORS origins.
+        slack_webhook_url: Slack webhook URL for notifications.
+        slack_enabled: Enable Slack integration.
+        slack_client_id: Slack OAuth client ID.
+        slack_client_secret: Slack OAuth client secret.
+        slack_signing_secret: Slack request signing secret.
+        slack_callback_uri: OAuth callback URI.
+        token_encryption_key: Key for encrypting Slack tokens.
+        supabase_anon_key: Supabase anonymous API key.
+        openai_api_key: OpenAI API key.
+        openai_enabled: Enable OpenAI integration.
+        openai_model: OpenAI model to use.
+        openai_max_requests_per_minute: Rate limit for OpenAI requests.
+    """
     
     model_config = SettingsConfigDict(
         env_file=".env",
@@ -119,8 +155,8 @@ class Settings(BaseSettings):
     
     def validate_on_startup(self) -> None:
         """Validate all required settings on startup with logging."""
-        import logging
-        logger = logging.getLogger(__name__)
+        from app.utils.structured_logger import get_logger
+        logger = get_logger(__name__)
         
         # Validate required settings (raises exception if missing)
         self.validate_required_settings()
@@ -129,8 +165,14 @@ class Settings(BaseSettings):
         slack_errors = self.validate_slack_settings()
         if slack_errors:
             for error in slack_errors:
-                logger.warning(f"Slack configuration warning: {error}")
-            logger.warning("Slack integration will not be available until all required variables are set")
+                logger.warning(
+                    "Slack configuration warning",
+                    warning=error,
+                )
+            logger.warning(
+                "Slack integration unavailable",
+                reason="Missing required configuration variables",
+            )
 
 
 # Global settings instance

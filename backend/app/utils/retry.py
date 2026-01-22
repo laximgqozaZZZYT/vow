@@ -11,11 +11,12 @@ Requirements:
 """
 
 import asyncio
-import logging
 import time
 from dataclasses import dataclass, field
 from functools import wraps
 from typing import Any, Callable, Optional, Tuple, Type, TypeVar, Union
+
+from .structured_logger import get_logger
 
 # Type variable for generic return type
 T = TypeVar("T")
@@ -208,7 +209,7 @@ def with_retry(config: Optional[RetryConfig] = None) -> Callable:
     if config is None:
         config = RetryConfig()
     
-    logger = logging.getLogger(__name__)
+    logger = get_logger(__name__)
     
     def decorator(func: Callable[..., T]) -> Callable[..., T]:
         @wraps(func)

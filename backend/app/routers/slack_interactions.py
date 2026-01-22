@@ -20,7 +20,6 @@ Requirements:
 """
 
 import json
-import logging
 import urllib.parse
 from typing import Optional, List, Dict, Any
 
@@ -37,8 +36,9 @@ from ..services.follow_up_agent import FollowUpAgent
 from ..services.slack_block_builder import SlackBlockBuilder
 from ..repositories.slack import SlackRepository
 from ..config import get_supabase_client
+from ..utils.structured_logger import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 router = APIRouter(prefix="/slack", tags=["slack-interactions"])
 
@@ -93,7 +93,7 @@ async def handle_slack_interaction(
     return JSONResponse(content={"error": "Unknown action type"})
 
 
-async def process_block_action(payload: dict):
+async def process_block_action(payload: Dict[str, Any]) -> None:
     """
     Process block actions (button clicks) from Slack.
     
@@ -103,7 +103,10 @@ async def process_block_action(payload: dict):
     - habit_later_* : Remind later (Req 3.3)
     
     Args:
-        payload: Slack interaction payload
+        payload: Slack interaction payload containing user, actions, and response_url.
+        
+    Returns:
+        None. Responses are sent via the response_url.
     """
     try:
         supabase = get_supabase_client()
@@ -213,10 +216,24 @@ async def _handle_habit_done(
     owner_type: str,
     owner_id: str,
     habit_id: str,
-):
+) -> None:
     """
     Handle Done button click.
     
+    Marks the specified habit as complete and sends a confirmation message
+    to the user via Slack. Includes streak count in the confirmation.
+    
+    Args:
+        completion_reporter: Service for handling habit completions.
+        slack_service: Service for Slack API interactions.
+        response_url: URL for sending the response to Slack.
+        owner_type: Type of owner (e.g., "user").
+        owner_id: Unique identifier of the owner.
+        habit_id: Unique identifier of the habit to complete.
+        
+    Returns:
+        None. Response is sent via the response_url.
+        
     Requirements:
     - 3.1: Mark habit as complete and return confirmation
     - 3.4: Include streak count in confirmation
@@ -260,10 +277,25 @@ async def _handle_habit_skip(
     owner_type: str,
     owner_id: str,
     habit_id: str,
-):
+) -> None:
     """
     Handle Skip button click.
     
+    Records that the user skipped the specified habit for today and sends
+    a confirmation message. Skipped habits will not receive follow-up messages.
+    
+    Args:
+        follow_up_agent: Agent for managing habit reminders and follow-ups.
+        completion_reporter: Service for handling habit completions.
+        slack_service: Service for Slack API interactions.
+        response_url: URL for sending the response to Slack.
+        owner_type: Type of owner (e.g., "user").
+        owner_id: Unique identifier of the owner.
+        habit_id: Unique identifier of the habit to skip.
+        
+    Returns:
+        None. Response is sent via the response_url.
+        
     Requirement 3.2: Record skip and return confirmation
     """
     await follow_up_agent.skip_habit_today(owner_type, owner_id, habit_id)
@@ -291,10 +323,25 @@ async def _handle_habit_later(
     owner_type: str,
     owner_id: str,
     habit_id: str,
-):
+) -> None:
     """
     Handle Remind Later button click.
     
+    Schedules a reminder for the specified habit to be sent later (default: 60 minutes)
+    and sends a confirmation message to the user.
+    
+    Args:
+        follow_up_agent: Agent for managing habit reminders and follow-ups.
+        completion_reporter: Service for handling habit completions.
+        slack_service: Service for Slack API interactions.
+        response_url: URL for sending the response to Slack.
+        owner_type: Type of owner (e.g., "user").
+        owner_id: Unique identifier of the owner.
+        habit_id: Unique identifier of the habit to remind later.
+        
+    Returns:
+        None. Response is sent via the response_url.
+        
     Requirement 3.3: Set remind_later_at and return confirmation
     """
     delay_minutes = 60  # Default delay
@@ -320,8 +367,20 @@ async def _handle_habit_later(
 async def _send_not_connected_response(
     slack_service: SlackIntegrationService,
     response_url: str,
-):
-    """Send response for users not connected to VOW."""
+) -> None:
+    """
+    Send response for users not connected to VOW.
+    
+    Sends a message to the user indicating that their Slack account is not
+    connected to VOW and provides instructions for connecting.
+    
+    Args:
+        slack_service: Service for Slack API interactions.
+        response_url: URL for sending the response to Slack.
+        
+    Returns:
+        None. Response is sent via the response_url.
+    """
     blocks = SlackBlockBuilder.not_connected()
     await slack_service.send_response(
         response_url,
@@ -401,9 +460,12 @@ async def process_slash_command(
     slack_user_id: str,
     team_id: str,
     response_url: str,
-):
+) -> None:
     """
     Process slash commands from Slack.
+    
+    Routes the command to the appropriate handler based on the command type.
+    Handles user authentication via Slack connection lookup.
     
     Handles:
     - /habit-done [name]: Mark habit as complete or show list (Req 5.1, 5.2)
@@ -411,11 +473,14 @@ async def process_slash_command(
     - /habit-list: Show habits grouped by goal (Req 5.4)
     
     Args:
-        command: The slash command (e.g., "/habit-done")
-        text: The text after the command
-        slack_user_id: Slack user ID
-        team_id: Slack team ID
-        response_url: URL to send response to
+        command: The slash command (e.g., "/habit-done").
+        text: The text after the command (habit name or empty).
+        slack_user_id: Slack user ID (e.g., "U12345678").
+        team_id: Slack team/workspace ID (e.g., "T12345678").
+        response_url: URL to send response to.
+        
+    Returns:
+        None. Responses are sent via the response_url.
     """
     try:
         supabase = get_supabase_client()
@@ -512,10 +577,25 @@ async def _handle_habit_done_command(
     owner_type: str,
     owner_id: str,
     habit_name: str,
-):
+) -> None:
     """
     Handle /habit-done command.
     
+    If a habit name is provided, attempts to complete that habit. If no name
+    is provided, shows a list of incomplete habits with completion buttons.
+    Suggests similar habit names when the specified habit is not found.
+    
+    Args:
+        completion_reporter: Service for handling habit completions.
+        slack_service: Service for Slack API interactions.
+        response_url: URL for sending the response to Slack.
+        owner_type: Type of owner (e.g., "user").
+        owner_id: Unique identifier of the owner.
+        habit_name: Name of the habit to complete (may be empty).
+        
+    Returns:
+        None. Response is sent via the response_url.
+        
     Requirements:
     - 5.1: /habit-done [name] → mark specified habit as complete
     - 5.2: /habit-done (no name) → show incomplete habits list with buttons
@@ -581,10 +661,23 @@ async def _handle_habit_status_command(
     response_url: str,
     owner_type: str,
     owner_id: str,
-):
+) -> None:
     """
     Handle /habit-status command.
     
+    Shows today's progress summary including completed/total habits count,
+    completion percentage, and a list of remaining habits.
+    
+    Args:
+        completion_reporter: Service for handling habit completions.
+        slack_service: Service for Slack API interactions.
+        response_url: URL for sending the response to Slack.
+        owner_type: Type of owner (e.g., "user").
+        owner_id: Unique identifier of the owner.
+        
+    Returns:
+        None. Response is sent via the response_url.
+        
     Requirement 5.3: Show today's progress summary
     """
     summary = await completion_reporter.get_today_summary(owner_id, owner_type)
@@ -606,10 +699,23 @@ async def _handle_habit_list_command(
     response_url: str,
     owner_type: str,
     owner_id: str,
-):
+) -> None:
     """
     Handle /habit-list command.
     
+    Shows all habits grouped by their associated goals, with completion
+    status and interactive buttons for completing habits.
+    
+    Args:
+        completion_reporter: Service for handling habit completions.
+        slack_service: Service for Slack API interactions.
+        response_url: URL for sending the response to Slack.
+        owner_type: Type of owner (e.g., "user").
+        owner_id: Unique identifier of the owner.
+        
+    Returns:
+        None. Response is sent via the response_url.
+        
     Requirement 5.4: Show habits grouped by goal
     """
     habits = await completion_reporter.get_all_habits_with_status(owner_id, owner_type)

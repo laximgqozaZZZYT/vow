@@ -6,7 +6,7 @@ Tests the JST timezone handling and day boundary calculations.
 
 import pytest
 from datetime import datetime
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, AsyncMock
 
 try:
     from zoneinfo import ZoneInfo
@@ -18,29 +18,46 @@ from app.services.daily_progress_calculator import (
     HabitProgress,
     DashboardSummary,
 )
+from app.repositories.habit import HabitRepository
+from app.repositories.activity import ActivityRepository
+from app.repositories.goal import GoalRepository
+
+
+def create_calculator_with_mocks():
+    """Helper function to create a DailyProgressCalculator with mocked repositories."""
+    mock_habit_repo = MagicMock(spec=HabitRepository)
+    mock_activity_repo = MagicMock(spec=ActivityRepository)
+    mock_goal_repo = MagicMock(spec=GoalRepository)
+    
+    calculator = DailyProgressCalculator(
+        habit_repo=mock_habit_repo,
+        activity_repo=mock_activity_repo,
+        goal_repo=mock_goal_repo,
+    )
+    
+    return calculator, mock_habit_repo, mock_activity_repo, mock_goal_repo
 
 
 class TestDailyProgressCalculator:
     """Tests for DailyProgressCalculator class."""
 
-    def test_init_sets_supabase_client(self):
-        """Test that __init__ properly sets the Supabase client."""
-        mock_supabase = MagicMock()
-        calculator = DailyProgressCalculator(mock_supabase)
+    def test_init_sets_repositories(self):
+        """Test that __init__ properly sets the repositories."""
+        calculator, habit_repo, activity_repo, goal_repo = create_calculator_with_mocks()
         
-        assert calculator.supabase == mock_supabase
+        assert calculator.habit_repo == habit_repo
+        assert calculator.activity_repo == activity_repo
+        assert calculator.goal_repo == goal_repo
 
     def test_init_sets_jst_timezone(self):
         """Test that __init__ properly sets JST timezone."""
-        mock_supabase = MagicMock()
-        calculator = DailyProgressCalculator(mock_supabase)
+        calculator, _, _, _ = create_calculator_with_mocks()
         
         assert calculator.jst == ZoneInfo("Asia/Tokyo")
 
     def test_get_jst_day_boundaries_returns_tuple(self):
         """Test that _get_jst_day_boundaries returns a tuple of two datetimes."""
-        mock_supabase = MagicMock()
-        calculator = DailyProgressCalculator(mock_supabase)
+        calculator, _, _, _ = create_calculator_with_mocks()
         
         result = calculator._get_jst_day_boundaries()
         
@@ -51,8 +68,7 @@ class TestDailyProgressCalculator:
 
     def test_get_jst_day_boundaries_start_is_before_end(self):
         """Test that start boundary is before end boundary."""
-        mock_supabase = MagicMock()
-        calculator = DailyProgressCalculator(mock_supabase)
+        calculator, _, _, _ = create_calculator_with_mocks()
         
         start_utc, end_utc = calculator._get_jst_day_boundaries()
         
@@ -60,8 +76,7 @@ class TestDailyProgressCalculator:
 
     def test_get_jst_day_boundaries_returns_utc_timestamps(self):
         """Test that boundaries are returned in UTC timezone."""
-        mock_supabase = MagicMock()
-        calculator = DailyProgressCalculator(mock_supabase)
+        calculator, _, _, _ = create_calculator_with_mocks()
         
         start_utc, end_utc = calculator._get_jst_day_boundaries()
         
@@ -75,8 +90,7 @@ class TestDailyProgressCalculator:
 
     def test_get_jst_day_boundaries_corresponds_to_jst_day(self):
         """Test that UTC boundaries correspond to JST 0:00-23:59."""
-        mock_supabase = MagicMock()
-        calculator = DailyProgressCalculator(mock_supabase)
+        calculator, _, _, _ = create_calculator_with_mocks()
         
         start_utc, end_utc = calculator._get_jst_day_boundaries()
         
@@ -97,8 +111,7 @@ class TestDailyProgressCalculator:
 
     def test_get_jst_day_boundaries_same_jst_date(self):
         """Test that start and end are on the same JST date."""
-        mock_supabase = MagicMock()
-        calculator = DailyProgressCalculator(mock_supabase)
+        calculator, _, _, _ = create_calculator_with_mocks()
         
         start_utc, end_utc = calculator._get_jst_day_boundaries()
         
@@ -112,8 +125,7 @@ class TestDailyProgressCalculator:
 
     def test_get_jst_day_boundaries_utc_offset(self):
         """Test that JST to UTC conversion is correct (JST = UTC+9)."""
-        mock_supabase = MagicMock()
-        calculator = DailyProgressCalculator(mock_supabase)
+        calculator, _, _, _ = create_calculator_with_mocks()
         
         start_utc, end_utc = calculator._get_jst_day_boundaries()
         
@@ -206,8 +218,7 @@ class TestCalculateWorkload:
 
     def test_calculate_workload_sums_amounts_for_matching_habit(self):
         """Test that amounts are summed for activities matching the habit_id."""
-        mock_supabase = MagicMock()
-        calculator = DailyProgressCalculator(mock_supabase)
+        calculator, _, _, _ = create_calculator_with_mocks()
         
         activities = [
             {"habit_id": "habit-1", "amount": 3},
@@ -221,8 +232,7 @@ class TestCalculateWorkload:
 
     def test_calculate_workload_filters_by_habit_id(self):
         """Test that only activities for the specified habit_id are included."""
-        mock_supabase = MagicMock()
-        calculator = DailyProgressCalculator(mock_supabase)
+        calculator, _, _, _ = create_calculator_with_mocks()
         
         activities = [
             {"habit_id": "habit-1", "amount": 10},
@@ -236,8 +246,7 @@ class TestCalculateWorkload:
 
     def test_calculate_workload_uses_default_when_amount_is_none(self):
         """Test that workload_per_count is used when amount is None (Requirement 6.3)."""
-        mock_supabase = MagicMock()
-        calculator = DailyProgressCalculator(mock_supabase)
+        calculator, _, _, _ = create_calculator_with_mocks()
         
         activities = [
             {"habit_id": "habit-1", "amount": None},
@@ -250,8 +259,7 @@ class TestCalculateWorkload:
 
     def test_calculate_workload_uses_default_when_amount_missing(self):
         """Test that workload_per_count is used when amount key is missing."""
-        mock_supabase = MagicMock()
-        calculator = DailyProgressCalculator(mock_supabase)
+        calculator, _, _, _ = create_calculator_with_mocks()
         
         activities = [
             {"habit_id": "habit-1"},  # No amount key
@@ -264,8 +272,7 @@ class TestCalculateWorkload:
 
     def test_calculate_workload_mixed_amounts_and_defaults(self):
         """Test mixing activities with amounts and those using defaults."""
-        mock_supabase = MagicMock()
-        calculator = DailyProgressCalculator(mock_supabase)
+        calculator, _, _, _ = create_calculator_with_mocks()
         
         activities = [
             {"habit_id": "habit-1", "amount": 10},
@@ -279,8 +286,7 @@ class TestCalculateWorkload:
 
     def test_calculate_workload_returns_zero_for_no_matching_activities(self):
         """Test that 0.0 is returned when no activities match the habit_id."""
-        mock_supabase = MagicMock()
-        calculator = DailyProgressCalculator(mock_supabase)
+        calculator, _, _, _ = create_calculator_with_mocks()
         
         activities = [
             {"habit_id": "habit-2", "amount": 5},
@@ -293,8 +299,7 @@ class TestCalculateWorkload:
 
     def test_calculate_workload_returns_zero_for_empty_activities(self):
         """Test that 0.0 is returned for an empty activities list."""
-        mock_supabase = MagicMock()
-        calculator = DailyProgressCalculator(mock_supabase)
+        calculator, _, _, _ = create_calculator_with_mocks()
         
         result = calculator._calculate_workload("habit-1", [], 1.0)
         
@@ -302,8 +307,7 @@ class TestCalculateWorkload:
 
     def test_calculate_workload_handles_float_amounts(self):
         """Test that float amounts are handled correctly."""
-        mock_supabase = MagicMock()
-        calculator = DailyProgressCalculator(mock_supabase)
+        calculator, _, _, _ = create_calculator_with_mocks()
         
         activities = [
             {"habit_id": "habit-1", "amount": 1.5},
@@ -316,8 +320,7 @@ class TestCalculateWorkload:
 
     def test_calculate_workload_handles_integer_amounts(self):
         """Test that integer amounts are converted to float correctly."""
-        mock_supabase = MagicMock()
-        calculator = DailyProgressCalculator(mock_supabase)
+        calculator, _, _, _ = create_calculator_with_mocks()
         
         activities = [
             {"habit_id": "habit-1", "amount": 5},
@@ -328,3 +331,80 @@ class TestCalculateWorkload:
         
         assert result == 8.0
         assert isinstance(result, float)
+
+
+class TestGetTodayActivities:
+    """Tests for _get_today_activities() method."""
+
+    @pytest.mark.asyncio
+    async def test_get_today_activities_calls_repository(self):
+        """Test that _get_today_activities calls the activity repository."""
+        calculator, _, activity_repo, _ = create_calculator_with_mocks()
+        
+        # Setup mock
+        activity_repo.get_activities_in_range = AsyncMock(return_value=[
+            {"habit_id": "habit-1", "amount": 5, "kind": "complete"},
+        ])
+        
+        result = await calculator._get_today_activities("owner-1", "user")
+        
+        # Verify repository was called
+        activity_repo.get_activities_in_range.assert_called_once()
+        call_args = activity_repo.get_activities_in_range.call_args
+        assert call_args.kwargs["owner_type"] == "user"
+        assert call_args.kwargs["owner_id"] == "owner-1"
+        assert call_args.kwargs["kind"] == "complete"
+        
+        # Verify result
+        assert len(result) == 1
+        assert result[0]["habit_id"] == "habit-1"
+
+
+class TestGetDailyProgress:
+    """Tests for get_daily_progress() method."""
+
+    @pytest.mark.asyncio
+    async def test_get_daily_progress_returns_empty_list_when_no_habits(self):
+        """Test that get_daily_progress returns empty list when no habits."""
+        calculator, habit_repo, activity_repo, _ = create_calculator_with_mocks()
+        
+        # Setup mocks
+        habit_repo.get_active_do_habits = AsyncMock(return_value=[])
+        activity_repo.get_activities_in_range = AsyncMock(return_value=[])
+        
+        result = await calculator.get_daily_progress("owner-1", "user")
+        
+        assert result == []
+
+    @pytest.mark.asyncio
+    async def test_get_daily_progress_calculates_progress_correctly(self):
+        """Test that get_daily_progress calculates progress correctly."""
+        calculator, habit_repo, activity_repo, goal_repo = create_calculator_with_mocks()
+        
+        # Setup mocks
+        habit_repo.get_active_do_habits = AsyncMock(return_value=[
+            {
+                "id": "habit-1",
+                "name": "Test Habit",
+                "goal_id": "goal-1",
+                "workload_per_count": 1,
+                "workload_total": 10,
+                "workload_unit": "回",
+            }
+        ])
+        activity_repo.get_activities_in_range = AsyncMock(return_value=[
+            {"habit_id": "habit-1", "amount": 5, "kind": "complete"},
+        ])
+        activity_repo.get_habit_activities = AsyncMock(return_value=[])
+        goal_repo.get_by_id = AsyncMock(return_value={"name": "Test Goal"})
+        
+        result = await calculator.get_daily_progress("owner-1", "user")
+        
+        assert len(result) == 1
+        assert result[0].habit_id == "habit-1"
+        assert result[0].habit_name == "Test Habit"
+        assert result[0].goal_name == "Test Goal"
+        assert result[0].current_count == 5.0
+        assert result[0].total_count == 10.0
+        assert result[0].progress_rate == 50.0
+        assert result[0].completed is False

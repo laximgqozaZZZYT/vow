@@ -3,7 +3,11 @@ Slack Webhook Router
 
 Processes incoming events from Slack (slash commands, interactive components).
 
+This router uses FastAPI's dependency injection for all services and repositories,
+following the dependency injection pattern for testability and separation of concerns.
+
 Requirements:
+- 1.3: THE Backend_API SHALL separate business logic from HTTP handling in routers
 - 4.4: Slackコマンドが処理される時、リクエストID、処理時間、結果ステータスを含む構造化ログを出力する
 """
 
@@ -12,15 +16,29 @@ import time
 from typing import Optional
 from urllib.parse import parse_qs
 
-from fastapi import APIRouter, Request, HTTPException, Response
+from fastapi import APIRouter, Request, HTTPException, Response, Depends
 
-from ..services.slack_service import get_slack_service
+from ..dependencies import (
+    get_slack_service,
+    get_slack_repository,
+    get_habit_repository,
+    get_activity_repository,
+    get_goal_repository,
+    get_habit_completion_reporter,
+    get_daily_progress_calculator,
+    get_follow_up_agent,
+)
+from ..services.slack_service import SlackIntegrationService
 from ..services.slack_block_builder import SlackBlockBuilder
 from ..services.habit_completion_reporter import HabitCompletionReporter
+from ..services.daily_progress_calculator import DailyProgressCalculator
 from ..services.follow_up_agent import FollowUpAgent
 from ..services.slack_error_handler import SlackErrorHandler, DataFetchError
 from ..services.dashboard_command_handler import DashboardCommandHandler
 from ..repositories.slack import SlackRepository
+from ..repositories.habit import HabitRepository
+from ..repositories.activity import ActivityRepository
+from ..repositories.goal import GoalRepository
 from ..schemas.slack import SlashCommandPayload, InteractionPayload, SlackEventPayload
 from ..utils.structured_logger import get_logger
 
@@ -30,37 +48,26 @@ router = APIRouter(prefix="/api/slack", tags=["slack"])
 logger = get_logger(__name__)
 
 
-def get_supabase():
-    """Get Supabase client - implement based on your setup."""
-    from ..config import get_supabase_client
-    return get_supabase_client()
-
-
-def get_supabase_with_retry():
-    """
-    Get Supabase client with automatic retry on connection failure.
-    
-    If the initial connection fails, forces a new connection and retries.
-    """
-    from ..config import get_supabase_client
-    try:
-        return get_supabase_client()
-    except Exception as e:
-        logger.warning(
-            "Initial Supabase connection failed, forcing new connection",
-            error_type=type(e).__name__,
-            error_message=str(e),
-        )
-        return get_supabase_client(force_new=True)
-
-
-async def verify_slack_request(request: Request) -> bytes:
+async def verify_slack_request(
+    request: Request,
+    slack_service: SlackIntegrationService = Depends(get_slack_service),
+) -> bytes:
     """
     Verify Slack request signature.
-    Returns raw body if valid, raises HTTPException if invalid.
-    """
-    slack_service = get_slack_service()
     
+    This dependency verifies that incoming requests are from Slack by checking
+    the HMAC-SHA256 signature. Returns raw body if valid, raises HTTPException if invalid.
+    
+    Args:
+        request: The incoming FastAPI request.
+        slack_service: SlackIntegrationService for signature verification (injected via Depends).
+        
+    Returns:
+        The raw request body bytes.
+        
+    Raises:
+        HTTPException: If the signature is invalid (401 Unauthorized).
+    """
     timestamp = request.headers.get("X-Slack-Request-Timestamp", "")
     signature = request.headers.get("X-Slack-Signature", "")
     body = await request.body()
@@ -72,17 +79,45 @@ async def verify_slack_request(request: Request) -> bytes:
 
 
 @router.post("/commands")
-async def handle_slash_command(request: Request) -> dict:
+async def handle_slash_command(
+    request: Request,
+    body: bytes = Depends(verify_slack_request),
+    slack_repo: SlackRepository = Depends(get_slack_repository),
+    habit_repo: HabitRepository = Depends(get_habit_repository),
+    activity_repo: ActivityRepository = Depends(get_activity_repository),
+    goal_repo: GoalRepository = Depends(get_goal_repository),
+    habit_reporter: HabitCompletionReporter = Depends(get_habit_completion_reporter),
+    progress_calculator: DailyProgressCalculator = Depends(get_daily_progress_calculator),
+    slack_service: SlackIntegrationService = Depends(get_slack_service),
+) -> dict:
     """
-    Handle slash commands: /habit-done, /habit-status, /habit-list
+    Handle slash commands: /habit-done, /habit-status, /habit-list, /habit-dashboard
     Must respond within 3 seconds.
     
-    Requirement 4.4: リクエストID、処理時間、結果ステータスを含む構造化ログを出力する
+    This endpoint uses dependency injection for all services and repositories,
+    following the separation of concerns pattern where routers only handle
+    HTTP concerns and delegate business logic to services.
+    
+    Args:
+        request: The incoming FastAPI request.
+        body: Verified request body (injected via Depends).
+        slack_repo: SlackRepository for Slack-related operations (injected via Depends).
+        habit_repo: HabitRepository for habit operations (injected via Depends).
+        activity_repo: ActivityRepository for activity operations (injected via Depends).
+        goal_repo: GoalRepository for goal operations (injected via Depends).
+        habit_reporter: HabitCompletionReporter for habit completions (injected via Depends).
+        progress_calculator: DailyProgressCalculator for progress calculations (injected via Depends).
+        slack_service: SlackIntegrationService for Slack API interactions (injected via Depends).
+        
+    Returns:
+        Slack response dict with blocks and response_type.
+        
+    Requirements:
+    - 1.3: THE Backend_API SHALL separate business logic from HTTP handling in routers
+    - 4.4: リクエストID、処理時間、結果ステータスを含む構造化ログを出力する
     """
     start_time = time.time()
     result_status = "success"
-    
-    body = await verify_slack_request(request)
     
     # Parse form data
     form_data = parse_qs(body.decode())
@@ -101,11 +136,7 @@ async def handle_slash_command(request: Request) -> dict:
         team_id=team_id,
     )
     
-    # Use get_supabase_with_retry to handle stale connections
-    supabase = get_supabase_with_retry()
-    slack_repo = SlackRepository(supabase)
-    
-    # Find user by Slack ID
+    # Find user by Slack ID using injected repository
     connection = await slack_repo.get_connection_by_slack_user(user_id, team_id)
     
     # Log connection lookup result with structured logging
@@ -150,8 +181,6 @@ async def handle_slash_command(request: Request) -> dict:
         command=command,
     )
     
-    habit_reporter = HabitCompletionReporter(supabase)
-    
     try:
         if command == "/habit-done":
             result = await _handle_habit_done(habit_reporter, owner_id, owner_type, text)
@@ -163,8 +192,14 @@ async def handle_slash_command(request: Request) -> dict:
             # Handle /habit-dashboard command (Requirements 1.1, 1.4)
             # The DashboardCommandHandler sends response via response_url
             # Return empty response to Slack (no immediate message)
-            slack_service = get_slack_service()
-            dashboard_handler = DashboardCommandHandler(supabase, slack_service)
+            
+            # Create DashboardCommandHandler with injected dependencies
+            dashboard_handler = DashboardCommandHandler(
+                progress_calculator=progress_calculator,
+                completion_reporter=habit_reporter,
+                slack_service=slack_service,
+                slack_repo=slack_repo,
+            )
             await dashboard_handler.handle_command(user_id, response_url)
             
             # Log command completion with structured logging (Requirement 4.4)
@@ -427,19 +462,48 @@ async def _handle_habit_list(
 
 
 @router.post("/interactions")
-async def handle_interaction(request: Request) -> Response:
+async def handle_interaction(
+    request: Request,
+    body: bytes = Depends(verify_slack_request),
+    slack_repo: SlackRepository = Depends(get_slack_repository),
+    habit_repo: HabitRepository = Depends(get_habit_repository),
+    activity_repo: ActivityRepository = Depends(get_activity_repository),
+    goal_repo: GoalRepository = Depends(get_goal_repository),
+    habit_reporter: HabitCompletionReporter = Depends(get_habit_completion_reporter),
+    progress_calculator: DailyProgressCalculator = Depends(get_daily_progress_calculator),
+    follow_up_agent: FollowUpAgent = Depends(get_follow_up_agent),
+    slack_service: SlackIntegrationService = Depends(get_slack_service),
+) -> Response:
     """
     Handle interactive component callbacks (button clicks).
     
+    This endpoint uses dependency injection for all services and repositories,
+    following the separation of concerns pattern where routers only handle
+    HTTP concerns and delegate business logic to services.
+    
+    Args:
+        request: The incoming FastAPI request.
+        body: Verified request body (injected via Depends).
+        slack_repo: SlackRepository for Slack-related operations (injected via Depends).
+        habit_repo: HabitRepository for habit operations (injected via Depends).
+        activity_repo: ActivityRepository for activity operations (injected via Depends).
+        goal_repo: GoalRepository for goal operations (injected via Depends).
+        habit_reporter: HabitCompletionReporter for habit completions (injected via Depends).
+        progress_calculator: DailyProgressCalculator for progress calculations (injected via Depends).
+        follow_up_agent: FollowUpAgent for reminder and follow-up logic (injected via Depends).
+        slack_service: SlackIntegrationService for Slack API interactions (injected via Depends).
+        
+    Returns:
+        HTTP 200 Response.
+        
     Requirements:
+    - 1.3: THE Backend_API SHALL separate business logic from HTTP handling in routers
     - 3.1: 接続エラー時にユーザーフレンドリーメッセージを返却
     - 3.2: データ取得失敗時に「データの取得に失敗しました」を表示
     - 3.3: エラーの種類に応じた適切なSlackブロックメッセージを返却
     """
     start_time = time.time()
     result_status = "success"
-    
-    body = await verify_slack_request(request)
     
     # Parse payload
     form_data = parse_qs(body.decode())
@@ -459,15 +523,10 @@ async def handle_interaction(request: Request) -> Response:
     action_id = action.get("action_id", "")
     value = action.get("value", "")
     
-    # Use get_supabase_with_retry to handle stale connections
-    supabase = get_supabase_with_retry()
-    slack_repo = SlackRepository(supabase)
-    slack_service = get_slack_service()
-    
     slack_user_id = user.get("id", "")
     slack_team_id = team.get("id", "")
     
-    # Find user
+    # Find user using injected repository
     connection = await slack_repo.get_connection_by_slack_user(
         slack_user_id,
         slack_team_id,
@@ -507,9 +566,6 @@ async def handle_interaction(request: Request) -> Response:
         owner_type=owner_type,
         action_id=action_id,
     )
-    
-    habit_reporter = HabitCompletionReporter(supabase)
-    follow_up_agent = FollowUpAgent(supabase, slack_service)
     
     try:
         # Handle different actions
@@ -564,8 +620,8 @@ async def handle_interaction(request: Request) -> Response:
             try:
                 await follow_up_agent.skip_habit_today(owner_type, owner_id, habit_id)
                 
-                # Get habit name
-                habit = await habit_reporter._get_habit_by_id(habit_id)
+                # Get habit name using injected repository
+                habit = await habit_repo.get_by_id(habit_id)
                 habit_name = habit.get("name", "Habit") if habit else "Habit"
             except Exception as e:
                 raise DataFetchError(
@@ -595,8 +651,8 @@ async def handle_interaction(request: Request) -> Response:
                     owner_type, owner_id, habit_id, delay_minutes=60
                 )
                 
-                # Get habit name
-                habit = await habit_reporter._get_habit_by_id(habit_id)
+                # Get habit name using injected repository
+                habit = await habit_repo.get_by_id(habit_id)
                 habit_name = habit.get("name", "Habit") if habit else "Habit"
             except Exception as e:
                 raise DataFetchError(
@@ -623,7 +679,13 @@ async def handle_interaction(request: Request) -> Response:
                 habit_id=habit_id,
             )
             try:
-                dashboard_handler = DashboardCommandHandler(supabase, slack_service)
+                # Create DashboardCommandHandler with injected dependencies
+                dashboard_handler = DashboardCommandHandler(
+                    progress_calculator=progress_calculator,
+                    completion_reporter=habit_reporter,
+                    slack_service=slack_service,
+                    slack_repo=slack_repo,
+                )
                 await dashboard_handler.handle_increment(
                     habit_id=habit_id,
                     owner_id=owner_id,
@@ -684,9 +746,25 @@ async def handle_interaction(request: Request) -> Response:
 
 
 @router.post("/events")
-async def handle_event(request: Request) -> dict:
+async def handle_event(
+    request: Request,
+    slack_service: SlackIntegrationService = Depends(get_slack_service),
+) -> dict:
     """
     Handle Slack Events API (URL verification, app mentions).
+    
+    This endpoint uses dependency injection for the Slack service,
+    following the separation of concerns pattern.
+    
+    Args:
+        request: The incoming FastAPI request.
+        slack_service: SlackIntegrationService for signature verification (injected via Depends).
+        
+    Returns:
+        Response dict with challenge or ok status.
+        
+    Requirements:
+    - 1.3: THE Backend_API SHALL separate business logic from HTTP handling in routers
     """
     body = await request.body()
     
@@ -700,8 +778,7 @@ async def handle_event(request: Request) -> dict:
     if payload.get("type") == "url_verification":
         return {"challenge": payload.get("challenge")}
     
-    # Verify signature for other events
-    slack_service = get_slack_service()
+    # Verify signature for other events using injected service
     timestamp = request.headers.get("X-Slack-Request-Timestamp", "")
     signature = request.headers.get("X-Slack-Signature", "")
     

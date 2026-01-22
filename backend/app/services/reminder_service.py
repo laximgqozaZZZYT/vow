@@ -27,6 +27,9 @@ from .slack_block_builder import SlackBlockBuilder
 from .encryption import decrypt_token
 from ..repositories.slack import SlackRepository
 from ..schemas.slack import SlackMessage
+from ..utils.structured_logger import get_logger
+
+logger = get_logger(__name__)
 
 
 class ReminderService:
@@ -136,7 +139,12 @@ class ReminderService:
                     error_count += 1
 
             except Exception as e:
-                print(f"Error processing habit {habit.get('id')}: {e}")
+                logger.error(
+                    "Error processing habit",
+                    error=e,
+                    habit_id=habit.get("id"),
+                    owner_id=habit.get("owner_id"),
+                )
                 error_count += 1
 
         return {
@@ -203,7 +211,12 @@ class ReminderService:
             return response.ok
 
         except Exception as e:
-            print(f"Error sending reminder: {e}")
+            logger.error(
+                "Error sending reminder",
+                error=e,
+                habit_id=habit.get("id"),
+                habit_name=habit.get("name"),
+            )
             return False
 
     async def _send_in_app_notification(
@@ -224,7 +237,13 @@ class ReminderService:
             True if notification was sent successfully
         """
         # TODO: Implement in-app notification system
-        print(f"In-app notification for {owner_id}: {habit['name']}")
+        logger.info(
+            "In-app notification triggered (not implemented)",
+            owner_type=owner_type,
+            owner_id=owner_id,
+            habit_name=habit["name"],
+            habit_id=habit.get("id"),
+        )
         return True
 
     async def _get_habits_with_triggers(self) -> List[Dict[str, Any]]:

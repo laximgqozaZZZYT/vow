@@ -106,21 +106,46 @@ class SlackBlockBuilder:
         workload_unit: Optional[str],
     ) -> Dict[str, Any]:
         """
-        Build an increment button with common "✓" label.
+        Build an increment button with appropriate label.
         
         Args:
             habit_id: ID of the habit
-            workload_per_count: Amount to add per click (not used for label anymore)
-            workload_unit: Unit of measurement (not used for label anymore)
+            workload_per_count: Amount to add per click
+            workload_unit: Unit of measurement (optional)
             
         Returns:
-            Block Kit button element with "✓" label
+            Block Kit button element with formatted label:
+            - With unit: "+{amount} {unit}" (e.g., "+5 分", "+1 回")
+            - Without unit and amount > 1: "+{amount}" (e.g., "+5")
+            - Without unit and amount == 1: "✓"
+            
+        Requirements:
+        - 5.1: WHEN a habit has workloadPerCount greater than 1, display "+{amount} {unit}"
+        - 5.2: WHEN a habit has workloadPerCount of 1 and workloadUnit is set, display "+1 {unit}"
+        - 5.3: WHEN a habit has no workloadUnit and amount is 1, display "✓"
         """
+        # Format the amount: display as integer if it's a whole number
+        if workload_per_count == int(workload_per_count):
+            amount_str = str(int(workload_per_count))
+        else:
+            amount_str = str(workload_per_count)
+        
+        # Determine button label based on unit and amount
+        if workload_unit is not None:
+            # Has unit: always show "+{amount} {unit}"
+            label = f"+{amount_str} {workload_unit}"
+        elif workload_per_count == 1:
+            # No unit and amount is 1: show "✓"
+            label = "✓"
+        else:
+            # No unit but amount > 1: show "+{amount}"
+            label = f"+{amount_str}"
+        
         return {
             "type": "button",
             "text": {
                 "type": "plain_text",
-                "text": "✓",
+                "text": label,
                 "emoji": True,
             },
             "action_id": f"habit_increment_{habit_id}",

@@ -14,6 +14,9 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from jose import jwt, JWTError, ExpiredSignatureError, jwk
 
 from app.config import settings
+from app.utils.structured_logger import get_logger
+
+logger = get_logger(__name__)
 
 
 # Cache for Cognito JWKS
@@ -108,9 +111,6 @@ class JWTAuthMiddleware(BaseHTTPMiddleware):
     
     async def dispatch(self, request: Request, call_next):
         """Process request and validate JWT if required."""
-        import logging
-        logger = logging.getLogger(__name__)
-        
         # Skip authentication for OPTIONS requests (CORS preflight)
         if request.method == "OPTIONS":
             logger.info("Skipping auth for OPTIONS preflight request")
@@ -119,11 +119,18 @@ class JWTAuthMiddleware(BaseHTTPMiddleware):
         # Debug logging for path analysis
         original_path = request.url.path
         normalized_path = self._strip_stage_prefix(original_path)
-        logger.info(f"Auth middleware - Original path: {original_path}, Normalized: {normalized_path}")
+        logger.info(
+            "Auth middleware processing request",
+            original_path=original_path,
+            normalized_path=normalized_path,
+        )
         
         # Skip authentication for excluded paths
         if self._is_excluded_path(request.url.path):
-            logger.info(f"Path {original_path} is excluded from authentication")
+            logger.info(
+                "Path excluded from authentication",
+                path=original_path,
+            )
             return await call_next(request)
         
         # Extract token from Authorization header
@@ -198,17 +205,18 @@ class JWTAuthMiddleware(BaseHTTPMiddleware):
         - ES256 (asymmetric): Uses JWKS endpoint to get public key
         - HS256 (symmetric): Uses JWT_SECRET for verification
         """
-        import logging
-        logger = logging.getLogger(__name__)
-        
         # Get token header to check algorithm
         try:
             headers = jwt.get_unverified_headers(token)
             token_alg = headers.get("alg", "unknown")
             token_kid = headers.get("kid")
-            logger.info(f"Supabase token algorithm: {token_alg}, kid: {token_kid}")
+            logger.info(
+                "Verifying Supabase token",
+                algorithm=token_alg,
+                kid=token_kid,
+            )
         except Exception as e:
-            logger.error(f"Failed to get token headers: {e}")
+            logger.error("Failed to get token headers", error=e)
             raise JWTError(f"Invalid token format: {e}")
         
         # Determine verification method based on algorithm
@@ -234,9 +242,6 @@ class JWTAuthMiddleware(BaseHTTPMiddleware):
     
     def _verify_with_jwks(self, token: str, alg: str, kid: str) -> dict:
         """Verify JWT using JWKS public key."""
-        import logging
-        logger = logging.getLogger(__name__)
-        
         jwks = self._get_supabase_jwks()
         
         # Find the key with matching kid
@@ -249,7 +254,10 @@ class JWTAuthMiddleware(BaseHTTPMiddleware):
         if not public_key:
             # If no kid match, try the first key
             if jwks.get("keys"):
-                logger.warning(f"No key found with kid={kid}, using first available key")
+                logger.warning(
+                    "No key found with matching kid, using first available key",
+                    kid=kid,
+                )
                 public_key = jwk.construct(jwks["keys"][0]).to_pem().decode("utf-8")
             else:
                 raise JWTError("No public keys available in JWKS")
@@ -270,10 +278,7 @@ class JWTAuthMiddleware(BaseHTTPMiddleware):
         """Fetch and cache Supabase JWKS."""
         import time
         import json
-        import logging
         from urllib.request import urlopen
-        
-        logger = logging.getLogger(__name__)
         
         global _jwks_cache, _jwks_cache_time
         
@@ -285,13 +290,16 @@ class JWTAuthMiddleware(BaseHTTPMiddleware):
             raise ValueError("SUPABASE_URL is not configured")
         
         jwks_url = f"{settings.supabase_url}/auth/v1/.well-known/jwks.json"
-        logger.info(f"Fetching JWKS from: {jwks_url}")
+        logger.info("Fetching JWKS", url=jwks_url)
         
         with urlopen(jwks_url, timeout=10) as response:
             _jwks_cache = json.loads(response.read().decode("utf-8"))
             _jwks_cache_time = current_time
         
-        logger.info(f"JWKS fetched, keys count: {len(_jwks_cache.get('keys', []))}")
+        logger.info(
+            "JWKS fetched successfully",
+            keys_count=len(_jwks_cache.get("keys", [])),
+        )
         return _jwks_cache
     
     def _verify_cognito_token(self, token: str) -> dict:

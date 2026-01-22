@@ -3,14 +3,18 @@ Daily Progress Calculator
 
 Service for calculating daily workload-based progress for habits.
 
+This service handles progress calculation logic, delegating all database
+operations to injected repositories.
+
 Requirements:
+- 2.3: THE Daily_Progress_Calculator SHALL handle only progress calculation logic
+- 2.6: WHEN services need database access, THE Backend_API SHALL inject repositories as dependencies
 - 6.1: THE Daily_Progress_Calculator SHALL calculate progress based on activities 
        within JST 0:00-23:59 of the current day
 - 6.4: THE Daily_Progress_Calculator SHALL return progress data including: habitId, habitName, 
        currentCount, totalCount, progressRate, workloadUnit, workloadPerCount, and completed status
 """
 
-import logging
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Dict, List, Optional, Tuple
@@ -20,9 +24,13 @@ try:
 except ImportError:
     from backports.zoneinfo import ZoneInfo
 
-from supabase import Client
+from ..repositories.habit import HabitRepository
+from ..repositories.activity import ActivityRepository
+from ..repositories.goal import GoalRepository
+from ..errors import DataFetchError
+from ..utils.structured_logger import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 @dataclass
@@ -78,18 +86,37 @@ class DailyProgressCalculator:
     This service calculates workload-based progress for habits based on
     activities within JST 0:00-23:59 of the current day.
     
+    All database operations are delegated to injected repositories,
+    following the dependency injection pattern for testability.
+    
     Requirements:
+    - 2.3: THE Daily_Progress_Calculator SHALL handle only progress calculation logic
     - 6.1: Calculate progress based on activities within JST 0:00-23:59
+    
+    Attributes:
+        habit_repo: Repository for habit database operations.
+        activity_repo: Repository for activity database operations.
+        goal_repo: Repository for goal database operations.
+        jst: Japan Standard Time timezone for date calculations.
     """
     
-    def __init__(self, supabase: Client):
+    def __init__(
+        self,
+        habit_repo: HabitRepository,
+        activity_repo: ActivityRepository,
+        goal_repo: GoalRepository,
+    ):
         """
-        Initialize the DailyProgressCalculator.
+        Initialize the DailyProgressCalculator with injected repositories.
         
         Args:
-            supabase: Supabase client for database operations
+            habit_repo: Repository for habit database operations.
+            activity_repo: Repository for activity database operations.
+            goal_repo: Repository for goal database operations.
         """
-        self.supabase = supabase
+        self.habit_repo = habit_repo
+        self.activity_repo = activity_repo
+        self.goal_repo = goal_repo
         self.jst = ZoneInfo("Asia/Tokyo")
     
     def _get_jst_day_boundaries(self) -> Tuple[datetime, datetime]:
@@ -131,7 +158,7 @@ class DailyProgressCalculator:
         """
         Get activities within JST 0:00-23:59 today.
         
-        Queries the activities table for all completion activities within
+        Uses the ActivityRepository to query completion activities within
         the current JST day boundaries.
         
         Requirements:
@@ -147,52 +174,31 @@ class DailyProgressCalculator:
         Returns:
             List of activity records with kind="complete" within JST day boundaries
         """
-        # Get JST day boundaries in UTC
-        start_utc, end_utc = self._get_jst_day_boundaries()
-        
-        # Format timestamps for database query (without timezone suffix for compatibility)
-        # Supabase stores timestamps in UTC, so we use the UTC values directly
-        start_iso = start_utc.strftime("%Y-%m-%dT%H:%M:%S")
-        end_iso = end_utc.strftime("%Y-%m-%dT%H:%M:%S")
-        
-        print(f"[DEBUG] Querying activities for owner {owner_id}: start={start_iso}, end={end_iso}")
-        
-        # First, get ALL activities for this user to debug
-        all_result = self.supabase.table("activities").select("*").eq(
-            "owner_type", owner_type
-        ).eq(
-            "owner_id", owner_id
-        ).order("timestamp", desc=True).limit(20).execute()
-        
-        all_activities = all_result.data if all_result.data else []
-        print(f"[DEBUG] Total recent activities for owner {owner_id}: {len(all_activities)}")
-        for act in all_activities[:5]:  # Only print first 5
-            print(
-                f"[DEBUG] Recent activity: habit_id={act.get('habit_id')}, "
-                f"kind={act.get('kind')}, amount={act.get('amount')}, "
-                f"timestamp={act.get('timestamp')}"
+        try:
+            # Get JST day boundaries in UTC
+            start_utc, end_utc = self._get_jst_day_boundaries()
+            
+            logger.debug(
+                f"Querying activities for owner {owner_id}: "
+                f"start={start_utc.isoformat()}, end={end_utc.isoformat()}"
             )
-        
-        # Query activities table with filters:
-        # - owner_type and owner_id for user filtering
-        # - kind="complete" for completion activities only
-        # - timestamp within JST day boundaries
-        result = self.supabase.table("activities").select("*").eq(
-            "owner_type", owner_type
-        ).eq(
-            "owner_id", owner_id
-        ).eq(
-            "kind", "complete"
-        ).gte(
-            "timestamp", start_iso
-        ).lte(
-            "timestamp", end_iso
-        ).execute()
-        
-        activities = result.data if result.data else []
-        print(f"[DEBUG] Found {len(activities)} activities within time range for owner {owner_id}")
-        
-        return activities
+            
+            # Use repository to get activities in range
+            activities = await self.activity_repo.get_activities_in_range(
+                owner_type=owner_type,
+                owner_id=owner_id,
+                start=start_utc,
+                end=end_utc,
+                kind="complete"
+            )
+            
+            logger.debug(
+                f"Found {len(activities)} activities within time range for owner {owner_id}"
+            )
+            
+            return activities
+        except Exception as e:
+            raise DataFetchError(f"Failed to get today's activities: {e}", e)
 
     def _calculate_workload(
         self,
@@ -240,7 +246,9 @@ class DailyProgressCalculator:
             
             total_workload += float(amount)
         
-        print(f"[DEBUG] Workload for habit {habit_id}: {matching_count} activities, total={total_workload}")
+        logger.debug(
+            f"Workload for habit {habit_id}: {matching_count} activities, total={total_workload}"
+        )
         
         return total_workload
 
@@ -272,121 +280,100 @@ class DailyProgressCalculator:
         Returns:
             List of HabitProgress objects sorted by goal_name
         """
-        # Import HabitCompletionReporter for streak calculation
-        from app.services.habit_completion_reporter import HabitCompletionReporter
-        
-        # Create instance for streak calculation
-        completion_reporter = HabitCompletionReporter(self.supabase)
-        
-        # Query active habits with type="do" (Requirements 6.5, 6.6)
-        habits = await self._get_active_do_habits(owner_id, owner_type)
-        
-        # Get today's activities
-        activities = await self._get_today_activities(owner_id, owner_type)
-        
-        # Build progress list
-        progress_list: List[HabitProgress] = []
-        
-        for habit in habits:
-            habit_id = habit.get("id", "")
-            habit_name = habit.get("name", "")
+        try:
+            # Import HabitCompletionReporter for streak calculation
+            # Note: We create a local instance with the same repositories
+            from app.services.habit_completion_reporter import HabitCompletionReporter
             
-            # Get goal name (default to "No Goal" if not set)
-            goal_name = await self._get_goal_name(habit.get("goal_id"))
-            
-            # Get workload_per_count (default to 1)
-            # Note: Supabase column is snake_case: workload_per_count
-            workload_per_count = float(habit.get("workload_per_count") or 1)
-            
-            # Calculate current count from today's activities
-            current_count = self._calculate_workload(
-                habit_id, activities, workload_per_count
+            # Create instance for streak calculation with injected repositories
+            completion_reporter = HabitCompletionReporter(
+                self.habit_repo,
+                self.activity_repo,
+                self.goal_repo
             )
             
-            # Determine total count: use workload_total if set, otherwise fall back to must
-            # Note: Supabase column is snake_case: workload_total
-            # (Requirement 2.4)
-            workload_total = habit.get("workload_total")
-            must = habit.get("must")
+            # Query active habits with type="do" using repository (Requirements 6.5, 6.6)
+            habits = await self.habit_repo.get_active_do_habits(owner_type, owner_id)
             
-            if workload_total is not None and workload_total > 0:
-                total_count = float(workload_total)
-            elif must is not None and must > 0:
-                total_count = float(must)
-            else:
-                # Default to 1 if neither is set
-                total_count = 1.0
+            # Get today's activities
+            activities = await self._get_today_activities(owner_id, owner_type)
             
-            # Calculate progress rate
-            progress_rate = (current_count / total_count) * 100 if total_count > 0 else 0.0
+            # Build progress list
+            progress_list: List[HabitProgress] = []
             
-            # Get workload unit (may be None)
-            # Note: Supabase column is snake_case: workload_unit
-            workload_unit = habit.get("workload_unit")
+            for habit in habits:
+                habit_id = habit.get("id", "")
+                habit_name = habit.get("name", "")
+                
+                # Get goal name using repository (default to "No Goal" if not set)
+                goal_name = await self._get_goal_name(habit.get("goal_id"))
+                
+                # Get workload_per_count (default to 1)
+                # Note: Supabase column is snake_case: workload_per_count
+                workload_per_count = float(habit.get("workload_per_count") or 1)
+                
+                # Calculate current count from today's activities
+                current_count = self._calculate_workload(
+                    habit_id, activities, workload_per_count
+                )
+                
+                # Determine total count: use workload_total if set, otherwise fall back to must
+                # Note: Supabase column is snake_case: workload_total
+                # (Requirement 2.4)
+                workload_total = habit.get("workload_total")
+                must = habit.get("must")
+                
+                if workload_total is not None and workload_total > 0:
+                    total_count = float(workload_total)
+                elif must is not None and must > 0:
+                    total_count = float(must)
+                else:
+                    # Default to 1 if neither is set
+                    total_count = 1.0
+                
+                # Calculate progress rate
+                progress_rate = (current_count / total_count) * 100 if total_count > 0 else 0.0
+                
+                # Get workload unit (may be None)
+                # Note: Supabase column is snake_case: workload_unit
+                workload_unit = habit.get("workload_unit")
+                
+                # Get streak count using existing method
+                streak = await completion_reporter.get_habit_streak(
+                    habit_id, owner_type, owner_id
+                )
+                
+                # Determine if completed (progress_rate >= 100)
+                completed = progress_rate >= 100
+                
+                # Create HabitProgress object
+                progress = HabitProgress(
+                    habit_id=habit_id,
+                    habit_name=habit_name,
+                    goal_name=goal_name,
+                    current_count=current_count,
+                    total_count=total_count,
+                    progress_rate=progress_rate,
+                    workload_unit=workload_unit,
+                    workload_per_count=workload_per_count,
+                    streak=streak,
+                    completed=completed,
+                )
+                
+                progress_list.append(progress)
             
-            # Get streak count using existing method
-            streak = await completion_reporter.get_habit_streak(
-                habit_id, owner_type, owner_id
-            )
+            # Sort by goal_name
+            progress_list.sort(key=lambda p: p.goal_name)
             
-            # Determine if completed (progress_rate >= 100)
-            completed = progress_rate >= 100
-            
-            # Create HabitProgress object
-            progress = HabitProgress(
-                habit_id=habit_id,
-                habit_name=habit_name,
-                goal_name=goal_name,
-                current_count=current_count,
-                total_count=total_count,
-                progress_rate=progress_rate,
-                workload_unit=workload_unit,
-                workload_per_count=workload_per_count,
-                streak=streak,
-                completed=completed,
-            )
-            
-            progress_list.append(progress)
-        
-        # Sort by goal_name
-        progress_list.sort(key=lambda p: p.goal_name)
-        
-        return progress_list
-
-    async def _get_active_do_habits(
-        self,
-        owner_id: str,
-        owner_type: str,
-    ) -> List[Dict[str, Any]]:
-        """
-        Get active habits with type="do" for an owner.
-        
-        Requirements:
-        - 6.5: THE Daily_Progress_Calculator SHALL exclude inactive habits
-        - 6.6: THE Daily_Progress_Calculator SHALL exclude habits with type="avoid"
-        
-        Args:
-            owner_id: User ID
-            owner_type: Type of owner
-            
-        Returns:
-            List of active habit records with type="do"
-        """
-        result = self.supabase.table("habits").select("*").eq(
-            "owner_type", owner_type
-        ).eq(
-            "owner_id", owner_id
-        ).eq(
-            "active", True
-        ).eq(
-            "type", "do"
-        ).execute()
-        
-        return result.data if result.data else []
+            return progress_list
+        except DataFetchError:
+            raise
+        except Exception as e:
+            raise DataFetchError(f"Failed to calculate daily progress: {e}", e)
 
     async def _get_goal_name(self, goal_id: Optional[str]) -> str:
         """
-        Get the name of a goal by ID.
+        Get the name of a goal by ID using the repository.
         
         Args:
             goal_id: ID of the goal (may be None)
@@ -397,11 +384,11 @@ class DailyProgressCalculator:
         if not goal_id:
             return "No Goal"
         
-        result = self.supabase.table("goals").select("name").eq(
-            "id", goal_id
-        ).execute()
-        
-        if result.data and len(result.data) > 0:
-            return result.data[0].get("name", "No Goal")
-        
-        return "No Goal"
+        try:
+            goal = await self.goal_repo.get_by_id(goal_id)
+            if goal:
+                return goal.get("name", "No Goal")
+            return "No Goal"
+        except Exception as e:
+            logger.warning(f"Failed to get goal name for {goal_id}: {e}")
+            return "No Goal"

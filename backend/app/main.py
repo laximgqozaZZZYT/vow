@@ -17,9 +17,12 @@ from app.config import settings
 from app.routers import health
 from app.routers import slack_oauth, slack_webhook, slack_interactions
 from app.middleware.auth import JWTAuthMiddleware
+from app.utils.structured_logger import get_logger
 
 # Check if running in Lambda environment
 IS_LAMBDA = bool(os.environ.get("AWS_LAMBDA_FUNCTION_NAME"))
+
+logger = get_logger(__name__)
 
 
 @asynccontextmanager
@@ -27,11 +30,18 @@ async def lifespan(app: FastAPI):
     """Application lifecycle management."""
     # Startup
     if not IS_LAMBDA:
-        print(f"Starting {settings.app_name} v{settings.app_version}")
+        logger.info(
+            "Application starting",
+            app_name=settings.app_name,
+            app_version=settings.app_version,
+        )
     yield
     # Shutdown
     if not IS_LAMBDA:
-        print(f"Shutting down {settings.app_name}")
+        logger.info(
+            "Application shutting down",
+            app_name=settings.app_name,
+        )
 
 
 app = FastAPI(

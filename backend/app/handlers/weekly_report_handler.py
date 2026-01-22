@@ -13,14 +13,13 @@ Requirements:
 
 import time
 import asyncio
-import logging
 from typing import Any, Dict
 
 from ..config import get_supabase_client
+from ..utils.structured_logger import get_logger
 
-# Configure logging for CloudWatch
-logger = logging.getLogger(__name__)
-logger.setLevel(logging.INFO)
+# Configure structured logger for CloudWatch
+logger = get_logger(__name__)
 
 
 def handle_weekly_report(event: dict, context: Any) -> dict:

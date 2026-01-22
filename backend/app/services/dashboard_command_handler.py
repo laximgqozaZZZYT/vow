@@ -16,7 +16,6 @@ Requirements:
 """
 
 import asyncio
-import logging
 from datetime import datetime
 from typing import Any, Dict, Optional
 
@@ -27,6 +26,7 @@ except ImportError:
 
 from supabase import Client
 
+from app.repositories.slack import SlackRepository
 from app.services.daily_progress_calculator import (
     DailyProgressCalculator,
     DashboardSummary,
@@ -34,8 +34,9 @@ from app.services.daily_progress_calculator import (
 from app.services.habit_completion_reporter import HabitCompletionReporter
 from app.services.slack_block_builder import SlackBlockBuilder
 from app.services.slack_service import SlackIntegrationService
+from app.utils.structured_logger import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 class DashboardCommandHandler:
@@ -46,6 +47,8 @@ class DashboardCommandHandler:
     progress data, HabitCompletionReporter for handling increment actions,
     and SlackIntegrationService for sending responses to Slack.
     
+    All services are injected as dependencies for testability.
+    
     Requirements:
     - 1.1: Respond with a combined view of habit list and progress status
     - 9.1: Display connection instructions if user not connected
@@ -53,25 +56,30 @@ class DashboardCommandHandler:
     
     def __init__(
         self,
-        supabase: Client,
+        progress_calculator: DailyProgressCalculator,
+        completion_reporter: HabitCompletionReporter,
         slack_service: SlackIntegrationService,
+        slack_repo: SlackRepository,
     ):
         """
-        Initialize the DashboardCommandHandler.
+        Initialize the DashboardCommandHandler with injected dependencies.
         
         Args:
-            supabase: Supabase client for database operations
+            progress_calculator: DailyProgressCalculator for progress calculations
+            completion_reporter: HabitCompletionReporter for habit completions
             slack_service: SlackIntegrationService for Slack API interactions
+            slack_repo: SlackRepository for Slack connection lookups
         """
-        self.progress_calculator = DailyProgressCalculator(supabase)
-        self.completion_reporter = HabitCompletionReporter(supabase)
+        self.progress_calculator = progress_calculator
+        self.completion_reporter = completion_reporter
         self.slack_service = slack_service
+        self.slack_repo = slack_repo
 
     async def _get_owner_id_from_slack(self, slack_user_id: str) -> Optional[str]:
         """
         Get the owner_id for a Slack user from the slack_connections table.
         
-        This method queries the slack_connections table to find the owner_id
+        This method uses the SlackRepository to find the owner_id
         associated with a given Slack user ID. This is used to map Slack users
         to their corresponding app user accounts.
         
@@ -87,12 +95,10 @@ class DashboardCommandHandler:
                Slack_Dashboard_Command SHALL display a message with 
                instructions to connect via the app settings
         """
-        result = self.progress_calculator.supabase.table("slack_connections").select(
-            "owner_id"
-        ).eq("slack_user_id", slack_user_id).eq("is_valid", True).execute()
+        connection = await self.slack_repo.get_connection_by_slack_user_id(slack_user_id)
         
-        if result.data and len(result.data) > 0:
-            return result.data[0].get("owner_id")
+        if connection and connection.get("is_valid", False):
+            return connection.get("owner_id")
         
         return None
 
@@ -159,7 +165,8 @@ class DashboardCommandHandler:
             if owner_id is None:
                 # User not connected - send error message with instructions
                 logger.info(
-                    f"Dashboard command from unconnected Slack user: {slack_user_id}"
+                    "Dashboard command from unconnected Slack user",
+                    slack_user_id=slack_user_id,
                 )
                 blocks = SlackBlockBuilder.not_connected()
                 await self.slack_service.send_response(
@@ -178,7 +185,10 @@ class DashboardCommandHandler:
             
             # Step 3: Check if user has no habits (Requirement 1.5)
             if not progress_list:
-                logger.info(f"Dashboard command for user with no habits: {owner_id}")
+                logger.info(
+                    "Dashboard command for user with no habits",
+                    owner_id=owner_id,
+                )
                 blocks = SlackBlockBuilder.dashboard_empty()
                 await self.slack_service.send_response(
                     response_url,
@@ -224,15 +234,18 @@ class DashboardCommandHandler:
             )
             
             logger.info(
-                f"Dashboard sent for user {owner_id}: "
-                f"{completed_habits}/{total_habits} habits completed"
+                "Dashboard sent successfully",
+                owner_id=owner_id,
+                completed_habits=completed_habits,
+                total_habits=total_habits,
             )
             
         except Exception as e:
             # Log error and send error message to user (Requirement 9.2)
             logger.error(
-                f"Error processing dashboard command for Slack user {slack_user_id}: {e}",
-                exc_info=True,
+                "Error processing dashboard command",
+                error=e,
+                slack_user_id=slack_user_id,
             )
             
             blocks = SlackBlockBuilder.dashboard_error(
@@ -269,7 +282,10 @@ class DashboardCommandHandler:
             # Step 2: Handle failure - habit not found
             if not success:
                 logger.warning(
-                    f"Increment failed for habit {habit_id}, owner {owner_id}: {message}"
+                    "Increment failed - habit not found",
+                    habit_id=habit_id,
+                    owner_id=owner_id,
+                    message=message,
                 )
                 
                 error_blocks = SlackBlockBuilder.dashboard_error(
@@ -316,15 +332,19 @@ class DashboardCommandHandler:
             )
             
             logger.info(
-                f"Increment successful for habit {habit_id}, owner {owner_id}"
+                "Increment successful",
+                habit_id=habit_id,
+                owner_id=owner_id,
             )
             
             return True
             
         except Exception as e:
             logger.error(
-                f"Error handling increment for habit {habit_id}, owner {owner_id}: {e}",
-                exc_info=True,
+                "Error handling increment",
+                error=e,
+                habit_id=habit_id,
+                owner_id=owner_id,
             )
             
             error_blocks = SlackBlockBuilder.dashboard_error(

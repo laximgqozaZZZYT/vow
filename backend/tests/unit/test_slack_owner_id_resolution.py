@@ -298,79 +298,128 @@ class TestMissingConnectionHandling:
         "not connected" error response is returned.
         
         **Validates: Requirement 1.4**
-        """
-        # Create mock request
-        mock_request = AsyncMock()
-        mock_request.body = AsyncMock(return_value=b"command=/habit-list&user_id=U_UNKNOWN&team_id=T_UNKNOWN&response_url=https://hooks.slack.com/test")
-        mock_request.headers = {
-            "X-Slack-Request-Timestamp": "1234567890",
-            "X-Slack-Signature": "v0=test_signature",
-        }
         
-        # Mock the slack service to pass signature verification
-        with patch("app.routers.slack_webhook.get_slack_service") as mock_get_service:
-            mock_service = MagicMock()
-            mock_service.verify_signature = MagicMock(return_value=True)
-            mock_get_service.return_value = mock_service
-            
-            # Mock supabase and repository - need to mock get_supabase_with_retry
-            with patch("app.routers.slack_webhook.get_supabase_with_retry") as mock_get_supabase:
-                mock_supabase = MagicMock()
-                mock_get_supabase.return_value = mock_supabase
-                
-                with patch("app.routers.slack_webhook.SlackRepository") as MockSlackRepo:
-                    mock_repo = AsyncMock()
-                    # Return None to simulate no connection found
-                    mock_repo.get_connection_by_slack_user = AsyncMock(return_value=None)
-                    MockSlackRepo.return_value = mock_repo
-                    
-                    # Call the handler
-                    result = await handle_slash_command(mock_request)
-                    
-                    # Verify "not connected" response
-                    assert result.get("response_type") == "ephemeral"
-                    assert "blocks" in result
-                    
-                    # The SlackBlockBuilder.not_connected() should be called
-                    # which returns blocks indicating user needs to connect
+        Note: This test uses FastAPI's dependency override pattern to inject
+        mock dependencies, following the refactored router's DI approach.
+        """
+        from fastapi.testclient import TestClient
+        from fastapi import FastAPI
+        from app.routers.slack_webhook import router
+        from app.dependencies import (
+            get_slack_service,
+            get_slack_repository,
+            get_habit_repository,
+            get_activity_repository,
+            get_goal_repository,
+            get_habit_completion_reporter,
+            get_daily_progress_calculator,
+        )
+        
+        # Create test app
+        app = FastAPI()
+        app.include_router(router)
+        
+        # Create mock dependencies
+        mock_slack_service = MagicMock()
+        mock_slack_service.verify_signature = MagicMock(return_value=True)
+        
+        mock_slack_repo = AsyncMock()
+        mock_slack_repo.get_connection_by_slack_user = AsyncMock(return_value=None)
+        
+        # Override dependencies
+        app.dependency_overrides[get_slack_service] = lambda: mock_slack_service
+        app.dependency_overrides[get_slack_repository] = lambda: mock_slack_repo
+        app.dependency_overrides[get_habit_repository] = lambda: MagicMock()
+        app.dependency_overrides[get_activity_repository] = lambda: MagicMock()
+        app.dependency_overrides[get_goal_repository] = lambda: MagicMock()
+        app.dependency_overrides[get_habit_completion_reporter] = lambda: AsyncMock()
+        app.dependency_overrides[get_daily_progress_calculator] = lambda: AsyncMock()
+        
+        client = TestClient(app)
+        
+        response = client.post(
+            "/api/slack/commands",
+            data={
+                "command": "/habit-list",
+                "user_id": "U_UNKNOWN",
+                "team_id": "T_UNKNOWN",
+                "response_url": "https://hooks.slack.com/test",
+            },
+            headers={
+                "X-Slack-Request-Timestamp": "1234567890",
+                "X-Slack-Signature": "v0=test_signature",
+            },
+        )
+        
+        # Verify "not connected" response
+        assert response.status_code == 200
+        result = response.json()
+        assert result.get("response_type") == "ephemeral"
+        assert "blocks" in result
 
     @pytest.mark.asyncio
     async def test_connection_lookup_called_with_correct_params(self):
         """
         Test that connection lookup is called with the correct 
         slack_user_id and team_id from the command payload.
-        """
-        mock_request = AsyncMock()
-        mock_request.body = AsyncMock(
-            return_value=b"command=/habit-list&user_id=U0A9L0TME1Y&team_id=T0A9L0TME1X&response_url=https://hooks.slack.com/test"
-        )
-        mock_request.headers = {
-            "X-Slack-Request-Timestamp": "1234567890",
-            "X-Slack-Signature": "v0=test_signature",
-        }
         
-        with patch("app.routers.slack_webhook.get_slack_service") as mock_get_service:
-            mock_service = MagicMock()
-            mock_service.verify_signature = MagicMock(return_value=True)
-            mock_get_service.return_value = mock_service
-            
-            # Mock get_supabase_with_retry instead of get_supabase
-            with patch("app.routers.slack_webhook.get_supabase_with_retry") as mock_get_supabase:
-                mock_supabase = MagicMock()
-                mock_get_supabase.return_value = mock_supabase
-                
-                with patch("app.routers.slack_webhook.SlackRepository") as MockSlackRepo:
-                    mock_repo = AsyncMock()
-                    mock_repo.get_connection_by_slack_user = AsyncMock(return_value=None)
-                    MockSlackRepo.return_value = mock_repo
-                    
-                    await handle_slash_command(mock_request)
-                    
-                    # Verify lookup was called with correct Slack IDs
-                    mock_repo.get_connection_by_slack_user.assert_called_once_with(
-                        "U0A9L0TME1Y",  # slack_user_id
-                        "T0A9L0TME1X",  # slack_team_id
-                    )
+        Note: This test uses FastAPI's dependency override pattern to inject
+        mock dependencies, following the refactored router's DI approach.
+        """
+        from fastapi.testclient import TestClient
+        from fastapi import FastAPI
+        from app.routers.slack_webhook import router
+        from app.dependencies import (
+            get_slack_service,
+            get_slack_repository,
+            get_habit_repository,
+            get_activity_repository,
+            get_goal_repository,
+            get_habit_completion_reporter,
+            get_daily_progress_calculator,
+        )
+        
+        # Create test app
+        app = FastAPI()
+        app.include_router(router)
+        
+        # Create mock dependencies
+        mock_slack_service = MagicMock()
+        mock_slack_service.verify_signature = MagicMock(return_value=True)
+        
+        mock_slack_repo = AsyncMock()
+        mock_slack_repo.get_connection_by_slack_user = AsyncMock(return_value=None)
+        
+        # Override dependencies
+        app.dependency_overrides[get_slack_service] = lambda: mock_slack_service
+        app.dependency_overrides[get_slack_repository] = lambda: mock_slack_repo
+        app.dependency_overrides[get_habit_repository] = lambda: MagicMock()
+        app.dependency_overrides[get_activity_repository] = lambda: MagicMock()
+        app.dependency_overrides[get_goal_repository] = lambda: MagicMock()
+        app.dependency_overrides[get_habit_completion_reporter] = lambda: AsyncMock()
+        app.dependency_overrides[get_daily_progress_calculator] = lambda: AsyncMock()
+        
+        client = TestClient(app)
+        
+        client.post(
+            "/api/slack/commands",
+            data={
+                "command": "/habit-list",
+                "user_id": "U0A9L0TME1Y",
+                "team_id": "T0A9L0TME1X",
+                "response_url": "https://hooks.slack.com/test",
+            },
+            headers={
+                "X-Slack-Request-Timestamp": "1234567890",
+                "X-Slack-Signature": "v0=test_signature",
+            },
+        )
+        
+        # Verify lookup was called with correct Slack IDs
+        mock_slack_repo.get_connection_by_slack_user.assert_called_once_with(
+            "U0A9L0TME1Y",  # slack_user_id
+            "T0A9L0TME1X",  # slack_team_id
+        )
 
 
 # =============================================================================
@@ -381,6 +430,9 @@ class TestFullSlashCommandFlow:
     """
     Integration-style tests that verify the full flow from command receipt
     to habit query with correct owner_id.
+    
+    Note: These tests use FastAPI's dependency override pattern to inject
+    mock dependencies, following the refactored router's DI approach.
     """
 
     @pytest.mark.asyncio
@@ -393,51 +445,70 @@ class TestFullSlashCommandFlow:
         
         **Validates: Requirements 1.1, 1.2, 1.4**
         """
-        mock_request = AsyncMock()
-        mock_request.body = AsyncMock(
-            return_value=b"command=/habit-list&user_id=U0A9L0TME1Y&team_id=T0A9L0TME1X&response_url=https://hooks.slack.com/test"
+        from fastapi.testclient import TestClient
+        from fastapi import FastAPI
+        from app.routers.slack_webhook import router
+        from app.dependencies import (
+            get_slack_service,
+            get_slack_repository,
+            get_habit_repository,
+            get_activity_repository,
+            get_goal_repository,
+            get_habit_completion_reporter,
+            get_daily_progress_calculator,
         )
-        mock_request.headers = {
-            "X-Slack-Request-Timestamp": "1234567890",
-            "X-Slack-Signature": "v0=test_signature",
-        }
         
-        with patch("app.routers.slack_webhook.get_slack_service") as mock_get_service:
-            mock_service = MagicMock()
-            mock_service.verify_signature = MagicMock(return_value=True)
-            mock_get_service.return_value = mock_service
-            
-            # Mock get_supabase_with_retry instead of get_supabase
-            with patch("app.routers.slack_webhook.get_supabase_with_retry") as mock_get_supabase:
-                mock_supabase = MagicMock()
-                mock_get_supabase.return_value = mock_supabase
-                
-                with patch("app.routers.slack_webhook.SlackRepository") as MockSlackRepo:
-                    mock_repo = AsyncMock()
-                    mock_repo.get_connection_by_slack_user = AsyncMock(
-                        return_value=mock_connection_distinct_ids
-                    )
-                    MockSlackRepo.return_value = mock_repo
-                    
-                    with patch("app.routers.slack_webhook.HabitCompletionReporter") as MockReporter:
-                        mock_reporter = AsyncMock()
-                        mock_reporter.get_all_habits_with_status = AsyncMock(
-                            return_value=mock_habits
-                        )
-                        MockReporter.return_value = mock_reporter
-                        
-                        result = await handle_slash_command(mock_request)
-                        
-                        # Verify HabitCompletionReporter was called with VOW owner_id
-                        mock_reporter.get_all_habits_with_status.assert_called_once_with(
-                            "2c7cfc4d-7dc2-4a36-b85a-b8c23a012f47",  # VOW UUID
-                            "user",
-                        )
-                        
-                        # Verify it was NOT called with Slack user ID
-                        call_args = mock_reporter.get_all_habits_with_status.call_args
-                        assert call_args[0][0] != "U0A9L0TME1Y", \
-                            "BUG: Should not use slack_user_id for habit queries!"
+        # Create test app
+        app = FastAPI()
+        app.include_router(router)
+        
+        # Create mock dependencies
+        mock_slack_service = MagicMock()
+        mock_slack_service.verify_signature = MagicMock(return_value=True)
+        
+        mock_slack_repo = AsyncMock()
+        mock_slack_repo.get_connection_by_slack_user = AsyncMock(
+            return_value=mock_connection_distinct_ids
+        )
+        
+        mock_reporter = AsyncMock()
+        mock_reporter.get_all_habits_with_status = AsyncMock(return_value=mock_habits)
+        
+        # Override dependencies
+        app.dependency_overrides[get_slack_service] = lambda: mock_slack_service
+        app.dependency_overrides[get_slack_repository] = lambda: mock_slack_repo
+        app.dependency_overrides[get_habit_repository] = lambda: MagicMock()
+        app.dependency_overrides[get_activity_repository] = lambda: MagicMock()
+        app.dependency_overrides[get_goal_repository] = lambda: MagicMock()
+        app.dependency_overrides[get_habit_completion_reporter] = lambda: mock_reporter
+        app.dependency_overrides[get_daily_progress_calculator] = lambda: AsyncMock()
+        
+        client = TestClient(app)
+        
+        client.post(
+            "/api/slack/commands",
+            data={
+                "command": "/habit-list",
+                "user_id": "U0A9L0TME1Y",
+                "team_id": "T0A9L0TME1X",
+                "response_url": "https://hooks.slack.com/test",
+            },
+            headers={
+                "X-Slack-Request-Timestamp": "1234567890",
+                "X-Slack-Signature": "v0=test_signature",
+            },
+        )
+        
+        # Verify HabitCompletionReporter was called with VOW owner_id
+        mock_reporter.get_all_habits_with_status.assert_called_once_with(
+            "2c7cfc4d-7dc2-4a36-b85a-b8c23a012f47",  # VOW UUID
+            "user",
+        )
+        
+        # Verify it was NOT called with Slack user ID
+        call_args = mock_reporter.get_all_habits_with_status.call_args
+        assert call_args[0][0] != "U0A9L0TME1Y", \
+            "BUG: Should not use slack_user_id for habit queries!"
 
     @pytest.mark.asyncio
     async def test_full_habit_status_flow_uses_correct_owner_id(
@@ -448,46 +519,65 @@ class TestFullSlashCommandFlow:
         
         **Validates: Requirements 1.1, 1.2, 1.4**
         """
-        mock_request = AsyncMock()
-        mock_request.body = AsyncMock(
-            return_value=b"command=/habit-status&user_id=U0A9L0TME1Y&team_id=T0A9L0TME1X&response_url=https://hooks.slack.com/test"
+        from fastapi.testclient import TestClient
+        from fastapi import FastAPI
+        from app.routers.slack_webhook import router
+        from app.dependencies import (
+            get_slack_service,
+            get_slack_repository,
+            get_habit_repository,
+            get_activity_repository,
+            get_goal_repository,
+            get_habit_completion_reporter,
+            get_daily_progress_calculator,
         )
-        mock_request.headers = {
-            "X-Slack-Request-Timestamp": "1234567890",
-            "X-Slack-Signature": "v0=test_signature",
-        }
         
-        with patch("app.routers.slack_webhook.get_slack_service") as mock_get_service:
-            mock_service = MagicMock()
-            mock_service.verify_signature = MagicMock(return_value=True)
-            mock_get_service.return_value = mock_service
-            
-            # Mock get_supabase_with_retry instead of get_supabase
-            with patch("app.routers.slack_webhook.get_supabase_with_retry") as mock_get_supabase:
-                mock_supabase = MagicMock()
-                mock_get_supabase.return_value = mock_supabase
-                
-                with patch("app.routers.slack_webhook.SlackRepository") as MockSlackRepo:
-                    mock_repo = AsyncMock()
-                    mock_repo.get_connection_by_slack_user = AsyncMock(
-                        return_value=mock_connection_distinct_ids
-                    )
-                    MockSlackRepo.return_value = mock_repo
-                    
-                    with patch("app.routers.slack_webhook.HabitCompletionReporter") as MockReporter:
-                        mock_reporter = AsyncMock()
-                        mock_reporter.get_today_summary = AsyncMock(
-                            return_value=mock_today_summary
-                        )
-                        MockReporter.return_value = mock_reporter
-                        
-                        result = await handle_slash_command(mock_request)
-                        
-                        # Verify called with VOW owner_id
-                        mock_reporter.get_today_summary.assert_called_once_with(
-                            "2c7cfc4d-7dc2-4a36-b85a-b8c23a012f47",
-                            "user",
-                        )
+        # Create test app
+        app = FastAPI()
+        app.include_router(router)
+        
+        # Create mock dependencies
+        mock_slack_service = MagicMock()
+        mock_slack_service.verify_signature = MagicMock(return_value=True)
+        
+        mock_slack_repo = AsyncMock()
+        mock_slack_repo.get_connection_by_slack_user = AsyncMock(
+            return_value=mock_connection_distinct_ids
+        )
+        
+        mock_reporter = AsyncMock()
+        mock_reporter.get_today_summary = AsyncMock(return_value=mock_today_summary)
+        
+        # Override dependencies
+        app.dependency_overrides[get_slack_service] = lambda: mock_slack_service
+        app.dependency_overrides[get_slack_repository] = lambda: mock_slack_repo
+        app.dependency_overrides[get_habit_repository] = lambda: MagicMock()
+        app.dependency_overrides[get_activity_repository] = lambda: MagicMock()
+        app.dependency_overrides[get_goal_repository] = lambda: MagicMock()
+        app.dependency_overrides[get_habit_completion_reporter] = lambda: mock_reporter
+        app.dependency_overrides[get_daily_progress_calculator] = lambda: AsyncMock()
+        
+        client = TestClient(app)
+        
+        client.post(
+            "/api/slack/commands",
+            data={
+                "command": "/habit-status",
+                "user_id": "U0A9L0TME1Y",
+                "team_id": "T0A9L0TME1X",
+                "response_url": "https://hooks.slack.com/test",
+            },
+            headers={
+                "X-Slack-Request-Timestamp": "1234567890",
+                "X-Slack-Signature": "v0=test_signature",
+            },
+        )
+        
+        # Verify called with VOW owner_id
+        mock_reporter.get_today_summary.assert_called_once_with(
+            "2c7cfc4d-7dc2-4a36-b85a-b8c23a012f47",
+            "user",
+        )
 
     @pytest.mark.asyncio
     async def test_full_habit_done_flow_uses_correct_owner_id(
@@ -498,48 +588,70 @@ class TestFullSlashCommandFlow:
         
         **Validates: Requirements 1.1, 1.2, 1.4**
         """
-        mock_request = AsyncMock()
-        mock_request.body = AsyncMock(
-            return_value=b"command=/habit-done&text=Morning Exercise&user_id=U0A9L0TME1Y&team_id=T0A9L0TME1X&response_url=https://hooks.slack.com/test"
+        from fastapi.testclient import TestClient
+        from fastapi import FastAPI
+        from app.routers.slack_webhook import router
+        from app.dependencies import (
+            get_slack_service,
+            get_slack_repository,
+            get_habit_repository,
+            get_activity_repository,
+            get_goal_repository,
+            get_habit_completion_reporter,
+            get_daily_progress_calculator,
         )
-        mock_request.headers = {
-            "X-Slack-Request-Timestamp": "1234567890",
-            "X-Slack-Signature": "v0=test_signature",
-        }
         
-        with patch("app.routers.slack_webhook.get_slack_service") as mock_get_service:
-            mock_service = MagicMock()
-            mock_service.verify_signature = MagicMock(return_value=True)
-            mock_get_service.return_value = mock_service
-            
-            # Mock get_supabase_with_retry instead of get_supabase
-            with patch("app.routers.slack_webhook.get_supabase_with_retry") as mock_get_supabase:
-                mock_supabase = MagicMock()
-                mock_get_supabase.return_value = mock_supabase
-                
-                with patch("app.routers.slack_webhook.SlackRepository") as MockSlackRepo:
-                    mock_repo = AsyncMock()
-                    mock_repo.get_connection_by_slack_user = AsyncMock(
-                        return_value=mock_connection_distinct_ids
-                    )
-                    MockSlackRepo.return_value = mock_repo
-                    
-                    with patch("app.routers.slack_webhook.HabitCompletionReporter") as MockReporter:
-                        mock_reporter = AsyncMock()
-                        mock_reporter.complete_habit_by_name = AsyncMock(
-                            return_value=(True, "Completed", {
-                                "habit": {"name": "Morning Exercise"},
-                                "streak": 6,
-                            })
-                        )
-                        MockReporter.return_value = mock_reporter
-                        
-                        result = await handle_slash_command(mock_request)
-                        
-                        # Verify called with VOW owner_id
-                        mock_reporter.complete_habit_by_name.assert_called_once()
-                        call_args = mock_reporter.complete_habit_by_name.call_args
-                        assert call_args[0][0] == "2c7cfc4d-7dc2-4a36-b85a-b8c23a012f47"
+        # Create test app
+        app = FastAPI()
+        app.include_router(router)
+        
+        # Create mock dependencies
+        mock_slack_service = MagicMock()
+        mock_slack_service.verify_signature = MagicMock(return_value=True)
+        
+        mock_slack_repo = AsyncMock()
+        mock_slack_repo.get_connection_by_slack_user = AsyncMock(
+            return_value=mock_connection_distinct_ids
+        )
+        
+        mock_reporter = AsyncMock()
+        mock_reporter.complete_habit_by_name = AsyncMock(
+            return_value=(True, "Completed", {
+                "habit": {"name": "Morning Exercise"},
+                "streak": 6,
+            })
+        )
+        
+        # Override dependencies
+        app.dependency_overrides[get_slack_service] = lambda: mock_slack_service
+        app.dependency_overrides[get_slack_repository] = lambda: mock_slack_repo
+        app.dependency_overrides[get_habit_repository] = lambda: MagicMock()
+        app.dependency_overrides[get_activity_repository] = lambda: MagicMock()
+        app.dependency_overrides[get_goal_repository] = lambda: MagicMock()
+        app.dependency_overrides[get_habit_completion_reporter] = lambda: mock_reporter
+        app.dependency_overrides[get_daily_progress_calculator] = lambda: AsyncMock()
+        
+        client = TestClient(app)
+        
+        client.post(
+            "/api/slack/commands",
+            data={
+                "command": "/habit-done",
+                "text": "Morning Exercise",
+                "user_id": "U0A9L0TME1Y",
+                "team_id": "T0A9L0TME1X",
+                "response_url": "https://hooks.slack.com/test",
+            },
+            headers={
+                "X-Slack-Request-Timestamp": "1234567890",
+                "X-Slack-Signature": "v0=test_signature",
+            },
+        )
+        
+        # Verify called with VOW owner_id
+        mock_reporter.complete_habit_by_name.assert_called_once()
+        call_args = mock_reporter.complete_habit_by_name.call_args
+        assert call_args[0][0] == "2c7cfc4d-7dc2-4a36-b85a-b8c23a012f47"
 
 
 # =============================================================================
