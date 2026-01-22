@@ -421,7 +421,8 @@ class HabitCompletionReporter:
             # If amount parameter is None, use workloadPerCount
             increment_amount = amount if amount is not None else workload_per_count
 
-            # Create activity record with amount and source using repository
+            # Create activity record with amount using repository
+            # Note: source field removed as it doesn't exist in activities table
             activity_data = {
                 "owner_type": owner_type,
                 "owner_id": owner_id,
@@ -430,7 +431,6 @@ class HabitCompletionReporter:
                 "kind": "complete",
                 "timestamp": datetime.utcnow().isoformat(),
                 "amount": increment_amount,
-                "source": source,
             }
 
             activity = await self.activity_repo.create(activity_data)
