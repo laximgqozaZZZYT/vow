@@ -106,49 +106,21 @@ class SlackBlockBuilder:
         workload_unit: Optional[str],
     ) -> Dict[str, Any]:
         """
-        Build an increment button with appropriate label.
+        Build an increment button with common "✓" label.
         
         Args:
             habit_id: ID of the habit
-            workload_per_count: Amount to add per click
-            workload_unit: Unit of measurement (e.g., "回", "分", "ページ")
+            workload_per_count: Amount to add per click (not used for label anymore)
+            workload_unit: Unit of measurement (not used for label anymore)
             
         Returns:
-            Block Kit button element
-            
-        Label formatting rules:
-            - If workload_unit is set: "+{workload_per_count} {workload_unit}" (e.g., "+1 回", "+5 分")
-            - If workload_unit is None and workload_per_count > 1: "+{workload_per_count}"
-            - If workload_unit is None and workload_per_count == 1: "✓"
-            
-        Requirements: 5.1, 5.2, 5.3
-        Property 12: Increment Button Label Formatting
+            Block Kit button element with "✓" label
         """
-        # Determine button label based on workload_unit and workload_per_count
-        if workload_unit is not None:
-            # Format as "+{amount} {unit}" when unit exists
-            # Convert to int if it's a whole number for cleaner display
-            if workload_per_count == int(workload_per_count):
-                amount_str = str(int(workload_per_count))
-            else:
-                amount_str = str(workload_per_count)
-            label = f"+{amount_str} {workload_unit}"
-        elif workload_per_count > 1:
-            # Format as "+{amount}" when amount > 1 and no unit
-            if workload_per_count == int(workload_per_count):
-                amount_str = str(int(workload_per_count))
-            else:
-                amount_str = str(workload_per_count)
-            label = f"+{amount_str}"
-        else:
-            # Format as "✓" when amount = 1 and no unit
-            label = "✓"
-        
         return {
             "type": "button",
             "text": {
                 "type": "plain_text",
-                "text": label,
+                "text": "✓",
                 "emoji": True,
             },
             "action_id": f"habit_increment_{habit_id}",
@@ -169,52 +141,45 @@ class SlackBlockBuilder:
             Block Kit section with accessory button
             
         Output format:
-            ⬜ *朝のストレッチ* 🔥3日
+            ⬜ *朝のストレッチ* (5回/日) 🔥3日
             2/5 回 (40%)
             `🟨🟨🟨🟨⬜⬜⬜⬜⬜⬜`
-            
-        Requirements:
-        - 2.1: Show progress in format `currentCount/totalCount unit (progressRate%)`
-        - 2.3: When no workloadUnit, display as `currentCount/totalCount (progressRate%)`
-        - 2.5: Display ✅ when progressRate >= 100%
-        - 2.6: Display ⬜ when progressRate < 100%
-        - 4.1: Include increment button for incomplete habits
-        - 4.6: Still display increment button when habit is at 100% or higher
-        
-        Property 3: Progress Format with Unit Handling
-        Property 6: Completion Indicator Based on Progress
         """
-        # Determine completion indicator (Requirements 2.5, 2.6)
+        # Determine completion indicator
         completion_indicator = "✅" if habit.completed else "⬜"
         
         # Get streak display
         streak_text = SlackBlockBuilder._streak_display(habit.streak)
         streak_suffix = f" {streak_text}" if streak_text else ""
         
-        # Build first line: completion indicator, habit name (bold), streak
-        first_line = f"{completion_indicator} *{habit.habit_name}*{streak_suffix}"
-        
-        # Build progress text (Requirements 2.1, 2.3)
-        # Format current_count and total_count as integers if they are whole numbers
-        if habit.current_count == int(habit.current_count):
-            current_str = str(int(habit.current_count))
-        else:
-            current_str = str(habit.current_count)
-        
+        # Build workload total display for title
+        # Format: (total_count unit/日) or (total_count/日) if no unit
         if habit.total_count == int(habit.total_count):
             total_str = str(int(habit.total_count))
         else:
             total_str = str(habit.total_count)
+        
+        if habit.workload_unit:
+            workload_display = f"({total_str}{habit.workload_unit}/日)"
+        else:
+            workload_display = f"({total_str}/日)"
+        
+        # Build first line: completion indicator, habit name (bold), workload total, streak
+        first_line = f"{completion_indicator} *{habit.habit_name}* {workload_display}{streak_suffix}"
+        
+        # Build progress text
+        if habit.current_count == int(habit.current_count):
+            current_str = str(int(habit.current_count))
+        else:
+            current_str = str(habit.current_count)
         
         # Format progress rate as integer percentage
         progress_rate_int = int(habit.progress_rate)
         
         # Build progress text based on whether workload_unit is defined
         if habit.workload_unit:
-            # Format: currentCount/totalCount unit (progressRate%)
             progress_text = f"{current_str}/{total_str} {habit.workload_unit} ({progress_rate_int}%)"
         else:
-            # Format: currentCount/totalCount (progressRate%)
             progress_text = f"{current_str}/{total_str} ({progress_rate_int}%)"
         
         # Get progress bar
@@ -223,7 +188,7 @@ class SlackBlockBuilder:
         # Build full section text
         section_text = f"{first_line}\n{progress_text}\n`{progress_bar}`"
         
-        # Build increment button (Requirements 4.1, 4.6 - always show button)
+        # Build increment button
         increment_button = SlackBlockBuilder._increment_button(
             habit.habit_id,
             habit.workload_per_count,
@@ -255,40 +220,18 @@ class SlackBlockBuilder:
         Returns:
             List of Block Kit blocks
             
-        Output format:
-            ┌─────────────────────────────────────────────────────┐
-            │ 📊 今日の進捗 - 2026年1月20日（月）                    │
-            │ 3/5 習慣を完了 (60%)                                 │
-            │ `████████░░░░░░░░░░░░` 60%                          │
-            ├─────────────────────────────────────────────────────┤
-            │ *健康*                                              │
-            ├─────────────────────────────────────────────────────┤
-            │ ⬜ 朝のストレッチ                                    │
-            │ 2/5 回 (40%) 🔥3日                                  │
-            │ `🟨🟨🟨🟨⬜⬜⬜⬜⬜⬜`                    [+1 回]    │
-            └─────────────────────────────────────────────────────┘
-            
-        Requirements:
-        - 1.1: WHEN a user types `/habit-dashboard`, THE Slack_Dashboard_Command 
-               SHALL respond with a combined view of habit list and progress status
-        - 1.2: WHEN displaying the dashboard, THE Slack_Block_Builder SHALL show 
-               a header with today's date and overall completion summary
-        - 1.3: WHEN displaying the dashboard, THE Slack_Block_Builder SHALL group 
-               habits by their associated goals
-               
-        Property 1: Dashboard Response Structure
-        Property 2: Habit Grouping by Goal
+        Note: Completed habits (progress_rate >= 100%) are excluded from display.
         """
         # Import DashboardSummary for type checking
         from app.services.daily_progress_calculator import DashboardSummary, HabitProgress
         
         blocks: List[Dict[str, Any]] = []
         
-        # 1. Header with date (Requirement 1.2)
+        # 1. Header with date
         header_text = f"📊 今日の進捗 - {summary.date_display}"
         blocks.append(SlackBlockBuilder._header(header_text))
         
-        # 2. Summary section with completion count and overall progress bar (Requirement 1.2)
+        # 2. Summary section with completion count and overall progress bar
         completion_rate_int = int(summary.completion_rate)
         overall_progress_bar = SlackBlockBuilder._progress_bar(summary.completion_rate)
         summary_text = (
@@ -300,16 +243,25 @@ class SlackBlockBuilder:
         # 3. Divider after summary
         blocks.append(SlackBlockBuilder._divider())
         
-        # 4. Group habits by goal_name (Requirement 1.3)
-        # Build a dictionary of goal_name -> list of habits
+        # 4. Filter out completed habits (progress_rate >= 100%)
+        incomplete_habits = [h for h in progress_list if not h.completed]
+        
+        # If all habits are completed, show a congratulations message
+        if not incomplete_habits:
+            blocks.append(SlackBlockBuilder._section(
+                "🎉 今日の習慣をすべて達成しました！素晴らしい！"
+            ))
+            return blocks
+        
+        # 5. Group incomplete habits by goal_name
         goals: Dict[str, List["HabitProgress"]] = {}
-        for habit in progress_list:
+        for habit in incomplete_habits:
             goal_name = habit.goal_name
             if goal_name not in goals:
                 goals[goal_name] = []
             goals[goal_name].append(habit)
         
-        # 5. For each goal group, add goal name section and habit progress sections
+        # 6. For each goal group, add goal name section and habit progress sections
         for goal_name, goal_habits in goals.items():
             # Goal name section in bold
             blocks.append(SlackBlockBuilder._section(f"*{goal_name}*"))

@@ -254,38 +254,11 @@ class DashboardCommandHandler:
         """
         Handle increment button click.
         
-        This method processes an increment button click by:
-        1. Calling increment_habit_progress on HabitCompletionReporter
-        2. If increment fails (habit not found), sending error message
-        3. If increment succeeds, checking if progress reached 100%
-        4. Sending celebration message or refreshing the dashboard
-        5. Updating the original message via response_url
-        
-        Args:
-            habit_id: ID of the habit to increment
-            owner_id: User ID
-            response_url: URL for updating the message
-            
-        Returns:
-            True if successful, False otherwise
-            
-        Requirements:
-        - 4.2: WHEN a user clicks the increment button, THE Habit_Completion_Reporter 
-               SHALL create an activity record with amount equal to the habit's 
-               workloadPerCount (default: 1)
-        - 4.3: WHEN an activity is created via increment button, THE 
-               Habit_Completion_Reporter SHALL set the source field to "slack"
-        - 4.5: WHEN progressRate reaches 100% after an increment, THE Slack_Bot 
-               SHALL display a completion celebration message with streak count
-        - 8.1: WHEN a user clicks an increment button, THE Slack_Bot SHALL update 
-               the original message with the new progress
-        - 9.3: IF an increment action fails, THEN THE Slack_Bot SHALL display an 
-               error message without modifying the original dashboard
-        - 9.5: IF a habit referenced in an interaction no longer exists, THEN THE 
-               Slack_Bot SHALL display a message indicating the habit was not found
+        Simplified version that just increments and sends a confirmation.
+        The user can use /habit-dashboard again to see updated progress.
         """
         try:
-            # Step 1: Call increment_habit_progress (Requirements 4.2, 4.3)
+            # Step 1: Call increment_habit_progress
             success, message, result_data = await self.completion_reporter.increment_habit_progress(
                 owner_id=owner_id,
                 habit_id=habit_id,
@@ -293,14 +266,12 @@ class DashboardCommandHandler:
                 owner_type="user",
             )
             
-            # Step 2: Handle failure - habit not found (Requirements 9.3, 9.5)
+            # Step 2: Handle failure - habit not found
             if not success:
                 logger.warning(
                     f"Increment failed for habit {habit_id}, owner {owner_id}: {message}"
                 )
                 
-                # Send error message without modifying original dashboard
-                # Use replace_original=False to preserve the original message
                 error_blocks = SlackBlockBuilder.dashboard_error(
                     "この習慣は見つかりませんでした。"
                 )
@@ -312,88 +283,36 @@ class DashboardCommandHandler:
                 )
                 return False
             
-            # Step 3: Increment succeeded - check if we need celebration
+            # Step 3: Send simple confirmation message
             habit = result_data.get("habit", {})
             habit_name = habit.get("name", "")
-            streak = result_data.get("streak", 0)
+            amount = result_data.get("amount", 1)
             
-            # Calculate new progress to check if we reached 100%
-            # Get the updated progress for this habit
-            progress_list = await self.progress_calculator.get_daily_progress(
-                owner_id=owner_id,
-                owner_type="user",
-            )
+            # Get workload_unit from habit
+            workload_unit = habit.get("workload_unit", "")
             
-            # Find the habit in the progress list
-            habit_progress = next(
-                (p for p in progress_list if p.habit_id == habit_id),
-                None
-            )
-            
-            # Step 4: Check if progress just reached 100% (Requirement 4.5)
-            # We consider it a celebration if progress_rate >= 100
-            if habit_progress and habit_progress.progress_rate >= 100:
-                # Check if this was the increment that pushed it to 100%
-                # by checking if current_count equals total_count (or just exceeded)
-                amount = result_data.get("amount", 1)
-                previous_count = habit_progress.current_count - amount
-                previous_rate = (previous_count / habit_progress.total_count) * 100 if habit_progress.total_count > 0 else 0
-                
-                if previous_rate < 100:
-                    # This increment caused completion - show celebration!
-                    logger.info(
-                        f"Habit {habit_id} reached 100% for owner {owner_id}, "
-                        f"streak: {streak}"
-                    )
-                    
-                    celebration_blocks = SlackBlockBuilder.habit_increment_success(
-                        habit_name=habit_name,
-                        streak=streak,
-                    )
-                    
-                    # Send celebration as a new message (don't replace dashboard)
-                    await self.slack_service.send_response(
-                        response_url,
-                        f"🎉 {habit_name} を達成しました！",
-                        blocks=celebration_blocks,
-                        replace_original=False,
-                    )
-            
-            # Step 5: Refresh the dashboard with updated progress (Requirement 8.1)
-            # Build updated dashboard
-            if not progress_list:
-                # No habits - show empty dashboard
-                blocks = SlackBlockBuilder.dashboard_empty()
+            # Build confirmation message
+            if workload_unit:
+                if amount == int(amount):
+                    amount_str = str(int(amount))
+                else:
+                    amount_str = str(amount)
+                confirm_text = f"✅ *{habit_name}* に +{amount_str} {workload_unit} を記録しました"
             else:
-                # Build summary
-                total_habits = len(progress_list)
-                completed_habits = sum(1 for p in progress_list if p.completed)
-                completion_rate = (
-                    (completed_habits / total_habits) * 100 if total_habits > 0 else 0.0
-                )
-                
-                # Format date in JST
-                jst = ZoneInfo("Asia/Tokyo")
-                now_jst = datetime.now(jst)
-                weekday_names = ["月", "火", "水", "木", "金", "土", "日"]
-                weekday = weekday_names[now_jst.weekday()]
-                date_display = f"{now_jst.year}年{now_jst.month}月{now_jst.day}日（{weekday}）"
-                
-                summary = DashboardSummary(
-                    total_habits=total_habits,
-                    completed_habits=completed_habits,
-                    completion_rate=completion_rate,
-                    date_display=date_display,
-                )
-                
-                blocks = SlackBlockBuilder.habit_dashboard(progress_list, summary)
+                confirm_text = f"✅ *{habit_name}* を記録しました"
             
-            # Update the original message with refreshed dashboard
+            # Send confirmation as a new message (don't replace dashboard)
             await self.slack_service.send_response(
                 response_url,
-                f"進捗を更新しました: {habit_name}",
-                blocks=blocks,
-                replace_original=True,
+                confirm_text,
+                blocks=[{
+                    "type": "section",
+                    "text": {
+                        "type": "mrkdwn",
+                        "text": confirm_text
+                    }
+                }],
+                replace_original=False,
             )
             
             logger.info(
@@ -403,13 +322,11 @@ class DashboardCommandHandler:
             return True
             
         except Exception as e:
-            # Log error and send error message (Requirement 9.3)
             logger.error(
                 f"Error handling increment for habit {habit_id}, owner {owner_id}: {e}",
                 exc_info=True,
             )
             
-            # Send error message without modifying original dashboard
             error_blocks = SlackBlockBuilder.dashboard_error(
                 "進捗の更新中にエラーが発生しました。再度お試しください。"
             )

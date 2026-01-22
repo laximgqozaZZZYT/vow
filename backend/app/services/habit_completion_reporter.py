@@ -456,8 +456,9 @@ class HabitCompletionReporter:
         if not habit:
             return False, "Habit not found", None
 
-        # Get workloadPerCount from habit (default to 1 if not set)
-        workload_per_count = habit.get("workloadPerCount", 1)
+        # Get workload_per_count from habit (default to 1 if not set)
+        # Note: Supabase column is snake_case: workload_per_count
+        workload_per_count = habit.get("workload_per_count", 1)
         if workload_per_count is None:
             workload_per_count = 1
 
