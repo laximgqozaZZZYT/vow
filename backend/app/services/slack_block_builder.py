@@ -4,9 +4,12 @@ Slack Block Kit Message Builder
 Utility for building rich Slack messages using Block Kit.
 """
 
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, TYPE_CHECKING
 from dataclasses import dataclass
 from datetime import date
+
+if TYPE_CHECKING:
+    from app.services.daily_progress_calculator import HabitProgress
 
 
 @dataclass
@@ -24,6 +27,322 @@ class WeeklyReportData:
 
 class SlackBlockBuilder:
     """Utility class for building Slack Block Kit messages."""
+
+    @staticmethod
+    def _progress_bar(progress_rate: float) -> str:
+        """
+        Generate a text-based progress bar with color coding.
+        
+        Args:
+            progress_rate: Progress percentage (0-100+)
+            
+        Returns:
+            String with colored block characters (10 segments)
+            
+        Color coding:
+            - >= 100%: 🟩 (green)
+            - 75-99%: 🟦 (blue)
+            - 50-74%: 🟨 (yellow)
+            - < 50%: 🟥 (red)
+            
+        Empty segments use ⬜
+        """
+        import math
+        
+        # Calculate filled segments: min(10, max(0, floor(progress_rate / 10)))
+        # max(0, ...) ensures negative values result in 0 filled segments
+        filled_segments = min(10, max(0, math.floor(progress_rate / 10)))
+        empty_segments = 10 - filled_segments
+        
+        # Determine color based on progress_rate
+        if progress_rate >= 100:
+            filled_char = "🟩"  # Green
+        elif progress_rate >= 75:
+            filled_char = "🟦"  # Blue
+        elif progress_rate >= 50:
+            filled_char = "🟨"  # Yellow
+        else:
+            filled_char = "🟥"  # Red
+        
+        empty_char = "⬜"
+        
+        # Build progress bar string
+        progress_bar = (filled_char * filled_segments) + (empty_char * empty_segments)
+        
+        return progress_bar
+
+    @staticmethod
+    def _streak_display(streak: int) -> str:
+        """
+        Generate streak display string with appropriate emoji.
+        
+        Args:
+            streak: Current streak count (number of consecutive days)
+            
+        Returns:
+            Formatted string with streak count and emoji:
+            - streak >= 7: "🔥{streak}日"
+            - streak 3-6: "✨{streak}日"
+            - streak 1-2: "{streak}日"
+            - streak 0: "" (empty string)
+            
+        Requirements: 10.1, 10.2, 10.3, 10.4
+        Property 15: Streak Display with Emoji
+        """
+        if streak <= 0:
+            return ""
+        elif streak >= 7:
+            return f"🔥{streak}日"
+        elif streak >= 3:
+            return f"✨{streak}日"
+        else:
+            # streak is 1 or 2
+            return f"{streak}日"
+
+    @staticmethod
+    def _increment_button(
+        habit_id: str,
+        workload_per_count: float,
+        workload_unit: Optional[str],
+    ) -> Dict[str, Any]:
+        """
+        Build an increment button with appropriate label.
+        
+        Args:
+            habit_id: ID of the habit
+            workload_per_count: Amount to add per click
+            workload_unit: Unit of measurement (e.g., "回", "分", "ページ")
+            
+        Returns:
+            Block Kit button element
+            
+        Label formatting rules:
+            - If workload_unit is set: "+{workload_per_count} {workload_unit}" (e.g., "+1 回", "+5 分")
+            - If workload_unit is None and workload_per_count > 1: "+{workload_per_count}"
+            - If workload_unit is None and workload_per_count == 1: "✓"
+            
+        Requirements: 5.1, 5.2, 5.3
+        Property 12: Increment Button Label Formatting
+        """
+        # Determine button label based on workload_unit and workload_per_count
+        if workload_unit is not None:
+            # Format as "+{amount} {unit}" when unit exists
+            # Convert to int if it's a whole number for cleaner display
+            if workload_per_count == int(workload_per_count):
+                amount_str = str(int(workload_per_count))
+            else:
+                amount_str = str(workload_per_count)
+            label = f"+{amount_str} {workload_unit}"
+        elif workload_per_count > 1:
+            # Format as "+{amount}" when amount > 1 and no unit
+            if workload_per_count == int(workload_per_count):
+                amount_str = str(int(workload_per_count))
+            else:
+                amount_str = str(workload_per_count)
+            label = f"+{amount_str}"
+        else:
+            # Format as "✓" when amount = 1 and no unit
+            label = "✓"
+        
+        return {
+            "type": "button",
+            "text": {
+                "type": "plain_text",
+                "text": label,
+                "emoji": True,
+            },
+            "action_id": f"habit_increment_{habit_id}",
+            "value": habit_id,
+        }
+
+    @staticmethod
+    def _habit_progress_section(
+        habit: "HabitProgress",
+    ) -> Dict[str, Any]:
+        """
+        Build a section block for a single habit with progress and button.
+        
+        Args:
+            habit: Habit progress data (HabitProgress dataclass)
+            
+        Returns:
+            Block Kit section with accessory button
+            
+        Output format:
+            ⬜ *朝のストレッチ* 🔥3日
+            2/5 回 (40%)
+            `🟨🟨🟨🟨⬜⬜⬜⬜⬜⬜`
+            
+        Requirements:
+        - 2.1: Show progress in format `currentCount/totalCount unit (progressRate%)`
+        - 2.3: When no workloadUnit, display as `currentCount/totalCount (progressRate%)`
+        - 2.5: Display ✅ when progressRate >= 100%
+        - 2.6: Display ⬜ when progressRate < 100%
+        - 4.1: Include increment button for incomplete habits
+        - 4.6: Still display increment button when habit is at 100% or higher
+        
+        Property 3: Progress Format with Unit Handling
+        Property 6: Completion Indicator Based on Progress
+        """
+        # Determine completion indicator (Requirements 2.5, 2.6)
+        completion_indicator = "✅" if habit.completed else "⬜"
+        
+        # Get streak display
+        streak_text = SlackBlockBuilder._streak_display(habit.streak)
+        streak_suffix = f" {streak_text}" if streak_text else ""
+        
+        # Build first line: completion indicator, habit name (bold), streak
+        first_line = f"{completion_indicator} *{habit.habit_name}*{streak_suffix}"
+        
+        # Build progress text (Requirements 2.1, 2.3)
+        # Format current_count and total_count as integers if they are whole numbers
+        if habit.current_count == int(habit.current_count):
+            current_str = str(int(habit.current_count))
+        else:
+            current_str = str(habit.current_count)
+        
+        if habit.total_count == int(habit.total_count):
+            total_str = str(int(habit.total_count))
+        else:
+            total_str = str(habit.total_count)
+        
+        # Format progress rate as integer percentage
+        progress_rate_int = int(habit.progress_rate)
+        
+        # Build progress text based on whether workload_unit is defined
+        if habit.workload_unit:
+            # Format: currentCount/totalCount unit (progressRate%)
+            progress_text = f"{current_str}/{total_str} {habit.workload_unit} ({progress_rate_int}%)"
+        else:
+            # Format: currentCount/totalCount (progressRate%)
+            progress_text = f"{current_str}/{total_str} ({progress_rate_int}%)"
+        
+        # Get progress bar
+        progress_bar = SlackBlockBuilder._progress_bar(habit.progress_rate)
+        
+        # Build full section text
+        section_text = f"{first_line}\n{progress_text}\n`{progress_bar}`"
+        
+        # Build increment button (Requirements 4.1, 4.6 - always show button)
+        increment_button = SlackBlockBuilder._increment_button(
+            habit.habit_id,
+            habit.workload_per_count,
+            habit.workload_unit,
+        )
+        
+        # Return section block with accessory button
+        return {
+            "type": "section",
+            "text": {
+                "type": "mrkdwn",
+                "text": section_text,
+            },
+            "accessory": increment_button,
+        }
+
+    @staticmethod
+    def habit_dashboard(
+        progress_list: List["HabitProgress"],
+        summary: "DashboardSummary",
+    ) -> List[Dict[str, Any]]:
+        """
+        Build the unified dashboard view with progress bars and buttons.
+        
+        Args:
+            progress_list: List of habit progress data
+            summary: Overall summary statistics
+            
+        Returns:
+            List of Block Kit blocks
+            
+        Output format:
+            ┌─────────────────────────────────────────────────────┐
+            │ 📊 今日の進捗 - 2026年1月20日（月）                    │
+            │ 3/5 習慣を完了 (60%)                                 │
+            │ `████████░░░░░░░░░░░░` 60%                          │
+            ├─────────────────────────────────────────────────────┤
+            │ *健康*                                              │
+            ├─────────────────────────────────────────────────────┤
+            │ ⬜ 朝のストレッチ                                    │
+            │ 2/5 回 (40%) 🔥3日                                  │
+            │ `🟨🟨🟨🟨⬜⬜⬜⬜⬜⬜`                    [+1 回]    │
+            └─────────────────────────────────────────────────────┘
+            
+        Requirements:
+        - 1.1: WHEN a user types `/habit-dashboard`, THE Slack_Dashboard_Command 
+               SHALL respond with a combined view of habit list and progress status
+        - 1.2: WHEN displaying the dashboard, THE Slack_Block_Builder SHALL show 
+               a header with today's date and overall completion summary
+        - 1.3: WHEN displaying the dashboard, THE Slack_Block_Builder SHALL group 
+               habits by their associated goals
+               
+        Property 1: Dashboard Response Structure
+        Property 2: Habit Grouping by Goal
+        """
+        # Import DashboardSummary for type checking
+        from app.services.daily_progress_calculator import DashboardSummary, HabitProgress
+        
+        blocks: List[Dict[str, Any]] = []
+        
+        # 1. Header with date (Requirement 1.2)
+        header_text = f"📊 今日の進捗 - {summary.date_display}"
+        blocks.append(SlackBlockBuilder._header(header_text))
+        
+        # 2. Summary section with completion count and overall progress bar (Requirement 1.2)
+        completion_rate_int = int(summary.completion_rate)
+        overall_progress_bar = SlackBlockBuilder._progress_bar(summary.completion_rate)
+        summary_text = (
+            f"*{summary.completed_habits}/{summary.total_habits}* 習慣を完了 ({completion_rate_int}%)\n"
+            f"`{overall_progress_bar}`"
+        )
+        blocks.append(SlackBlockBuilder._section(summary_text))
+        
+        # 3. Divider after summary
+        blocks.append(SlackBlockBuilder._divider())
+        
+        # 4. Group habits by goal_name (Requirement 1.3)
+        # Build a dictionary of goal_name -> list of habits
+        goals: Dict[str, List["HabitProgress"]] = {}
+        for habit in progress_list:
+            goal_name = habit.goal_name
+            if goal_name not in goals:
+                goals[goal_name] = []
+            goals[goal_name].append(habit)
+        
+        # 5. For each goal group, add goal name section and habit progress sections
+        for goal_name, goal_habits in goals.items():
+            # Goal name section in bold
+            blocks.append(SlackBlockBuilder._section(f"*{goal_name}*"))
+            
+            # All habit progress sections for this goal
+            for habit in goal_habits:
+                habit_section = SlackBlockBuilder._habit_progress_section(habit)
+                blocks.append(habit_section)
+            
+            # Divider after each goal group
+            blocks.append(SlackBlockBuilder._divider())
+        
+        return blocks
+
+    @staticmethod
+    def dashboard_empty() -> List[Dict[str, Any]]:
+        """
+        Build dashboard message for users with no active habits.
+        
+        Returns:
+            List of Block Kit blocks with encouraging message to add habits
+            
+        Requirements: 1.5
+        WHEN a user has no active habits, THE Slack_Dashboard_Command SHALL 
+        display a message encouraging them to add habits via the app.
+        """
+        return [
+            SlackBlockBuilder._header("📊 今日の進捗"),
+            SlackBlockBuilder._section(
+                "📝 まだ習慣が登録されていません。\n"
+                "アプリで習慣を追加して始めましょう！"
+            ),
+        ]
 
     @staticmethod
     def _section(text: str, accessory: Optional[Dict] = None) -> Dict[str, Any]:
@@ -512,6 +831,70 @@ class SlackBlockBuilder:
                 "🔗 SlackアカウントがまだVOWに接続されていません。\n"
                 "設定画面から接続して、Slackコマンドを使えるようにしましょう！"
             ),
+        ]
+
+    @staticmethod
+    def dashboard_error(message: str) -> List[Dict[str, Any]]:
+        """
+        Build error message for dashboard errors.
+        
+        Args:
+            message: Error message to display
+            
+        Returns:
+            List of Block Kit blocks with error message prefixed with ❌
+            
+        Requirements: 9.1, 9.2, 9.3, 9.5
+        - 9.1: Display message with instructions when Slack account not connected
+        - 9.2: Display friendly error message when database query fails
+        - 9.3: Display error message when increment action fails
+        - 9.5: Display message when habit referenced in interaction no longer exists
+        """
+        return [
+            {
+                "type": "section",
+                "text": {
+                    "type": "mrkdwn",
+                    "text": f"❌ {message}"
+                }
+            }
+        ]
+
+    @staticmethod
+    def habit_increment_success(habit_name: str, streak: int) -> List[Dict[str, Any]]:
+        """
+        Build celebration message when habit progress reaches 100%.
+        
+        Args:
+            habit_name: Name of the completed habit
+            streak: Current streak count (consecutive days)
+            
+        Returns:
+            List of Block Kit blocks with celebration message including streak count
+            
+        Output format:
+            🎉 *{habit_name}* を達成しました！ 🔥{streak}日連続！
+            
+        Requirements: 4.5
+        WHEN progressRate reaches 100% after an increment, THE Slack_Bot SHALL 
+        display a completion celebration message with streak count.
+        
+        Property 11: Completion Celebration on Reaching 100%
+        For any increment action that causes progressRate to reach or exceed 100% 
+        (from below 100%), the response SHALL include a celebration message 
+        containing the streak count.
+        """
+        # Build celebration message with habit name and streak count
+        celebration_text = f"🎉 *{habit_name}* を達成しました！ 🔥{streak}日連続！"
+        
+        return [
+            {
+                "type": "section",
+                "text": {
+                    "type": "mrkdwn",
+                    "text": celebration_text
+                }
+            }
         ]
 
     @staticmethod

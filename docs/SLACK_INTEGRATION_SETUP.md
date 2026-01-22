@@ -62,11 +62,14 @@
 
 「Create New Command」をクリックして以下のコマンドを作成：
 
-| Command | Request URL | Short Description |
-|---------|-------------|-------------------|
-| `/habit-done` | `http://localhost:8000/api/slack/commands` | Mark a habit as complete |
-| `/habit-status` | `http://localhost:8000/api/slack/commands` | View today's progress |
-| `/habit-list` | `http://localhost:8000/api/slack/commands` | List all habits |
+| Command | Request URL | Short Description | Usage Hint |
+|---------|-------------|-------------------|------------|
+| `/habit-dashboard` | `http://localhost:8000/api/slack/commands` | 今日の習慣進捗を表示します | 習慣の進捗を確認 |
+| `/habit-done` | `http://localhost:8000/api/slack/commands` | Mark a habit as complete | [習慣名] |
+| `/habit-status` | `http://localhost:8000/api/slack/commands` | View today's progress | - |
+| `/habit-list` | `http://localhost:8000/api/slack/commands` | List all habits | - |
+
+> **推奨**: `/habit-dashboard` は `/habit-status` と `/habit-list` の機能を統合した新しいコマンドです。ワークロードベースの進捗表示とインクリメントボタンが含まれています。
 
 > **注意**: 開発環境ではngrokなどのトンネリングツールを使用してローカルサーバーを公開する必要があります。
 
@@ -202,10 +205,13 @@ npm run dev
 Slackで以下のコマンドを試す：
 
 ```
+/habit-dashboard
 /habit-status
 /habit-list
 /habit-done "習慣名"
 ```
+
+> **推奨**: `/habit-dashboard` を使用すると、習慣一覧と進捗状況を統合したビューが表示されます。各習慣にはインクリメントボタンが付いており、ワンクリックで進捗を記録できます。
 
 ---
 

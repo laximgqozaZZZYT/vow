@@ -421,3 +421,72 @@ class HabitCompletionReporter:
                 similar.append(habit_name)
         
         return similar[:3]  # Return top 3 suggestions
+
+    async def increment_habit_progress(
+        self,
+        owner_id: str,
+        habit_id: str,
+        amount: Optional[float] = None,
+        source: str = "slack",
+        owner_type: str = "user",
+    ) -> Tuple[bool, str, Optional[Dict]]:
+        """
+        Increment habit progress by the specified amount.
+        
+        Creates an activity record with the specified amount (or the habit's
+        workloadPerCount if not specified) and source.
+        
+        Requirements:
+        - 4.2: Create activity record with amount equal to habit's workloadPerCount (default: 1)
+        - 4.3: Set source field to "slack" for increment button actions
+        
+        Args:
+            owner_id: User ID
+            habit_id: ID of the habit
+            amount: Amount to add (defaults to workloadPerCount)
+            source: Source of the increment (default: "slack")
+            owner_type: Type of owner (default: "user")
+            
+        Returns:
+            Tuple of (success, message, result_data)
+            - result_data contains: habit, streak, activity, amount
+        """
+        # Get habit by ID
+        habit = await self._get_habit_by_id(habit_id)
+        if not habit:
+            return False, "Habit not found", None
+
+        # Get workloadPerCount from habit (default to 1 if not set)
+        workload_per_count = habit.get("workloadPerCount", 1)
+        if workload_per_count is None:
+            workload_per_count = 1
+
+        # If amount parameter is None, use workloadPerCount
+        increment_amount = amount if amount is not None else workload_per_count
+
+        # Create activity record with amount and source
+        activity_data = {
+            "owner_type": owner_type,
+            "owner_id": owner_id,
+            "habit_id": habit_id,
+            "habit_name": habit.get("name", ""),
+            "kind": "complete",
+            "timestamp": datetime.utcnow().isoformat(),
+            "amount": increment_amount,
+            "source": source,
+        }
+
+        activity = await self._insert_activity(activity_data)
+
+        if not activity:
+            return False, "Failed to record progress", None
+
+        # Calculate new streak
+        streak = await self.get_habit_streak(habit_id, owner_type, owner_id)
+
+        return True, "Progress updated", {
+            "habit": habit,
+            "streak": streak,
+            "activity": activity,
+            "amount": increment_amount,
+        }

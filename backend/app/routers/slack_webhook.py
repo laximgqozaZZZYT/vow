@@ -19,6 +19,7 @@ from ..services.slack_block_builder import SlackBlockBuilder
 from ..services.habit_completion_reporter import HabitCompletionReporter
 from ..services.follow_up_agent import FollowUpAgent
 from ..services.slack_error_handler import SlackErrorHandler, DataFetchError
+from ..services.dashboard_command_handler import DashboardCommandHandler
 from ..repositories.slack import SlackRepository
 from ..schemas.slack import SlashCommandPayload, InteractionPayload, SlackEventPayload
 from ..utils.structured_logger import get_logger
@@ -158,6 +159,27 @@ async def handle_slash_command(request: Request) -> dict:
             result = await _handle_habit_status(habit_reporter, owner_id, owner_type)
         elif command == "/habit-list":
             result = await _handle_habit_list(habit_reporter, owner_id, owner_type)
+        elif command == "/habit-dashboard":
+            # Handle /habit-dashboard command (Requirements 1.1, 1.4)
+            # The DashboardCommandHandler sends response via response_url
+            # Return empty response to Slack (no immediate message)
+            slack_service = get_slack_service()
+            dashboard_handler = DashboardCommandHandler(supabase, slack_service)
+            await dashboard_handler.handle_command(user_id, response_url)
+            
+            # Log command completion with structured logging (Requirement 4.4)
+            processing_time_ms = (time.time() - start_time) * 1000
+            logger.log_slack_command(
+                command=command,
+                processing_time_ms=processing_time_ms,
+                result_status=result_status,
+                slack_user_id=user_id,
+                owner_id=owner_id,
+                owner_type=owner_type,
+            )
+            
+            # Return empty string to avoid showing "{}" in Slack
+            return Response(status_code=200)
         else:
             result = {
                 "response_type": "ephemeral",
@@ -310,6 +332,8 @@ async def _handle_habit_status(
     - 3.1: 接続エラー時にユーザーフレンドリーメッセージを返却
     - 3.2: データ取得失敗時に「データの取得に失敗しました」を表示
     - 3.3: エラーの種類に応じた適切なSlackブロックメッセージを返却
+    - 7.2: /habit-status コマンドは非推奨通知を表示
+    - 7.4: /habit-status 使用時に /habit-dashboard を提案
     """
     # Log before habit query with structured logging
     logger.info(
@@ -326,13 +350,28 @@ async def _handle_habit_status(
             original_error=e,
         ) from e
     
+    # Get the existing status blocks
+    blocks = SlackBlockBuilder.habit_status(
+        summary["completed"],
+        summary["total"],
+        summary["habits"],
+    )
+    
+    # Add deprecation notice (Requirements 7.2, 7.4)
+    deprecation_block = {
+        "type": "context",
+        "elements": [
+            {
+                "type": "mrkdwn",
+                "text": "💡 _このコマンドは非推奨です。より詳細な進捗表示には `/habit-dashboard` をお試しください。_"
+            }
+        ]
+    }
+    blocks.append(deprecation_block)
+    
     return {
         "response_type": "ephemeral",
-        "blocks": SlackBlockBuilder.habit_status(
-            summary["completed"],
-            summary["total"],
-            summary["habits"],
-        ),
+        "blocks": blocks,
     }
 
 
@@ -348,6 +387,8 @@ async def _handle_habit_list(
     - 3.1: 接続エラー時にユーザーフレンドリーメッセージを返却
     - 3.2: データ取得失敗時に「データの取得に失敗しました」を表示
     - 3.3: エラーの種類に応じた適切なSlackブロックメッセージを返却
+    - 7.3: /habit-list コマンドは非推奨通知を表示
+    - 7.4: /habit-list 使用時に /habit-dashboard を提案
     """
     # Log before habit query with structured logging
     logger.info(
@@ -364,9 +405,24 @@ async def _handle_habit_list(
             original_error=e,
         ) from e
     
+    # Get the existing list blocks
+    blocks = SlackBlockBuilder.habit_list(habits, show_buttons=True)
+    
+    # Add deprecation notice (Requirements 7.3, 7.4)
+    deprecation_block = {
+        "type": "context",
+        "elements": [
+            {
+                "type": "mrkdwn",
+                "text": "💡 _このコマンドは非推奨です。より詳細な進捗表示には `/habit-dashboard` をお試しください。_"
+            }
+        ]
+    }
+    blocks.append(deprecation_block)
+    
     return {
         "response_type": "ephemeral",
-        "blocks": SlackBlockBuilder.habit_list(habits, show_buttons=True),
+        "blocks": blocks,
     }
 
 
@@ -555,6 +611,29 @@ async def handle_interaction(request: Request) -> Response:
                 blocks=blocks,
                 replace_original=True,
             )
+        
+        elif action_id.startswith("habit_increment_"):
+            # Handle increment button click from dashboard (Requirements 4.2, 8.1)
+            habit_id = action_id.replace("habit_increment_", "")
+            # Log before calling handler
+            logger.info(
+                "Habit query: increment_habit_progress",
+                owner_id=owner_id,
+                owner_type=owner_type,
+                habit_id=habit_id,
+            )
+            try:
+                dashboard_handler = DashboardCommandHandler(supabase, slack_service)
+                await dashboard_handler.handle_increment(
+                    habit_id=habit_id,
+                    owner_id=owner_id,
+                    response_url=response_url,
+                )
+            except Exception as e:
+                raise DataFetchError(
+                    f"Failed to increment habit {habit_id}",
+                    original_error=e,
+                ) from e
         
         # Log interaction completion with structured logging (Requirement 4.4)
         processing_time_ms = (time.time() - start_time) * 1000
