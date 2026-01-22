@@ -137,23 +137,42 @@ class Settings(BaseSettings):
 settings = Settings()
 
 
-# Supabase client singleton
-_supabase_client = None
-
-
-def get_supabase_client():
-    """Get or create Supabase client singleton."""
-    global _supabase_client
+def get_supabase_client(force_new: bool = False):
+    """
+    Get a valid Supabase client using the connection factory.
     
-    if _supabase_client is None:
-        from supabase import create_client
-        
-        if not settings.supabase_url or not settings.supabase_anon_key:
-            raise ValueError("SUPABASE_URL and SUPABASE_ANON_KEY are required for Supabase client")
-        
-        _supabase_client = create_client(
-            settings.supabase_url,
-            settings.supabase_anon_key
-        )
+    Uses SupabaseConnectionFactory to manage connections with:
+    - Connection validation before use (Requirement 1.1, 1.4)
+    - Automatic reconnection for invalid connections (Requirement 1.2)
+    - Resource cleanup on recreation (Requirement 1.3)
+    - Connection timeout: 5 seconds (Requirement 5.1)
+    - Read timeout: 10 seconds (Requirement 5.2)
+    - Keep-alive disabled for Lambda optimization (Requirement 5.3)
+    - Max connections: 10 (Requirement 5.5)
     
-    return _supabase_client
+    Args:
+        force_new: If True, force creation of a new client even if existing one is valid
+    
+    Returns:
+        Supabase client instance
+        
+    Raises:
+        ValueError: If SUPABASE_URL or SUPABASE_ANON_KEY are not configured
+    """
+    from app.services.supabase_connection_factory import get_connection_factory
+    
+    if not settings.supabase_url or not settings.supabase_anon_key:
+        raise ValueError("SUPABASE_URL and SUPABASE_ANON_KEY are required for Supabase client")
+    
+    factory = get_connection_factory(
+        supabase_url=settings.supabase_url,
+        supabase_key=settings.supabase_anon_key,
+        connection_timeout=5.0,   # Requirement 5.1
+        read_timeout=10.0,        # Requirement 5.2
+        max_connections=10,       # Requirement 5.5
+    )
+    
+    if force_new:
+        return factory.force_reconnect()
+    
+    return factory.get_client()

@@ -28,6 +28,8 @@ class SlackConnectionCreate(BaseModel):
 class SlackConnectionResponse(BaseModel):
     """Schema for Slack connection response (excludes sensitive tokens)."""
     id: str
+    owner_type: str
+    owner_id: str
     slack_user_id: str
     slack_team_id: str
     slack_team_name: Optional[str]

@@ -2,12 +2,21 @@
 Habit Completion Reporter
 
 Service for processing habit completions from Slack interactions.
+
+Requirements:
+- 2.1: WHEN Supabaseへのリクエストが接続エラーで失敗する THEN Retry_Logic SHALL 指数バックオフで最大3回リトライする
+- 2.3: WHEN 全てのリトライが失敗する THEN Retry_Logic SHALL 最終エラーを適切にログ出力して例外を発生させる
 """
 
+import logging
 from typing import Optional, List, Dict, Any, Tuple
 from datetime import date, datetime, timedelta
 from difflib import SequenceMatcher
 from supabase import Client
+
+from app.utils.retry import with_retry
+
+logger = logging.getLogger(__name__)
 
 
 class HabitCompletionReporter:
@@ -97,18 +106,20 @@ class HabitCompletionReporter:
             }
 
         # Create activity record
+        # Note: activities table uses 'timestamp', 'kind', and 'habit_name' columns
+        from datetime import datetime
         activity_data = {
             "owner_type": owner_type,
             "owner_id": owner_id,
             "habit_id": habit_id,
-            "date": today.isoformat(),
-            "completed": True,
-            "source": source,
+            "habit_name": habit.get("name", ""),
+            "kind": "complete",
+            "timestamp": datetime.utcnow().isoformat(),
         }
         
-        result = self.supabase.table("activities").insert(activity_data).execute()
+        activity = await self._insert_activity(activity_data)
         
-        if not result.data:
+        if not activity:
             return False, "Failed to record completion", None
 
         # Calculate streak
@@ -117,7 +128,7 @@ class HabitCompletionReporter:
         return True, "Habit completed", {
             "habit": habit,
             "streak": streak,
-            "activity": result.data[0],
+            "activity": activity,
         }
 
     async def get_incomplete_habits_today(
@@ -200,6 +211,7 @@ class HabitCompletionReporter:
         
         return result
 
+    @with_retry()
     async def get_habit_streak(
         self,
         habit_id: str,
@@ -209,6 +221,12 @@ class HabitCompletionReporter:
         """
         Calculate current streak count for a habit.
         
+        Applies retry logic for transient connection errors.
+        Requirements: 2.1, 2.3
+        
+        Note: activities table uses 'timestamp' and 'kind' columns
+        instead of 'date' and 'completed'.
+        
         Args:
             habit_id: ID of the habit
             owner_type: Type of owner
@@ -217,10 +235,10 @@ class HabitCompletionReporter:
         Returns:
             Current streak count
         """
-        # Get recent activities for this habit, ordered by date descending
-        query = self.supabase.table("activities").select("date, completed").eq(
+        # Get recent activities for this habit, ordered by timestamp descending
+        query = self.supabase.table("activities").select("timestamp").eq(
             "habit_id", habit_id
-        ).eq("completed", True).order("date", desc=True).limit(365)
+        ).eq("kind", "complete").order("timestamp", desc=True).limit(365)
         
         if owner_id:
             query = query.eq("owner_type", owner_type).eq("owner_id", owner_id)
@@ -230,12 +248,20 @@ class HabitCompletionReporter:
         if not result.data:
             return 0
 
-        # Calculate streak
+        # Calculate streak by extracting dates from timestamps
         streak = 0
         expected_date = date.today()
+        seen_dates = set()
         
         for activity in result.data:
-            activity_date = date.fromisoformat(activity["date"])
+            # Extract date from timestamp (format: 2026-01-11T16:59:28.61+00:00)
+            timestamp_str = activity["timestamp"]
+            activity_date = date.fromisoformat(timestamp_str[:10])
+            
+            # Skip if we've already counted this date
+            if activity_date in seen_dates:
+                continue
+            seen_dates.add(activity_date)
             
             # Allow for today or yesterday as the start
             if streak == 0 and activity_date == expected_date:
@@ -283,34 +309,53 @@ class HabitCompletionReporter:
     # Private Helper Methods
     # ========================================================================
 
+    @with_retry()
     async def _get_habits_by_owner(
         self,
         owner_type: str,
         owner_id: str,
     ) -> List[Dict[str, Any]]:
-        """Get all habits for an owner."""
+        """
+        Get all habits for an owner.
+        
+        Applies retry logic for transient connection errors.
+        Requirements: 2.1, 2.3
+        """
         result = self.supabase.table("habits").select("*").eq(
             "owner_type", owner_type
         ).eq("owner_id", owner_id).execute()
         
         return result.data if result.data else []
 
+    @with_retry()
     async def _get_habit_by_id(self, habit_id: str) -> Optional[Dict[str, Any]]:
-        """Get a habit by ID."""
+        """
+        Get a habit by ID.
+        
+        Applies retry logic for transient connection errors.
+        Requirements: 2.1, 2.3
+        """
         result = self.supabase.table("habits").select("*").eq(
             "id", habit_id
         ).execute()
         
         return result.data[0] if result.data else None
 
+    @with_retry()
     async def _get_goal_by_id(self, goal_id: str) -> Optional[Dict[str, Any]]:
-        """Get a goal by ID."""
+        """
+        Get a goal by ID.
+        
+        Applies retry logic for transient connection errors.
+        Requirements: 2.1, 2.3
+        """
         result = self.supabase.table("goals").select("*").eq(
             "id", goal_id
         ).execute()
         
         return result.data[0] if result.data else None
 
+    @with_retry()
     async def _is_completed_today(
         self,
         owner_type: str,
@@ -318,14 +363,46 @@ class HabitCompletionReporter:
         habit_id: str,
         check_date: date,
     ) -> bool:
-        """Check if a habit is completed for a specific date."""
+        """
+        Check if a habit is completed for a specific date.
+        
+        Applies retry logic for transient connection errors.
+        Requirements: 2.1, 2.3
+        
+        Note: activities table uses 'timestamp' column and 'kind' column
+        instead of 'date' and 'completed'.
+        """
+        # Filter by date range using timestamp column
+        start_of_day = f"{check_date.isoformat()}T00:00:00"
+        end_of_day = f"{check_date.isoformat()}T23:59:59"
+        
         result = self.supabase.table("activities").select("id").eq(
             "owner_type", owner_type
         ).eq("owner_id", owner_id).eq("habit_id", habit_id).eq(
-            "date", check_date.isoformat()
-        ).eq("completed", True).execute()
+            "kind", "complete"
+        ).gte("timestamp", start_of_day).lte("timestamp", end_of_day).execute()
         
         return len(result.data) > 0 if result.data else False
+
+    @with_retry()
+    async def _insert_activity(
+        self,
+        activity_data: Dict[str, Any],
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Insert an activity record into the database.
+        
+        Applies retry logic for transient connection errors.
+        Requirements: 2.1, 2.3
+        
+        Args:
+            activity_data: Activity data to insert
+            
+        Returns:
+            Inserted activity record or None if failed
+        """
+        result = self.supabase.table("activities").insert(activity_data).execute()
+        return result.data[0] if result.data else None
 
     def _find_similar_habits(
         self,
