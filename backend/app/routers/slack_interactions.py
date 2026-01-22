@@ -35,6 +35,9 @@ from ..services.habit_completion_reporter import HabitCompletionReporter
 from ..services.follow_up_agent import FollowUpAgent
 from ..services.slack_block_builder import SlackBlockBuilder
 from ..repositories.slack import SlackRepository
+from ..repositories.habit import HabitRepository
+from ..repositories.activity import ActivityRepository
+from ..repositories.goal import GoalRepository
 from ..config import get_supabase_client
 from ..utils.structured_logger import get_logger
 
@@ -121,8 +124,11 @@ async def process_block_action(payload: Dict[str, Any]) -> None:
     try:
         supabase = get_supabase_client()
         slack_repo = SlackRepository(supabase)
-        completion_reporter = HabitCompletionReporter(supabase)
-        follow_up_agent = FollowUpAgent(supabase)
+        habit_repo = HabitRepository(supabase)
+        activity_repo = ActivityRepository(supabase)
+        goal_repo = GoalRepository(supabase)
+        completion_reporter = HabitCompletionReporter(habit_repo, activity_repo, goal_repo)
+        follow_up_agent = FollowUpAgent(slack_repo, habit_repo, activity_repo)
         slack_service = get_slack_service()
 
         user = payload.get("user", {})
@@ -167,7 +173,7 @@ async def process_block_action(payload: Dict[str, Any]) -> None:
         elif action_id.startswith("habit_skip_"):
             await _handle_habit_skip(
                 follow_up_agent,
-                completion_reporter,
+                habit_repo,
                 slack_service,
                 response_url,
                 owner_type,
@@ -177,7 +183,7 @@ async def process_block_action(payload: Dict[str, Any]) -> None:
         elif action_id.startswith("habit_later_"):
             await _handle_habit_later(
                 follow_up_agent,
-                completion_reporter,
+                habit_repo,
                 slack_service,
                 response_url,
                 owner_type,
@@ -290,7 +296,7 @@ async def _handle_habit_done(
 
 async def _handle_habit_skip(
     follow_up_agent: FollowUpAgent,
-    completion_reporter: HabitCompletionReporter,
+    habit_repo: HabitRepository,
     slack_service: SlackIntegrationService,
     response_url: str,
     owner_type: str,
@@ -305,7 +311,7 @@ async def _handle_habit_skip(
     
     Args:
         follow_up_agent: Agent for managing habit reminders and follow-ups.
-        completion_reporter: Service for handling habit completions.
+        habit_repo: Repository for habit database operations.
         slack_service: Service for Slack API interactions.
         response_url: URL for sending the response to Slack.
         owner_type: Type of owner (e.g., "user").
@@ -320,7 +326,7 @@ async def _handle_habit_skip(
     await follow_up_agent.skip_habit_today(owner_type, owner_id, habit_id)
     
     # Get habit name for confirmation message
-    habit = await completion_reporter._get_habit_by_id(habit_id)
+    habit = await habit_repo.get_by_id(habit_id)
     habit_name = habit.get("name", "") if habit else ""
     
     blocks = SlackBlockBuilder.habit_skipped(habit_name)
@@ -336,7 +342,7 @@ async def _handle_habit_skip(
 
 async def _handle_habit_later(
     follow_up_agent: FollowUpAgent,
-    completion_reporter: HabitCompletionReporter,
+    habit_repo: HabitRepository,
     slack_service: SlackIntegrationService,
     response_url: str,
     owner_type: str,
@@ -351,7 +357,7 @@ async def _handle_habit_later(
     
     Args:
         follow_up_agent: Agent for managing habit reminders and follow-ups.
-        completion_reporter: Service for handling habit completions.
+        habit_repo: Repository for habit database operations.
         slack_service: Service for Slack API interactions.
         response_url: URL for sending the response to Slack.
         owner_type: Type of owner (e.g., "user").
@@ -369,7 +375,7 @@ async def _handle_habit_later(
     )
     
     # Get habit name for confirmation message
-    habit = await completion_reporter._get_habit_by_id(habit_id)
+    habit = await habit_repo.get_by_id(habit_id)
     habit_name = habit.get("name", "") if habit else ""
     
     blocks = SlackBlockBuilder.habit_remind_later(habit_name, delay_minutes)
@@ -654,7 +660,10 @@ async def process_slash_command(
     try:
         supabase = get_supabase_client()
         slack_repo = SlackRepository(supabase)
-        completion_reporter = HabitCompletionReporter(supabase)
+        habit_repo = HabitRepository(supabase)
+        activity_repo = ActivityRepository(supabase)
+        goal_repo = GoalRepository(supabase)
+        completion_reporter = HabitCompletionReporter(habit_repo, activity_repo, goal_repo)
         slack_service = get_slack_service()
 
         # Get VOW user from Slack user ID (Requirement 5.6)
@@ -680,6 +689,7 @@ async def process_slash_command(
         if command == "/habit-done":
             await _handle_habit_done_command(
                 completion_reporter,
+                goal_repo,
                 slack_service,
                 response_url,
                 owner_type,
@@ -741,6 +751,7 @@ async def process_slash_command(
 
 async def _handle_habit_done_command(
     completion_reporter: HabitCompletionReporter,
+    goal_repo: GoalRepository,
     slack_service: SlackIntegrationService,
     response_url: str,
     owner_type: str,
@@ -816,7 +827,7 @@ async def _handle_habit_done_command(
         else:
             # Build habit list with goal names
             habits_with_goals = await _add_goal_names_to_habits(
-                completion_reporter, habits
+                goal_repo, habits
             )
             blocks = SlackBlockBuilder.habit_list(habits_with_goals, show_buttons=True)
             response_text = "完了する習慣を選択してください"
@@ -897,14 +908,14 @@ async def _handle_habit_list_command(
 
 
 async def _add_goal_names_to_habits(
-    completion_reporter: HabitCompletionReporter,
+    goal_repo: GoalRepository,
     habits: List[Dict[str, Any]],
 ) -> List[Dict[str, Any]]:
     """
     Add goal names to habits for display.
     
     Args:
-        completion_reporter: HabitCompletionReporter instance
+        goal_repo: GoalRepository for goal database operations
         habits: List of habit dicts
         
     Returns:
@@ -914,7 +925,7 @@ async def _add_goal_names_to_habits(
     for habit in habits:
         goal_name = None
         if habit.get("goal_id"):
-            goal = await completion_reporter._get_goal_by_id(habit["goal_id"])
+            goal = await goal_repo.get_by_id(habit["goal_id"])
             goal_name = goal.get("name") if goal else None
         
         result.append({
