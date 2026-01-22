@@ -174,6 +174,15 @@ async def process_block_action(payload: Dict[str, Any]) -> None:
                 owner_id,
                 habit_id,
             )
+        elif action_id.startswith("habit_increment_"):
+            await _handle_habit_increment(
+                completion_reporter,
+                slack_service,
+                response_url,
+                owner_type,
+                owner_id,
+                habit_id,
+            )
         else:
             logger.warning(f"Unknown action_id: {action_id}")
 
@@ -362,6 +371,140 @@ async def _handle_habit_later(
         blocks=blocks,
         replace_original=True,
     )
+
+
+async def _handle_habit_increment(
+    completion_reporter: HabitCompletionReporter,
+    slack_service: SlackIntegrationService,
+    response_url: str,
+    owner_type: str,
+    owner_id: str,
+    habit_id: str,
+) -> None:
+    """
+    Handle Increment button click from dashboard.
+    
+    Increments the habit progress by the workload_per_count amount and sends
+    a confirmation message. This is used for the [✓] or [+N unit] buttons
+    in the dashboard view.
+    
+    Args:
+        completion_reporter: Service for handling habit completions.
+        slack_service: Service for Slack API interactions.
+        response_url: URL for sending the response to Slack.
+        owner_type: Type of owner (e.g., "user").
+        owner_id: Unique identifier of the owner.
+        habit_id: Unique identifier of the habit to increment.
+        
+    Returns:
+        None. Response is sent via the response_url.
+        
+    Requirements:
+    - 4.1: Include increment button for incomplete habits
+    - 4.2: Increment by workload_per_count when button is clicked
+    - 4.5: Display celebration message when reaching 100%
+    """
+    try:
+        # Call increment_habit_progress
+        success, message, result_data = await completion_reporter.increment_habit_progress(
+            owner_id=owner_id,
+            habit_id=habit_id,
+            source="slack",
+            owner_type=owner_type,
+        )
+        
+        if not success:
+            # Habit not found or other error
+            logger.warning(
+                f"Increment failed for habit {habit_id}: {message}",
+                extra={
+                    "habit_id": habit_id,
+                    "owner_id": owner_id,
+                    "message": message,
+                }
+            )
+            
+            error_blocks = SlackBlockBuilder.dashboard_error(
+                message or "この習慣は見つかりませんでした。"
+            )
+            await slack_service.send_response(
+                response_url,
+                "習慣が見つかりません。",
+                blocks=error_blocks,
+                replace_original=False,
+            )
+            return
+        
+        # Build confirmation message
+        habit = result_data.get("habit", {}) if result_data else {}
+        habit_name = habit.get("name", "")
+        amount = result_data.get("amount", 1) if result_data else 1
+        workload_unit = habit.get("workload_unit", "")
+        new_progress_rate = result_data.get("new_progress_rate", 0) if result_data else 0
+        streak = result_data.get("streak", 0) if result_data else 0
+        just_completed = result_data.get("just_completed", False) if result_data else False
+        
+        # Check if habit just reached 100% (Requirement 4.5)
+        if just_completed:
+            # Celebration message
+            blocks = SlackBlockBuilder.habit_increment_success(habit_name, streak)
+            response_text = f"🎉 {habit_name}を達成しました！ 🔥{streak}日連続！"
+        else:
+            # Normal confirmation message
+            if workload_unit:
+                if amount == int(amount):
+                    amount_str = str(int(amount))
+                else:
+                    amount_str = str(amount)
+                confirm_text = f"✅ *{habit_name}* に +{amount_str} {workload_unit} を記録しました"
+            else:
+                confirm_text = f"✅ *{habit_name}* を記録しました"
+            
+            blocks = [{
+                "type": "section",
+                "text": {
+                    "type": "mrkdwn",
+                    "text": confirm_text
+                }
+            }]
+            response_text = confirm_text
+        
+        # Send confirmation (don't replace original dashboard)
+        await slack_service.send_response(
+            response_url,
+            response_text,
+            blocks=blocks,
+            replace_original=False,
+        )
+        
+        logger.info(
+            f"Increment successful for habit {habit_id}",
+            extra={
+                "habit_id": habit_id,
+                "owner_id": owner_id,
+                "new_progress_rate": new_progress_rate,
+            }
+        )
+        
+    except Exception as e:
+        logger.error(
+            f"Error handling increment for habit {habit_id}: {e}",
+            exc_info=True,
+            extra={
+                "habit_id": habit_id,
+                "owner_id": owner_id,
+            }
+        )
+        
+        error_blocks = SlackBlockBuilder.dashboard_error(
+            "進捗の更新中にエラーが発生しました。再度お試しください。"
+        )
+        await slack_service.send_response(
+            response_url,
+            "エラーが発生しました。",
+            blocks=error_blocks,
+            replace_original=False,
+        )
 
 
 async def _send_not_connected_response(
