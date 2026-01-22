@@ -55,8 +55,14 @@ async def handle_slack_interaction(
     with buttons in messages. It must respond within 3 seconds, so actual
     processing is done in background tasks.
     
+    Note: In Lambda environment, we process synchronously because background
+    tasks don't work reliably when the Lambda function exits.
+    
     Requirements: 3.1, 3.2, 3.3, 3.4, 3.5, 3.6
     """
+    import os
+    IS_LAMBDA = bool(os.environ.get("AWS_LAMBDA_FUNCTION_NAME"))
+    
     slack_service = get_slack_service()
     
     # Get headers for signature verification
@@ -81,11 +87,15 @@ async def handle_slack_interaction(
     action_type = payload.get("type")
     
     if action_type == "block_actions":
-        # Process button clicks in background to respond within 3 seconds
-        background_tasks.add_task(
-            process_block_action,
-            payload,
-        )
+        if IS_LAMBDA:
+            # In Lambda, process synchronously to ensure completion
+            await process_block_action(payload)
+        else:
+            # In non-Lambda environments, use background tasks
+            background_tasks.add_task(
+                process_block_action,
+                payload,
+            )
         # Return empty response immediately (Slack requirement)
         return JSONResponse(content={})
     
@@ -550,6 +560,9 @@ async def handle_slash_command(
     slash commands. It must respond within 3 seconds, so actual
     processing is done in background tasks.
     
+    Note: In Lambda environment, we process synchronously because background
+    tasks don't work reliably when the Lambda function exits.
+    
     Supported commands:
     - /habit-done [name]: Mark a habit as complete (Req 5.1, 5.2, 5.5)
     - /habit-status: Show today's progress (Req 5.3)
@@ -557,6 +570,9 @@ async def handle_slash_command(
     
     Requirements: 5.1, 5.2, 5.3, 5.4, 5.5, 5.6
     """
+    import os
+    IS_LAMBDA = bool(os.environ.get("AWS_LAMBDA_FUNCTION_NAME"))
+    
     slack_service = get_slack_service()
     
     # Get headers for signature verification
@@ -583,15 +599,25 @@ async def handle_slash_command(
 
     logger.info(f"Received slash command: {command} with text: '{text}' from user: {user_id}")
 
-    # Process in background to respond within 3 seconds
-    background_tasks.add_task(
-        process_slash_command,
-        command,
-        text,
-        user_id,
-        team_id,
-        response_url,
-    )
+    if IS_LAMBDA:
+        # In Lambda, process synchronously to ensure completion
+        await process_slash_command(
+            command,
+            text,
+            user_id,
+            team_id,
+            response_url,
+        )
+    else:
+        # In non-Lambda environments, use background tasks
+        background_tasks.add_task(
+            process_slash_command,
+            command,
+            text,
+            user_id,
+            team_id,
+            response_url,
+        )
     
     # Return ephemeral response type immediately (Slack requirement)
     return JSONResponse(content={"response_type": "ephemeral"})
