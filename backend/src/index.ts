@@ -16,13 +16,15 @@ import type { Context, Next } from 'hono';
 
 // Middleware imports
 import { createCorsMiddleware } from './middleware/cors.js';
-import { jwtAuthMiddleware } from './middleware/auth.js';
+import { jwtAuthMiddleware, addExcludedPath } from './middleware/auth.js';
 
 // Router imports
 import { createHealthRouter } from './routers/health.js';
 import { createSlackOAuthRouter } from './routers/slackOAuth.js';
 import { createSlackCommandsRouter } from './routers/slackCommands.js';
 import { createSlackInteractionsRouter } from './routers/slackInteractions.js';
+import { widgetRouter } from './routers/widgets.js';
+import { apiKeyRouter } from './routers/apiKeys.js';
 
 // Error handling imports
 import { AppError, getUserFriendlyMessage } from './errors/index.js';
@@ -46,6 +48,13 @@ const logger = getLogger('app');
 export function createApp(): Hono {
   const app = new Hono();
   const settings = getSettings();
+
+  // ---------------------------------------------------------------------------
+  // Exclude Widget API from JWT Authentication
+  // ---------------------------------------------------------------------------
+  // Widget endpoints use API key authentication instead of JWT
+  // This must be done before the JWT middleware is applied
+  addExcludedPath('/api/widgets');
 
   // ---------------------------------------------------------------------------
   // Global Middleware
@@ -174,6 +183,20 @@ export function createApp(): Hono {
   // Endpoints: /api/slack/interactions
   const slackInteractionsRouter = createSlackInteractionsRouter();
   app.route('/api/slack', slackInteractionsRouter);
+
+  // Widget router - mounted at /api/widgets
+  // Endpoints: /api/widgets/progress, /api/widgets/stats, /api/widgets/next,
+  //            /api/widgets/stickies, /api/widgets/habits/:habitId/complete,
+  //            /api/widgets/stickies/:stickyId/toggle
+  // Note: Uses API key authentication (not JWT) and has its own CORS configuration
+  // Requirements: 7.1, 7.2
+  app.route('/api/widgets', widgetRouter);
+
+  // API key management router - mounted at /api/api-keys
+  // Endpoints: /api/api-keys (GET, POST), /api/api-keys/:keyId (DELETE)
+  // Note: Uses JWT authentication for user management
+  // Requirements: 1.1, 1.3, 1.4
+  app.route('/api/api-keys', apiKeyRouter);
 
   logger.info('Application initialized', {
     version: settings.appVersion,

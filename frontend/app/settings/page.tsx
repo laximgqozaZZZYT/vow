@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { useSlackIntegration } from '@/hooks/useSlackIntegration';
 import { DAYS_OF_WEEK, TIME_OPTIONS } from '@/lib/types/slack';
 
-type SettingsSection = 'profile' | 'notifications' | 'integrations';
+type SettingsSection = 'profile' | 'notifications' | 'integrations' | 'api-keys';
 
 export default function SettingsPage() {
   const [activeSection, setActiveSection] = useState<SettingsSection>('integrations');
@@ -45,7 +45,7 @@ export default function SettingsPage() {
     await updatePreferences({ [key]: value });
   };
 
-  const sections: { id: SettingsSection; label: string; icon: React.ReactNode }[] = [
+  const sections: { id: SettingsSection; label: string; icon: React.ReactNode; href?: string }[] = [
     {
       id: 'profile',
       label: 'Profile',
@@ -70,6 +70,16 @@ export default function SettingsPage() {
       icon: (
         <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
+        </svg>
+      ),
+    },
+    {
+      id: 'api-keys',
+      label: 'API Keys',
+      href: '/dashboard/settings/api-keys',
+      icon: (
+        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
         </svg>
       ),
     },
@@ -101,18 +111,29 @@ export default function SettingsPage() {
         <aside className="fixed left-0 top-14 bottom-0 w-64 border-r border-border bg-card p-4 hidden md:block">
           <nav className="space-y-1">
             {sections.map((section) => (
-              <button
-                key={section.id}
-                onClick={() => setActiveSection(section.id)}
-                className={`w-full flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors ${
-                  activeSection === section.id
-                    ? 'bg-primary text-primary-foreground'
-                    : 'text-muted-foreground hover:bg-accent hover:text-foreground'
-                }`}
-              >
-                {section.icon}
-                {section.label}
-              </button>
+              section.href ? (
+                <Link
+                  key={section.id}
+                  href={section.href}
+                  className="w-full flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors text-muted-foreground hover:bg-accent hover:text-foreground"
+                >
+                  {section.icon}
+                  {section.label}
+                </Link>
+              ) : (
+                <button
+                  key={section.id}
+                  onClick={() => setActiveSection(section.id)}
+                  className={`w-full flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors ${
+                    activeSection === section.id
+                      ? 'bg-primary text-primary-foreground'
+                      : 'text-muted-foreground hover:bg-accent hover:text-foreground'
+                  }`}
+                >
+                  {section.icon}
+                  {section.label}
+                </button>
+              )
             ))}
           </nav>
         </aside>
@@ -121,18 +142,29 @@ export default function SettingsPage() {
         <div className="md:hidden fixed top-14 left-0 right-0 z-40 bg-card border-b border-border">
           <div className="flex overflow-x-auto p-2 gap-2">
             {sections.map((section) => (
-              <button
-                key={section.id}
-                onClick={() => setActiveSection(section.id)}
-                className={`flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium whitespace-nowrap transition-colors ${
-                  activeSection === section.id
-                    ? 'bg-primary text-primary-foreground'
-                    : 'text-muted-foreground hover:bg-accent'
-                }`}
-              >
-                {section.icon}
-                {section.label}
-              </button>
+              section.href ? (
+                <Link
+                  key={section.id}
+                  href={section.href}
+                  className="flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium whitespace-nowrap transition-colors text-muted-foreground hover:bg-accent"
+                >
+                  {section.icon}
+                  {section.label}
+                </Link>
+              ) : (
+                <button
+                  key={section.id}
+                  onClick={() => setActiveSection(section.id)}
+                  className={`flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium whitespace-nowrap transition-colors ${
+                    activeSection === section.id
+                      ? 'bg-primary text-primary-foreground'
+                      : 'text-muted-foreground hover:bg-accent'
+                  }`}
+                >
+                  {section.icon}
+                  {section.label}
+                </button>
+              )
             ))}
           </div>
         </div>

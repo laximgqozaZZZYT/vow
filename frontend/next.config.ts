@@ -36,8 +36,29 @@ const nextConfig: NextConfig = {
   // セキュリティヘッダー（Vercel環境で有効）
   async headers() {
     return [
+      // Embed pages - allow iframe embedding from any origin (Requirement 7.3)
       {
-        source: '/(.*)',
+        source: '/embed/:path*',
+        headers: [
+          {
+            key: 'X-Content-Type-Options',
+            value: 'nosniff',
+          },
+          {
+            key: 'Referrer-Policy',
+            value: 'strict-origin-when-cross-origin',
+          },
+          {
+            key: 'X-XSS-Protection',
+            value: '1; mode=block',
+          },
+          // Note: X-Frame-Options is intentionally omitted to allow embedding
+          // Content-Security-Policy frame-ancestors could be used for more control
+        ],
+      },
+      // All other pages - deny iframe embedding
+      {
+        source: '/((?!embed).*)',
         headers: [
           {
             key: 'X-Frame-Options',
