@@ -2,7 +2,20 @@
 
 シンプルで使いやすい個人向け習慣管理・目標設定アプリケーションです。
 
-🌐 **本番URL**: https://vow-sigma.vercel.app/
+🌐 **本番URL**: https://main.do1k9oyyorn24.amplifyapp.com/
+
+[![VOW Demo](https://img.shields.io/badge/🚀_Live_Demo-Try_Now-blue?style=for-the-badge)](https://main.do1k9oyyorn24.amplifyapp.com/)
+[![Dashboard](https://img.shields.io/badge/📊_Dashboard-Open-green?style=for-the-badge)](https://main.do1k9oyyorn24.amplifyapp.com/dashboard)
+
+## 🎬 デモプレビュー
+
+<p align="center">
+  <a href="https://main.do1k9oyyorn24.amplifyapp.com/">
+    <img src="docs/images/demo-preview.png" alt="VOW Dashboard Demo" width="800" />
+  </a>
+</p>
+
+> 👆 クリックしてインタラクティブデモを体験！登録不要・完全無料で今すぐ始められます。
 
 ## ✨ 主な機能
 
