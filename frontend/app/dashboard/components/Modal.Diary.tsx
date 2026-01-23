@@ -451,8 +451,8 @@ export default function DiaryModal({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center pt-12 bg-black/30">
-      <div className="w-full max-w-5xl rounded bg-white px-4 pt-4 pb-4 shadow-lg text-black dark:bg-[#0f1724] dark:text-slate-100">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 overflow-y-auto py-4">
+      <div className="w-full max-w-5xl rounded bg-white px-4 pt-4 pb-4 shadow-lg text-black dark:bg-[#0f1724] dark:text-slate-100 max-h-[calc(100vh-2rem)] overflow-y-auto my-auto">
         <div className="flex items-center justify-between">
           <h3 className="text-2xl font-semibold">Diary Card</h3>
           <button onClick={onClose} className="text-slate-500">✕</button>
@@ -530,7 +530,8 @@ export default function DiaryModal({
               />
             </div>
 
-            <div className="mt-5 flex items-center justify-between">
+            {/* Mobile only: buttons at bottom of left column */}
+            <div className="mt-5 flex items-center justify-between lg:hidden">
               <div className="flex items-center gap-2">
                 {initial?.id && onDelete ? (
                   <button
@@ -577,13 +578,60 @@ export default function DiaryModal({
             </div>
           </div>
 
-          <div className="min-w-0">
+          <div className="min-w-0 flex flex-col">
             <div className="flex items-center justify-between">
               <div className="text-sm font-medium">Preview ({tab})</div>
               <div className="text-xs text-zinc-500">Rendered</div>
             </div>
-            <div className="mt-2 max-h-[32rem] overflow-auto rounded-lg border border-zinc-200 bg-white p-3 shadow-inner dark:border-white/10 dark:bg-[#0a0f16]">
+            <div className="mt-2 h-72 lg:h-80 overflow-auto rounded-lg border border-zinc-200 bg-white p-3 shadow-inner dark:border-white/10 dark:bg-[#0a0f16]">
               <Markdown value={tab === 'front' ? frontMd : backMd} />
+            </div>
+
+            {/* PC only: buttons at bottom right */}
+            <div className="hidden lg:flex mt-4 items-center justify-between">
+              <div className="flex items-center gap-2">
+                {initial?.id && onDelete ? (
+                  <button
+                    className="rounded border border-red-200 bg-red-50 px-3 py-1.5 text-sm text-red-700 hover:bg-red-100 dark:border-red-900/40 dark:bg-red-950/20 dark:text-red-200"
+                    disabled={saving}
+                    onClick={async () => {
+                      try {
+                        setSaving(true)
+                        await onDelete(initial.id!)
+                        onClose()
+                      } catch (e: any) {
+                        setError(String(e?.message ?? e))
+                      } finally {
+                        setSaving(false)
+                      }
+                    }}
+                  >
+                    Delete
+                  </button>
+                ) : null}
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button className="rounded border px-3 py-2" onClick={onClose} disabled={saving}>Cancel</button>
+                <button
+                  className="rounded bg-blue-600 px-3 py-2 text-sm text-white disabled:opacity-60"
+                  disabled={saving}
+                  onClick={async () => {
+                    try {
+                      setSaving(true)
+                      setError(null)
+                      await onSave({ id: initial?.id, frontMd, backMd, tagIds, goalIds, habitIds })
+                      onClose()
+                    } catch (e: any) {
+                      setError(String(e?.message ?? e))
+                    } finally {
+                      setSaving(false)
+                    }
+                  }}
+                >
+                  Save
+                </button>
+              </div>
             </div>
           </div>
         </div>
