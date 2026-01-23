@@ -167,7 +167,7 @@ resource "aws_iam_role" "dms_secrets_access" {
 }
 
 resource "aws_iam_role_policy" "dms_secrets_access" {
-  count = var.enable_dms ? 1 : 0
+  count = var.enable_dms && var.enable_aurora ? 1 : 0
 
   name = "${var.project_name}-${var.environment}-dms-secrets-policy"
   role = aws_iam_role.dms_secrets_access[0].id
@@ -180,7 +180,7 @@ resource "aws_iam_role_policy" "dms_secrets_access" {
         Action = [
           "secretsmanager:GetSecretValue"
         ]
-        Resource = aws_rds_cluster.aurora.master_user_secret[0].secret_arn
+        Resource = aws_rds_cluster.aurora[0].master_user_secret[0].secret_arn
       }
     ]
   })
@@ -218,14 +218,14 @@ resource "aws_dms_endpoint" "source" {
 # =================================================================
 
 resource "aws_dms_endpoint" "target" {
-  count = var.enable_dms ? 1 : 0
+  count = var.enable_dms && var.enable_aurora ? 1 : 0
 
   endpoint_id   = "${var.project_name}-${var.environment}-aurora-target"
   endpoint_type = "target"
   engine_name   = "aurora-postgresql"
 
-  server_name   = aws_rds_cluster.aurora.endpoint
-  port          = aws_rds_cluster.aurora.port
+  server_name   = aws_rds_cluster.aurora[0].endpoint
+  port          = aws_rds_cluster.aurora[0].port
   database_name = var.database_name
   username      = var.aurora_master_username
   password      = var.aurora_master_password

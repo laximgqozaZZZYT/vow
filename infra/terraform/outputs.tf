@@ -27,32 +27,32 @@ output "isolated_subnet_ids" {
 }
 
 # =================================================================
-# Aurora Outputs
+# Aurora Outputs (only if enabled)
 # =================================================================
 
 output "aurora_cluster_endpoint" {
   description = "Aurora cluster endpoint"
-  value       = aws_rds_cluster.aurora.endpoint
+  value       = var.enable_aurora ? aws_rds_cluster.aurora[0].endpoint : null
 }
 
 output "aurora_cluster_reader_endpoint" {
   description = "Aurora cluster reader endpoint"
-  value       = aws_rds_cluster.aurora.reader_endpoint
+  value       = var.enable_aurora ? aws_rds_cluster.aurora[0].reader_endpoint : null
 }
 
 output "aurora_cluster_port" {
   description = "Aurora cluster port"
-  value       = aws_rds_cluster.aurora.port
+  value       = var.enable_aurora ? aws_rds_cluster.aurora[0].port : null
 }
 
 output "aurora_secret_arn" {
   description = "Aurora master user secret ARN"
-  value       = aws_rds_cluster.aurora.master_user_secret[0].secret_arn
+  value       = var.enable_aurora ? aws_rds_cluster.aurora[0].master_user_secret[0].secret_arn : null
 }
 
 output "aurora_cluster_identifier" {
   description = "Aurora cluster identifier"
-  value       = aws_rds_cluster.aurora.cluster_identifier
+  value       = var.enable_aurora ? aws_rds_cluster.aurora[0].cluster_identifier : null
 }
 
 # =================================================================

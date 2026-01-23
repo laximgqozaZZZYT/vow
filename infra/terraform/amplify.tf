@@ -41,15 +41,10 @@ resource "aws_amplify_app" "frontend" {
           - frontend/.npm/**/*
   EOT
 
-  # Environment variables
+  # Environment variables (all branches)
   environment_variables = {
-    AMPLIFY_MONOREPO_APP_ROOT        = "frontend"
-    NEXT_PUBLIC_USE_SUPABASE_API     = "false"
-    NEXT_PUBLIC_USE_COGNITO          = "true"
-    NEXT_PUBLIC_COGNITO_REGION       = var.aws_region
-    NEXT_PUBLIC_COGNITO_USER_POOL_ID = aws_cognito_user_pool.main.id
-    NEXT_PUBLIC_COGNITO_CLIENT_ID    = aws_cognito_user_pool_client.main.id
-    NEXT_PUBLIC_COGNITO_DOMAIN       = "${var.project_name}-auth-${var.environment}.auth.${var.aws_region}.amazoncognito.com"
+    AMPLIFY_MONOREPO_APP_ROOT        = var.amplify_env_monorepo_app_root
+    NEXT_PUBLIC_SLACK_API_URL        = var.amplify_env_next_public_slack_api_url
   }
 
   # Auto branch creation disabled for production
@@ -92,8 +87,17 @@ resource "aws_amplify_branch" "main" {
 
   enable_auto_build = true
 
+  # Branch-specific environment variables (main branch)
   environment_variables = {
-    NODE_ENV = "production"
+    NODE_ENV                         = "production"
+    NEXT_PUBLIC_API_URL              = var.amplify_env_next_public_api_url
+    NEXT_PUBLIC_SITE_URL             = var.amplify_env_next_public_site_url
+    NEXT_PUBLIC_SLACK_API_URL        = var.amplify_env_next_public_slack_api_url
+    NEXT_PUBLIC_SUPABASE_ANON_KEY    = var.amplify_env_next_public_supabase_anon_key
+    NEXT_PUBLIC_SUPABASE_URL         = var.amplify_env_next_public_supabase_url
+    NEXT_PUBLIC_USE_EDGE_FUNCTIONS   = var.amplify_env_next_public_use_edge_functions
+    NEXT_PUBLIC_USE_SUPABASE_API     = var.amplify_env_next_public_use_supabase_api
+    NEXT_PUBLIC_BACKEND_API_URL      = var.amplify_env_next_public_backend_api_url
   }
 
   tags = {

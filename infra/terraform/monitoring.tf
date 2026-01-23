@@ -26,7 +26,7 @@ resource "aws_sns_topic_subscription" "email" {
 }
 
 # =================================================================
-# CloudWatch Dashboard
+# CloudWatch Dashboard (Lambda + API Gateway only when Aurora disabled)
 # =================================================================
 
 resource "aws_cloudwatch_dashboard" "main" {
@@ -83,58 +83,11 @@ resource "aws_cloudwatch_dashboard" "main" {
           view = "timeSeries"
         }
       },
-      # Aurora Metrics Row
-      {
-        type   = "metric"
-        x      = 0
-        y      = 6
-        width  = 8
-        height = 6
-        properties = {
-          title  = "Aurora CPU Utilization"
-          region = var.aws_region
-          metrics = [
-            ["AWS/RDS", "CPUUtilization", "DBClusterIdentifier", aws_rds_cluster.aurora.cluster_identifier, { stat = "Average", period = 300 }]
-          ]
-          view   = "timeSeries"
-          yAxis  = { left = { min = 0, max = 100 } }
-        }
-      },
-      {
-        type   = "metric"
-        x      = 8
-        y      = 6
-        width  = 8
-        height = 6
-        properties = {
-          title  = "Aurora Connections"
-          region = var.aws_region
-          metrics = [
-            ["AWS/RDS", "DatabaseConnections", "DBClusterIdentifier", aws_rds_cluster.aurora.cluster_identifier, { stat = "Average", period = 300 }]
-          ]
-          view = "timeSeries"
-        }
-      },
-      {
-        type   = "metric"
-        x      = 16
-        y      = 6
-        width  = 8
-        height = 6
-        properties = {
-          title  = "Aurora ACU Capacity"
-          region = var.aws_region
-          metrics = [
-            ["AWS/RDS", "ServerlessDatabaseCapacity", "DBClusterIdentifier", aws_rds_cluster.aurora.cluster_identifier, { stat = "Average", period = 300 }]
-          ]
-          view = "timeSeries"
-        }
-      },
       # API Gateway Metrics Row
       {
         type   = "metric"
         x      = 0
-        y      = 12
+        y      = 6
         width  = 12
         height = 6
         properties = {
@@ -149,7 +102,7 @@ resource "aws_cloudwatch_dashboard" "main" {
       {
         type   = "metric"
         x      = 12
-        y      = 12
+        y      = 6
         width  = 12
         height = 6
         properties = {
@@ -225,9 +178,9 @@ resource "aws_cloudwatch_metric_alarm" "lambda_duration" {
   }
 }
 
-# Aurora CPU Alarm
+# Aurora CPU Alarm (only if enabled)
 resource "aws_cloudwatch_metric_alarm" "aurora_cpu" {
-  count = var.environment == "production" ? 1 : 0
+  count = var.environment == "production" && var.enable_aurora ? 1 : 0
 
   alarm_name          = "${var.project_name}-${var.environment}-aurora-cpu"
   comparison_operator = "GreaterThanThreshold"
@@ -240,7 +193,7 @@ resource "aws_cloudwatch_metric_alarm" "aurora_cpu" {
   alarm_description   = "Aurora CPU utilization exceeded 80%"
 
   dimensions = {
-    DBClusterIdentifier = aws_rds_cluster.aurora.cluster_identifier
+    DBClusterIdentifier = aws_rds_cluster.aurora[0].cluster_identifier
   }
 
   alarm_actions = [aws_sns_topic.alerts[0].arn]
@@ -252,9 +205,9 @@ resource "aws_cloudwatch_metric_alarm" "aurora_cpu" {
   }
 }
 
-# Aurora Connections Alarm
+# Aurora Connections Alarm (only if enabled)
 resource "aws_cloudwatch_metric_alarm" "aurora_connections" {
-  count = var.environment == "production" ? 1 : 0
+  count = var.environment == "production" && var.enable_aurora ? 1 : 0
 
   alarm_name          = "${var.project_name}-${var.environment}-aurora-connections"
   comparison_operator = "GreaterThanThreshold"
@@ -267,7 +220,7 @@ resource "aws_cloudwatch_metric_alarm" "aurora_connections" {
   alarm_description   = "Aurora database connections exceeded 50"
 
   dimensions = {
-    DBClusterIdentifier = aws_rds_cluster.aurora.cluster_identifier
+    DBClusterIdentifier = aws_rds_cluster.aurora[0].cluster_identifier
   }
 
   alarm_actions = [aws_sns_topic.alerts[0].arn]

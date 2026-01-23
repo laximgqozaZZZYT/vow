@@ -1,6 +1,6 @@
 # =================================================================
 # Lambda + API Gateway
-# Serverless backend with FastAPI (~$3.70/month)
+# Serverless backend (~$3.70/month)
 # =================================================================
 
 # =================================================================
@@ -28,10 +28,17 @@ resource "aws_iam_role" "lambda" {
   }
 }
 
-# VPC Access
+# VPC Access (only needed if using Aurora)
 resource "aws_iam_role_policy_attachment" "lambda_vpc" {
+  count      = var.enable_aurora ? 1 : 0
   role       = aws_iam_role.lambda.name
   policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole"
+}
+
+# Basic Lambda Execution (CloudWatch Logs)
+resource "aws_iam_role_policy_attachment" "lambda_basic" {
+  role       = aws_iam_role.lambda.name
+  policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
 }
 
 # X-Ray
@@ -40,10 +47,11 @@ resource "aws_iam_role_policy_attachment" "lambda_xray" {
   policy_arn = "arn:aws:iam::aws:policy/AWSXRayDaemonWriteAccess"
 }
 
-# Secrets Manager Access
+# Secrets Manager Access (only if using Aurora)
 resource "aws_iam_role_policy" "lambda_secrets" {
-  name = "${var.project_name}-${var.environment}-lambda-secrets"
-  role = aws_iam_role.lambda.id
+  count = var.enable_aurora ? 1 : 0
+  name  = "${var.project_name}-${var.environment}-lambda-secrets"
+  role  = aws_iam_role.lambda.id
 
   policy = jsonencode({
     Version = "2012-10-17"
@@ -54,7 +62,7 @@ resource "aws_iam_role_policy" "lambda_secrets" {
           "secretsmanager:GetSecretValue"
         ]
         Resource = [
-          aws_rds_cluster.aurora.master_user_secret[0].secret_arn
+          aws_rds_cluster.aurora[0].master_user_secret[0].secret_arn
         ]
       }
     ]
@@ -62,56 +70,46 @@ resource "aws_iam_role_policy" "lambda_secrets" {
 }
 
 # =================================================================
-# Lambda Function (条件付き作成 - S3パッケージが指定された場合のみ)
+# Lambda Function - Node.js/TypeScript (Hono Backend)
 # =================================================================
 
 resource "aws_lambda_function" "api" {
   count = var.lambda_s3_bucket != "" ? 1 : 0
 
   function_name = "${var.project_name}-${var.environment}-api"
-  description   = "Vow FastAPI Backend"
+  description   = "Vow Hono Backend (Node.js/TypeScript)"
   role          = aws_iam_role.lambda.arn
 
-  runtime     = "python3.12"
-  handler     = "lambda_handler.handler"
+  runtime     = "nodejs20.x"
+  handler     = "lambda-package/lambda.handler"
   memory_size = var.lambda_memory_size
   timeout     = var.lambda_timeout
 
   s3_bucket = var.lambda_s3_bucket
   s3_key    = var.lambda_s3_key
 
-  vpc_config {
-    subnet_ids         = aws_subnet.private[*].id
-    security_group_ids = [aws_security_group.lambda.id]
-  }
-
   environment {
     variables = {
       # Core settings
-      ENV                 = var.environment
-      DATABASE_SECRET_ARN = aws_rds_cluster.aurora.master_user_secret[0].secret_arn
-      DATABASE_HOST       = aws_rds_cluster.aurora.endpoint
-      DATABASE_PORT       = aws_rds_cluster.aurora.port
-      DATABASE_NAME       = var.database_name
+      ENV = var.lambda_env_env != "" ? var.lambda_env_env : var.environment
       
-      # Cognito Authentication
-      COGNITO_USER_POOL_ID = aws_cognito_user_pool.main.id
-      COGNITO_CLIENT_ID    = aws_cognito_user_pool_client.main.id
-      COGNITO_REGION       = var.aws_region
-      AUTH_PROVIDER        = "cognito"
+      # Authentication (Supabase)
+      AUTH_PROVIDER = "supabase"
+      JWT_SECRET    = var.jwt_secret
       
       # Slack Integration
       SLACK_CLIENT_ID      = var.slack_client_id
       SLACK_CLIENT_SECRET  = var.slack_client_secret
       SLACK_SIGNING_SECRET = var.slack_signing_secret
-      SLACK_CALLBACK_URI   = "https://${aws_api_gateway_rest_api.main[0].id}.execute-api.${var.aws_region}.amazonaws.com/${var.environment}/api/slack/callback"
+      SLACK_CALLBACK_URI   = var.lambda_env_slack_callback_uri != "" ? var.lambda_env_slack_callback_uri : "https://${aws_api_gateway_rest_api.main[0].id}.execute-api.${var.aws_region}.amazonaws.com/${var.environment}/api/slack/callback"
+      SLACK_ENABLED        = var.lambda_env_slack_enabled
       TOKEN_ENCRYPTION_KEY = var.token_encryption_key
       
-      # Supabase (for Slack connection storage)
+      # Supabase
       SUPABASE_URL      = var.supabase_url
       SUPABASE_ANON_KEY = var.supabase_anon_key
       
-      # Frontend URL (for OAuth redirects)
+      # Frontend URL
       FRONTEND_URL = var.frontend_url
       
       # CORS
@@ -149,7 +147,6 @@ resource "aws_lambda_function" "hono_api" {
 
   environment {
     variables = {
-      # Core settings
       NODE_ENV = var.environment
       
       # Supabase
@@ -166,7 +163,7 @@ resource "aws_lambda_function" "hono_api" {
       SLACK_SIGNING_SECRET = var.slack_signing_secret
       TOKEN_ENCRYPTION_KEY = var.token_encryption_key
       
-      # Frontend URL (for OAuth redirects)
+      # Frontend URL
       FRONTEND_URL = var.frontend_url
       
       # CORS
@@ -196,7 +193,7 @@ resource "aws_cloudwatch_log_group" "hono_lambda" {
 }
 
 # =================================================================
-# API Gateway for Hono Lambda (separate from Python API)
+# API Gateway for Hono Lambda
 # =================================================================
 
 resource "aws_api_gateway_rest_api" "hono" {
@@ -214,7 +211,6 @@ resource "aws_api_gateway_rest_api" "hono" {
   }
 }
 
-# Proxy Resource for Hono
 resource "aws_api_gateway_resource" "hono_proxy" {
   count = var.lambda_nodejs_s3_bucket != "" ? 1 : 0
 
@@ -223,7 +219,6 @@ resource "aws_api_gateway_resource" "hono_proxy" {
   path_part   = "{proxy+}"
 }
 
-# ANY Method for Hono Proxy
 resource "aws_api_gateway_method" "hono_proxy" {
   count = var.lambda_nodejs_s3_bucket != "" ? 1 : 0
 
@@ -233,7 +228,6 @@ resource "aws_api_gateway_method" "hono_proxy" {
   authorization = "NONE"
 }
 
-# Lambda Integration for Hono
 resource "aws_api_gateway_integration" "hono_proxy" {
   count = var.lambda_nodejs_s3_bucket != "" ? 1 : 0
 
@@ -245,7 +239,6 @@ resource "aws_api_gateway_integration" "hono_proxy" {
   uri                     = aws_lambda_function.hono_api[0].invoke_arn
 }
 
-# Root Method for Hono
 resource "aws_api_gateway_method" "hono_root" {
   count = var.lambda_nodejs_s3_bucket != "" ? 1 : 0
 
@@ -266,7 +259,6 @@ resource "aws_api_gateway_integration" "hono_root" {
   uri                     = aws_lambda_function.hono_api[0].invoke_arn
 }
 
-# Deployment for Hono
 resource "aws_api_gateway_deployment" "hono" {
   count = var.lambda_nodejs_s3_bucket != "" ? 1 : 0
 
@@ -282,7 +274,6 @@ resource "aws_api_gateway_deployment" "hono" {
   }
 }
 
-# Stage for Hono
 resource "aws_api_gateway_stage" "hono" {
   count = var.lambda_nodejs_s3_bucket != "" ? 1 : 0
 
@@ -297,7 +288,6 @@ resource "aws_api_gateway_stage" "hono" {
   }
 }
 
-# Lambda Permission for Hono API Gateway
 resource "aws_lambda_permission" "hono_api_gateway" {
   count = var.lambda_nodejs_s3_bucket != "" ? 1 : 0
 
@@ -309,7 +299,7 @@ resource "aws_lambda_permission" "hono_api_gateway" {
 }
 
 # =================================================================
-# CloudWatch Log Group
+# CloudWatch Log Group for Python Lambda
 # =================================================================
 
 resource "aws_cloudwatch_log_group" "lambda" {
@@ -324,7 +314,7 @@ resource "aws_cloudwatch_log_group" "lambda" {
 }
 
 # =================================================================
-# API Gateway REST API (条件付き作成)
+# API Gateway REST API for Python Lambda
 # =================================================================
 
 resource "aws_api_gateway_rest_api" "main" {
@@ -342,7 +332,6 @@ resource "aws_api_gateway_rest_api" "main" {
   }
 }
 
-# Proxy Resource
 resource "aws_api_gateway_resource" "proxy" {
   count = var.lambda_s3_bucket != "" ? 1 : 0
 
@@ -351,7 +340,6 @@ resource "aws_api_gateway_resource" "proxy" {
   path_part   = "{proxy+}"
 }
 
-# ANY Method for Proxy
 resource "aws_api_gateway_method" "proxy" {
   count = var.lambda_s3_bucket != "" ? 1 : 0
 
@@ -361,7 +349,6 @@ resource "aws_api_gateway_method" "proxy" {
   authorization = "NONE"
 }
 
-# Lambda Integration
 resource "aws_api_gateway_integration" "proxy" {
   count = var.lambda_s3_bucket != "" ? 1 : 0
 
@@ -373,7 +360,6 @@ resource "aws_api_gateway_integration" "proxy" {
   uri                     = aws_lambda_function.api[0].invoke_arn
 }
 
-# Root Method
 resource "aws_api_gateway_method" "root" {
   count = var.lambda_s3_bucket != "" ? 1 : 0
 
@@ -394,7 +380,6 @@ resource "aws_api_gateway_integration" "root" {
   uri                     = aws_lambda_function.api[0].invoke_arn
 }
 
-# Deployment
 resource "aws_api_gateway_deployment" "main" {
   count = var.lambda_s3_bucket != "" ? 1 : 0
 
@@ -410,7 +395,6 @@ resource "aws_api_gateway_deployment" "main" {
   }
 }
 
-# Stage
 resource "aws_api_gateway_stage" "main" {
   count = var.lambda_s3_bucket != "" ? 1 : 0
 
@@ -425,7 +409,6 @@ resource "aws_api_gateway_stage" "main" {
   }
 }
 
-# Lambda Permission for API Gateway
 resource "aws_lambda_permission" "api_gateway" {
   count = var.lambda_s3_bucket != "" ? 1 : 0
 

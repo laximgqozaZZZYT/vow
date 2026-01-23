@@ -63,6 +63,12 @@ variable "database_name" {
   default     = "vow"
 }
 
+variable "enable_aurora" {
+  description = "Enable Aurora Serverless v2 (set to false if using Supabase)"
+  type        = bool
+  default     = false
+}
+
 # =================================================================
 # Cognito Variables
 # =================================================================
@@ -321,4 +327,128 @@ variable "frontend_url" {
   description = "Frontend URL for OAuth redirects"
   type        = string
   default     = "https://main.do1k9oyyorn24.amplifyapp.com"
+}
+
+# =================================================================
+# Lambda Environment Variables (Override)
+# =================================================================
+
+variable "lambda_env_cognito_client_id" {
+  description = "Override: Cognito Client ID for Lambda"
+  type        = string
+  default     = ""
+}
+
+variable "lambda_env_cognito_region" {
+  description = "Override: Cognito Region for Lambda"
+  type        = string
+  default     = ""
+}
+
+variable "lambda_env_cognito_user_pool_id" {
+  description = "Override: Cognito User Pool ID for Lambda"
+  type        = string
+  default     = ""
+}
+
+variable "lambda_env_database_host" {
+  description = "Override: Database Host for Lambda"
+  type        = string
+  default     = ""
+}
+
+variable "lambda_env_database_name" {
+  description = "Override: Database Name for Lambda"
+  type        = string
+  default     = ""
+}
+
+variable "lambda_env_database_port" {
+  description = "Override: Database Port for Lambda"
+  type        = string
+  default     = ""
+}
+
+variable "lambda_env_database_secret_arn" {
+  description = "Override: Database Secret ARN for Lambda"
+  type        = string
+  default     = ""
+  sensitive   = true
+}
+
+variable "lambda_env_env" {
+  description = "Override: ENV for Lambda"
+  type        = string
+  default     = ""
+}
+
+variable "lambda_env_slack_callback_uri" {
+  description = "Override: Slack Callback URI for Lambda"
+  type        = string
+  default     = ""
+}
+
+variable "lambda_env_slack_enabled" {
+  description = "Override: Slack Enabled for Lambda"
+  type        = string
+  default     = "true"
+}
+
+# =================================================================
+# Amplify Environment Variables
+# =================================================================
+
+variable "amplify_env_monorepo_app_root" {
+  description = "Amplify: AMPLIFY_MONOREPO_APP_ROOT"
+  type        = string
+  default     = "frontend"
+}
+
+variable "amplify_env_next_public_api_url" {
+  description = "Amplify: NEXT_PUBLIC_API_URL"
+  type        = string
+  default     = ""
+}
+
+variable "amplify_env_next_public_site_url" {
+  description = "Amplify: NEXT_PUBLIC_SITE_URL"
+  type        = string
+  default     = ""
+}
+
+variable "amplify_env_next_public_slack_api_url" {
+  description = "Amplify: NEXT_PUBLIC_SLACK_API_URL"
+  type        = string
+  default     = ""
+}
+
+variable "amplify_env_next_public_supabase_anon_key" {
+  description = "Amplify: NEXT_PUBLIC_SUPABASE_ANON_KEY"
+  type        = string
+  default     = ""
+  sensitive   = true
+}
+
+variable "amplify_env_next_public_supabase_url" {
+  description = "Amplify: NEXT_PUBLIC_SUPABASE_URL"
+  type        = string
+  default     = ""
+}
+
+variable "amplify_env_next_public_use_edge_functions" {
+  description = "Amplify: NEXT_PUBLIC_USE_EDGE_FUNCTIONS"
+  type        = string
+  default     = "false"
+}
+
+variable "amplify_env_next_public_use_supabase_api" {
+  description = "Amplify: NEXT_PUBLIC_USE_SUPABASE_API"
+  type        = string
+  default     = "true"
+}
+
+variable "amplify_env_next_public_backend_api_url" {
+  description = "Amplify: NEXT_PUBLIC_BACKEND_API_URL for API key management"
+  type        = string
+  default     = ""
 }
