@@ -1,0 +1,36 @@
+{
+  "version": "48.0.0",
+  "files": {
+    "d6aa0774aedac8022274e84303575f0b285a4fdbf1b6aac380a3221af3c6a3bc": {
+      "displayName": "BackendTsFunction/Code",
+      "source": {
+        "path": "asset.d6aa0774aedac8022274e84303575f0b285a4fdbf1b6aac380a3221af3c6a3bc",
+        "packaging": "zip"
+      },
+      "destinations": {
+        "257784614320-ap-northeast-1-749eb027": {
+          "bucketName": "cdk-hnb659fds-assets-257784614320-ap-northeast-1",
+          "objectKey": "d6aa0774aedac8022274e84303575f0b285a4fdbf1b6aac380a3221af3c6a3bc.zip",
+          "region": "ap-northeast-1",
+          "assumeRoleArn": "arn:${AWS::Partition}:iam::257784614320:role/cdk-hnb659fds-file-publishing-role-257784614320-ap-northeast-1"
+        }
+      }
+    },
+    "6998171d6b99cafdba75ac01c1a5a071ebbce74997a6b1ca8572df3a6bbfeca7": {
+      "displayName": "VowBackendTsStack Template",
+      "source": {
+        "path": "VowBackendTsStack.template.json",
+        "packaging": "file"
+      },
+      "destinations": {
+        "257784614320-ap-northeast-1-c7390f79": {
+          "bucketName": "cdk-hnb659fds-assets-257784614320-ap-northeast-1",
+          "objectKey": "6998171d6b99cafdba75ac01c1a5a071ebbce74997a6b1ca8572df3a6bbfeca7.json",
+          "region": "ap-northeast-1",
+          "assumeRoleArn": "arn:${AWS::Partition}:iam::257784614320:role/cdk-hnb659fds-file-publishing-role-257784614320-ap-northeast-1"
+        }
+      }
+    }
+  },
+  "dockerImages": {}
+}

@@ -137,6 +137,32 @@ variable "lambda_s3_key" {
   default     = ""
 }
 
+variable "lambda_nodejs_s3_bucket" {
+  description = "S3 bucket for Node.js Lambda deployment package"
+  type        = string
+  default     = ""
+}
+
+variable "lambda_nodejs_s3_key" {
+  description = "S3 key for Node.js Lambda deployment package"
+  type        = string
+  default     = ""
+}
+
+variable "supabase_service_role_key" {
+  description = "Supabase service role key for server-side operations"
+  type        = string
+  default     = ""
+  sensitive   = true
+}
+
+variable "jwt_secret" {
+  description = "JWT secret for token verification"
+  type        = string
+  default     = ""
+  sensitive   = true
+}
+
 
 # =================================================================
 # DMS Variables (for Supabase to Aurora migration)

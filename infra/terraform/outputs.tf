@@ -104,6 +104,25 @@ output "lambda_function_name" {
 }
 
 # =================================================================
+# Hono Lambda & API Gateway Outputs (Node.js Backend)
+# =================================================================
+
+output "hono_api_gateway_url" {
+  description = "Hono API Gateway URL (Node.js Backend)"
+  value       = var.lambda_nodejs_s3_bucket != "" ? "https://${aws_api_gateway_rest_api.hono[0].id}.execute-api.${var.aws_region}.amazonaws.com/${var.environment}" : null
+}
+
+output "hono_lambda_function_arn" {
+  description = "Hono Lambda function ARN"
+  value       = var.lambda_nodejs_s3_bucket != "" ? aws_lambda_function.hono_api[0].arn : null
+}
+
+output "hono_lambda_function_name" {
+  description = "Hono Lambda function name"
+  value       = var.lambda_nodejs_s3_bucket != "" ? aws_lambda_function.hono_api[0].function_name : null
+}
+
+# =================================================================
 # DMS Outputs (条件付き)
 # =================================================================
 

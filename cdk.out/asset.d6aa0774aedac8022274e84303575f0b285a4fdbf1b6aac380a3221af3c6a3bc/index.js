@@ -12,19 +12,17 @@
 import { Hono } from 'hono';
 import { serve } from '@hono/node-server';
 // Middleware imports
-import { createCorsMiddleware } from './middleware/cors.js';
-import { jwtAuthMiddleware, addExcludedPath } from './middleware/auth.js';
+import { createCorsMiddleware } from './middleware/cors';
+import { jwtAuthMiddleware } from './middleware/auth';
 // Router imports
-import { createHealthRouter } from './routers/health.js';
-import { createSlackOAuthRouter } from './routers/slackOAuth.js';
-import { createSlackCommandsRouter } from './routers/slackCommands.js';
-import { createSlackInteractionsRouter } from './routers/slackInteractions.js';
-import { widgetRouter } from './routers/widgets.js';
-import { apiKeyRouter } from './routers/apiKeys.js';
+import { createHealthRouter } from './routers/health';
+import { createSlackOAuthRouter } from './routers/slackOAuth';
+import { createSlackCommandsRouter } from './routers/slackCommands';
+import { createSlackInteractionsRouter } from './routers/slackInteractions';
 // Error handling imports
-import { AppError, getUserFriendlyMessage } from './errors/index.js';
-import { getLogger } from './utils/logger.js';
-import { getSettings } from './config.js';
+import { AppError, getUserFriendlyMessage } from './errors';
+import { getLogger } from './utils/logger';
+import { getSettings } from './config';
 const logger = getLogger('app');
 // =============================================================================
 // Application Factory
@@ -40,12 +38,6 @@ const logger = getLogger('app');
 export function createApp() {
     const app = new Hono();
     const settings = getSettings();
-    // ---------------------------------------------------------------------------
-    // Exclude Widget API from JWT Authentication
-    // ---------------------------------------------------------------------------
-    // Widget endpoints use API key authentication instead of JWT
-    // This must be done before the JWT middleware is applied
-    addExcludedPath('/api/widgets');
     // ---------------------------------------------------------------------------
     // Global Middleware
     // ---------------------------------------------------------------------------
@@ -143,18 +135,6 @@ export function createApp() {
     // Endpoints: /api/slack/interactions
     const slackInteractionsRouter = createSlackInteractionsRouter();
     app.route('/api/slack', slackInteractionsRouter);
-    // Widget router - mounted at /api/widgets
-    // Endpoints: /api/widgets/progress, /api/widgets/stats, /api/widgets/next,
-    //            /api/widgets/stickies, /api/widgets/habits/:habitId/complete,
-    //            /api/widgets/stickies/:stickyId/toggle
-    // Note: Uses API key authentication (not JWT) and has its own CORS configuration
-    // Requirements: 7.1, 7.2
-    app.route('/api/widgets', widgetRouter);
-    // API key management router - mounted at /api/api-keys
-    // Endpoints: /api/api-keys (GET, POST), /api/api-keys/:keyId (DELETE)
-    // Note: Uses JWT authentication for user management
-    // Requirements: 1.1, 1.3, 1.4
-    app.route('/api/api-keys', apiKeyRouter);
     logger.info('Application initialized', {
         version: settings.appVersion,
         debug: settings.debug,
