@@ -85,23 +85,28 @@ export default function ApiKeysPage() {
           throw new Error("No authentication token available");
         }
 
-        // Fetch API keys from backend
-        const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL?.replace(/\/+$/, '') || '';
-        const response = await fetch(`${SUPABASE_URL}/functions/v1/api-keys`, {
-          method: "GET",
-          headers: {
-            "Content-Type": "application/json",
-            "Authorization": `Bearer ${session.access_token}`,
-          },
-        });
+        // Fetch API keys directly from Supabase
+        const { data, error: fetchError } = await supabase
+          .from('api_keys')
+          .select('id, key_prefix, name, created_at, last_used_at, is_active')
+          .eq('user_id', session.user.id)
+          .eq('is_active', true)
+          .order('created_at', { ascending: false });
 
-        if (!response.ok) {
-          const errorData = await response.json().catch(() => ({}));
-          throw new Error(errorData.message || `Failed to fetch API keys: ${response.status}`);
+        if (fetchError) {
+          throw new Error(fetchError.message || 'Failed to fetch API keys');
         }
 
-        const data = await response.json();
-        setApiKeys(data.keys || []);
+        // Convert snake_case to camelCase
+        const keys = (data || []).map((k: any) => ({
+          id: k.id,
+          keyPrefix: k.key_prefix,
+          name: k.name,
+          createdAt: k.created_at,
+          lastUsedAt: k.last_used_at,
+          isActive: k.is_active,
+        }));
+        setApiKeys(keys);
       } catch (err) {
         console.error("Failed to fetch API keys:", err);
         setError(err instanceof Error ? err.message : "Failed to fetch API keys");
@@ -191,38 +196,63 @@ export default function ApiKeysPage() {
       }
 
       const { data: { session } } = await supabase.auth.getSession();
-      if (!session?.access_token) {
+      if (!session?.user) {
         throw new Error("No authentication token available");
       }
 
-      const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL?.replace(/\/+$/, '') || '';
-      const response = await fetch(`${SUPABASE_URL}/functions/v1/api-keys`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${session.access_token}`,
-        },
-        body: JSON.stringify({ name: newKeyName.trim() }),
-      });
+      // Generate a cryptographically secure API key
+      const keyBytes = new Uint8Array(32);
+      crypto.getRandomValues(keyBytes);
+      const fullKey = 'vow_' + Array.from(keyBytes).map(b => b.toString(16).padStart(2, '0')).join('');
+      const keyPrefix = fullKey.substring(0, 12);
+      
+      // Hash the key for storage (using SHA-256)
+      const encoder = new TextEncoder();
+      const data = encoder.encode(fullKey);
+      const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+      const hashArray = Array.from(new Uint8Array(hashBuffer));
+      const keyHash = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
 
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.message || `Failed to create API key: ${response.status}`);
+      const now = new Date().toISOString();
+      
+      // Insert into Supabase
+      const { data: insertedKey, error: insertError } = await supabase
+        .from('api_keys')
+        .insert({
+          user_id: session.user.id,
+          key_hash: keyHash,
+          key_prefix: keyPrefix,
+          name: newKeyName.trim(),
+          is_active: true,
+          created_at: now,
+          updated_at: now,
+        })
+        .select('id, key_prefix, name, created_at')
+        .single();
+
+      if (insertError) {
+        throw new Error(insertError.message || 'Failed to create API key');
       }
 
-      const data: CreatedApiKey = await response.json();
+      const createdKeyData: CreatedApiKey = {
+        id: insertedKey.id,
+        key: fullKey,
+        keyPrefix: insertedKey.key_prefix,
+        name: insertedKey.name,
+        createdAt: insertedKey.created_at,
+      };
       
       // Close create modal and show created key modal
       setIsCreateModalOpen(false);
       setNewKeyName("");
-      setCreatedKey(data);
+      setCreatedKey(createdKeyData);
       
       // Add the new key to the list (without the full key)
       setApiKeys(prev => [...prev, {
-        id: data.id,
-        keyPrefix: data.keyPrefix,
-        name: data.name,
-        createdAt: data.createdAt,
+        id: createdKeyData.id,
+        keyPrefix: createdKeyData.keyPrefix,
+        name: createdKeyData.name,
+        createdAt: createdKeyData.createdAt,
         lastUsedAt: null,
         isActive: true,
       }]);
@@ -262,22 +292,22 @@ export default function ApiKeysPage() {
       }
 
       const { data: { session } } = await supabase.auth.getSession();
-      if (!session?.access_token) {
+      if (!session?.user) {
         throw new Error("No authentication token available");
       }
 
-      const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL?.replace(/\/+$/, '') || '';
-      const response = await fetch(`${SUPABASE_URL}/functions/v1/api-keys/${keyToRevoke.id}`, {
-        method: "DELETE",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${session.access_token}`,
-        },
-      });
+      // Mark the key as inactive in Supabase
+      const { error: updateError } = await supabase
+        .from('api_keys')
+        .update({ 
+          is_active: false,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', keyToRevoke.id)
+        .eq('user_id', session.user.id);
 
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.message || `Failed to revoke API key: ${response.status}`);
+      if (updateError) {
+        throw new Error(updateError.message || 'Failed to revoke API key');
       }
 
       // Remove the revoked key from the list
