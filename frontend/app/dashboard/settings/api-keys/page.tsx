@@ -204,7 +204,8 @@ export default function ApiKeysPage() {
       const keyBytes = new Uint8Array(32);
       crypto.getRandomValues(keyBytes);
       const fullKey = 'vow_' + Array.from(keyBytes).map(b => b.toString(16).padStart(2, '0')).join('');
-      const keyPrefix = fullKey.substring(0, 12);
+      // Store only first 8 chars as prefix (e.g., "vow_ab12") for display
+      const keyPrefix = fullKey.substring(0, 8);
       
       // Hash the key for storage (using SHA-256)
       const encoder = new TextEncoder();
