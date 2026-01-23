@@ -1,0 +1,2 @@
+# Errors directory
+# Contains custom error classes: AppError, AuthenticationError, SlackAPIError, etc.

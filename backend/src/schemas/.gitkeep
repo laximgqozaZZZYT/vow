@@ -1,0 +1,2 @@
+# Schemas directory
+# Contains Zod schemas for validation: slack.ts, habit.ts, activity.ts

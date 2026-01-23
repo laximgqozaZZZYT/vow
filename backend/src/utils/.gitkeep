@@ -1,0 +1,2 @@
+# Utils directory
+# Contains utility functions: logger.ts, retry.ts, encryption.ts
