@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { useAuth } from "../../hooks/useAuth";
 
 /**
@@ -358,59 +359,145 @@ export default function ApiKeysPage() {
     );
   }
 
+  // Navigation sections (same as Settings page)
+  const sections = [
+    {
+      id: 'profile',
+      label: 'Profile',
+      href: '/settings',
+      icon: (
+        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+        </svg>
+      ),
+    },
+    {
+      id: 'notifications',
+      label: 'Notifications',
+      href: '/settings',
+      icon: (
+        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+        </svg>
+      ),
+    },
+    {
+      id: 'integrations',
+      label: 'Integrations',
+      href: '/settings',
+      icon: (
+        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
+        </svg>
+      ),
+    },
+    {
+      id: 'api-keys',
+      label: 'API Keys',
+      href: '/dashboard/settings/api-keys',
+      active: true,
+      icon: (
+        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
+        </svg>
+      ),
+    },
+  ];
+
   return (
-    <div className="min-h-screen bg-background text-foreground p-6">
-      <div className="max-w-4xl mx-auto">
-        {/* Header */}
-        <div className="flex items-center justify-between mb-6">
+    <div className="min-h-screen bg-background">
+      {/* Header */}
+      <header className="fixed inset-x-0 top-0 z-50 border-b border-border bg-background/90 backdrop-blur">
+        <div className="flex h-14 items-center justify-between px-4 sm:px-6">
           <div className="flex items-center gap-4">
-            <button
-              onClick={handleBack}
-              className="p-2 hover:bg-muted rounded-md transition-colors"
-              aria-label="Back to dashboard"
+            <Link
+              href="/dashboard"
+              className="inline-flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors"
             >
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                width="24"
-                height="24"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              >
-                <path d="M19 12H5M12 19l-7-7 7-7" />
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
               </svg>
-            </button>
-            <div>
-              <h1 className="text-h1 font-semibold">API Keys</h1>
-              <p className="text-muted-foreground text-small">
-                Manage API keys for embedding dashboard widgets
-              </p>
-            </div>
+              <span className="hidden sm:inline">Back to Dashboard</span>
+            </Link>
           </div>
-          <button
-            onClick={handleOpenCreateModal}
-            disabled={apiKeys.length >= 5}
-            className="px-4 py-2 bg-primary text-primary-foreground rounded-md shadow-sm hover:opacity-90 focus-visible:outline-2 focus-visible:outline-primary transition-opacity flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              width="20"
-              height="20"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            >
-              <path d="M12 5v14M5 12h14" />
-            </svg>
-            Create API Key
-          </button>
+          <h1 className="text-lg font-semibold">Settings</h1>
+          <div className="w-24" /> {/* Spacer for centering */}
         </div>
+      </header>
+
+      <div className="pt-14 flex">
+        {/* Sidebar */}
+        <aside className="fixed left-0 top-14 bottom-0 w-64 border-r border-border bg-card p-4 hidden md:block">
+          <nav className="space-y-1">
+            {sections.map((section) => (
+              <Link
+                key={section.id}
+                href={section.href}
+                className={`w-full flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors ${
+                  section.active
+                    ? 'bg-primary text-primary-foreground'
+                    : 'text-muted-foreground hover:bg-accent hover:text-foreground'
+                }`}
+              >
+                {section.icon}
+                {section.label}
+              </Link>
+            ))}
+          </nav>
+        </aside>
+
+        {/* Mobile navigation */}
+        <div className="md:hidden fixed top-14 left-0 right-0 z-40 bg-card border-b border-border">
+          <div className="flex overflow-x-auto p-2 gap-2">
+            {sections.map((section) => (
+              <Link
+                key={section.id}
+                href={section.href}
+                className={`flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium whitespace-nowrap transition-colors ${
+                  section.active
+                    ? 'bg-primary text-primary-foreground'
+                    : 'text-muted-foreground hover:bg-accent'
+                }`}
+              >
+                {section.icon}
+                {section.label}
+              </Link>
+            ))}
+          </div>
+        </div>
+
+        {/* Main content */}
+        <main className="flex-1 md:ml-64 p-6 mt-12 md:mt-0">
+          <div className="max-w-2xl mx-auto">
+            {/* Page Header */}
+            <div className="flex items-center justify-between mb-6">
+              <div>
+                <h2 className="text-xl font-semibold">API Keys</h2>
+                <p className="text-muted-foreground text-sm">
+                  Manage API keys for embedding dashboard widgets
+                </p>
+              </div>
+              <button
+                onClick={handleOpenCreateModal}
+                disabled={apiKeys.length >= 5}
+                className="px-4 py-2 bg-primary text-primary-foreground rounded-md shadow-sm hover:opacity-90 focus-visible:outline-2 focus-visible:outline-primary transition-opacity flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  width="20"
+                  height="20"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <path d="M12 5v14M5 12h14" />
+                </svg>
+                Create API Key
+              </button>
+            </div>
 
         {/* Info Card */}
         <div className="bg-muted border border-border rounded-lg p-4 mb-6">
@@ -570,6 +657,8 @@ export default function ApiKeysPage() {
             {apiKeys.length} of 5 API keys used
           </p>
         )}
+          </div>
+        </main>
       </div>
 
       {/* Create API Key Modal */}
