@@ -53,6 +53,15 @@ const envSchema = z.object({
   OPENAI_ENABLED: z.string().transform((v) => v === 'true').default('false'),
   OPENAI_MODEL: z.string().default('gpt-4o-mini'),
   OPENAI_MAX_REQUESTS_PER_MINUTE: z.string().transform(Number).default('60'),
+
+  // Stripe Integration
+  STRIPE_SECRET_KEY: z.string().optional(),
+  STRIPE_WEBHOOK_SECRET: z.string().optional(),
+  STRIPE_PRICE_ID_BASIC: z.string().optional(),
+  STRIPE_PRICE_ID_PRO: z.string().optional(),
+
+  // Admin Access
+  ADMIN_EMAILS: z.string().optional(),
 });
 
 /**
@@ -130,6 +139,15 @@ export interface Settings {
   openaiEnabled: boolean;
   openaiModel: string;
   openaiMaxRequestsPerMinute: number;
+
+  // Stripe Integration
+  stripeSecretKey: string | undefined;
+  stripeWebhookSecret: string | undefined;
+  stripePriceIdBasic: string | undefined;
+  stripePriceIdPro: string | undefined;
+
+  // Admin Access
+  adminEmails: string[];
 }
 
 /**
@@ -180,6 +198,15 @@ function loadSettings(): Settings {
     openaiEnabled: env.OPENAI_ENABLED,
     openaiModel: env.OPENAI_MODEL,
     openaiMaxRequestsPerMinute: env.OPENAI_MAX_REQUESTS_PER_MINUTE,
+
+    // Stripe Integration
+    stripeSecretKey: env.STRIPE_SECRET_KEY,
+    stripeWebhookSecret: env.STRIPE_WEBHOOK_SECRET,
+    stripePriceIdBasic: env.STRIPE_PRICE_ID_BASIC,
+    stripePriceIdPro: env.STRIPE_PRICE_ID_PRO,
+
+    // Admin Access
+    adminEmails: env.ADMIN_EMAILS?.split(',').map((e) => e.trim().toLowerCase()) ?? [],
   };
 }
 

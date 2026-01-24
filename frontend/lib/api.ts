@@ -587,6 +587,83 @@ export async function claim() {
 
 // 認証関数
 const api = {
+  // Generic HTTP methods for backend API calls
+  get: async (path: string) => {
+    const url = `${process.env.NEXT_PUBLIC_BACKEND_API_URL || ''}${path}`;
+    const { supabase } = await import('./supabaseClient');
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    
+    if (supabase) {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session?.access_token) {
+        headers.Authorization = `Bearer ${session.access_token}`;
+      }
+    }
+    
+    const res = await fetch(url, { method: 'GET', headers });
+    if (!res.ok) throw new ApiError(`HTTP ${res.status}`, url, { status: res.status });
+    return safeJsonParse(await res.text());
+  },
+  
+  post: async (path: string, body?: any) => {
+    const url = `${process.env.NEXT_PUBLIC_BACKEND_API_URL || ''}${path}`;
+    const { supabase } = await import('./supabaseClient');
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    
+    if (supabase) {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session?.access_token) {
+        headers.Authorization = `Bearer ${session.access_token}`;
+      }
+    }
+    
+    const res = await fetch(url, { 
+      method: 'POST', 
+      headers,
+      body: body ? JSON.stringify(body) : undefined
+    });
+    if (!res.ok) throw new ApiError(`HTTP ${res.status}`, url, { status: res.status });
+    return safeJsonParse(await res.text());
+  },
+  
+  patch: async (path: string, body?: any) => {
+    const url = `${process.env.NEXT_PUBLIC_BACKEND_API_URL || ''}${path}`;
+    const { supabase } = await import('./supabaseClient');
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    
+    if (supabase) {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session?.access_token) {
+        headers.Authorization = `Bearer ${session.access_token}`;
+      }
+    }
+    
+    const res = await fetch(url, { 
+      method: 'PATCH', 
+      headers,
+      body: body ? JSON.stringify(body) : undefined
+    });
+    if (!res.ok) throw new ApiError(`HTTP ${res.status}`, url, { status: res.status });
+    return safeJsonParse(await res.text());
+  },
+  
+  delete: async (path: string) => {
+    const url = `${process.env.NEXT_PUBLIC_BACKEND_API_URL || ''}${path}`;
+    const { supabase } = await import('./supabaseClient');
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    
+    if (supabase) {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session?.access_token) {
+        headers.Authorization = `Bearer ${session.access_token}`;
+      }
+    }
+    
+    const res = await fetch(url, { method: 'DELETE', headers });
+    if (!res.ok) throw new ApiError(`HTTP ${res.status}`, url, { status: res.status });
+    return safeJsonParse(await res.text());
+  },
+  
   // データAPI
   getGoals,
   createGoal,

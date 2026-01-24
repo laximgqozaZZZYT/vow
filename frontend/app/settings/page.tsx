@@ -4,6 +4,8 @@ import { useState } from 'react';
 import Link from 'next/link';
 import { useSlackIntegration } from '@/hooks/useSlackIntegration';
 import { DAYS_OF_WEEK, TIME_OPTIONS } from '@/lib/types/slack';
+import { useNotificationPreferences } from '../hooks/useNotificationPreferences';
+import { usePushNotifications } from '../hooks/usePushNotifications';
 
 type SettingsSection = 'profile' | 'notifications' | 'integrations' | 'api-keys';
 
@@ -18,6 +20,28 @@ export default function SettingsPage() {
     updatePreferences,
     testConnection,
   } = useSlackIntegration();
+  
+  // Notification preferences
+  const {
+    preferences: notificationPrefs,
+    isLoading: notificationLoading,
+    isSaving: notificationSaving,
+    error: notificationError,
+    updateInAppPreference,
+    updateSlackPreference,
+    updateWebPushPreference,
+  } = useNotificationPreferences();
+  
+  // Push notifications
+  const {
+    isSupported: pushSupported,
+    isSubscribed: pushSubscribed,
+    permission: pushPermission,
+    isLoading: pushLoading,
+    error: pushError,
+    subscribe: subscribePush,
+    unsubscribe: unsubscribePush,
+  } = usePushNotifications();
   
   const [testingConnection, setTestingConnection] = useState(false);
   const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null);
@@ -180,6 +204,30 @@ export default function SettingsPage() {
                     <p className="text-muted-foreground">Profile settings coming soon...</p>
                   </div>
                 </div>
+                
+                {/* Subscription Management */}
+                <div>
+                  <h2 className="text-xl font-semibold mb-4">Subscription</h2>
+                  <div className="bg-card border border-border rounded-lg p-6">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <h3 className="font-medium">プランを管理</h3>
+                        <p className="text-sm text-muted-foreground mt-1">
+                          サブスクリプションプランの確認・変更、トークン使用量の確認ができます。
+                        </p>
+                      </div>
+                      <Link
+                        href="/settings/subscription"
+                        className="inline-flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-md text-sm font-medium hover:bg-primary/90 transition-colors"
+                      >
+                        プランを管理
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                        </svg>
+                      </Link>
+                    </div>
+                  </div>
+                </div>
               </div>
             )}
 
@@ -187,9 +235,251 @@ export default function SettingsPage() {
               <div className="space-y-6">
                 <div>
                   <h2 className="text-xl font-semibold mb-4">Notification Settings</h2>
-                  <div className="bg-card border border-border rounded-lg p-6">
-                    <p className="text-muted-foreground">Notification settings coming soon...</p>
-                  </div>
+                  
+                  {/* Error display */}
+                  {notificationError && (
+                    <div className="mb-4 p-3 bg-destructive/10 border border-destructive/20 rounded-md text-destructive text-sm">
+                      {notificationError}
+                    </div>
+                  )}
+                  
+                  {notificationLoading ? (
+                    <div className="bg-card border border-border rounded-lg p-6">
+                      <div className="flex items-center gap-2 text-muted-foreground">
+                        <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                        Loading...
+                      </div>
+                    </div>
+                  ) : (
+                    <>
+                      {/* In-App Notifications */}
+                      <div className="bg-card border border-border rounded-lg p-6 mb-4">
+                        <div className="flex items-center gap-3 mb-4">
+                          <div className="w-10 h-10 bg-primary/10 rounded-lg flex items-center justify-center">
+                            <svg className="w-5 h-5 text-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+                            </svg>
+                          </div>
+                          <div>
+                            <h3 className="font-medium">アプリ内通知</h3>
+                            <p className="text-sm text-muted-foreground">ダッシュボードに表示される通知</p>
+                          </div>
+                        </div>
+                        
+                        <div className="space-y-3">
+                          <label className="flex items-center justify-between">
+                            <span className="text-sm">ワークロードコーチング</span>
+                            <input
+                              type="checkbox"
+                              checked={notificationPrefs.inApp.workloadCoaching}
+                              onChange={(e) => updateInAppPreference('workloadCoaching', e.target.checked)}
+                              disabled={notificationSaving}
+                              className="w-4 h-4 rounded border-border"
+                            />
+                          </label>
+                          
+                          <label className="flex items-center justify-between">
+                            <span className="text-sm">トークン使用量警告</span>
+                            <input
+                              type="checkbox"
+                              checked={notificationPrefs.inApp.tokenWarning}
+                              onChange={(e) => updateInAppPreference('tokenWarning', e.target.checked)}
+                              disabled={notificationSaving}
+                              className="w-4 h-4 rounded border-border"
+                            />
+                          </label>
+                          
+                          <label className="flex items-center justify-between">
+                            <span className="text-sm">週次レポート</span>
+                            <input
+                              type="checkbox"
+                              checked={notificationPrefs.inApp.weeklyReport}
+                              onChange={(e) => updateInAppPreference('weeklyReport', e.target.checked)}
+                              disabled={notificationSaving}
+                              className="w-4 h-4 rounded border-border"
+                            />
+                          </label>
+                        </div>
+                      </div>
+                      
+                      {/* Slack Notifications */}
+                      {slackStatus?.connected && (
+                        <div className="bg-card border border-border rounded-lg p-6 mb-4">
+                          <div className="flex items-center gap-3 mb-4">
+                            <div className="w-10 h-10 bg-[#4A154B] rounded-lg flex items-center justify-center">
+                              <svg className="w-5 h-5 text-white" viewBox="0 0 24 24" fill="currentColor">
+                                <path d="M5.042 15.165a2.528 2.528 0 0 1-2.52 2.523A2.528 2.528 0 0 1 0 15.165a2.527 2.527 0 0 1 2.522-2.52h2.52v2.52zM6.313 15.165a2.527 2.527 0 0 1 2.521-2.52 2.527 2.527 0 0 1 2.521 2.52v6.313A2.528 2.528 0 0 1 8.834 24a2.528 2.528 0 0 1-2.521-2.522v-6.313z"/>
+                              </svg>
+                            </div>
+                            <div>
+                              <h3 className="font-medium">Slack通知</h3>
+                              <p className="text-sm text-muted-foreground">SlackのDMで通知を受け取る</p>
+                            </div>
+                          </div>
+                          
+                          <div className="space-y-3">
+                            <label className="flex items-center justify-between">
+                              <span className="text-sm">Slack通知を有効化</span>
+                              <input
+                                type="checkbox"
+                                checked={notificationPrefs.slack.enabled}
+                                onChange={(e) => updateSlackPreference('enabled', e.target.checked)}
+                                disabled={notificationSaving}
+                                className="w-4 h-4 rounded border-border"
+                              />
+                            </label>
+                            
+                            {notificationPrefs.slack.enabled && (
+                              <>
+                                <label className="flex items-center justify-between pl-4">
+                                  <span className="text-sm">ワークロードコーチング</span>
+                                  <input
+                                    type="checkbox"
+                                    checked={notificationPrefs.slack.workloadCoaching}
+                                    onChange={(e) => updateSlackPreference('workloadCoaching', e.target.checked)}
+                                    disabled={notificationSaving}
+                                    className="w-4 h-4 rounded border-border"
+                                  />
+                                </label>
+                                
+                                <label className="flex items-center justify-between pl-4">
+                                  <span className="text-sm">トークン使用量警告</span>
+                                  <input
+                                    type="checkbox"
+                                    checked={notificationPrefs.slack.tokenWarning}
+                                    onChange={(e) => updateSlackPreference('tokenWarning', e.target.checked)}
+                                    disabled={notificationSaving}
+                                    className="w-4 h-4 rounded border-border"
+                                  />
+                                </label>
+                                
+                                <label className="flex items-center justify-between pl-4">
+                                  <span className="text-sm">週次レポート</span>
+                                  <input
+                                    type="checkbox"
+                                    checked={notificationPrefs.slack.weeklyReport}
+                                    onChange={(e) => updateSlackPreference('weeklyReport', e.target.checked)}
+                                    disabled={notificationSaving}
+                                    className="w-4 h-4 rounded border-border"
+                                  />
+                                </label>
+                                
+                                <div className="flex items-center justify-between pl-4">
+                                  <span className="text-sm">通知時刻</span>
+                                  <select
+                                    value={notificationPrefs.slack.notificationTime}
+                                    onChange={(e) => updateSlackPreference('notificationTime', e.target.value)}
+                                    disabled={notificationSaving}
+                                    className="px-2 py-1 text-sm bg-background border border-border rounded-md"
+                                  >
+                                    {TIME_OPTIONS.map(time => (
+                                      <option key={time.value} value={time.value}>{time.label}</option>
+                                    ))}
+                                  </select>
+                                </div>
+                              </>
+                            )}
+                          </div>
+                        </div>
+                      )}
+                      
+                      {/* Web Push Notifications */}
+                      <div className="bg-card border border-border rounded-lg p-6">
+                        <div className="flex items-center gap-3 mb-4">
+                          <div className="w-10 h-10 bg-blue-500/10 rounded-lg flex items-center justify-center">
+                            <svg className="w-5 h-5 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z" />
+                            </svg>
+                          </div>
+                          <div>
+                            <h3 className="font-medium">プッシュ通知</h3>
+                            <p className="text-sm text-muted-foreground">ブラウザのプッシュ通知</p>
+                          </div>
+                        </div>
+                        
+                        {!pushSupported ? (
+                          <p className="text-sm text-muted-foreground">
+                            お使いのブラウザはプッシュ通知に対応していません。
+                          </p>
+                        ) : pushPermission === 'denied' ? (
+                          <p className="text-sm text-destructive">
+                            プッシュ通知がブロックされています。ブラウザの設定から許可してください。
+                          </p>
+                        ) : (
+                          <div className="space-y-3">
+                            {pushError && (
+                              <p className="text-sm text-destructive">{pushError}</p>
+                            )}
+                            
+                            {!pushSubscribed ? (
+                              <button
+                                onClick={subscribePush}
+                                disabled={pushLoading}
+                                className="px-4 py-2 bg-primary text-primary-foreground rounded-md text-sm font-medium hover:bg-primary/90 disabled:opacity-50 transition-colors"
+                              >
+                                {pushLoading ? '設定中...' : 'プッシュ通知を有効化'}
+                              </button>
+                            ) : (
+                              <>
+                                <div className="flex items-center gap-2 text-sm text-green-600 dark:text-green-400">
+                                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                                  </svg>
+                                  プッシュ通知が有効です
+                                </div>
+                                
+                                <label className="flex items-center justify-between">
+                                  <span className="text-sm">デイリーリマインダー</span>
+                                  <input
+                                    type="checkbox"
+                                    checked={notificationPrefs.webPush.dailyReminder}
+                                    onChange={(e) => updateWebPushPreference('dailyReminder', e.target.checked)}
+                                    disabled={notificationSaving}
+                                    className="w-4 h-4 rounded border-border"
+                                  />
+                                </label>
+                                
+                                {notificationPrefs.webPush.dailyReminder && (
+                                  <div className="flex items-center justify-between pl-4">
+                                    <span className="text-sm">リマインダー時刻</span>
+                                    <select
+                                      value={notificationPrefs.webPush.dailyReminderTime}
+                                      onChange={(e) => updateWebPushPreference('dailyReminderTime', e.target.value)}
+                                      disabled={notificationSaving}
+                                      className="px-2 py-1 text-sm bg-background border border-border rounded-md"
+                                    >
+                                      {TIME_OPTIONS.map(time => (
+                                        <option key={time.value} value={time.value}>{time.label}</option>
+                                      ))}
+                                    </select>
+                                  </div>
+                                )}
+                                
+                                <label className="flex items-center justify-between">
+                                  <span className="text-sm">ワークロードコーチング</span>
+                                  <input
+                                    type="checkbox"
+                                    checked={notificationPrefs.webPush.workloadCoaching}
+                                    onChange={(e) => updateWebPushPreference('workloadCoaching', e.target.checked)}
+                                    disabled={notificationSaving}
+                                    className="w-4 h-4 rounded border-border"
+                                  />
+                                </label>
+                                
+                                <button
+                                  onClick={unsubscribePush}
+                                  disabled={pushLoading}
+                                  className="px-3 py-1.5 text-sm text-destructive border border-destructive/30 rounded-md hover:bg-destructive/10 disabled:opacity-50 transition-colors"
+                                >
+                                  {pushLoading ? '解除中...' : 'プッシュ通知を無効化'}
+                                </button>
+                              </>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    </>
+                  )}
                 </div>
               </div>
             )}

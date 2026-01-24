@@ -15,6 +15,7 @@ import StaticsSection from './components/Section.Statistics';
 import DiarySection from './components/Section.Diary';
 import StickiesSection from './components/Section.Stickies';
 import MindmapSection from './components/Section.Mindmap';
+import NoticeSection from './components/Section.Notice';
 
 // Extracted components
 import DashboardHeader from './components/Layout.Header';
@@ -735,6 +736,25 @@ function DashboardLayout(props: any) {
                     setHabits(hs || []);
                   } catch (e) {
                     console.error('Failed to reload data', e);
+                  }
+                }}
+              />
+            ) : sec === 'notices' ? (
+              <NoticeSection
+                key="notices"
+                onActionClick={(notice) => {
+                  // Handle notice action clicks
+                  debug.log('[Dashboard] Notice action clicked:', notice);
+                  // Navigate based on action type
+                  if (notice.actionType === 'rescue_proposal' || notice.actionType === 'recovery_proposal') {
+                    // Could open coaching modal or navigate to coaching page
+                  } else if (notice.actionType === 'subscription') {
+                    // Navigate to subscription settings
+                    window.location.href = '/settings/subscription';
+                  } else if (notice.actionType === 'habit_suggestion' && notice.actionPayload?.goalId) {
+                    // Open goal modal with suggestions
+                    setEditingGoalId(notice.actionPayload.goalId);
+                    setOpenGoalModal(true);
                   }
                 }}
               />
