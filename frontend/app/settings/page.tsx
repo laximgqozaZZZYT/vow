@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { useSlackIntegration } from '@/hooks/useSlackIntegration';
-import { DAYS_OF_WEEK, TIME_OPTIONS } from '@/lib/types/slack';
+import { TIME_OPTIONS } from '@/lib/types/slack';
 import { useNotificationPreferences } from '../hooks/useNotificationPreferences';
 import { usePushNotifications } from '../hooks/usePushNotifications';
 
@@ -302,87 +302,6 @@ export default function SettingsPage() {
                         </div>
                       </div>
                       
-                      {/* Slack Notifications */}
-                      {slackStatus?.connected && (
-                        <div className="bg-card border border-border rounded-lg p-6 mb-4">
-                          <div className="flex items-center gap-3 mb-4">
-                            <div className="w-10 h-10 bg-[#4A154B] rounded-lg flex items-center justify-center">
-                              <svg className="w-5 h-5 text-white" viewBox="0 0 24 24" fill="currentColor">
-                                <path d="M5.042 15.165a2.528 2.528 0 0 1-2.52 2.523A2.528 2.528 0 0 1 0 15.165a2.527 2.527 0 0 1 2.522-2.52h2.52v2.52zM6.313 15.165a2.527 2.527 0 0 1 2.521-2.52 2.527 2.527 0 0 1 2.521 2.52v6.313A2.528 2.528 0 0 1 8.834 24a2.528 2.528 0 0 1-2.521-2.522v-6.313z"/>
-                              </svg>
-                            </div>
-                            <div>
-                              <h3 className="font-medium">Slack通知</h3>
-                              <p className="text-sm text-muted-foreground">SlackのDMで通知を受け取る</p>
-                            </div>
-                          </div>
-                          
-                          <div className="space-y-3">
-                            <label className="flex items-center justify-between">
-                              <span className="text-sm">Slack通知を有効化</span>
-                              <input
-                                type="checkbox"
-                                checked={notificationPrefs.slack.enabled}
-                                onChange={(e) => updateSlackPreference('enabled', e.target.checked)}
-                                disabled={notificationSaving}
-                                className="w-4 h-4 rounded border-border"
-                              />
-                            </label>
-                            
-                            {notificationPrefs.slack.enabled && (
-                              <>
-                                <label className="flex items-center justify-between pl-4">
-                                  <span className="text-sm">ワークロードコーチング</span>
-                                  <input
-                                    type="checkbox"
-                                    checked={notificationPrefs.slack.workloadCoaching}
-                                    onChange={(e) => updateSlackPreference('workloadCoaching', e.target.checked)}
-                                    disabled={notificationSaving}
-                                    className="w-4 h-4 rounded border-border"
-                                  />
-                                </label>
-                                
-                                <label className="flex items-center justify-between pl-4">
-                                  <span className="text-sm">トークン使用量警告</span>
-                                  <input
-                                    type="checkbox"
-                                    checked={notificationPrefs.slack.tokenWarning}
-                                    onChange={(e) => updateSlackPreference('tokenWarning', e.target.checked)}
-                                    disabled={notificationSaving}
-                                    className="w-4 h-4 rounded border-border"
-                                  />
-                                </label>
-                                
-                                <label className="flex items-center justify-between pl-4">
-                                  <span className="text-sm">週次レポート</span>
-                                  <input
-                                    type="checkbox"
-                                    checked={notificationPrefs.slack.weeklyReport}
-                                    onChange={(e) => updateSlackPreference('weeklyReport', e.target.checked)}
-                                    disabled={notificationSaving}
-                                    className="w-4 h-4 rounded border-border"
-                                  />
-                                </label>
-                                
-                                <div className="flex items-center justify-between pl-4">
-                                  <span className="text-sm">通知時刻</span>
-                                  <select
-                                    value={notificationPrefs.slack.notificationTime}
-                                    onChange={(e) => updateSlackPreference('notificationTime', e.target.value)}
-                                    disabled={notificationSaving}
-                                    className="px-2 py-1 text-sm bg-background border border-border rounded-md"
-                                  >
-                                    {TIME_OPTIONS.map(time => (
-                                      <option key={time.value} value={time.value}>{time.label}</option>
-                                    ))}
-                                  </select>
-                                </div>
-                              </>
-                            )}
-                          </div>
-                        </div>
-                      )}
-                      
                       {/* Web Push Notifications */}
                       <div className="bg-card border border-border rounded-lg p-6">
                         <div className="flex items-center gap-3 mb-4">
@@ -541,47 +460,78 @@ export default function SettingsPage() {
                             
                             {/* Preferences */}
                             <div className="space-y-3 pt-2 border-t border-border">
+                              <h4 className="text-sm font-medium text-muted-foreground">通知設定</h4>
+                              
                               <label className="flex items-center justify-between">
-                                <span className="text-sm">Habit reminders via Slack</span>
+                                <span className="text-sm">Slack通知を有効化</span>
                                 <input
                                   type="checkbox"
-                                  checked={slackStatus.preferences?.slackNotificationsEnabled ?? false}
-                                  onChange={(e) => handlePreferenceChange('slackNotificationsEnabled', e.target.checked)}
+                                  checked={notificationPrefs.slack.enabled}
+                                  onChange={(e) => updateSlackPreference('enabled', e.target.checked)}
+                                  disabled={notificationSaving}
                                   className="w-4 h-4 rounded border-border"
                                 />
                               </label>
                               
-                              <label className="flex items-center justify-between">
-                                <span className="text-sm">Weekly reports via Slack</span>
-                                <input
-                                  type="checkbox"
-                                  checked={slackStatus.preferences?.weeklySlackReportEnabled ?? false}
-                                  onChange={(e) => handlePreferenceChange('weeklySlackReportEnabled', e.target.checked)}
-                                  className="w-4 h-4 rounded border-border"
-                                />
-                              </label>
-                              
-                              {slackStatus.preferences?.weeklySlackReportEnabled && (
-                                <div className="flex items-center gap-4 pl-4">
-                                  <select
-                                    value={slackStatus.preferences?.weeklyReportDay ?? 0}
-                                    onChange={(e) => handlePreferenceChange('weeklyReportDay', parseInt(e.target.value))}
-                                    className="px-2 py-1 text-sm bg-background border border-border rounded-md"
-                                  >
-                                    {DAYS_OF_WEEK.map(day => (
-                                      <option key={day.value} value={day.value}>{day.label}</option>
-                                    ))}
-                                  </select>
-                                  <select
-                                    value={slackStatus.preferences?.weeklyReportTime ?? '09:00'}
-                                    onChange={(e) => handlePreferenceChange('weeklyReportTime', e.target.value)}
-                                    className="px-2 py-1 text-sm bg-background border border-border rounded-md"
-                                  >
-                                    {TIME_OPTIONS.map(time => (
-                                      <option key={time.value} value={time.value}>{time.label}</option>
-                                    ))}
-                                  </select>
-                                </div>
+                              {notificationPrefs.slack.enabled && (
+                                <>
+                                  <label className="flex items-center justify-between pl-4">
+                                    <span className="text-sm">習慣リマインダー</span>
+                                    <input
+                                      type="checkbox"
+                                      checked={slackStatus.preferences?.slackNotificationsEnabled ?? false}
+                                      onChange={(e) => handlePreferenceChange('slackNotificationsEnabled', e.target.checked)}
+                                      className="w-4 h-4 rounded border-border"
+                                    />
+                                  </label>
+                                  
+                                  <label className="flex items-center justify-between pl-4">
+                                    <span className="text-sm">ワークロードコーチング</span>
+                                    <input
+                                      type="checkbox"
+                                      checked={notificationPrefs.slack.workloadCoaching}
+                                      onChange={(e) => updateSlackPreference('workloadCoaching', e.target.checked)}
+                                      disabled={notificationSaving}
+                                      className="w-4 h-4 rounded border-border"
+                                    />
+                                  </label>
+                                  
+                                  <label className="flex items-center justify-between pl-4">
+                                    <span className="text-sm">トークン使用量警告</span>
+                                    <input
+                                      type="checkbox"
+                                      checked={notificationPrefs.slack.tokenWarning}
+                                      onChange={(e) => updateSlackPreference('tokenWarning', e.target.checked)}
+                                      disabled={notificationSaving}
+                                      className="w-4 h-4 rounded border-border"
+                                    />
+                                  </label>
+                                  
+                                  <label className="flex items-center justify-between pl-4">
+                                    <span className="text-sm">週次レポート</span>
+                                    <input
+                                      type="checkbox"
+                                      checked={notificationPrefs.slack.weeklyReport}
+                                      onChange={(e) => updateSlackPreference('weeklyReport', e.target.checked)}
+                                      disabled={notificationSaving}
+                                      className="w-4 h-4 rounded border-border"
+                                    />
+                                  </label>
+                                  
+                                  <div className="flex items-center justify-between pl-4">
+                                    <span className="text-sm">通知時刻</span>
+                                    <select
+                                      value={notificationPrefs.slack.notificationTime}
+                                      onChange={(e) => updateSlackPreference('notificationTime', e.target.value)}
+                                      disabled={notificationSaving}
+                                      className="px-2 py-1 text-sm bg-background border border-border rounded-md"
+                                    >
+                                      {TIME_OPTIONS.map(time => (
+                                        <option key={time.value} value={time.value}>{time.label}</option>
+                                      ))}
+                                    </select>
+                                  </div>
+                                </>
                               )}
                             </div>
                             
