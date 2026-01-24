@@ -110,7 +110,7 @@ export function useNotificationPreferences() {
     setState(prev => ({ ...prev, isSaving: true, error: null }));
 
     try {
-      const response = await api.patch('/api/notifications/preferences', updates);
+      const response = await api.put('/api/notifications/preferences', updates);
       
       if (response && response.preferences) {
         setState(prev => ({

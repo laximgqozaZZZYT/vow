@@ -647,6 +647,27 @@ const api = {
     return safeJsonParse(await res.text());
   },
   
+  put: async (path: string, body?: any) => {
+    const url = `${process.env.NEXT_PUBLIC_BACKEND_API_URL || ''}${path}`;
+    const { supabase } = await import('./supabaseClient');
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    
+    if (supabase) {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session?.access_token) {
+        headers.Authorization = `Bearer ${session.access_token}`;
+      }
+    }
+    
+    const res = await fetch(url, { 
+      method: 'PUT', 
+      headers,
+      body: body ? JSON.stringify(body) : undefined
+    });
+    if (!res.ok) throw new ApiError(`HTTP ${res.status}`, url, { status: res.status });
+    return safeJsonParse(await res.text());
+  },
+  
   delete: async (path: string) => {
     const url = `${process.env.NEXT_PUBLIC_BACKEND_API_URL || ''}${path}`;
     const { supabase } = await import('./supabaseClient');

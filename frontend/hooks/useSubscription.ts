@@ -10,7 +10,7 @@ import { useState, useCallback, useEffect } from 'react';
 import { supabase } from '@/lib/supabaseClient';
 
 // Backend API endpoint
-const API_URL = process.env.NEXT_PUBLIC_SLACK_API_URL || '';
+const API_URL = process.env.NEXT_PUBLIC_BACKEND_API_URL || process.env.NEXT_PUBLIC_SLACK_API_URL || '';
 
 // Plan types
 export type PlanType = 'free' | 'premium_basic' | 'premium_pro';
@@ -242,6 +242,9 @@ export function useSubscription(): UseSubscriptionReturn {
         method: 'POST',
         headers,
         credentials: 'include',
+        body: JSON.stringify({
+          returnUrl: `${window.location.origin}/settings/subscription`,
+        }),
       });
       
       if (!response.ok) {
