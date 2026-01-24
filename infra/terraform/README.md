@@ -1,6 +1,6 @@
 # Vow AWS Terraform Infrastructure
 
-開発環境用のAWSサーバレスインフラをTerraformで構築します。
+開発環境・本番環境のAWSサーバレスインフラをTerraformで構築します。
 
 ## アーキテクチャ
 
@@ -14,30 +14,22 @@
 │                            │                                     │
 │                     ┌──────▼──────┐                             │
 │                     │   Lambda    │                             │
-│                     │  (FastAPI)  │                             │
+│                     │   (Hono)    │                             │
 │                     └──────┬──────┘                             │
 │                            │                                     │
-│  ┌─────────────────────────▼─────────────────────────────────┐ │
-│  │                        VPC                                  │ │
-│  │  ┌─────────────┐  ┌─────────────┐  ┌─────────────────────┐│ │
-│  │  │   Public    │  │   Private   │  │      Isolated       ││ │
-│  │  │   Subnet    │  │   Subnet    │  │       Subnet        ││ │
-│  │  │  (NAT GW)   │  │  (Lambda)   │  │  (Aurora Serverless)││ │
-│  │  └─────────────┘  └─────────────┘  └─────────────────────┘│ │
-│  └───────────────────────────────────────────────────────────┘ │
+│                     ┌──────▼──────┐                             │
+│                     │  Supabase   │                             │
+│                     │ (PostgreSQL)│                             │
+│                     └─────────────┘                             │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
-## コスト見積もり（月額）
+## 環境構成
 
-| サービス | 仕様 | コスト |
-|---------|------|--------|
-| Lambda | 512MB, 1M requests | ~$0.20 |
-| API Gateway | REST API, 1M requests | ~$3.50 |
-| Aurora Serverless v2 | 0.5 ACU minimum | ~$44.00 |
-| NAT Gateway | 1 AZ | ~$32.00 |
-| Cognito | 無料枠 | ~$0.00 |
-| **合計** | | **~$80/月** |
+| 環境 | ブランチ | Lambda関数名 | Amplify URL |
+|------|---------|-------------|-------------|
+| Development | develop | vow-development-api | develop.do1k9oyyorn24.amplifyapp.com |
+| Production | main | vow-production-api | main.do1k9oyyorn24.amplifyapp.com |
 
 ## 前提条件
 
@@ -47,59 +39,146 @@
 
 ## クイックスタート
 
-### 1. 変数ファイルの作成
+### 1. 初期化
 
 ```bash
 cd infra/terraform
-cp terraform.tfvars.example terraform.tfvars
-# terraform.tfvars を編集
+terraform init
 ```
 
-### 2. 初期化
+### 2. 環境切り替え
 
 ```bash
-terraform init
+# 開発環境に切り替え
+./scripts/switch-env.sh development
+
+# 本番環境に切り替え
+./scripts/switch-env.sh production
 ```
 
 ### 3. プラン確認
 
 ```bash
-terraform plan
+# 開発環境
+terraform plan -var-file="terraform.development.tfvars"
+
+# 本番環境
+terraform plan -var-file="terraform.production.tfvars"
 ```
 
 ### 4. デプロイ
 
 ```bash
-terraform apply
+# 開発環境
+terraform apply -var-file="terraform.development.tfvars"
+
+# 本番環境（確認プロンプトあり）
+terraform apply -var-file="terraform.production.tfvars"
 ```
 
-### 5. 削除（必要な場合）
+## S3バックエンド設定（推奨）
+
+チーム開発やCI/CDでの利用には、S3バックエンドを設定してください。
+
+### 1. バックエンドリソースの作成
 
 ```bash
-terraform destroy
+# 初回のみ：S3バケットとDynamoDBテーブルを作成
+terraform apply -target=aws_s3_bucket.terraform_state -target=aws_dynamodb_table.terraform_locks
 ```
 
-## Lambda デプロイパッケージの準備
+### 2. バックエンド設定の有効化
 
-Lambda をデプロイする場合は、事前にパッケージを S3 にアップロードします：
+`versions.tf` のS3バックエンドブロックのコメントを解除：
+
+```hcl
+backend "s3" {
+  bucket         = "vow-terraform-state-257784614320"
+  key            = "terraform.tfstate"
+  region         = "ap-northeast-1"
+  encrypt        = true
+  dynamodb_table = "vow-terraform-locks"
+}
+```
+
+### 3. ステートの移行
 
 ```bash
-# backend ディレクトリでパッケージを作成
-cd backend
-pip install -r requirements.txt -t package/
-cp -r app package/
-cp lambda_handler.py package/
-cd package && zip -r ../lambda.zip . && cd ..
+terraform init -migrate-state
+```
 
-# S3 バケットを作成（初回のみ）
-aws s3 mb s3://vow-deployment-${AWS_ACCOUNT_ID}
+### 4. Workspaceの作成
 
-# S3 にアップロード
-aws s3 cp lambda.zip s3://vow-deployment-${AWS_ACCOUNT_ID}/lambda/vow-api.zip
+```bash
+# 開発環境用Workspace
+terraform workspace new development
 
-# terraform.tfvars を更新
-# lambda_s3_bucket = "vow-deployment-${AWS_ACCOUNT_ID}"
-# lambda_s3_key    = "lambda/vow-api.zip"
+# 本番環境用Workspace
+terraform workspace new production
+```
+
+## 環境変数（シークレット）
+
+機密情報は `TF_VAR_` 環境変数で設定してください：
+
+```bash
+# Supabase
+export TF_VAR_supabase_url="https://xxx.supabase.co"
+export TF_VAR_supabase_anon_key="eyJ..."
+
+# Slack
+export TF_VAR_slack_client_id="xxx"
+export TF_VAR_slack_client_secret="xxx"
+export TF_VAR_slack_signing_secret="xxx"
+export TF_VAR_token_encryption_key="xxx"
+
+# GitHub (Amplify用)
+export TF_VAR_github_access_token="ghp_xxx"
+```
+
+## デプロイフロー
+
+```
+┌─────────────┐     ┌─────────────┐     ┌─────────────┐
+│   develop   │────▶│    main     │────▶│ Production  │
+│   branch    │ PR  │   branch    │     │ Environment │
+└─────────────┘     └─────────────┘     └─────────────┘
+       │                                       
+       ▼                                       
+┌─────────────┐                               
+│ Development │                               
+│ Environment │                               
+└─────────────┘                               
+```
+
+1. `develop` ブランチにプッシュ → 開発環境へ自動デプロイ
+2. 開発環境で検証
+3. `develop` → `main` へPR作成・マージ
+4. `main` ブランチへマージ → 本番環境へ自動デプロイ
+
+## 検証スクリプト
+
+### 環境設定の検証
+
+```bash
+# 開発環境の設定を検証
+../scripts/validate-env.sh development
+
+# 本番環境の設定を検証
+../scripts/validate-env.sh production
+```
+
+### ヘルスチェック
+
+```bash
+# 開発環境のヘルスチェック
+../scripts/health-check.sh development
+
+# 本番環境のヘルスチェック
+../scripts/health-check.sh production
+
+# 両環境のヘルスチェック
+../scripts/health-check.sh all
 ```
 
 ## 出力値
@@ -108,43 +187,57 @@ aws s3 cp lambda.zip s3://vow-deployment-${AWS_ACCOUNT_ID}/lambda/vow-api.zip
 
 | 出力 | 説明 |
 |------|------|
-| `vpc_id` | VPC ID |
-| `aurora_cluster_endpoint` | Aurora エンドポイント |
-| `aurora_secret_arn` | 認証情報の Secret ARN |
+| `api_gateway_url` | API Gateway URL |
+| `lambda_function_name` | Lambda関数名 |
+| `amplify_app_url` | Amplify アプリURL |
 | `cognito_user_pool_id` | Cognito User Pool ID |
 | `cognito_client_id` | App Client ID |
-| `api_gateway_url` | API Gateway URL（Lambda デプロイ時のみ） |
 
-## 本番環境への移行
+## ロールバック
 
-本番環境用の設定は各ファイルでコメントアウトされています。
-移行時は以下を変更：
+### Lambda ロールバック
 
-1. `variables.tf`: `environment` に `production` を追加
-2. `aurora.tf`: `deletion_protection = true` に変更
-3. `variables.tf`: `callback_urls` / `logout_urls` に本番 URL を追加
-4. `versions.tf`: S3 バックエンドを有効化
+GitHub Actions の `workflow_dispatch` を使用：
+
+1. Actions タブを開く
+2. "Deploy Lambda to AWS (Production)" を選択
+3. "Run workflow" をクリック
+4. `rollback: true` を選択
+5. 必要に応じてバージョンを指定
+
+### Amplify ロールバック
+
+1. AWS Amplify コンソールを開く
+2. 対象のアプリを選択
+3. "Hosting" → "Deployments" を選択
+4. 前回のデプロイを選択して "Redeploy" をクリック
 
 ## トラブルシューティング
-
-### Aurora バージョンエラー
-
-```
-Cannot find version X.X for aurora-postgresql
-```
-
-→ `aurora.tf` の `engine_version` を利用可能なバージョンに更新
-
-利用可能なバージョンを確認：
-```bash
-aws rds describe-db-engine-versions \
-  --engine aurora-postgresql \
-  --query 'DBEngineVersions[?SupportedEngineModes[?contains(@, `provisioned`)]].EngineVersion' \
-  --region ap-northeast-1
-```
 
 ### Lambda タイムアウト
 
 1. VPC 設定を確認（NAT Gateway 経由でインターネットアクセス可能か）
 2. セキュリティグループのアウトバウンドルールを確認
-3. Aurora への接続を確認
+3. Supabase への接続を確認
+
+### Amplify ビルド失敗
+
+1. Amplify コンソールでビルドログを確認
+2. 環境変数が正しく設定されているか確認
+3. `package.json` の依存関係を確認
+
+### Terraform ステートロック
+
+```bash
+# ロックを強制解除（注意して使用）
+terraform force-unlock <LOCK_ID>
+```
+
+## GitHub Secrets 設定
+
+GitHub Actions で使用するシークレット：
+
+| シークレット名 | 説明 |
+|--------------|------|
+| `AWS_LAMBDA_DEPLOY_ROLE_ARN` | Lambda デプロイ用IAMロールARN |
+| `SNS_ALERTS_TOPIC_ARN` | 通知用SNSトピックARN（オプション） |

@@ -106,6 +106,39 @@ resource "aws_amplify_branch" "main" {
 }
 
 # =================================================================
+# Development Branch (develop)
+# =================================================================
+
+resource "aws_amplify_branch" "develop" {
+  count = var.github_access_token != "" ? 1 : 0
+
+  app_id      = aws_amplify_app.frontend[0].id
+  branch_name = "develop"
+
+  framework = "Next.js - SSR"
+  stage     = "DEVELOPMENT"
+
+  enable_auto_build = true
+
+  # Branch-specific environment variables (develop branch)
+  environment_variables = {
+    NODE_ENV                         = "development"
+    NEXT_PUBLIC_API_URL              = var.amplify_env_dev_next_public_api_url
+    NEXT_PUBLIC_SITE_URL             = var.amplify_env_dev_next_public_site_url
+    NEXT_PUBLIC_SLACK_API_URL        = var.amplify_env_dev_next_public_slack_api_url
+    NEXT_PUBLIC_SUPABASE_ANON_KEY    = var.amplify_env_next_public_supabase_anon_key
+    NEXT_PUBLIC_SUPABASE_URL         = var.amplify_env_next_public_supabase_url
+    NEXT_PUBLIC_USE_EDGE_FUNCTIONS   = var.amplify_env_next_public_use_edge_functions
+    NEXT_PUBLIC_USE_SUPABASE_API     = var.amplify_env_next_public_use_supabase_api
+    NEXT_PUBLIC_BACKEND_API_URL      = var.amplify_env_dev_next_public_backend_api_url
+  }
+
+  tags = {
+    Name = "${var.project_name}-develop-branch"
+  }
+}
+
+# =================================================================
 # Custom Domain Association (Optional)
 # =================================================================
 

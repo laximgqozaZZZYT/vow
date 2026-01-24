@@ -1,0 +1,261 @@
+name: Deploy Lambda to AWS (Development)
+
+on:
+  push:
+    branches: [develop]
+    paths:
+      - 'backend/**'
+      - '.github/workflows/deploy-lambda-dev.yml'
+  pull_request:
+    branches: [develop]
+    paths:
+      - 'backend/**'
+  workflow_dispatch:
+    inputs:
+      skip_tests:
+        description: 'Skip tests (for emergency deployments)'
+        required: false
+        default: 'false'
+        type: boolean
+
+permissions:
+  id-token: write
+  contents: read
+
+env:
+  AWS_REGION: ap-northeast-1
+  LAMBDA_FUNCTION_NAME: vow-development-api
+  ENVIRONMENT: development
+
+jobs:
+  # =================================================================
+  # Validate Secrets
+  # =================================================================
+  validate-secrets:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check required secrets
+        run: |
+          MISSING_SECRETS=""
+          
+          if [ -z "${{ secrets.AWS_LAMBDA_DEPLOY_ROLE_ARN }}" ]; then
+            MISSING_SECRETS="$MISSING_SECRETS AWS_LAMBDA_DEPLOY_ROLE_ARN"
+          fi
+          
+          if [ -n "$MISSING_SECRETS" ]; then
+            echo "❌ Missing required secrets:$MISSING_SECRETS"
+            echo ""
+            echo "Please configure these secrets in GitHub repository settings:"
+            echo "Settings → Secrets and variables → Actions → New repository secret"
+            exit 1
+          fi
+          
+          echo "✅ All required secrets are configured"
+
+  # =================================================================
+  # Test
+  # =================================================================
+  test:
+    needs: validate-secrets
+    runs-on: ubuntu-latest
+    if: github.event.inputs.skip_tests != 'true'
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: 'backend/package-lock.json'
+      
+      - name: Install dependencies
+        run: cd backend && npm ci
+      
+      - name: Run linting
+        run: cd backend && npm run lint --if-present
+      
+      - name: Run tests
+        run: cd backend && npm test --if-present
+        env:
+          NODE_ENV: test
+
+  # =================================================================
+  # Build
+  # =================================================================
+  build:
+    needs: [validate-secrets, test]
+    runs-on: ubuntu-latest
+    if: |
+      always() && 
+      needs.validate-secrets.result == 'success' &&
+      (needs.test.result == 'success' || needs.test.result == 'skipped') &&
+      (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+    outputs:
+      package_hash: ${{ steps.package.outputs.hash }}
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: 'backend/package-lock.json'
+      
+      - name: Install dependencies
+        run: cd backend && npm ci --production
+      
+      - name: Build TypeScript
+        run: cd backend && npm run build --if-present
+      
+      - name: Create deployment package
+        id: package
+        run: |
+          cd backend
+          
+          # Create package directory
+          mkdir -p lambda-package
+          
+          # Copy built files
+          if [ -d "dist" ]; then
+            cp -r dist/* lambda-package/
+          fi
+          
+          # Copy package.json for dependencies
+          cp package.json lambda-package/
+          
+          # Install production dependencies in package
+          cd lambda-package
+          npm ci --production --ignore-scripts
+          
+          # Create zip
+          zip -r ../lambda-deployment.zip .
+          cd ..
+          
+          # Calculate hash
+          HASH=$(sha256sum lambda-deployment.zip | cut -d' ' -f1 | head -c 8)
+          echo "hash=$HASH" >> $GITHUB_OUTPUT
+          echo "📦 Package hash: $HASH"
+          echo "📦 Package size: $(du -h lambda-deployment.zip | cut -f1)"
+      
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: lambda-package-dev-${{ steps.package.outputs.hash }}
+          path: backend/lambda-deployment.zip
+          retention-days: 7
+
+  # =================================================================
+  # Deploy
+  # =================================================================
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    environment: development
+    steps:
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_LAMBDA_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+      
+      - name: Download artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: lambda-package-dev-${{ needs.build.outputs.package_hash }}
+          path: .
+      
+      - name: Check if Lambda function exists
+        id: check-lambda
+        run: |
+          if aws lambda get-function --function-name ${{ env.LAMBDA_FUNCTION_NAME }} 2>/dev/null; then
+            echo "exists=true" >> $GITHUB_OUTPUT
+            echo "✅ Lambda function exists"
+          else
+            echo "exists=false" >> $GITHUB_OUTPUT
+            echo "⚠️ Lambda function does not exist - will be created by Terraform"
+          fi
+      
+      - name: Deploy to Lambda
+        if: steps.check-lambda.outputs.exists == 'true'
+        id: deploy
+        run: |
+          # Update function code
+          aws lambda update-function-code \
+            --function-name ${{ env.LAMBDA_FUNCTION_NAME }} \
+            --zip-file fileb://lambda-deployment.zip \
+            --publish
+          
+          # Wait for update to complete
+          echo "⏳ Waiting for Lambda update to complete..."
+          aws lambda wait function-updated \
+            --function-name ${{ env.LAMBDA_FUNCTION_NAME }}
+          
+          # Get new version
+          NEW_VERSION=$(aws lambda get-function \
+            --function-name ${{ env.LAMBDA_FUNCTION_NAME }} \
+            --query 'Configuration.Version' \
+            --output text)
+          
+          echo "new_version=$NEW_VERSION" >> $GITHUB_OUTPUT
+          echo "✅ Deployed version: $NEW_VERSION"
+      
+      - name: Update alias (development)
+        if: steps.check-lambda.outputs.exists == 'true' && steps.deploy.outputs.new_version
+        run: |
+          # Update or create development alias
+          aws lambda update-alias \
+            --function-name ${{ env.LAMBDA_FUNCTION_NAME }} \
+            --name development \
+            --function-version ${{ steps.deploy.outputs.new_version }} \
+            2>/dev/null || \
+          aws lambda create-alias \
+            --function-name ${{ env.LAMBDA_FUNCTION_NAME }} \
+            --name development \
+            --function-version ${{ steps.deploy.outputs.new_version }}
+          
+          echo "✅ Updated development alias to version ${{ steps.deploy.outputs.new_version }}"
+      
+      - name: Verify deployment
+        if: steps.check-lambda.outputs.exists == 'true'
+        run: |
+          # Invoke health check
+          RESPONSE=$(aws lambda invoke \
+            --function-name ${{ env.LAMBDA_FUNCTION_NAME }}:development \
+            --payload '{"httpMethod": "GET", "path": "/health", "headers": {}, "queryStringParameters": null, "body": null}' \
+            --cli-binary-format raw-in-base64-out \
+            response.json 2>/dev/null || echo '{"StatusCode": 0}')
+          
+          if [ -f response.json ]; then
+            echo "📋 Health check response:"
+            cat response.json
+          else
+            echo "⚠️ Could not invoke health check (function may need API Gateway)"
+          fi
+
+  # =================================================================
+  # Notify
+  # =================================================================
+  notify:
+    needs: [deploy]
+    runs-on: ubuntu-latest
+    if: always()
+    steps:
+      - name: Deployment Status
+        run: |
+          if [ "${{ needs.deploy.result }}" == "success" ]; then
+            echo "✅ Development Lambda deployment completed successfully!"
+            echo ""
+            echo "🔗 Environment: Development"
+            echo "📦 Function: ${{ env.LAMBDA_FUNCTION_NAME }}"
+            echo "🔀 Branch: ${{ github.ref_name }}"
+            echo "📝 Commit: ${{ github.sha }}"
+          elif [ "${{ needs.deploy.result }}" == "skipped" ]; then
+            echo "⏭️ Deployment was skipped (PR or Lambda not yet created)"
+          else
+            echo "❌ Development Lambda deployment failed"
+            echo ""
+            echo "Please check the workflow logs for details."
+          fi

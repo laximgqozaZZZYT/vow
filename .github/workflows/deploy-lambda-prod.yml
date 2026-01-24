@@ -11,7 +11,7 @@ on:
       rollback:
         description: 'Rollback to previous version'
         required: false
-        default: 'false'
+        default: false
         type: boolean
       version:
         description: 'Version to rollback to (e.g., 1, 2, $LATEST)'
@@ -26,54 +26,89 @@ permissions:
 env:
   AWS_REGION: ap-northeast-1
   LAMBDA_FUNCTION_NAME: vow-production-api
+  ENVIRONMENT: production
 
 jobs:
-  test:
+  # =================================================================
+  # Validate Secrets
+  # =================================================================
+  validate-secrets:
     runs-on: ubuntu-latest
+    steps:
+      - name: Check required secrets
+        run: |
+          MISSING_SECRETS=""
+          
+          if [ -z "${{ secrets.AWS_LAMBDA_DEPLOY_ROLE_ARN }}" ]; then
+            MISSING_SECRETS="$MISSING_SECRETS AWS_LAMBDA_DEPLOY_ROLE_ARN"
+          fi
+          
+          if [ -n "$MISSING_SECRETS" ]; then
+            echo "❌ Missing required secrets:$MISSING_SECRETS"
+            echo ""
+            echo "Please configure these secrets in GitHub repository settings:"
+            echo "Settings → Secrets and variables → Actions → New repository secret"
+            exit 1
+          fi
+          
+          echo "✅ All required secrets are configured"
+
+  # =================================================================
+  # Test
+  # =================================================================
+  test:
+    needs: validate-secrets
+    runs-on: ubuntu-latest
+    if: github.event.inputs.rollback != true
     steps:
       - uses: actions/checkout@v4
       
-      - name: Set up Python
-        uses: actions/setup-python@v5
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
         with:
-          python-version: '3.12'
-          cache: 'pip'
-          cache-dependency-path: 'backend/requirements*.txt'
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: 'backend/package-lock.json'
       
       - name: Install dependencies
-        run: |
-          cd backend
-          pip install -r requirements.txt
-          pip install -r requirements-dev.txt || true
-          pip install ruff pytest pytest-asyncio
+        run: cd backend && npm ci
       
       - name: Run linting
-        run: |
-          cd backend
-          ruff check app/ --ignore E501
+        run: cd backend && npm run lint --if-present
       
       - name: Run tests
-        run: |
-          cd backend
-          pytest tests/ -v --tb=short || echo "No tests found or tests skipped"
+        run: cd backend && npm test --if-present
         env:
-          DATABASE_URL: sqlite+aiosqlite:///./test.db
-          JWT_SECRET: test-secret-key
-          DEBUG: true
+          NODE_ENV: test
 
+  # =================================================================
+  # Build
+  # =================================================================
   build:
-    needs: test
+    needs: [validate-secrets, test]
     runs-on: ubuntu-latest
-    if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && github.event.inputs.rollback != 'true')
+    if: |
+      always() && 
+      needs.validate-secrets.result == 'success' &&
+      (needs.test.result == 'success' || needs.test.result == 'skipped') &&
+      (github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && github.event.inputs.rollback != true))
     outputs:
       package_hash: ${{ steps.package.outputs.hash }}
     steps:
       - uses: actions/checkout@v4
       
-      - name: Set up Python
-        uses: actions/setup-python@v5
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
         with:
-          python-version: '3.12'
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: 'backend/package-lock.json'
+      
+      - name: Install dependencies
+        run: cd backend && npm ci --production
+      
+      - name: Build TypeScript
+        run: cd backend && npm run build --if-present
       
       - name: Create deployment package
         id: package
@@ -81,36 +116,45 @@ jobs:
           cd backend
           
           # Create package directory
-          mkdir -p package
+          mkdir -p lambda-package
           
-          # Install dependencies to package directory
-          pip install -r requirements.txt -t package/
+          # Copy built files
+          if [ -d "dist" ]; then
+            cp -r dist/* lambda-package/
+          fi
           
-          # Copy application code
-          cp -r app package/
-          cp lambda_handler.py package/
+          # Copy package.json for dependencies
+          cp package.json lambda-package/
+          
+          # Install production dependencies in package
+          cd lambda-package
+          npm ci --production --ignore-scripts
           
           # Create zip
-          cd package
           zip -r ../lambda-deployment.zip .
           cd ..
           
           # Calculate hash
           HASH=$(sha256sum lambda-deployment.zip | cut -d' ' -f1 | head -c 8)
           echo "hash=$HASH" >> $GITHUB_OUTPUT
-          echo "Package hash: $HASH"
+          echo "📦 Package hash: $HASH"
+          echo "📦 Package size: $(du -h lambda-deployment.zip | cut -f1)"
       
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: lambda-package-${{ steps.package.outputs.hash }}
+          name: lambda-package-prod-${{ steps.package.outputs.hash }}
           path: backend/lambda-deployment.zip
-          retention-days: 7
+          retention-days: 14
 
+  # =================================================================
+  # Deploy
+  # =================================================================
   deploy:
     needs: build
     runs-on: ubuntu-latest
-    if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && github.event.inputs.rollback != 'true')
+    if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && github.event.inputs.rollback != true)
+    environment: production
     steps:
       - name: Configure AWS credentials (OIDC)
         uses: aws-actions/configure-aws-credentials@v4
@@ -121,7 +165,7 @@ jobs:
       - name: Download artifact
         uses: actions/download-artifact@v4
         with:
-          name: lambda-package-${{ needs.build.outputs.package_hash }}
+          name: lambda-package-prod-${{ needs.build.outputs.package_hash }}
           path: .
       
       - name: Get current version (for rollback)
@@ -132,7 +176,7 @@ jobs:
             --query 'Configuration.Version' \
             --output text 2>/dev/null || echo "0")
           echo "current_version=$CURRENT_VERSION" >> $GITHUB_OUTPUT
-          echo "Current version: $CURRENT_VERSION"
+          echo "📋 Current version: $CURRENT_VERSION"
       
       - name: Deploy to Lambda
         id: deploy
@@ -144,7 +188,7 @@ jobs:
             --publish
           
           # Wait for update to complete
-          echo "Waiting for Lambda update to complete..."
+          echo "⏳ Waiting for Lambda update to complete..."
           aws lambda wait function-updated \
             --function-name ${{ env.LAMBDA_FUNCTION_NAME }}
           
@@ -191,9 +235,14 @@ jobs:
             cat response.json
           fi
 
+  # =================================================================
+  # Rollback
+  # =================================================================
   rollback:
+    needs: validate-secrets
     runs-on: ubuntu-latest
-    if: github.event_name == 'workflow_dispatch' && github.event.inputs.rollback == 'true'
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.rollback == true
+    environment: production
     steps:
       - name: Configure AWS credentials (OIDC)
         uses: aws-actions/configure-aws-credentials@v4
@@ -204,7 +253,7 @@ jobs:
       - name: List available versions
         id: list-versions
         run: |
-          echo "Available versions:"
+          echo "📋 Available versions:"
           aws lambda list-versions-by-function \
             --function-name ${{ env.LAMBDA_FUNCTION_NAME }} \
             --query 'Versions[*].[Version, LastModified]' \
@@ -227,7 +276,7 @@ jobs:
             exit 1
           fi
           
-          echo "Rolling back to version: $TARGET_VERSION"
+          echo "🔄 Rolling back to version: $TARGET_VERSION"
           
           # Update production alias to previous version
           aws lambda update-alias \
@@ -246,37 +295,43 @@ jobs:
             --cli-binary-format raw-in-base64-out \
             response.json)
           
-          echo "Health check response:"
+          echo "📋 Health check response:"
           cat response.json
 
+  # =================================================================
+  # Notify
+  # =================================================================
   notify:
-    needs: [deploy]
+    needs: [deploy, rollback]
     runs-on: ubuntu-latest
     if: always()
     steps:
       - name: Configure AWS credentials (OIDC)
-        if: needs.deploy.result == 'success' || needs.deploy.result == 'failure'
+        if: (needs.deploy.result == 'success' || needs.deploy.result == 'failure') || (needs.rollback.result == 'success' || needs.rollback.result == 'failure')
         uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ secrets.AWS_LAMBDA_DEPLOY_ROLE_ARN }}
           aws-region: ${{ env.AWS_REGION }}
       
       - name: Send SNS Notification
-        if: needs.deploy.result == 'success' || needs.deploy.result == 'failure'
+        if: (needs.deploy.result == 'success' || needs.deploy.result == 'failure') || (needs.rollback.result == 'success' || needs.rollback.result == 'failure')
         run: |
           SNS_TOPIC_ARN="${{ secrets.SNS_ALERTS_TOPIC_ARN }}"
           
           if [ -z "$SNS_TOPIC_ARN" ]; then
-            echo "SNS topic not configured, skipping notification"
+            echo "ℹ️ SNS topic not configured, skipping notification"
             exit 0
           fi
           
           if [ "${{ needs.deploy.result }}" == "success" ]; then
-            MESSAGE="✅ Lambda deployment to AWS completed successfully!\n\nFunction: ${{ env.LAMBDA_FUNCTION_NAME }}\nCommit: ${{ github.sha }}\nBranch: main"
-            SUBJECT="[VOW] Lambda Deployment Success"
+            MESSAGE="✅ Production Lambda deployment completed successfully!\n\nFunction: ${{ env.LAMBDA_FUNCTION_NAME }}\nCommit: ${{ github.sha }}\nBranch: main"
+            SUBJECT="[VOW] Production Deployment Success"
+          elif [ "${{ needs.rollback.result }}" == "success" ]; then
+            MESSAGE="🔄 Production Lambda rollback completed successfully!\n\nFunction: ${{ env.LAMBDA_FUNCTION_NAME }}\nVersion: ${{ github.event.inputs.version }}"
+            SUBJECT="[VOW] Production Rollback Success"
           else
-            MESSAGE="❌ Lambda deployment to AWS failed!\n\nFunction: ${{ env.LAMBDA_FUNCTION_NAME }}\nCommit: ${{ github.sha }}\nBranch: main\n\nCheck GitHub Actions for details."
-            SUBJECT="[VOW] Lambda Deployment Failed"
+            MESSAGE="❌ Production Lambda operation failed!\n\nFunction: ${{ env.LAMBDA_FUNCTION_NAME }}\nCommit: ${{ github.sha }}\n\nCheck GitHub Actions for details."
+            SUBJECT="[VOW] Production Operation Failed"
           fi
           
           aws sns publish \
@@ -287,7 +342,14 @@ jobs:
       - name: Deployment Status
         run: |
           if [ "${{ needs.deploy.result }}" == "success" ]; then
-            echo "✅ Lambda deployment completed successfully!"
+            echo "✅ Production Lambda deployment completed successfully!"
+            echo ""
+            echo "🔗 Environment: Production"
+            echo "📦 Function: ${{ env.LAMBDA_FUNCTION_NAME }}"
+            echo "🔀 Branch: main"
+            echo "📝 Commit: ${{ github.sha }}"
+          elif [ "${{ needs.rollback.result }}" == "success" ]; then
+            echo "✅ Production Lambda rollback completed successfully!"
           else
-            echo "❌ Lambda deployment failed"
+            echo "❌ Production Lambda operation failed or was skipped"
           fi

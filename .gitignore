@@ -24,10 +24,14 @@ infra/terraform/*.tfstate
 infra/terraform/*.tfstate.*
 infra/terraform/.terraform.lock.hcl
 infra/terraform/terraform.tfvars
+infra/terraform/terraform.*.tfvars
 infra/terraform/*.tfplan
 infra/terraform/tfplan
+infra/terraform/tfplan-*
 infra/terraform/.env.terraform
+infra/terraform/.terraform.tfstate.lock.info
 !infra/terraform/.env.terraform.example
+!infra/terraform/terraform.tfvars.example
 
 # Postman
 .postman.json
@@ -80,8 +84,11 @@ backend/.lambda-artifact-api/
 backend/.lambda-artifact-migrate/
 backend/lambda-*.zip
 backend/lambda_package/
+backend/lambda-package/
+backend/lambda-package-dev/
 lambda_package.zip
 .vercel/
+cdk.out/
 
 # IDE
 .idea/

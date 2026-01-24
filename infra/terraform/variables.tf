@@ -452,3 +452,32 @@ variable "amplify_env_next_public_backend_api_url" {
   type        = string
   default     = ""
 }
+
+
+# =================================================================
+# Amplify Development Environment Variables
+# =================================================================
+
+variable "amplify_env_dev_next_public_api_url" {
+  description = "Amplify (develop): NEXT_PUBLIC_API_URL"
+  type        = string
+  default     = ""
+}
+
+variable "amplify_env_dev_next_public_site_url" {
+  description = "Amplify (develop): NEXT_PUBLIC_SITE_URL"
+  type        = string
+  default     = "https://develop.do1k9oyyorn24.amplifyapp.com"
+}
+
+variable "amplify_env_dev_next_public_slack_api_url" {
+  description = "Amplify (develop): NEXT_PUBLIC_SLACK_API_URL"
+  type        = string
+  default     = ""
+}
+
+variable "amplify_env_dev_next_public_backend_api_url" {
+  description = "Amplify (develop): NEXT_PUBLIC_BACKEND_API_URL for API key management"
+  type        = string
+  default     = ""
+}
