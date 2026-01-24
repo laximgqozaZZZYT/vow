@@ -17,7 +17,6 @@ export default function SettingsPage() {
     error: slackError,
     connectSlack,
     disconnectSlack,
-    updatePreferences,
     testConnection,
   } = useSlackIntegration();
   
@@ -63,10 +62,6 @@ export default function SettingsPage() {
     setDisconnecting(true);
     await disconnectSlack();
     setDisconnecting(false);
-  };
-
-  const handlePreferenceChange = async (key: string, value: boolean | number | string) => {
-    await updatePreferences({ [key]: value });
   };
 
   const sections: { id: SettingsSection; label: string; icon: React.ReactNode; href?: string }[] = [
@@ -475,16 +470,6 @@ export default function SettingsPage() {
                               
                               {notificationPrefs.slack.enabled && (
                                 <>
-                                  <label className="flex items-center justify-between pl-4">
-                                    <span className="text-sm">習慣リマインダー</span>
-                                    <input
-                                      type="checkbox"
-                                      checked={slackStatus.preferences?.slackNotificationsEnabled ?? false}
-                                      onChange={(e) => handlePreferenceChange('slackNotificationsEnabled', e.target.checked)}
-                                      className="w-4 h-4 rounded border-border"
-                                    />
-                                  </label>
-                                  
                                   <label className="flex items-center justify-between pl-4">
                                     <span className="text-sm">ワークロードコーチング</span>
                                     <input
