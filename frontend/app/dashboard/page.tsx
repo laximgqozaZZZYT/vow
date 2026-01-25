@@ -26,6 +26,12 @@ import NextSection from './components/Section.Next';
 import ActivitySection from './components/Section.Activity';
 import CalendarWidget from './components/Widget.Calendar';
 
+// Tab navigation components
+import { TabNavigation } from './components/Layout.TabNavigation';
+import { TabContent } from './components/Layout.TabContent';
+import { useTabNavigation } from './hooks/useTabNavigation';
+import { getVisibleTabs, getTabById } from './constants/tabConfig';
+
 // Hooks
 import { useActivityManager } from './hooks/useActivityManager';
 import { useGoalManager } from './hooks/useGoalManager';
@@ -622,6 +628,137 @@ function DashboardLayout(props: any) {
     handleMoveHabit,
   } = props;
 
+  // Tab navigation state
+  const visibleTabs = getVisibleTabs(pageSections);
+  const { activeTab, setActiveTab, isFullView, toggleFullView, exitFullView } = useTabNavigation(
+    pageSections[0],
+    pageSections
+  );
+  const currentTabConfig = getTabById(activeTab);
+  const supportsFullView = currentTabConfig?.supportsFullView ?? false;
+
+  // Render section content based on active tab
+  const renderSectionContent = () => {
+    switch (activeTab) {
+      case 'next':
+        return (
+          <NextSection 
+            habits={habits}
+            activities={activities}
+            onHabitAction={handleHabitAction}
+            onHabitEdit={(habitId) => {
+              setSelectedHabitId(habitId);
+              setOpenHabitModal(true);
+            }}
+          />
+        );
+      case 'activity':
+        return (
+          <ActivitySection 
+            activities={activities} 
+            onEditActivity={openEditActivity} 
+            onDeleteActivity={handleDeleteActivity} 
+            habits={habits}
+          />
+        );
+      case 'calendar':
+        return (
+          <CalendarWidget
+            habits={habits}
+            goals={goals}
+            activities={activities}
+            onEventClick={(id: string) => { setSelectedHabitId(id); setOpenHabitModal(true); }}
+            onSlotSelect={(isoDate: string, time?: string, endTime?: string) => {
+              const dateOnly = (isoDate || '').slice(0, 10);
+              setNewHabitInitial({ date: dateOnly, time, endTime });
+              setOpenNewHabit(true);
+            }}
+            onEventChange={(id: string, updated) => handleEventChange(id, updated)}
+            onRecurringAttempt={(habitId: string, updated) => { setRecurringRequest({ habitId, start: updated.start, end: updated.end }); }}
+            onRecurringHabitRequest={handleRecurringHabitRequest}
+          />
+        );
+      case 'statics':
+        return <StaticsSection habits={habits as any} activities={activities as any} goals={goals as any} />;
+      case 'diary':
+        return (
+          <DiarySection 
+            goals={goals as any} 
+            habits={habits as any}
+            onManageTags={() => setOpenManageTags(true)}
+          />
+        );
+      case 'stickies':
+        return (
+          <StickiesSection
+            stickies={stickies}
+            onStickyCreate={handleStickyCreate}
+            onStickyEdit={handleStickyEdit}
+            onStickyComplete={handleStickyComplete}
+            onStickyDelete={handleStickyDelete}
+            onStickyNameChange={handleStickyNameChange}
+          />
+        );
+      case 'mindmap':
+        return (
+          <MindmapSection
+            goals={goals as any}
+            habits={habits as any}
+            onRegisterAsHabit={async (data) => {
+              const createdHabit = await createHabit(data);
+              return createdHabit;
+            }}
+            onRegisterAsGoal={async (payload) => {
+              const createdGoal = await createGoal(payload);
+              return createdGoal;
+            }}
+            onDataChange={async () => {
+              try {
+                const gs = await api.getGoals();
+                setGoals(gs || []);
+                const hs = await api.getHabits();
+                setHabits(hs || []);
+              } catch (e) {
+                console.error('Failed to reload data', e);
+              }
+            }}
+          />
+        );
+      case 'notices':
+        return (
+          <NoticeSection
+            onActionClick={(notice) => {
+              debug.log('[Dashboard] Notice action clicked:', notice);
+              if (notice.actionType === 'rescue_proposal' || notice.actionType === 'recovery_proposal') {
+                // Could open coaching modal or navigate to coaching page
+              } else if (notice.actionType === 'subscription') {
+                window.location.href = '/settings/subscription';
+              } else if (notice.actionType === 'habit_suggestion' && notice.actionPayload?.goalId) {
+                setEditingGoalId(notice.actionPayload.goalId);
+                setOpenGoalModal(true);
+              }
+            }}
+          />
+        );
+      case 'coach':
+        return (
+          <CoachSection
+            goals={goals}
+            onHabitCreated={async () => {
+              try {
+                const hs = await api.getHabits();
+                setHabits(hs || []);
+              } catch (e) {
+                console.error('Failed to reload habits', e);
+              }
+            }}
+          />
+        );
+      default:
+        return null;
+    }
+  };
+
   return (
     <div className="flex min-h-screen bg-background text-foreground">
         <DashboardHeader
@@ -657,126 +794,29 @@ function DashboardLayout(props: any) {
         onMoveHabit={handleMoveHabit}
       />
 
-  {/* Main content pane */}
-  <main className={`flex-1 pt-20 p-6 lg:p-8 ${showLeftPane ? (isLeftHanded ? 'lg:mr-80' : 'lg:ml-80') : ''}`}>
-        <div className="grid grid-cols-1 gap-6 max-w-full overflow-hidden">
-          {pageSections.map((sec: string) => (
-            sec === 'next' ? (
-              <NextSection 
-                key="next" 
-                habits={habits}
-                activities={activities}
-                onHabitAction={handleHabitAction}
-                onHabitEdit={(habitId) => {
-                  setSelectedHabitId(habitId);
-                  setOpenHabitModal(true);
-                }}
-              />
-            ) : sec === 'activity' ? (
-              <ActivitySection 
-                key="activity" 
-                activities={activities} 
-                onEditActivity={openEditActivity} 
-                onDeleteActivity={handleDeleteActivity} 
-                habits={habits}
-              />
-            ) : sec === 'calendar' ? (
-              <CalendarWidget
-                key="calendar"
-                habits={habits}
-                goals={goals}
-                activities={activities}
-                onEventClick={(id: string) => { setSelectedHabitId(id); setOpenHabitModal(true); }}
-                onSlotSelect={(isoDate: string, time?: string, endTime?: string) => {
-                  const dateOnly = (isoDate || '').slice(0, 10);
-                  setNewHabitInitial({ date: dateOnly, time, endTime });
-                  setOpenNewHabit(true);
-                }}
-                onEventChange={(id: string, updated) => handleEventChange(id, updated)}
-                onRecurringAttempt={(habitId: string, updated) => { setRecurringRequest({ habitId, start: updated.start, end: updated.end }); }}
-                onRecurringHabitRequest={handleRecurringHabitRequest}
-              />
-            ) : sec === 'statics' ? (
-              <StaticsSection key="statics" habits={habits as any} activities={activities as any} goals={goals as any} />
-            ) : sec === 'diary' ? (
-              <DiarySection 
-                key="diary" 
-                goals={goals as any} 
-                habits={habits as any}
-                onManageTags={() => setOpenManageTags(true)}
-              />
-            ) : sec === 'stickies' ? (
-              <StickiesSection
-                key="stickies"
-                stickies={stickies}
-                onStickyCreate={handleStickyCreate}
-                onStickyEdit={handleStickyEdit}
-                onStickyComplete={handleStickyComplete}
-                onStickyDelete={handleStickyDelete}
-                onStickyNameChange={handleStickyNameChange}
-              />
-            ) : sec === 'mindmap' ? (
-              <MindmapSection
-                key="mindmap"
-                goals={goals as any}
-                habits={habits as any}
-                onRegisterAsHabit={async (data) => {
-                  const createdHabit = await createHabit(data);
-                  return createdHabit;
-                }}
-                onRegisterAsGoal={async (payload) => {
-                  const createdGoal = await createGoal(payload);
-                  return createdGoal;
-                }}
-                onDataChange={async () => {
-                  // データを再読み込み
-                  try {
-                    const gs = await api.getGoals();
-                    setGoals(gs || []);
-                    const hs = await api.getHabits();
-                    setHabits(hs || []);
-                  } catch (e) {
-                    console.error('Failed to reload data', e);
-                  }
-                }}
-              />
-            ) : sec === 'notices' ? (
-              <NoticeSection
-                key="notices"
-                onActionClick={(notice) => {
-                  // Handle notice action clicks
-                  debug.log('[Dashboard] Notice action clicked:', notice);
-                  // Navigate based on action type
-                  if (notice.actionType === 'rescue_proposal' || notice.actionType === 'recovery_proposal') {
-                    // Could open coaching modal or navigate to coaching page
-                  } else if (notice.actionType === 'subscription') {
-                    // Navigate to subscription settings
-                    window.location.href = '/settings/subscription';
-                  } else if (notice.actionType === 'habit_suggestion' && notice.actionPayload?.goalId) {
-                    // Open goal modal with suggestions
-                    setEditingGoalId(notice.actionPayload.goalId);
-                    setOpenGoalModal(true);
-                  }
-                }}
-              />
-            ) : sec === 'coach' ? (
-              <CoachSection
-                key="coach"
-                goals={goals}
-                onHabitCreated={async () => {
-                  // Reload data after habit creation
-                  try {
-                    const hs = await api.getHabits();
-                    setHabits(hs || []);
-                  } catch (e) {
-                    console.error('Failed to reload habits', e);
-                  }
-                }}
-              />
-            ) : null
-          ))}
+  {/* Main content pane with tab navigation */}
+  <main className={`flex-1 pt-16 ${showLeftPane ? (isLeftHanded ? 'lg:mr-80' : 'lg:ml-80') : ''}`}>
+        {/* Tab Navigation */}
+        <div className="sticky top-16 z-30">
+          <TabNavigation
+            tabs={visibleTabs}
+            activeTab={activeTab}
+            onTabChange={setActiveTab}
+          />
         </div>
-        
+
+        {/* Tab Content */}
+        <div className="p-4 lg:p-6">
+          <TabContent
+            activeTab={activeTab}
+            isFullView={isFullView}
+            onToggleFullView={toggleFullView}
+            onExitFullView={exitFullView}
+            supportsFullView={supportsFullView}
+          >
+            {renderSectionContent()}
+          </TabContent>
+        </div>
       </main>
 
       <GoalModal
