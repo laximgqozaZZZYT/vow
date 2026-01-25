@@ -2,6 +2,7 @@
 # This sits in front of Amplify to provide server-side access control
 
 # Lambda@Edge function for authentication (must be in us-east-1)
+# Lambda@Edge function for authentication (viewer-request)
 resource "aws_lambda_function" "dev_auth_edge" {
   provider = aws.us_east_1
   
@@ -13,6 +14,27 @@ resource "aws_lambda_function" "dev_auth_edge" {
   publish          = true  # Required for Lambda@Edge
   
   # Lambda@Edge has a 1MB limit and 5 second timeout for viewer request
+  memory_size = 128
+  timeout     = 5
+  
+  tags = {
+    Environment = "development"
+    Project     = "vow"
+  }
+}
+
+# Lambda@Edge function for Host header rewrite (origin-request)
+resource "aws_lambda_function" "dev_origin_edge" {
+  provider = aws.us_east_1
+  
+  filename         = "${path.module}/../lambda-edge/origin-request.zip"
+  function_name    = "vow-dev-origin-edge"
+  role             = aws_iam_role.lambda_edge_role.arn
+  handler          = "index.handler"
+  runtime          = "nodejs18.x"
+  publish          = true  # Required for Lambda@Edge
+  
+  # Origin request has 30 second timeout limit
   memory_size = 128
   timeout     = 5
   
@@ -65,6 +87,11 @@ resource "aws_cloudfront_distribution" "dev_distribution" {
     domain_name = "develop.do1k9oyyorn24.amplifyapp.com"
     origin_id   = "amplify-dev"
     
+    custom_header {
+      name  = "X-Custom-Header"
+      value = "cloudfront-dev"
+    }
+    
     custom_origin_config {
       http_port              = 80
       https_port             = 443
@@ -80,7 +107,7 @@ resource "aws_cloudfront_distribution" "dev_distribution" {
     
     forwarded_values {
       query_string = true
-      headers      = ["Host", "Origin", "Authorization"]
+      headers      = ["Origin", "Authorization", "Accept", "Accept-Language"]
       
       cookies {
         forward = "all"  # Forward all cookies for Supabase auth
@@ -93,10 +120,17 @@ resource "aws_cloudfront_distribution" "dev_distribution" {
     max_ttl                = 0
     compress               = true
     
-    # Lambda@Edge for authentication
+    # Lambda@Edge for authentication (viewer-request for auth check)
     lambda_function_association {
       event_type   = "viewer-request"
       lambda_arn   = aws_lambda_function.dev_auth_edge.qualified_arn
+      include_body = false
+    }
+    
+    # Lambda@Edge for Host header rewrite (origin-request)
+    lambda_function_association {
+      event_type   = "origin-request"
+      lambda_arn   = aws_lambda_function.dev_origin_edge.qualified_arn
       include_body = false
     }
   }

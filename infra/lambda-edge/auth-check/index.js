@@ -107,6 +107,7 @@ exports.handler = async (event) => {
   // Allow public paths
   for (const path of PUBLIC_PATHS) {
     if (uri.startsWith(path) || uri.endsWith('.svg') || uri.endsWith('.png') || uri.endsWith('.jpg') || uri.endsWith('.ico')) {
+      // Allow request to proceed - Host header will be set by origin-request Lambda
       return request;
     }
   }
@@ -198,6 +199,6 @@ exports.handler = async (event) => {
     };
   }
   
-  // Admin - allow access
+  // Admin - allow access (Host header will be set by origin-request Lambda)
   return request;
 };

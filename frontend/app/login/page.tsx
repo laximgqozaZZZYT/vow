@@ -13,6 +13,41 @@ function LoginContent() {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [devRestricted, setDevRestricted] = useState(false);
+  const [processingCallback, setProcessingCallback] = useState(false);
+
+  // OAuth認証コールバック処理（ハッシュフラグメントからトークンを取得）
+  useEffect(() => {
+    const handleAuthCallback = async () => {
+      // URLにハッシュフラグメントがある場合（OAuth認証後のコールバック）
+      if (window.location.hash && window.location.hash.includes('access_token')) {
+        setProcessingCallback(true);
+        try {
+          if (!supabase) return;
+          
+          // Supabaseがハッシュからセッションを自動的に処理するのを待つ
+          const { data: { session }, error } = await supabase.auth.getSession();
+          
+          if (error) {
+            setError(`認証エラー: ${error.message}`);
+            setProcessingCallback(false);
+            return;
+          }
+          
+          if (session) {
+            // セッションが確立された - リダイレクト先に移動
+            const redirectPath = searchParams.get('redirect') || '/dashboard';
+            router.push(redirectPath);
+            return;
+          }
+        } catch (e: any) {
+          setError(`認証処理エラー: ${e.message}`);
+        }
+        setProcessingCallback(false);
+      }
+    };
+    
+    handleAuthCallback();
+  }, [router, searchParams]);
 
   // 開発環境でのリダイレクト検出
   useEffect(() => {
@@ -41,9 +76,9 @@ function LoginContent() {
     try {
       if (!supabase) throw new Error('Supabase is not configured (missing NEXT_PUBLIC_SUPABASE_URL / NEXT_PUBLIC_SUPABASE_ANON_KEY)')
       
-      // リダイレクト先を決定（開発環境制限からのリダイレクトの場合は元のパスに戻る）
+      // リダイレクト先を保持してログインページに戻る（ハッシュフラグメントを処理するため）
       const redirectPath = searchParams.get('redirect') || '/dashboard';
-      const redirectTo = `${window.location.origin}${redirectPath}`;
+      const redirectTo = `${window.location.origin}/login?redirect=${encodeURIComponent(redirectPath)}`;
       
       const { error } = await supabase.auth.signInWithOAuth({
         provider,
@@ -66,7 +101,14 @@ function LoginContent() {
         <h1 className="text-xl font-semibold">Login</h1>
       </div>
 
-      {devRestricted && (
+      {processingCallback && (
+        <div className="mt-4 flex flex-col items-center gap-2">
+          <div className="animate-spin h-6 w-6 border-2 border-zinc-300 border-t-zinc-600 rounded-full"></div>
+          <p className="text-sm text-zinc-500">認証処理中...</p>
+        </div>
+      )}
+
+      {devRestricted && !processingCallback && (
         <div className="mt-4 p-3 bg-amber-50 border border-amber-200 rounded-lg">
           <p className="text-sm text-amber-800">
             🔒 開発環境へのアクセスには管理者アカウントでのログインが必要です。
@@ -74,6 +116,7 @@ function LoginContent() {
         </div>
       )}
 
+      {!processingCallback && (
       <div className="mt-6 space-y-4">
         <div className="space-y-2">
           <button
@@ -116,6 +159,7 @@ function LoginContent() {
           ダッシュボードはログインなしでも使用できます。ログインすると現在のゲストデータがアカウントにマージされます。
         </div>
       </div>
+      )}
     </div>
   );
 }
