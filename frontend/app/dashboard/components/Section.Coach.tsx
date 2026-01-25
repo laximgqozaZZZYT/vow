@@ -218,7 +218,7 @@ export function CoachSection({ goals, onHabitCreated }: CoachSectionProps) {
     }
   };
 
-  // Main AI chat handler - uses NLU to understand intent
+  // Main AI chat handler - uses Function Calling for intelligent coaching
   const handleAIChat = async (token: string, userInput: string) => {
     // Build conversation history for context
     const conversationHistory = messages.slice(-10).map(m => ({
@@ -235,9 +235,6 @@ export function CoachSection({ goals, onHabitCreated }: CoachSectionProps) {
       body: JSON.stringify({
         message: userInput,
         conversationHistory,
-        context: {
-          goals: goals.map(g => ({ id: g.id, name: g.name })),
-        },
       }),
     });
 
@@ -247,67 +244,52 @@ export function CoachSection({ goals, onHabitCreated }: CoachSectionProps) {
     }
 
     const data = await response.json();
-    const intent = data.intent as string;
 
     // Add AI response
-    addMessage('assistant', data.response, intent as DetectedIntent, data);
+    addMessage('assistant', data.response, null, data);
 
-    // Handle based on AI-detected intent
-    switch (intent) {
-      case 'create_habit':
-        if (data.habitData) {
-          const parsed: ParsedHabit = {
-            name: data.habitData.name || '',
-            type: data.habitData.type || 'do',
-            frequency: data.habitData.frequency || 'daily',
-            triggerTime: data.habitData.triggerTime || null,
-            duration: data.habitData.duration || null,
-            targetCount: data.habitData.targetCount || null,
-            workloadUnit: data.habitData.workloadUnit || null,
-            goalId: data.habitData.goalId || null,
-            confidence: data.confidence || 0.8,
-          };
-          setFormData(parsed);
-        }
-        break;
-
-      case 'suggest':
-        if (data.suggestions && data.suggestions.length > 0) {
-          setSuggestions(data.suggestions.map((s: any) => ({
-            name: s.name,
-            type: s.type || 'do',
-            frequency: s.frequency || 'daily',
-            suggestedTargetCount: s.suggestedTargetCount || 1,
-            workloadUnit: s.workloadUnit || null,
-            reason: s.reason || '',
-            confidence: s.confidence || 0.8,
-          })));
-        }
-        break;
-
-      case 'coaching':
-        // AI response already added, optionally show coaching widget
-        if (data.response.includes('ワークロード') || data.response.includes('負荷')) {
-          setShowCoaching(true);
-        }
-        break;
-
-      case 'question':
-        // AI is asking for more details - just show the response (already added)
-        break;
-
-      case 'edit_habit':
-        // Show edit result if available
-        break;
-
-      default:
-        // General conversation - response already added
-        break;
+    // Show analysis data if available
+    if (data.data?.analysis && data.data.analysis.length > 0) {
+      // Show habit analysis summary
+      const lowCompletionHabits = data.data.analysis.filter((a: any) => a.completionRate < 0.5);
+      if (lowCompletionHabits.length > 0) {
+        setTimeout(() => {
+          const analysisMsg = `📊 分析結果:\n${lowCompletionHabits.slice(0, 3).map((a: any) => 
+            `• ${a.habitName}: 達成率 ${Math.round(a.completionRate * 100)}% (${a.trend === 'improving' ? '↑改善中' : a.trend === 'declining' ? '↓下降中' : '→安定'})`
+          ).join('\n')}`;
+          addMessage('assistant', analysisMsg);
+        }, 300);
+      }
     }
 
-    // Add follow-up question if provided
-    if (data.followUpQuestion) {
-      setTimeout(() => addMessage('assistant', data.followUpQuestion), 500);
+    // Show workload summary if available
+    if (data.data?.workload) {
+      const workload = data.data.workload;
+      const statusEmoji = {
+        light: '🟢',
+        moderate: '🟡',
+        heavy: '🟠',
+        overloaded: '🔴',
+      }[workload.status] || '⚪';
+      
+      setTimeout(() => {
+        addMessage('assistant', `${statusEmoji} ワークロード: 1日約${workload.dailyMinutes}分 (${workload.activeHabits}個の習慣)`);
+      }, 500);
+    }
+
+    // Show suggestions if available
+    if (data.data?.suggestions && data.data.suggestions.length > 0) {
+      setTimeout(() => {
+        const suggestionsMsg = `💡 調整提案:\n${data.data.suggestions.slice(0, 3).map((s: any) => 
+          `• ${s.habitName}: ${s.suggestion}\n  理由: ${s.reason}`
+        ).join('\n\n')}`;
+        addMessage('assistant', suggestionsMsg);
+      }, 700);
+    }
+
+    // Update token info if provided
+    if (data.remainingTokens !== undefined) {
+      setTokenInfo(prev => prev ? { ...prev, remaining: data.remainingTokens } : null);
     }
   };
 
