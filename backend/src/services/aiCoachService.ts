@@ -356,27 +356,27 @@ const COACH_TOOLS: ChatCompletionTool[] = [
     type: 'function',
     function: {
       name: 'show_choice_buttons',
-      description: 'ユーザーに選択肢をボタン形式で表示する。複数の選択肢から選んでもらいたい場合に使用。',
+      description: '【重要】ユーザーに選択肢を提示する際は必ずこのツールを使用する。テキストの番号リスト（1. 2. 3.）は禁止。選択肢をボタン形式で表示することで、ユーザーはクリックで選択でき、UXが向上する。習慣カテゴリの選択、頻度の選択、次のアクションの選択など、複数の選択肢がある場合は常にこのツールを使う。',
       parameters: {
         type: 'object',
         properties: {
           title: {
             type: 'string',
-            description: '選択肢のタイトル',
+            description: '選択肢のタイトル（例: どんな分野の習慣を始めたいですか？）',
           },
           choices: {
             type: 'array',
             items: {
               type: 'object',
               properties: {
-                id: { type: 'string', description: '選択肢のID' },
-                label: { type: 'string', description: '選択肢のラベル' },
-                icon: { type: 'string', description: 'アイコン（絵文字）' },
-                description: { type: 'string', description: '説明' },
+                id: { type: 'string', description: '選択肢のID（英語、スネークケース推奨）' },
+                label: { type: 'string', description: '選択肢のラベル（日本語OK）' },
+                icon: { type: 'string', description: 'アイコン（絵文字1つ）' },
+                description: { type: 'string', description: '補足説明（省略可）' },
               },
               required: ['id', 'label'],
             },
-            description: '選択肢のリスト（最大5つ）',
+            description: '選択肢のリスト（2-5個推奨）',
           },
         },
         required: ['title', 'choices'],
