@@ -630,7 +630,7 @@ function DashboardLayout(props: any) {
 
   // Tab navigation state
   const visibleTabs = getVisibleTabs(pageSections);
-  const { activeTab, setActiveTab, isFullView, toggleFullView, exitFullView } = useTabNavigation(
+  const { activeTab, setActiveTab, isFullView, toggleFullView, exitFullView, isCollapsed, toggleCollapse } = useTabNavigation(
     pageSections[0],
     pageSections
   );
@@ -794,19 +794,51 @@ function DashboardLayout(props: any) {
         onMoveHabit={handleMoveHabit}
       />
 
-  {/* Main content pane with tab navigation */}
-  <main className={`flex-1 pt-16 ${showLeftPane ? (isLeftHanded ? 'lg:mr-80' : 'lg:ml-80') : ''}`}>
-        {/* Tab Navigation */}
-        <div className="sticky top-16 z-30">
+  {/* Main content pane with left tab navigation */}
+  <main className={`flex-1 pt-16 flex ${showLeftPane ? (isLeftHanded ? 'lg:mr-80' : 'lg:ml-80') : ''}`}>
+        {/* Left Tab Navigation */}
+        <div className="hidden md:flex flex-col h-[calc(100vh-4rem)] sticky top-16">
           <TabNavigation
             tabs={visibleTabs}
             activeTab={activeTab}
             onTabChange={setActiveTab}
+            collapsed={isCollapsed}
+            onToggleCollapse={toggleCollapse}
           />
         </div>
 
+        {/* Mobile Tab Navigation (horizontal at top) */}
+        <div className="md:hidden sticky top-16 z-30 w-full bg-card border-b border-border">
+          <div className="flex overflow-x-auto scrollbar-hide px-2 py-1 gap-1">
+            {visibleTabs.map((tab) => {
+              const isActive = tab.id === activeTab;
+              return (
+                <button
+                  key={tab.id}
+                  onClick={() => setActiveTab(tab.id)}
+                  className={`
+                    flex items-center gap-1.5
+                    px-3 py-2
+                    min-w-[44px] min-h-[44px]
+                    text-sm font-medium
+                    rounded-md
+                    whitespace-nowrap
+                    transition-colors duration-150
+                    ${isActive
+                      ? 'bg-primary text-primary-foreground shadow-sm'
+                      : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+                    }
+                  `}
+                >
+                  <span className="text-base">{tab.icon}</span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
         {/* Tab Content */}
-        <div className="p-4 lg:p-6">
+        <div className="flex-1 p-4 lg:p-6 overflow-auto">
           <TabContent
             activeTab={activeTab}
             isFullView={isFullView}

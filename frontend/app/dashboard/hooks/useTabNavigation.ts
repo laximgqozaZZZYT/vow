@@ -7,6 +7,8 @@ export interface UseTabNavigationReturn {
   isFullView: boolean;
   toggleFullView: () => void;
   exitFullView: () => void;
+  isCollapsed: boolean;
+  toggleCollapse: () => void;
 }
 
 /**
@@ -29,6 +31,7 @@ export function useTabNavigation(
     getValidTab(initialTab)
   );
   const [isFullView, setIsFullView] = useState(false);
+  const [isCollapsed, setIsCollapsed] = useState(false);
 
   // Update active tab with validation
   const setActiveTab = useCallback((tabId: string) => {
@@ -48,6 +51,11 @@ export function useTabNavigation(
   // Exit full view mode
   const exitFullView = useCallback(() => {
     setIsFullView(false);
+  }, []);
+
+  // Toggle collapsed state
+  const toggleCollapse = useCallback(() => {
+    setIsCollapsed(prev => !prev);
   }, []);
 
   // Handle ESC key to exit full view
@@ -77,5 +85,7 @@ export function useTabNavigation(
     isFullView,
     toggleFullView,
     exitFullView,
+    isCollapsed,
+    toggleCollapse,
   };
 }
