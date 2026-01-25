@@ -15,38 +15,46 @@ function LoginContent() {
   const [devRestricted, setDevRestricted] = useState(false);
   const [processingCallback, setProcessingCallback] = useState(false);
 
-  // OAuth認証コールバック処理（ハッシュフラグメントからトークンを取得）
+  // OAuth認証コールバック処理
   useEffect(() => {
-    const handleAuthCallback = async () => {
-      // URLにハッシュフラグメントがある場合（OAuth認証後のコールバック）
-      if (window.location.hash && window.location.hash.includes('access_token')) {
+    if (!supabase) return;
+    
+    const processAuth = async () => {
+      // ハッシュフラグメントがある場合は処理中表示
+      const hasHash = window.location.hash && window.location.hash.includes('access_token');
+      if (hasHash) {
         setProcessingCallback(true);
-        try {
-          if (!supabase) return;
-          
-          // Supabaseがハッシュからセッションを自動的に処理するのを待つ
-          const { data: { session }, error } = await supabase.auth.getSession();
-          
-          if (error) {
-            setError(`認証エラー: ${error.message}`);
-            setProcessingCallback(false);
-            return;
-          }
-          
-          if (session) {
-            // セッションが確立された - リダイレクト先に移動
-            const redirectPath = searchParams.get('redirect') || '/dashboard';
-            router.push(redirectPath);
-            return;
-          }
-        } catch (e: any) {
-          setError(`認証処理エラー: ${e.message}`);
+        console.log('Processing OAuth callback, hash detected');
+      }
+      
+      // 少し待ってからセッションを確認（Supabaseがハッシュを処理する時間を与える）
+      await new Promise(resolve => setTimeout(resolve, 500));
+      
+      const { data: { session }, error } = await supabase.auth.getSession();
+      console.log('Session check:', session?.user?.email, error);
+      
+      if (session) {
+        // ログイン済み - リダイレクト先に移動
+        const redirectPath = searchParams.get('redirect') || '/dashboard';
+        console.log('Session found, redirecting to:', redirectPath);
+        
+        // ハッシュをクリア
+        if (hasHash) {
+          window.history.replaceState(null, '', window.location.pathname + window.location.search);
         }
+        
+        router.push(redirectPath);
+        return;
+      }
+      
+      if (hasHash) {
+        // ハッシュがあるのにセッションがない - エラー
+        setError('認証処理に失敗しました。もう一度お試しください。');
         setProcessingCallback(false);
       }
     };
     
-    handleAuthCallback();
+    processAuth();
   }, [router, searchParams]);
 
   // 開発環境でのリダイレクト検出
