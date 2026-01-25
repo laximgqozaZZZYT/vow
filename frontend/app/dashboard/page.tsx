@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { useRouter } from "next/navigation";
 import type { Metadata } from "next";
 import ActivityModal from './components/Modal.Activity';
 import api from '../../lib/api';
@@ -40,59 +39,13 @@ import type { CreateGoalPayload } from './types';
 import { useAuth } from './hooks/useAuth';
 import { HandednessProvider, useHandedness } from './contexts/HandednessContext';
 import { LocaleProvider } from '@/contexts/LocaleContext';
-import { supabase } from '../../lib/supabaseClient';
-
-// 開発環境で許可されるメールアドレス
-const ALLOWED_EMAILS_DEV = process.env.NEXT_PUBLIC_ALLOWED_EMAILS_DEV?.split(',').map(e => e.trim().toLowerCase()) || [];
-const IS_DEV_ENV = process.env.NEXT_PUBLIC_ENV === 'development';
 
 export default function DashboardPage() {
-  const router = useRouter();
   const [showLeftPane, setShowLeftPane] = useState(false);
   const [selectedGoal, setSelectedGoal] = useState<string | null>(null);
-  const [devAccessDenied, setDevAccessDenied] = useState(false);
   
   // 認証状態を取得
   const { isAuthed, isGuest, migrationStatus } = useAuth();
-
-  // 開発環境でのアクセス制限チェック
-  useEffect(() => {
-    const checkDevAccess = async () => {
-      if (!IS_DEV_ENV || !supabase) return;
-      
-      // 開発環境ではゲストアクセスを禁止
-      if (isGuest) {
-        debug.log('[dashboard] Dev environment: Guest access denied');
-        setDevAccessDenied(true);
-        return;
-      }
-      
-      const { data: { session } } = await supabase.auth.getSession();
-      
-      // 未ログインの場合はログインページへ
-      if (!session?.user?.email) {
-        debug.log('[dashboard] Dev environment: No session, redirecting to login');
-        router.push('/login');
-        return;
-      }
-      
-      const userEmail = session.user.email.toLowerCase();
-      
-      // 許可リストにないメールアドレスの場合
-      if (ALLOWED_EMAILS_DEV.length > 0 && !ALLOWED_EMAILS_DEV.includes(userEmail)) {
-        debug.log('[dashboard] Dev environment: User not in allowed list', userEmail);
-        setDevAccessDenied(true);
-        await supabase.auth.signOut();
-        return;
-      }
-      
-      setDevAccessDenied(false);
-    };
-    
-    if (isAuthed !== null) {
-      checkDevAccess();
-    }
-  }, [isAuthed, isGuest, router]);
 
   // Check for guest data migration on page load
   useEffect(() => {
@@ -474,27 +427,6 @@ export default function DashboardPage() {
     return <div className="flex min-h-screen items-center justify-center bg-zinc-50 dark:bg-black text-black dark:text-zinc-50 p-4">
       <div className="text-base sm:text-lg">Loading...</div>
     </div>
-  }
-
-  // 開発環境でのアクセス拒否
-  if (IS_DEV_ENV && devAccessDenied) {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-zinc-50 dark:bg-black text-black dark:text-zinc-50 p-4">
-        <div className="max-w-md text-center">
-          <div className="text-4xl mb-4">🔒</div>
-          <h1 className="text-xl font-semibold mb-2">アクセスが制限されています</h1>
-          <p className="text-muted-foreground mb-4">
-            この開発環境は管理者のみアクセス可能です。
-          </p>
-          <a
-            href="/login"
-            className="inline-flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-md hover:opacity-90"
-          >
-            ログインページへ
-          </a>
-        </div>
-      </div>
-    );
   }
 
   // Show loading state during data migration

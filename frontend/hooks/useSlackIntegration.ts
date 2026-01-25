@@ -13,7 +13,7 @@ import type {
 } from '@/lib/types/slack';
 
 // Slack API endpoint (AWS Lambda)
-const SLACK_API_URL = process.env.NEXT_PUBLIC_SLACK_API_URL || '';
+const SLACK_API_URL = process.env.NEXT_PUBLIC_SLACK_API_URL || process.env.NEXT_PUBLIC_BACKEND_API_URL || '';
 
 interface UseSlackIntegrationReturn {
   // State
