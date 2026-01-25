@@ -146,7 +146,8 @@ export class SpecLoader {
   private getDefaultSpecDir(): string {
     // Lambda環境かどうかを判定
     if (process.env['AWS_LAMBDA_FUNCTION_NAME']) {
-      return '/var/task/specs/ai-coach';
+      // Lambda環境では /var/task/lambda-package/specs/ai-coach になる
+      return '/var/task/lambda-package/specs/ai-coach';
     }
     // ローカル開発環境
     return path.resolve(process.cwd(), 'specs/ai-coach');

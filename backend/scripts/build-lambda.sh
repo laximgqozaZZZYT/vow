@@ -24,6 +24,15 @@ mkdir -p lambda-package
 # Copy compiled code
 cp -r dist/* lambda-package/
 
+# Copy specs directory (AI Coach specifications)
+echo "📋 Copying AI Coach specs..."
+if [ -d "specs" ]; then
+  cp -r specs lambda-package/
+  echo "   ✓ Specs directory copied"
+else
+  echo "   ⚠️ Specs directory not found"
+fi
+
 # Copy package.json (for reference)
 cp package.json lambda-package/
 
