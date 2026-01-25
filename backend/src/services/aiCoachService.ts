@@ -225,59 +225,18 @@ const COACH_TOOLS: ChatCompletionTool[] = [
   },
 ];
 
+// Import the spec-based system prompt
+import {
+  buildCoachSystemPrompt,
+  shouldProceedWithoutClarification,
+  isWithinScope,
+  needsClarification,
+} from './aiCoachSpec.js';
+
 /**
- * System prompt for the AI Coach
+ * System prompt for the AI Coach (loaded from spec)
  */
-const COACH_SYSTEM_PROMPT = `あなたは習慣管理アプリの専属AIコーチです。行動科学と心理学の知識を活かして、ユーザーの習慣形成を親身にサポートします。
-
-あなたの特徴:
-- 共感的で励ましの姿勢を持つ
-- 科学的根拠に基づいたアドバイスを提供する
-- ユーザーの状況を深く理解するために質問する
-- データに基づいた客観的な分析ができる
-- 小さな一歩から始めることを重視する
-
-利用可能なツール:
-
-【分析系】
-- analyze_habits: 習慣の達成率と傾向を分析
-- get_workload_summary: ワークロード状況を確認
-- get_habit_details: 特定の習慣の詳細を取得
-- get_goal_progress: ゴールの進捗を確認
-- analyze_motivation_patterns: モチベーションパターンを分析
-
-【提案系】
-- suggest_habit_adjustments: 調整案を生成
-- get_habit_template: 習慣テンプレートとベストプラクティスを取得
-- suggest_habit_stacking: 習慣スタッキングを提案
-- calculate_minimum_viable_habit: 最小限の習慣を設計
-- suggest_rewards: 報酬システムを提案
-
-【トリガー分析】
-- identify_triggers: 効果的なトリガーを特定
-
-コーチングの原則:
-1. まずユーザーの話を聞き、状況を理解する
-2. 必要に応じてツールを使ってデータを確認する
-3. 科学的知見とデータの両方を踏まえてアドバイスする
-4. 一度に多くの変更を提案しない（1-2個に絞る）
-5. 「2分ルール」を活用し、小さく始めることを推奨
-6. 習慣スタッキングで既存の行動に紐付ける
-7. ユーザーの自主性を尊重し、押し付けない
-
-行動科学の知識:
-- 習慣ループ: きっかけ → 行動 → 報酬
-- 2分ルール: 新しい習慣は2分以内でできる形から始める
-- 習慣スタッキング: 「〜した後に〜する」で既存習慣に紐付け
-- 環境デザイン: 良い習慣を簡単に、悪い習慣を難しくする
-- アイデンティティ: 「〜する人」というセルフイメージを育てる
-
-応答スタイル:
-- 自然な日本語で会話する
-- 絵文字を適度に使う
-- 長すぎない応答を心がける
-- 質問で会話を続ける
-- 具体的なアクションを提案する`;
+const COACH_SYSTEM_PROMPT = buildCoachSystemPrompt();
 
 interface HabitAnalysis {
   habitId: string;
@@ -363,8 +322,28 @@ export class AICoachService {
       throw new Error('OpenAI API key not configured');
     }
 
+    // Check if the topic is within scope (guardrail)
+    if (!isWithinScope(userMessage)) {
+      return {
+        message: '申し訳ありませんが、習慣管理に関することでお手伝いできます。\n\n例えば：\n・新しい習慣を作りたい\n・習慣の達成率を確認したい\n・ワークロードを調整したい\n\nなどについてお聞きください 😊',
+        toolsUsed: [],
+        tokensUsed: 0,
+      };
+    }
+
+    // Check if clarification is needed (unless user wants to proceed)
+    const clarification = needsClarification(userMessage);
+    const shouldProceed = shouldProceedWithoutClarification(userMessage);
+    
+    // Build context message for clarification needs
+    let contextMessage = '';
+    if (clarification.needed && !shouldProceed && conversationHistory.length === 0) {
+      // Only add clarification hint on first message if needed
+      contextMessage = `\n\n[システム注記: ユーザーの意図が曖昧な可能性があります。以下の点を確認することを検討してください: ${clarification.questions.join(', ')}。ただし、ユーザーが「それで進めて」などと言った場合は確認せずに進めてください。]`;
+    }
+
     const messages: ChatCompletionMessageParam[] = [
-      { role: 'system', content: COACH_SYSTEM_PROMPT },
+      { role: 'system', content: COACH_SYSTEM_PROMPT + contextMessage },
       ...conversationHistory.slice(-10).map(m => ({
         role: m.role as 'user' | 'assistant',
         content: m.content,
