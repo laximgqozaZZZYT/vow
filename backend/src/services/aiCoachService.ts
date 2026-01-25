@@ -21,6 +21,90 @@ const logger = getLogger('aiCoachService');
  * Tool definitions for OpenAI Function Calling
  */
 const COACH_TOOLS: ChatCompletionTool[] = [
+  // === UI連携ツール（習慣作成・提案用） ===
+  {
+    type: 'function',
+    function: {
+      name: 'create_habit_suggestion',
+      description: 'ユーザーに習慣を提案する際に使用。このツールを呼ぶと、フロントエンドに編集可能なフォームが表示される。ユーザーが習慣を作りたい、または習慣を提案してほしいと言った場合は必ずこのツールを使う。',
+      parameters: {
+        type: 'object',
+        properties: {
+          name: {
+            type: 'string',
+            description: '習慣の名前（例: 毎朝ジョギング、読書30分）',
+          },
+          type: {
+            type: 'string',
+            enum: ['do', 'avoid'],
+            description: '習慣のタイプ。do=実行する習慣、avoid=避ける習慣',
+          },
+          frequency: {
+            type: 'string',
+            enum: ['daily', 'weekly', 'monthly'],
+            description: '頻度。daily=毎日、weekly=毎週、monthly=毎月',
+          },
+          triggerTime: {
+            type: 'string',
+            description: '実行時刻（HH:MM形式、例: 07:00）。省略可。',
+          },
+          duration: {
+            type: 'number',
+            description: '所要時間（分）。省略可。',
+          },
+          targetCount: {
+            type: 'number',
+            description: '目標回数/量。省略可。',
+          },
+          workloadUnit: {
+            type: 'string',
+            description: '単位（例: 回、ページ、分）。省略可。',
+          },
+          reason: {
+            type: 'string',
+            description: 'この習慣を提案する理由。',
+          },
+          confidence: {
+            type: 'number',
+            description: '提案の確信度（0-1）。',
+          },
+        },
+        required: ['name', 'type', 'frequency'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'create_multiple_habit_suggestions',
+      description: '複数の習慣を一度に提案する際に使用。ゴール達成のための習慣を提案する場合などに使う。',
+      parameters: {
+        type: 'object',
+        properties: {
+          suggestions: {
+            type: 'array',
+            items: {
+              type: 'object',
+              properties: {
+                name: { type: 'string', description: '習慣の名前' },
+                type: { type: 'string', enum: ['do', 'avoid'] },
+                frequency: { type: 'string', enum: ['daily', 'weekly', 'monthly'] },
+                triggerTime: { type: 'string', description: '実行時刻（HH:MM形式）' },
+                duration: { type: 'number', description: '所要時間（分）' },
+                suggestedTargetCount: { type: 'number', description: '目標回数/量' },
+                workloadUnit: { type: 'string', description: '単位' },
+                reason: { type: 'string', description: '提案理由' },
+                confidence: { type: 'number', description: '確信度（0-1）' },
+              },
+              required: ['name', 'type', 'frequency', 'reason'],
+            },
+            description: '提案する習慣のリスト',
+          },
+        },
+        required: ['suggestions'],
+      },
+    },
+  },
   // === 既存ツール ===
   {
     type: 'function',
@@ -276,6 +360,8 @@ export interface CoachResponse {
     suggestions?: AdjustmentSuggestion[];
     habitDetails?: Record<string, unknown>;
     goalProgress?: Record<string, unknown>;
+    parsedHabit?: Record<string, unknown>;
+    habitSuggestions?: Array<Record<string, unknown>>;
   } | undefined;
 }
 
@@ -432,6 +518,13 @@ export class AICoachService {
    */
   private async executeTool(toolName: string, args: Record<string, unknown>): Promise<unknown> {
     switch (toolName) {
+      // UI連携ツール
+      case 'create_habit_suggestion':
+        return this.createHabitSuggestion(args);
+
+      case 'create_multiple_habit_suggestions':
+        return this.createMultipleHabitSuggestions(args['suggestions'] as Array<Record<string, unknown>>);
+
       // 既存ツール
       case 'analyze_habits':
         return this.analyzeHabits(
@@ -492,6 +585,14 @@ export class AICoachService {
     result: unknown
   ): void {
     switch (toolName) {
+      case 'create_habit_suggestion':
+        // Store as parsedHabit for single habit suggestion
+        data.parsedHabit = result as Record<string, unknown>;
+        break;
+      case 'create_multiple_habit_suggestions':
+        // Store as suggestions for multiple habit suggestions
+        data.habitSuggestions = (result as { suggestions: Record<string, unknown>[] }).suggestions;
+        break;
       case 'analyze_habits':
         data.analysis = result as HabitAnalysis[];
         break;
@@ -508,6 +609,43 @@ export class AICoachService {
         data.goalProgress = result as Record<string, unknown>;
         break;
     }
+  }
+
+  /**
+   * Create a single habit suggestion (for UI display)
+   */
+  private createHabitSuggestion(args: Record<string, unknown>): Record<string, unknown> {
+    return {
+      name: args['name'] as string,
+      type: args['type'] as string,
+      frequency: args['frequency'] as string,
+      triggerTime: args['triggerTime'] as string | null || null,
+      duration: args['duration'] as number | null || null,
+      targetCount: args['targetCount'] as number | null || null,
+      workloadUnit: args['workloadUnit'] as string | null || null,
+      reason: args['reason'] as string || '',
+      confidence: args['confidence'] as number || 0.8,
+      goalId: null,
+    };
+  }
+
+  /**
+   * Create multiple habit suggestions (for UI display)
+   */
+  private createMultipleHabitSuggestions(suggestions: Array<Record<string, unknown>>): { suggestions: Array<Record<string, unknown>> } {
+    return {
+      suggestions: suggestions.map(s => ({
+        name: s['name'] as string,
+        type: s['type'] as string,
+        frequency: s['frequency'] as string,
+        triggerTime: s['triggerTime'] as string | null || null,
+        duration: s['duration'] as number | null || null,
+        suggestedTargetCount: s['suggestedTargetCount'] as number || 1,
+        workloadUnit: s['workloadUnit'] as string | null || null,
+        reason: s['reason'] as string || '',
+        confidence: s['confidence'] as number || 0.8,
+      })),
+    };
   }
 
   /**
