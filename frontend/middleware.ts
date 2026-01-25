@@ -7,6 +7,7 @@ const ADMIN_EMAIL = 'k6285620@gmail.com';
 
 // 認証不要のパス（静的ファイル、API、ログインページなど）
 const PUBLIC_PATHS = [
+  '/',
   '/login',
   '/api',
   '/_next',
@@ -20,6 +21,7 @@ const PUBLIC_PATHS = [
   '/vercel.svg',
   '/window.svg',
   '/oauth',
+  '/embed',
 ];
 
 export async function middleware(request: NextRequest) {
@@ -127,7 +129,9 @@ export const config = {
      * - _next/image (image optimization files)
      * - favicon.ico (favicon file)
      * - public folder files
+     * - login page (for OAuth flow)
+     * - api routes
      */
-    '/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
+    '/((?!_next/static|_next/image|favicon.ico|login|api|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
   ],
 };
