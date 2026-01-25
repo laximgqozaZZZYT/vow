@@ -9,6 +9,7 @@
  * - Get habit suggestions for goals
  * - Coaching/workload advice
  * - Continuous conversation with follow-up questions
+ * - UI component rendering from AI responses
  *
  * Requirements: Premium subscription features
  */
@@ -16,6 +17,11 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '../../../lib/supabaseClient';
 import { CoachingWidget } from './Widget.Coaching';
+import { HabitStatsCard, type HabitStats } from './Widget.HabitStats';
+import { WorkloadChart, type WorkloadData } from './Widget.WorkloadChart';
+import { ChoiceButtons, type Choice } from './Widget.ChoiceButtons';
+import { ProgressIndicator } from './Widget.Progress';
+import { QuickActionButtons, type QuickAction } from './Widget.QuickActions';
 
 interface Goal {
   id: string;
@@ -54,6 +60,13 @@ interface Message {
   timestamp: Date;
   intent?: DetectedIntent;
   data?: any; // Parsed habit, suggestions, etc.
+  uiComponents?: UIComponentData[]; // UI components to render
+}
+
+interface UIComponentData {
+  type: 'ui_component';
+  component: 'habit_stats' | 'choice_buttons' | 'workload_chart' | 'progress_indicator' | 'quick_actions';
+  data: any;
 }
 
 interface CoachSectionProps {
@@ -151,7 +164,7 @@ export function CoachSection({ goals, onHabitCreated }: CoachSectionProps) {
   }, []);
 
   // Add message to conversation
-  const addMessage = useCallback((role: 'user' | 'assistant', content: string, intent?: DetectedIntent, data?: any) => {
+  const addMessage = useCallback((role: 'user' | 'assistant', content: string, intent?: DetectedIntent, data?: any, uiComponents?: UIComponentData[]) => {
     const newMessage: Message = {
       id: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
       role,
@@ -159,6 +172,7 @@ export function CoachSection({ goals, onHabitCreated }: CoachSectionProps) {
       timestamp: new Date(),
       intent,
       data,
+      uiComponents,
     };
     setMessages(prev => [...prev, newMessage]);
     return newMessage;
@@ -245,8 +259,11 @@ export function CoachSection({ goals, onHabitCreated }: CoachSectionProps) {
 
     const data = await response.json();
 
-    // Add AI response
-    addMessage('assistant', data.response, null, data);
+    // Extract UI components from response
+    const uiComponents: UIComponentData[] = data.data?.uiComponents || [];
+
+    // Add AI response with UI components
+    addMessage('assistant', data.response, null, data, uiComponents);
 
     // Handle structured habit data from AI tools
     if (data.data?.parsedHabit) {
@@ -511,6 +528,35 @@ export function CoachSection({ goals, onHabitCreated }: CoachSectionProps) {
     addMessage('assistant', `「${suggestion.name}」を選択しました。下のフォームで詳細を編集してください。`);
   };
 
+  // Handle choice button selection
+  const handleChoiceSelect = useCallback(async (choice: Choice) => {
+    // Send the choice as a user message
+    const userMessage = choice.description 
+      ? `${choice.label}を選択しました: ${choice.description}`
+      : `${choice.label}を選択しました`;
+    
+    setInput('');
+    setProcessing(true);
+    addMessage('user', userMessage);
+
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.access_token) {
+        setError('認証が必要です');
+        addMessage('assistant', '認証が必要です。ログインしてください。');
+        return;
+      }
+
+      await handleAIChat(session.access_token, userMessage);
+    } catch (err: any) {
+      const errorMsg = err.message || 'エラーが発生しました';
+      setError(errorMsg);
+      addMessage('assistant', `エラー: ${errorMsg}`);
+    } finally {
+      setProcessing(false);
+    }
+  }, [addMessage, handleAIChat]);
+
   // Clear conversation
   const handleClearConversation = () => {
     setMessages([]);
@@ -568,21 +614,34 @@ export function CoachSection({ goals, onHabitCreated }: CoachSectionProps) {
         <div className="space-y-4">
           {/* Conversation History */}
           {messages.length > 0 && (
-            <div className="max-h-64 overflow-y-auto space-y-3 p-3 bg-muted/30 rounded-lg">
+            <div className="max-h-96 overflow-y-auto space-y-3 p-3 bg-muted/30 rounded-lg">
               {messages.map((msg) => (
-                <div
-                  key={msg.id}
-                  className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
-                >
+                <div key={msg.id} className="space-y-2">
                   <div
-                    className={`max-w-[85%] px-3 py-2 rounded-lg text-sm whitespace-pre-wrap ${
-                      msg.role === 'user'
-                        ? 'bg-primary text-primary-foreground'
-                        : 'bg-background border border-border'
-                    }`}
+                    className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
                   >
-                    {msg.content}
+                    <div
+                      className={`max-w-[85%] px-3 py-2 rounded-lg text-sm whitespace-pre-wrap ${
+                        msg.role === 'user'
+                          ? 'bg-primary text-primary-foreground'
+                          : 'bg-background border border-border'
+                      }`}
+                    >
+                      {msg.content}
+                    </div>
                   </div>
+                  {/* Render UI Components */}
+                  {msg.uiComponents && msg.uiComponents.length > 0 && (
+                    <div className="space-y-2 ml-2">
+                      {msg.uiComponents.map((comp, idx) => (
+                        <UIComponentRenderer
+                          key={`${msg.id}-ui-${idx}`}
+                          component={comp}
+                          onChoiceSelect={handleChoiceSelect}
+                        />
+                      ))}
+                    </div>
+                  )}
                 </div>
               ))}
               <div ref={messagesEndRef} />
@@ -937,6 +996,86 @@ function QuickExamples({ onSelect }: { onSelect: (text: string) => void }) {
       </div>
     </div>
   );
+}
+
+// UI Component Renderer
+function UIComponentRenderer({
+  component,
+  onChoiceSelect,
+}: {
+  component: UIComponentData;
+  onChoiceSelect: (choice: Choice) => void;
+}) {
+  switch (component.component) {
+    case 'habit_stats':
+      return (
+        <HabitStatsCard
+          stats={{
+            habitId: component.data.habitId,
+            habitName: component.data.habitName,
+            completionRate: component.data.completionRate,
+            trend: component.data.trend,
+            streakDays: component.data.streak || 0,
+            recentHistory: component.data.recentHistory,
+          }}
+          className="max-w-sm"
+        />
+      );
+
+    case 'workload_chart':
+      return (
+        <WorkloadChart
+          data={component.data as WorkloadData}
+          type={component.data.chartType || 'bar'}
+          className="max-w-md"
+        />
+      );
+
+    case 'choice_buttons':
+      return (
+        <div className="space-y-2 max-w-md">
+          {component.data.title && (
+            <p className="text-sm font-medium text-foreground">{component.data.title}</p>
+          )}
+          <ChoiceButtons
+            choices={component.data.choices}
+            onSelect={onChoiceSelect}
+          />
+        </div>
+      );
+
+    case 'progress_indicator':
+      return (
+        <ProgressIndicator
+          value={component.data.value}
+          max={component.data.max}
+          type={component.data.type}
+          size={component.data.size}
+          color={component.data.color}
+          label={component.data.label}
+          className="max-w-xs"
+        />
+      );
+
+    case 'quick_actions':
+      return (
+        <QuickActionButtons
+          actions={component.data.actions as QuickAction[]}
+          onAction={(actionId) => {
+            const action = component.data.actions.find((a: QuickAction) => a.id === actionId);
+            if (action) {
+              onChoiceSelect({ id: action.id, label: action.label, description: action.description });
+            }
+          }}
+          layout={component.data.layout}
+          size={component.data.size}
+          className="max-w-md"
+        />
+      );
+
+    default:
+      return null;
+  }
 }
 
 // Upgrade Prompt

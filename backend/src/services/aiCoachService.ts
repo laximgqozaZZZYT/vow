@@ -13,6 +13,11 @@ import { getLogger } from '../utils/logger.js';
 import { HabitRepository } from '../repositories/habitRepository.js';
 import { ActivityRepository } from '../repositories/activityRepository.js';
 import { GoalRepository } from '../repositories/goalRepository.js';
+import {
+  handleError,
+  getToolFallbackResponse,
+  createErrorLogMessage,
+} from '../utils/errorHandler.js';
 import type { SupabaseClient } from '@supabase/supabase-js';
 
 const logger = getLogger('aiCoachService');
@@ -307,20 +312,144 @@ const COACH_TOOLS: ChatCompletionTool[] = [
       },
     },
   },
+  // === UIコンポーネント表示ツール ===
+  {
+    type: 'function',
+    function: {
+      name: 'render_ui_component',
+      description: 'フロントエンドにUIコンポーネントを表示する。統計、選択肢、ワークロードなどを視覚的に表示したい場合に使用。',
+      parameters: {
+        type: 'object',
+        properties: {
+          component: {
+            type: 'string',
+            enum: ['habit_stats', 'choice_buttons', 'workload_chart', 'progress_indicator', 'quick_actions'],
+            description: '表示するコンポーネントの種類',
+          },
+          data: {
+            type: 'object',
+            description: 'コンポーネントに渡すデータ',
+          },
+        },
+        required: ['component', 'data'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'show_habit_stats',
+      description: '習慣の統計情報をカード形式で表示する。達成率、トレンド、ストリーク日数などを視覚的に表示。',
+      parameters: {
+        type: 'object',
+        properties: {
+          habit_name: {
+            type: 'string',
+            description: '統計を表示する習慣の名前',
+          },
+        },
+        required: ['habit_name'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'show_choice_buttons',
+      description: 'ユーザーに選択肢をボタン形式で表示する。複数の選択肢から選んでもらいたい場合に使用。',
+      parameters: {
+        type: 'object',
+        properties: {
+          title: {
+            type: 'string',
+            description: '選択肢のタイトル',
+          },
+          choices: {
+            type: 'array',
+            items: {
+              type: 'object',
+              properties: {
+                id: { type: 'string', description: '選択肢のID' },
+                label: { type: 'string', description: '選択肢のラベル' },
+                icon: { type: 'string', description: 'アイコン（絵文字）' },
+                description: { type: 'string', description: '説明' },
+              },
+              required: ['id', 'label'],
+            },
+            description: '選択肢のリスト（最大5つ）',
+          },
+        },
+        required: ['title', 'choices'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'show_workload_chart',
+      description: 'ワークロード分析をチャート形式で表示する。日/週の負荷を視覚的に表示。',
+      parameters: {
+        type: 'object',
+        properties: {
+          chart_type: {
+            type: 'string',
+            enum: ['bar', 'donut'],
+            description: 'チャートの種類。bar=棒グラフ、donut=ドーナツチャート',
+          },
+        },
+        required: [],
+      },
+    },
+  },
 ];
 
-// Import the spec-based system prompt
+// Import the spec-based helpers (guardrails and clarification logic)
 import {
-  buildCoachSystemPrompt,
   shouldProceedWithoutClarification,
   isWithinScope,
   needsClarification,
 } from './aiCoachSpec.js';
 
+// Import SpecLoader for external spec files
+import { getSpecLoader, type SpecContent } from './specLoader.js';
+
 /**
- * System prompt for the AI Coach (loaded from spec)
+ * System prompt cache for the AI Coach
+ * Loaded from external spec files on first use
  */
-const COACH_SYSTEM_PROMPT = buildCoachSystemPrompt();
+let cachedSystemPrompt: string | null = null;
+let specLoadPromise: Promise<SpecContent> | null = null;
+
+/**
+ * Load and build system prompt from external spec files
+ * Uses caching to avoid repeated file reads
+ */
+async function loadSystemPrompt(): Promise<string> {
+  if (cachedSystemPrompt) {
+    return cachedSystemPrompt;
+  }
+
+  // Prevent concurrent loading
+  if (!specLoadPromise) {
+    const specLoader = getSpecLoader();
+    specLoadPromise = specLoader.loadSpecs();
+  }
+
+  const specs = await specLoadPromise;
+  const specLoader = getSpecLoader();
+  cachedSystemPrompt = specLoader.buildSystemPrompt(specs);
+
+  return cachedSystemPrompt;
+}
+
+/**
+ * Clear the cached system prompt (for hot-reload support)
+ */
+export function clearSystemPromptCache(): void {
+  cachedSystemPrompt = null;
+  specLoadPromise = null;
+  getSpecLoader().clearCache();
+}
 
 interface HabitAnalysis {
   habitId: string;
@@ -362,6 +491,7 @@ export interface CoachResponse {
     goalProgress?: Record<string, unknown>;
     parsedHabit?: Record<string, unknown>;
     habitSuggestions?: Array<Record<string, unknown>>;
+    uiComponents?: Array<Record<string, unknown>>;
   } | undefined;
 }
 
@@ -417,100 +547,145 @@ export class AICoachService {
       };
     }
 
-    // Check if clarification is needed (unless user wants to proceed)
-    const clarification = needsClarification(userMessage);
-    const shouldProceed = shouldProceedWithoutClarification(userMessage);
-    
-    // Build context message for clarification needs
-    let contextMessage = '';
-    if (clarification.needed && !shouldProceed && conversationHistory.length === 0) {
-      // Only add clarification hint on first message if needed
-      contextMessage = `\n\n[システム注記: ユーザーの意図が曖昧な可能性があります。以下の点を確認することを検討してください: ${clarification.questions.join(', ')}。ただし、ユーザーが「それで進めて」などと言った場合は確認せずに進めてください。]`;
-    }
+    try {
+      // Load system prompt from external spec files
+      const systemPrompt = await loadSystemPrompt();
 
-    const messages: ChatCompletionMessageParam[] = [
-      { role: 'system', content: COACH_SYSTEM_PROMPT + contextMessage },
-      ...conversationHistory.slice(-10).map(m => ({
-        role: m.role as 'user' | 'assistant',
-        content: m.content,
-      })),
-      { role: 'user', content: userMessage },
-    ];
+      // Check if clarification is needed (unless user wants to proceed)
+      const clarification = needsClarification(userMessage);
+      const shouldProceed = shouldProceedWithoutClarification(userMessage);
+      
+      // Build context message for clarification needs
+      let contextMessage = '';
+      if (clarification.needed && !shouldProceed && conversationHistory.length === 0) {
+        // Only add clarification hint on first message if needed
+        contextMessage = `\n\n[システム注記: ユーザーの意図が曖昧な可能性があります。以下の点を確認することを検討してください: ${clarification.questions.join(', ')}。ただし、ユーザーが「それで進めて」などと言った場合は確認せずに進めてください。]`;
+      }
 
-    const toolsUsed: string[] = [];
-    const collectedData: NonNullable<CoachResponse['data']> = {};
-    let totalTokens = 0;
+      const messages: ChatCompletionMessageParam[] = [
+        { role: 'system', content: systemPrompt + contextMessage },
+        ...conversationHistory.slice(-10).map(m => ({
+          role: m.role as 'user' | 'assistant',
+          content: m.content,
+        })),
+        { role: 'user', content: userMessage },
+      ];
 
-    // Allow up to 3 tool call iterations
-    for (let iteration = 0; iteration < 3; iteration++) {
-      const response = await this.openai.chat.completions.create({
+      const toolsUsed: string[] = [];
+      const collectedData: NonNullable<CoachResponse['data']> = {};
+      let totalTokens = 0;
+
+      // Allow up to 3 tool call iterations
+      for (let iteration = 0; iteration < 3; iteration++) {
+        const response = await this.openai.chat.completions.create({
+          model: this.model,
+          messages,
+          tools: COACH_TOOLS,
+          tool_choice: 'auto',
+          temperature: 0.7,
+          max_tokens: 1500,
+        });
+
+        totalTokens += response.usage?.total_tokens || 0;
+        const choice = response.choices[0];
+
+        if (!choice) {
+          break;
+        }
+
+        if (choice.finish_reason === 'tool_calls' && choice.message.tool_calls) {
+          // Process tool calls
+          messages.push(choice.message);
+
+          for (const toolCall of choice.message.tool_calls) {
+            if (toolCall.type !== 'function') continue;
+            
+            const toolName = toolCall.function.name;
+            let args: Record<string, unknown>;
+            try {
+              args = JSON.parse(toolCall.function.arguments || '{}') as Record<string, unknown>;
+            } catch {
+              args = {};
+            }
+            
+            toolsUsed.push(toolName);
+            logger.info('Executing tool', { toolName, args, userId: this.userId });
+
+            // Execute tool with error handling
+            const result = await this.executeToolSafely(toolName, args);
+            
+            // Store collected data
+            this.storeToolResult(collectedData, toolName, result);
+
+            messages.push({
+              role: 'tool',
+              tool_call_id: toolCall.id,
+              content: JSON.stringify(result),
+            });
+          }
+        } else {
+          // Final response
+          return {
+            message: choice.message.content || 'すみません、応答を生成できませんでした。',
+            toolsUsed,
+            tokensUsed: totalTokens,
+            data: Object.keys(collectedData).length > 0 ? collectedData : undefined,
+          };
+        }
+      }
+
+      // If we hit max iterations, get final response
+      const finalResponse = await this.openai.chat.completions.create({
         model: this.model,
         messages,
-        tools: COACH_TOOLS,
-        tool_choice: 'auto',
         temperature: 0.7,
-        max_tokens: 1500,
+        max_tokens: 1000,
       });
 
-      totalTokens += response.usage?.total_tokens || 0;
-      const choice = response.choices[0];
+      totalTokens += finalResponse.usage?.total_tokens || 0;
+      const finalChoice = finalResponse.choices[0];
 
-      if (!choice) {
-        break;
-      }
+      return {
+        message: finalChoice?.message.content || 'すみません、応答を生成できませんでした。',
+        toolsUsed,
+        tokensUsed: totalTokens,
+        data: Object.keys(collectedData).length > 0 ? collectedData : undefined,
+      };
+    } catch (error) {
+      // Handle errors gracefully
+      const errorResult = handleError(error);
+      logger.error(createErrorLogMessage(error, { userId: this.userId, userMessage }));
 
-      if (choice.finish_reason === 'tool_calls' && choice.message.tool_calls) {
-        // Process tool calls
-        messages.push(choice.message);
-
-        for (const toolCall of choice.message.tool_calls) {
-          if (toolCall.type !== 'function') continue;
-          
-          const toolName = toolCall.function.name;
-          const args = JSON.parse(toolCall.function.arguments || '{}') as Record<string, unknown>;
-          
-          toolsUsed.push(toolName);
-          logger.info('Executing tool', { toolName, args, userId: this.userId });
-
-          const result = await this.executeTool(toolName, args);
-          
-          // Store collected data
-          this.storeToolResult(collectedData, toolName, result);
-
-          messages.push({
-            role: 'tool',
-            tool_call_id: toolCall.id,
-            content: JSON.stringify(result),
-          });
-        }
-      } else {
-        // Final response
-        return {
-          message: choice.message.content || 'すみません、応答を生成できませんでした。',
-          toolsUsed,
-          tokensUsed: totalTokens,
-          data: Object.keys(collectedData).length > 0 ? collectedData : undefined,
-        };
-      }
+      return {
+        message: errorResult.userMessage,
+        toolsUsed: [],
+        tokensUsed: 0,
+      };
     }
+  }
 
-    // If we hit max iterations, get final response
-    const finalResponse = await this.openai.chat.completions.create({
-      model: this.model,
-      messages,
-      temperature: 0.7,
-      max_tokens: 1000,
-    });
+  /**
+   * Execute a tool safely with error handling
+   */
+  private async executeToolSafely(
+    toolName: string,
+    args: Record<string, unknown>
+  ): Promise<unknown> {
+    try {
+      return await this.executeTool(toolName, args);
+    } catch (error) {
+      logger.error(
+        'Tool execution failed',
+        error instanceof Error ? error : new Error(String(error)),
+        { toolName, userId: this.userId }
+      );
 
-    totalTokens += finalResponse.usage?.total_tokens || 0;
-    const finalChoice = finalResponse.choices[0];
-
-    return {
-      message: finalChoice?.message.content || 'すみません、応答を生成できませんでした。',
-      toolsUsed,
-      tokensUsed: totalTokens,
-      data: Object.keys(collectedData).length > 0 ? collectedData : undefined,
-    };
+      // Return fallback response for the tool
+      return {
+        error: true,
+        fallbackMessage: getToolFallbackResponse(toolName),
+      };
+    }
   }
 
   /**
@@ -571,6 +746,25 @@ export class AICoachService {
           args['preference'] as string | undefined
         );
 
+      // UIコンポーネント表示ツール
+      case 'render_ui_component':
+        return this.renderUIComponent(
+          args['component'] as string,
+          args['data'] as Record<string, unknown>
+        );
+
+      case 'show_habit_stats':
+        return this.showHabitStats(args['habit_name'] as string);
+
+      case 'show_choice_buttons':
+        return this.showChoiceButtons(
+          args['title'] as string,
+          args['choices'] as Array<{ id: string; label: string; icon?: string; description?: string }>
+        );
+
+      case 'show_workload_chart':
+        return this.showWorkloadChart(args['chart_type'] as string | undefined);
+
       default:
         return { error: `Unknown tool: ${toolName}` };
     }
@@ -607,6 +801,16 @@ export class AICoachService {
         break;
       case 'get_goal_progress':
         data.goalProgress = result as Record<string, unknown>;
+        break;
+      case 'render_ui_component':
+      case 'show_habit_stats':
+      case 'show_choice_buttons':
+      case 'show_workload_chart':
+        // UIコンポーネントデータを保存
+        if (!data.uiComponents) {
+          data.uiComponents = [];
+        }
+        data.uiComponents.push(result as Record<string, unknown>);
         break;
     }
   }
@@ -1275,6 +1479,156 @@ export class AICoachService {
       principle: '習慣ループの「報酬」は、行動を繰り返したくなる動機を作ります',
       tips: ['報酬は習慣の直後に与える', '最初は外発的報酬も有効、徐々に内発的報酬にシフト'],
       scienceNote: 'ドーパミンは報酬を「予期」する時に最も放出されます。',
+    };
+  }
+
+  // ============================================================================
+  // UIコンポーネント表示ツール
+  // ============================================================================
+
+  /**
+   * Render a UI component with specified data
+   */
+  private renderUIComponent(
+    component: string,
+    data: Record<string, unknown>
+  ): Record<string, unknown> {
+    return {
+      type: 'ui_component',
+      component,
+      data,
+      rendered: true,
+    };
+  }
+
+  /**
+   * Show habit statistics card
+   */
+  private async showHabitStats(habitName: string): Promise<Record<string, unknown>> {
+    const habits = await this.habitRepo.searchByName('user', this.userId, habitName, 1);
+    
+    if (habits.length === 0) {
+      return { error: `「${habitName}」という習慣が見つかりませんでした` };
+    }
+
+    const habit = habits[0];
+    if (!habit) {
+      return { error: `「${habitName}」という習慣が見つかりませんでした` };
+    }
+
+    const analysis = await this.analyzeHabits(30, [habit.id]);
+    const habitAnalysis = analysis[0];
+
+    // Calculate streak
+    const activities = await this.activityRepo.getHabitActivities(habit.id, 'complete', 60);
+    let streak = 0;
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    for (let i = 0; i < 60; i++) {
+      const checkDate = new Date(today);
+      checkDate.setDate(checkDate.getDate() - i);
+      const dateStr = checkDate.toISOString().split('T')[0];
+      
+      const hasActivity = activities.some(a => {
+        const actDate = new Date(a.timestamp).toISOString().split('T')[0];
+        return actDate === dateStr;
+      });
+
+      if (hasActivity) {
+        streak++;
+      } else if (i > 0) {
+        break;
+      }
+    }
+
+    // Get recent history for mini calendar
+    const recentHistory: Array<{ date: string; completed: boolean }> = [];
+    for (let i = 6; i >= 0; i--) {
+      const checkDate = new Date(today);
+      checkDate.setDate(checkDate.getDate() - i);
+      const dateStr = checkDate.toISOString().split('T')[0] || '';
+      
+      const hasActivity = activities.some(a => {
+        const actDate = new Date(a.timestamp).toISOString().split('T')[0];
+        return actDate === dateStr;
+      });
+
+      recentHistory.push({ date: dateStr, completed: hasActivity });
+    }
+
+    return {
+      type: 'ui_component',
+      component: 'habit_stats',
+      data: {
+        habitId: habit.id,
+        habitName: habit.name,
+        completionRate: habitAnalysis?.completionRate || 0,
+        trend: habitAnalysis?.trend || 'stable',
+        streak,
+        recentHistory,
+        frequency: habit.frequency,
+        targetCount: habit.target_count,
+        workloadUnit: habit.workload_unit,
+      },
+    };
+  }
+
+  /**
+   * Show choice buttons for user selection
+   */
+  private showChoiceButtons(
+    title: string,
+    choices: Array<{ id: string; label: string; icon?: string; description?: string }>
+  ): Record<string, unknown> {
+    // Limit to 5 choices
+    const limitedChoices = choices.slice(0, 5);
+
+    return {
+      type: 'ui_component',
+      component: 'choice_buttons',
+      data: {
+        title,
+        choices: limitedChoices.map(c => ({
+          id: c.id,
+          label: c.label,
+          icon: c.icon || '📌',
+          description: c.description,
+        })),
+      },
+    };
+  }
+
+  /**
+   * Show workload chart
+   */
+  private async showWorkloadChart(chartType?: string): Promise<Record<string, unknown>> {
+    const workload = await this.getWorkloadSummary();
+    const habits = await this.habitRepo.getByOwner('user', this.userId, true);
+    const activeHabits = habits.filter(h => h.active);
+
+    // Calculate breakdown by habit
+    const breakdown = activeHabits.map(habit => {
+      let minutes = habit.workload_per_count * 15;
+      if (habit.frequency === 'weekly') {
+        minutes = minutes / 7;
+      } else if (habit.frequency === 'monthly') {
+        minutes = minutes / 30;
+      }
+      return {
+        name: habit.name,
+        minutes: Math.round(minutes),
+      };
+    }).sort((a, b) => b.minutes - a.minutes).slice(0, 8);
+
+    return {
+      type: 'ui_component',
+      component: 'workload_chart',
+      data: {
+        ...workload,
+        breakdown,
+        chartType: chartType || 'bar',
+      },
     };
   }
 }
