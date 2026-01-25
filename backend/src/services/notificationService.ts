@@ -370,6 +370,18 @@ class NotificationServiceImpl implements NotificationService {
   }
 
   /**
+   * Normalize time string to HH:MM format (PostgreSQL TIME returns HH:MM:SS)
+   */
+  private normalizeTimeFormat(time: string | null | undefined, defaultValue: string): string {
+    if (!time) return defaultValue;
+    // If time is in HH:MM:SS format, extract HH:MM
+    if (time.length >= 5) {
+      return time.slice(0, 5);
+    }
+    return time;
+  }
+
+  /**
    * Get user's notification preferences
    */
   async getUserNotificationPreferences(userId: string): Promise<NotificationPreferences> {
@@ -395,12 +407,12 @@ class NotificationServiceImpl implements NotificationService {
         workloadCoaching: data.slack_workload_coaching ?? false,
         tokenWarning: data.slack_token_warning ?? true,
         weeklyReport: data.slack_weekly_report ?? true,
-        notificationTime: data.slack_notification_time ?? '09:00',
+        notificationTime: this.normalizeTimeFormat(data.slack_notification_time, '09:00'),
       },
       webPush: {
         enabled: data.web_push_enabled ?? false,
         dailyReminder: data.web_push_daily_reminder ?? false,
-        dailyReminderTime: data.web_push_daily_reminder_time ?? '08:00',
+        dailyReminderTime: this.normalizeTimeFormat(data.web_push_daily_reminder_time, '08:00'),
         workloadCoaching: data.web_push_workload_coaching ?? false,
       },
     };
@@ -470,9 +482,16 @@ class NotificationServiceImpl implements NotificationService {
       .upsert(updateData, { onConflict: 'user_id' });
 
     if (error) {
-      logger.error('Failed to update notification preferences', new Error(error.message), { userId });
-      throw new Error('Failed to update notification preferences');
+      logger.error('Failed to update notification preferences', new Error(error.message), { 
+        userId, 
+        errorCode: error.code,
+        errorDetails: error.details,
+        errorHint: error.hint
+      });
+      throw new Error(`Failed to update notification preferences: ${error.message}`);
     }
+    
+    logger.info('Notification preferences updated successfully', { userId });
   }
 
   /**

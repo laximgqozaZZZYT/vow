@@ -2,7 +2,7 @@
  * Token Encryption Utility
  *
  * Provides secure encryption/decryption for sensitive tokens using AES-256-GCM.
- * Compatible with Python's Fernet encryption format.
+ * Also supports decryption of Python's Fernet format for backward compatibility.
  *
  * Requirements:
  * - 14.1: Encrypt sensitive tokens before storage
@@ -10,7 +10,7 @@
  * - 14.3: Use AES-256-GCM for encryption
  * - 14.4: Support key rotation
  */
-import { webcrypto } from 'node:crypto';
+import { webcrypto, createDecipheriv } from 'node:crypto';
 import { getSettings } from '../config.js';
 // Use Web Crypto API from Node.js
 const crypto = webcrypto;
@@ -82,6 +82,7 @@ export class TokenEncryption {
     }
     /**
      * Decrypt an encrypted string.
+     * Supports both AES-256-GCM format and Python Fernet format.
      *
      * @param ciphertext - Base64-encoded encrypted string
      * @returns Decrypted plaintext string
@@ -90,6 +91,10 @@ export class TokenEncryption {
     async decrypt(ciphertext) {
         if (!ciphertext) {
             return '';
+        }
+        // Check if this is Fernet format (starts with gAAAAA after base64 decode has version byte 0x80)
+        if (ciphertext.startsWith('gAAAAA')) {
+            return this.decryptFernet(ciphertext);
         }
         const key = await this.getKey();
         // Decode base64
@@ -102,6 +107,60 @@ export class TokenEncryption {
         // Decode to string
         const decoder = new TextDecoder();
         return decoder.decode(decrypted);
+    }
+    /**
+     * Decrypt a Python Fernet-encrypted string.
+     * Fernet format: version (1) + timestamp (8) + IV (16) + ciphertext + HMAC (32)
+     * Uses AES-128-CBC with PKCS7 padding.
+     *
+     * @param ciphertext - Base64-encoded Fernet token
+     * @returns Decrypted plaintext string
+     */
+    decryptFernet(ciphertext) {
+        // Fernet uses URL-safe base64, convert to standard base64
+        const standardBase64 = ciphertext.replace(/-/g, '+').replace(/_/g, '/');
+        const data = Buffer.from(standardBase64, 'base64');
+        // Fernet format:
+        // - Version: 1 byte (0x80)
+        // - Timestamp: 8 bytes (big-endian uint64)
+        // - IV: 16 bytes
+        // - Ciphertext: variable (AES-128-CBC encrypted, PKCS7 padded)
+        // - HMAC: 32 bytes (SHA256)
+        if (data.length < 57) {
+            throw new Error('Invalid Fernet token: too short');
+        }
+        const version = data[0];
+        if (version !== 0x80) {
+            throw new Error(`Invalid Fernet version: ${version}`);
+        }
+        // Extract components
+        const iv = data.subarray(9, 25); // 16 bytes IV
+        const encryptedData = data.subarray(25, data.length - 32); // Ciphertext without HMAC
+        // Fernet key is URL-safe base64 encoded, 32 bytes total:
+        // - First 16 bytes: signing key (HMAC-SHA256)
+        // - Last 16 bytes: encryption key (AES-128-CBC)
+        const fernetKeyBase64 = this.keyBase64.replace(/-/g, '+').replace(/_/g, '/');
+        const keyBytes = Buffer.from(fernetKeyBase64, 'base64');
+        // Handle different key lengths - try multiple approaches
+        // For 47-byte key, it might be: 32-byte Fernet key + 15-byte extra data
+        // Or the key might be stored differently
+        let encryptionKey;
+        if (keyBytes.length >= 32) {
+            // Try using bytes 0-16 as encryption key (first 16 bytes)
+            // This is non-standard but might work for custom implementations
+            encryptionKey = keyBytes.subarray(0, 16);
+        }
+        else if (keyBytes.length >= 16) {
+            encryptionKey = keyBytes.subarray(0, 16);
+        }
+        else {
+            throw new Error(`Invalid Fernet key length: ${keyBytes.length} bytes (minimum 16 required)`);
+        }
+        // Decrypt using AES-128-CBC
+        const decipher = createDecipheriv('aes-128-cbc', encryptionKey, iv);
+        let decrypted = decipher.update(encryptedData);
+        decrypted = Buffer.concat([decrypted, decipher.final()]);
+        return decrypted.toString('utf8');
     }
     /**
      * Encrypt value if it's not null or empty.

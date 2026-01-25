@@ -1,14 +1,37 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import api from "../../lib/api";
 import { supabase } from "../../lib/supabaseClient";
+
+// 開発環境で許可されるメールアドレス（環境変数から取得）
+const ALLOWED_EMAILS_DEV = process.env.NEXT_PUBLIC_ALLOWED_EMAILS_DEV?.split(',').map(e => e.trim().toLowerCase()) || [];
+const IS_DEV_ENV = process.env.NEXT_PUBLIC_ENV === 'development';
 
 export default function LoginPage() {
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+
+  // 開発環境でのアクセス制限チェック
+  useEffect(() => {
+    const checkDevAccess = async () => {
+      if (!IS_DEV_ENV || !supabase) return;
+      
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session?.user?.email) {
+        const userEmail = session.user.email.toLowerCase();
+        if (ALLOWED_EMAILS_DEV.length > 0 && !ALLOWED_EMAILS_DEV.includes(userEmail)) {
+          // 許可されていないメールアドレスの場合、ログアウト
+          await supabase.auth.signOut();
+          setError('この開発環境へのアクセスは許可されていません。');
+        }
+      }
+    };
+    
+    checkDevAccess();
+  }, []);
 
   async function doLogout() {
     setError(null);

@@ -21,6 +21,11 @@ import { createSlackCommandsRouter } from './routers/slackCommands.js';
 import { createSlackInteractionsRouter } from './routers/slackInteractions.js';
 import { widgetRouter } from './routers/widgets.js';
 import { apiKeyRouter } from './routers/apiKeys.js';
+import { subscriptionRouter } from './routers/subscription.js';
+import { aiRouter } from './routers/ai.js';
+import { coachingRouter } from './routers/coaching.js';
+import { noticesRouter } from './routers/notices.js';
+import { notificationsRouter } from './routers/notifications.js';
 // Error handling imports
 import { AppError, getUserFriendlyMessage } from './errors/index.js';
 import { getLogger } from './utils/logger.js';
@@ -46,6 +51,8 @@ export function createApp() {
     // Widget endpoints use API key authentication instead of JWT
     // This must be done before the JWT middleware is applied
     addExcludedPath('/api/widgets');
+    // Stripe webhook endpoint uses signature verification instead of JWT
+    addExcludedPath('/api/subscription/webhooks/stripe');
     // ---------------------------------------------------------------------------
     // Global Middleware
     // ---------------------------------------------------------------------------
@@ -155,6 +162,36 @@ export function createApp() {
     // Note: Uses JWT authentication for user management
     // Requirements: 1.1, 1.3, 1.4
     app.route('/api/api-keys', apiKeyRouter);
+    // Subscription router - mounted at /api/subscription
+    // Endpoints: /api/subscription/checkout, /api/subscription/status,
+    //            /api/subscription/portal, /api/subscription/cancel,
+    //            /api/subscription/webhooks/stripe
+    // Requirements: 1.4, 2.1, 2.2, 2.3, 2.4, 2.5, 2.8, 2.9, 2.10
+    app.route('/api/subscription', subscriptionRouter);
+    // AI router - mounted at /api/ai
+    // Endpoints: /api/ai/parse-habit, /api/ai/edit-habit
+    // Note: Requires Premium subscription
+    // Requirements: 3.1, 3.6, 4.1
+    app.route('/api/ai', aiRouter);
+    // Coaching router - mounted at /api/coaching
+    // Endpoints: /api/coaching/proposals, /api/coaching/apply/:id,
+    //            /api/coaching/dismiss/:id, /api/coaching/snooze/:id,
+    //            /api/coaching/recovery/:habitId
+    // Note: Workload coaching is available for all users (rule-based, not AI)
+    // Requirements: 10.3, 10.4
+    app.route('/api/coaching', coachingRouter);
+    // Notices router - mounted at /api/notices
+    // Endpoints: /api/notices, /api/notices/unread-count, /api/notices/:id/read,
+    //            /api/notices/read-all, /api/notices/:id
+    // Note: In-app notification management
+    // Requirements: 12.1, 12.2
+    app.route('/api/notices', noticesRouter);
+    // Notifications router - mounted at /api/notifications
+    // Endpoints: /api/notifications/preferences, /api/notifications/push-subscription,
+    //            /api/notifications/push-subscriptions
+    // Note: Notification preferences and Web Push subscription management
+    // Requirements: 12.4
+    app.route('/api/notifications', notificationsRouter);
     logger.info('Application initialized', {
         version: settings.appVersion,
         debug: settings.debug,

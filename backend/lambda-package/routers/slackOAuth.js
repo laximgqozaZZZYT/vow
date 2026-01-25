@@ -241,13 +241,22 @@ function generateState() {
     return Array.from(array, (byte) => byte.toString(16).padStart(2, '0')).join('');
 }
 /**
- * Get Supabase client instance.
+ * Get Supabase client instance with service role for backend operations.
+ * Uses service role key to bypass RLS policies.
  */
 function getSupabaseClient(settings) {
-    if (!settings.supabaseUrl || !settings.supabaseAnonKey) {
-        throw new Error('Supabase is not configured');
+    if (!settings.supabaseUrl) {
+        throw new Error('Supabase URL is not configured');
     }
-    return createClient(settings.supabaseUrl, settings.supabaseAnonKey);
+    // Prefer service role key for backend operations (bypasses RLS)
+    if (settings.supabaseServiceRoleKey) {
+        return createClient(settings.supabaseUrl, settings.supabaseServiceRoleKey);
+    }
+    // Fallback to anon key if service role key is not available
+    if (settings.supabaseAnonKey) {
+        return createClient(settings.supabaseUrl, settings.supabaseAnonKey);
+    }
+    throw new Error('Supabase is not configured: no API key available');
 }
 /**
  * Build error redirect URL.
@@ -536,22 +545,35 @@ export function createSlackOAuthRouter() {
         catch {
             return c.json({ error: 'Not authenticated' }, 401);
         }
+        logger.info('Slack test: Getting connection', { userId: currentUser.id, userType: currentUser.type });
         // Get connection
         const connection = await slackRepo.getConnectionWithTokens(currentUser.type, currentUser.id);
         if (!connection) {
+            logger.warning('Slack test: No connection found', { userId: currentUser.id });
             return c.json({ error: 'No Slack connection found' }, 404);
         }
+        logger.info('Slack test: Connection found', {
+            userId: currentUser.id,
+            isValid: connection['is_valid'],
+            hasAccessToken: !!connection['access_token'],
+            slackUserId: connection['slack_user_id']
+        });
         if (!connection['is_valid']) {
             return c.json({ error: 'Slack connection is invalid' }, 400);
         }
         try {
+            logger.info('Slack test: Decrypting token');
             const token = await decryptToken(connection['access_token']);
+            logger.info('Slack test: Token decrypted', { tokenLength: token.length, tokenPrefix: token.substring(0, 10) });
             const slackUserId = connection['slack_user_id'];
             // Get DM channel
+            logger.info('Slack test: Getting DM channel', { slackUserId });
             const channel = await slackService.getUserDmChannel(token, slackUserId);
             if (!channel) {
+                logger.warning('Slack test: Could not open DM channel', { slackUserId });
                 return c.json({ error: 'Could not open DM channel' }, 400);
             }
+            logger.info('Slack test: Sending message', { channel });
             // Send test message
             const message = {
                 channel,
@@ -568,13 +590,16 @@ export function createSlackOAuthRouter() {
             };
             const response = await slackService.sendMessage(token, message);
             if (response.ok) {
+                logger.info('Slack test: Message sent successfully');
                 return c.json({ success: true, message: 'Test message sent!' });
             }
             else {
+                logger.warning('Slack test: Failed to send message', { error: response.error });
                 return c.json({ error: `Failed to send message: ${response.error}` }, 400);
             }
         }
         catch (e) {
+            logger.error('Slack test: Error', e instanceof Error ? e : new Error(String(e)));
             return c.json({ error: e.message }, 500);
         }
     });

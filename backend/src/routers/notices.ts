@@ -36,7 +36,7 @@ noticesRouter.get('/', async (c: Context<{ Variables: AuthContext }>) => {
     return c.json({ error: 'Unauthorized' }, 401);
   }
 
-  const userId = user['id'] as string;
+  const userId = user.sub;
   const unreadOnly = c.req.query('unreadOnly') === 'true';
   const type = c.req.query('type');
   const limit = parseInt(c.req.query('limit') || '50', 10);
@@ -80,7 +80,7 @@ noticesRouter.get('/unread-count', async (c: Context<{ Variables: AuthContext }>
     return c.json({ error: 'Unauthorized' }, 401);
   }
 
-  const userId = user['id'] as string;
+  const userId = user.sub;
 
   try {
     const supabase = getSupabaseClient();
@@ -112,7 +112,7 @@ noticesRouter.patch(
       return c.json({ error: 'Unauthorized' }, 401);
     }
 
-    const userId = user['id'] as string;
+    const userId = user.sub;
     const noticeId = c.req.param('id');
 
     try {
@@ -139,7 +139,7 @@ noticesRouter.post('/read-all', async (c: Context<{ Variables: AuthContext }>) =
     return c.json({ error: 'Unauthorized' }, 401);
   }
 
-  const userId = user['id'] as string;
+  const userId = user.sub;
 
   try {
     const supabase = getSupabaseClient();
@@ -167,7 +167,7 @@ noticesRouter.delete(
       return c.json({ error: 'Unauthorized' }, 401);
     }
 
-    const userId = user['id'] as string;
+    const userId = user.sub;
     const noticeId = c.req.param('id');
 
     try {

@@ -38,6 +38,11 @@ declare const envSchema: z.ZodObject<{
     OPENAI_ENABLED: z.ZodDefault<z.ZodEffects<z.ZodString, boolean, string>>;
     OPENAI_MODEL: z.ZodDefault<z.ZodString>;
     OPENAI_MAX_REQUESTS_PER_MINUTE: z.ZodDefault<z.ZodEffects<z.ZodString, number, string>>;
+    STRIPE_SECRET_KEY: z.ZodOptional<z.ZodString>;
+    STRIPE_WEBHOOK_SECRET: z.ZodOptional<z.ZodString>;
+    STRIPE_PRICE_ID_BASIC: z.ZodOptional<z.ZodString>;
+    STRIPE_PRICE_ID_PRO: z.ZodOptional<z.ZodString>;
+    ADMIN_EMAILS: z.ZodOptional<z.ZodString>;
 }, "strip", z.ZodTypeAny, {
     APP_NAME: string;
     APP_VERSION: string;
@@ -66,6 +71,11 @@ declare const envSchema: z.ZodObject<{
     SLACK_CALLBACK_URI?: string | undefined;
     TOKEN_ENCRYPTION_KEY?: string | undefined;
     OPENAI_API_KEY?: string | undefined;
+    STRIPE_SECRET_KEY?: string | undefined;
+    STRIPE_WEBHOOK_SECRET?: string | undefined;
+    STRIPE_PRICE_ID_BASIC?: string | undefined;
+    STRIPE_PRICE_ID_PRO?: string | undefined;
+    ADMIN_EMAILS?: string | undefined;
 }, {
     APP_NAME?: string | undefined;
     APP_VERSION?: string | undefined;
@@ -94,6 +104,11 @@ declare const envSchema: z.ZodObject<{
     OPENAI_ENABLED?: string | undefined;
     OPENAI_MODEL?: string | undefined;
     OPENAI_MAX_REQUESTS_PER_MINUTE?: string | undefined;
+    STRIPE_SECRET_KEY?: string | undefined;
+    STRIPE_WEBHOOK_SECRET?: string | undefined;
+    STRIPE_PRICE_ID_BASIC?: string | undefined;
+    STRIPE_PRICE_ID_PRO?: string | undefined;
+    ADMIN_EMAILS?: string | undefined;
 }>;
 /**
  * Parsed and validated environment variables type.
@@ -131,6 +146,11 @@ export interface Settings {
     openaiEnabled: boolean;
     openaiModel: string;
     openaiMaxRequestsPerMinute: number;
+    stripeSecretKey: string | undefined;
+    stripeWebhookSecret: string | undefined;
+    stripePriceIdBasic: string | undefined;
+    stripePriceIdPro: string | undefined;
+    adminEmails: string[];
 }
 /**
  * Validate required settings on startup.

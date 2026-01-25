@@ -11,6 +11,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { SubscriptionRepository } from '../repositories/subscriptionRepository.js';
 import { TokenQuotaRepository } from '../repositories/tokenRepository.js';
 import { getLogger } from '../utils/logger.js';
+import { getAdminService } from './adminService.js';
 import type {
   SubscriptionInfo,
   PlanType,
@@ -40,6 +41,7 @@ export class SubscriptionService {
   private readonly stripe: Stripe;
   private readonly subscriptionRepo: SubscriptionRepository;
   private readonly tokenQuotaRepo: TokenQuotaRepository;
+  private readonly supabase: SupabaseClient;
 
   constructor(supabase: SupabaseClient) {
     const stripeSecretKey = process.env['STRIPE_SECRET_KEY'];
@@ -51,6 +53,7 @@ export class SubscriptionService {
     this.stripe = new Stripe(stripeSecretKey, {
       apiVersion: '2025-02-24.acacia',
     });
+    this.supabase = supabase;
     this.subscriptionRepo = new SubscriptionRepository(supabase);
     this.tokenQuotaRepo = new TokenQuotaRepository(supabase);
   }
@@ -356,8 +359,19 @@ export class SubscriptionService {
 
   /**
    * Check if a user has premium access.
+   * Admins always have premium access without subscription.
+   *
+   * Requirements: 13.2
    */
-  async hasPremiumAccess(userId: string): Promise<boolean> {
+  async hasPremiumAccess(userId: string, userEmail?: string): Promise<boolean> {
+    // Check admin status first - admins always have premium access
+    const adminService = getAdminService(this.supabase);
+    const isAdmin = await adminService.isAdmin(userId, userEmail);
+    if (isAdmin) {
+      logger.info('Premium access granted to admin', { userId });
+      return true;
+    }
+
     const subscription = await this.subscriptionRepo.getByUserId(userId);
     if (!subscription) {
       return false;
@@ -371,8 +385,19 @@ export class SubscriptionService {
 
   /**
    * Check if a user has access to a specific feature.
+   * Admins have access to all features.
+   *
+   * Requirements: 13.2
    */
-  async hasFeatureAccess(userId: string, feature: string): Promise<boolean> {
+  async hasFeatureAccess(userId: string, feature: string, userEmail?: string): Promise<boolean> {
+    // Check admin status first - admins have access to all features
+    const adminService = getAdminService(this.supabase);
+    const isAdmin = await adminService.isAdmin(userId, userEmail);
+    if (isAdmin) {
+      logger.info('Feature access granted to admin', { userId, feature });
+      return true;
+    }
+
     const subscription = await this.subscriptionRepo.getByUserId(userId);
     const planType = subscription?.plan_type ?? 'free';
     const planConfig = PLAN_CONFIG[planType];

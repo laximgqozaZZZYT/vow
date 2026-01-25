@@ -16,6 +16,7 @@ import DiarySection from './components/Section.Diary';
 import StickiesSection from './components/Section.Stickies';
 import MindmapSection from './components/Section.Mindmap';
 import NoticeSection from './components/Section.Notice';
+import CoachSection from './components/Section.Coach';
 
 // Extracted components
 import DashboardHeader from './components/Layout.Header';
@@ -755,6 +756,20 @@ function DashboardLayout(props: any) {
                     // Open goal modal with suggestions
                     setEditingGoalId(notice.actionPayload.goalId);
                     setOpenGoalModal(true);
+                  }
+                }}
+              />
+            ) : sec === 'coach' ? (
+              <CoachSection
+                key="coach"
+                goals={goals}
+                onHabitCreated={async () => {
+                  // Reload data after habit creation
+                  try {
+                    const hs = await api.getHabits();
+                    setHabits(hs || []);
+                  } catch (e) {
+                    console.error('Failed to reload habits', e);
                   }
                 }}
               />

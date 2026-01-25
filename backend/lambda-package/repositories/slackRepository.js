@@ -160,59 +160,56 @@ export class SlackRepository {
     // ========================================================================
     /**
      * Get Slack notification preferences.
+     * Note: notification_preferences table uses user_id column (not owner_type/owner_id)
      */
-    async getPreferences(ownerType, ownerId) {
+    async getPreferences(_ownerType, ownerId) {
         const { data, error } = await this.supabase
             .from('notification_preferences')
-            .select('slack_notifications_enabled, weekly_slack_report_enabled, weekly_report_day, weekly_report_time')
-            .eq('owner_type', ownerType)
-            .eq('owner_id', ownerId)
+            .select('slack_enabled, slack_weekly_report, slack_notification_time')
+            .eq('user_id', ownerId)
             .single();
         if (error || !data) {
             return null;
         }
         return {
-            slack_notifications_enabled: data['slack_notifications_enabled'] ?? false,
-            weekly_slack_report_enabled: data['weekly_slack_report_enabled'] ?? false,
-            weekly_report_day: data['weekly_report_day'] ?? 0,
-            weekly_report_time: String(data['weekly_report_time'] ?? '09:00'),
+            slack_notifications_enabled: data['slack_enabled'] ?? false,
+            weekly_slack_report_enabled: data['slack_weekly_report'] ?? false,
+            weekly_report_day: 0, // Not stored in new schema, default to Sunday
+            weekly_report_time: String(data['slack_notification_time'] ?? '09:00'),
         };
     }
     /**
      * Update Slack notification preferences.
+     * Note: notification_preferences table uses user_id column (not owner_type/owner_id)
      */
-    async updatePreferences(ownerType, ownerId, preferences) {
+    async updatePreferences(_ownerType, ownerId, preferences) {
         const updates = {};
         if (preferences.slack_notifications_enabled !== undefined) {
-            updates['slack_notifications_enabled'] = preferences.slack_notifications_enabled;
+            updates['slack_enabled'] = preferences.slack_notifications_enabled;
         }
         if (preferences.weekly_slack_report_enabled !== undefined) {
-            updates['weekly_slack_report_enabled'] = preferences.weekly_slack_report_enabled;
-        }
-        if (preferences.weekly_report_day !== undefined) {
-            updates['weekly_report_day'] = preferences.weekly_report_day;
+            updates['slack_weekly_report'] = preferences.weekly_slack_report_enabled;
         }
         if (preferences.weekly_report_time !== undefined) {
-            updates['weekly_report_time'] = preferences.weekly_report_time;
+            updates['slack_notification_time'] = preferences.weekly_report_time;
         }
         const data = {
-            owner_type: ownerType,
-            owner_id: ownerId,
+            user_id: ownerId,
             ...updates,
         };
         const { data: result, error } = await this.supabase
             .from('notification_preferences')
-            .upsert(data, { onConflict: 'owner_type,owner_id' })
+            .upsert(data, { onConflict: 'user_id' })
             .select()
             .single();
         if (error || !result) {
             throw new Error(`Failed to update preferences: ${error?.message ?? 'Unknown error'}`);
         }
         return {
-            slack_notifications_enabled: result['slack_notifications_enabled'] ?? false,
-            weekly_slack_report_enabled: result['weekly_slack_report_enabled'] ?? false,
-            weekly_report_day: result['weekly_report_day'] ?? 0,
-            weekly_report_time: String(result['weekly_report_time'] ?? '09:00'),
+            slack_notifications_enabled: result['slack_enabled'] ?? false,
+            weekly_slack_report_enabled: result['slack_weekly_report'] ?? false,
+            weekly_report_day: 0, // Not stored in new schema, default to Sunday
+            weekly_report_time: String(result['slack_notification_time'] ?? '09:00'),
         };
     }
     // ========================================================================

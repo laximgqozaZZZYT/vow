@@ -30,6 +30,7 @@ import { DailyProgressCalculator } from '../services/dailyProgressCalculator.js'
 import { DashboardDataService } from '../services/dashboardDataService.js';
 import { SlackBlockBuilder } from '../services/slackBlockBuilder.js';
 import { DataFetchError, getUserFriendlyMessage } from '../errors/index.js';
+import { getConnectorService } from '../services/connectorService.js';
 const logger = getLogger('slackCommands');
 // =============================================================================
 // Helper Functions
@@ -468,6 +469,73 @@ async function handleStickies(dashboardService, slackService, ownerId, ownerType
     }
 }
 // =============================================================================
+// Natural Language Command Handler
+// =============================================================================
+/**
+ * Handle /habit-nl and /nl commands.
+ *
+ * Processes natural language input for habit creation/editing.
+ * Requirements: 6.1, 6.2, 6.3, 6.5, 6.6
+ */
+async function handleNLCommand(slackService, ownerId, ownerType, text, responseUrl, supabase) {
+    try {
+        if (!text.trim()) {
+            // Show help if no text provided
+            const helpBlocks = [
+                {
+                    type: 'section',
+                    text: {
+                        type: 'mrkdwn',
+                        text: '*🤖 自然言語コマンドの使い方*',
+                    },
+                },
+                {
+                    type: 'section',
+                    text: {
+                        type: 'mrkdwn',
+                        text: '*習慣を追加:*\n`/habit-nl 新しい習慣: 毎朝7時に30分ジョギング`\n`/nl 習慣登録: 毎日水を2L飲む`',
+                    },
+                },
+                {
+                    type: 'section',
+                    text: {
+                        type: 'mrkdwn',
+                        text: '*習慣を編集:*\n`/habit-nl 習慣を編集: ジョギングを45分に変更`\n`/nl 習慣を変更: 読書の時間を夜9時に`',
+                    },
+                },
+                {
+                    type: 'context',
+                    elements: [
+                        {
+                            type: 'mrkdwn',
+                            text: '💎 _この機能はPremiumプランでのみ利用可能です_',
+                        },
+                    ],
+                },
+            ];
+            await slackService.sendResponse(responseUrl, '自然言語コマンドの使い方', helpBlocks, false);
+            return;
+        }
+        const connectorService = getConnectorService(supabase);
+        const result = await connectorService.handleSlackNLCommand(ownerId, text, ownerType);
+        await slackService.sendResponse(responseUrl, result.text, result.blocks, false);
+        logger.info('NL command processed via slash command', {
+            owner_id: ownerId,
+            owner_type: ownerType,
+            success: result.success,
+            tokensUsed: result.tokensUsed,
+        });
+    }
+    catch (error) {
+        logger.error('NL command error', error instanceof Error ? error : new Error(String(error)), {
+            owner_id: ownerId,
+            owner_type: ownerType,
+        });
+        const errorMessage = getUserFriendlyMessage(error);
+        await slackService.sendResponse(responseUrl, errorMessage, SlackBlockBuilder.dashboardError(errorMessage), false);
+    }
+}
+// =============================================================================
 // Router Factory
 // =============================================================================
 /**
@@ -649,6 +717,22 @@ export function createSlackCommandsRouter() {
                         });
                     }
                     return c.body(null, 200);
+                case '/habit-nl':
+                case '/nl':
+                    // Natural language command handler
+                    await handleNLCommand(slackService, ownerId, ownerType, payload.text, payload.response_url, supabase);
+                    {
+                        const processingTime = Date.now() - startTime;
+                        logger.info('Slack command completed', {
+                            command: payload.command,
+                            processing_time_ms: processingTime,
+                            result_status: resultStatus,
+                            slack_user_id: payload.user_id,
+                            owner_id: ownerId,
+                            owner_type: ownerType,
+                        });
+                    }
+                    return c.body(null, 200);
                 default:
                     result = {
                         response_type: 'ephemeral',
@@ -719,9 +803,57 @@ export function createSlackCommandsRouter() {
         // Handle events
         const event = payload['event'];
         const eventType = event?.['type'];
-        if (eventType === 'app_mention') {
-            // Handle app mentions if needed
-            logger.info('App mention received', { event });
+        const eventSettings = getSettings();
+        if (eventType === 'app_mention' || eventType === 'message') {
+            // Handle app mentions and direct messages for NL commands
+            const text = event?.['text'];
+            const slackUserId = event?.['user'];
+            const channel = event?.['channel'];
+            const teamId = payload['team_id'];
+            if (text && slackUserId && channel) {
+                // Remove bot mention from text if present
+                const cleanText = text.replace(/<@[A-Z0-9]+>/g, '').trim();
+                // Check if this looks like a NL command
+                const supabaseClient = getSupabaseClient(eventSettings);
+                const connectorService = getConnectorService(supabaseClient);
+                const detection = connectorService.detectNLCommand(cleanText);
+                if (detection.isNLCommand) {
+                    logger.info('NL command detected in event', {
+                        eventType,
+                        slackUserId,
+                        commandType: detection.commandType,
+                    });
+                    // Get VOW user from Slack user ID
+                    const slackRepo = new SlackRepository(supabaseClient);
+                    const connection = await slackRepo.getConnectionBySlackUser(slackUserId, teamId || '');
+                    if (connection) {
+                        const ownerId = connection.owner_id;
+                        const ownerType = connection.owner_type;
+                        // Process NL command
+                        const result = await connectorService.handleSlackNLCommand(ownerId, cleanText, ownerType);
+                        // Send response via Slack API
+                        const eventSlackService = getSlackService();
+                        const botToken = process.env['SLACK_BOT_TOKEN'];
+                        if (botToken) {
+                            await eventSlackService.sendMessage(botToken, {
+                                channel,
+                                text: result.text,
+                                blocks: result.blocks,
+                            });
+                        }
+                        logger.info('NL command processed', {
+                            slackUserId,
+                            ownerId,
+                            success: result.success,
+                            tokensUsed: result.tokensUsed,
+                        });
+                    }
+                    else {
+                        // User not connected
+                        logger.info('NL command from unconnected user', { slackUserId });
+                    }
+                }
+            }
         }
         return c.json({ ok: true });
     });

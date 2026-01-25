@@ -699,5 +699,126 @@ export class SlackBlockBuilder {
         }
         return blocks;
     }
+    // ========================================================================
+    // Workload Coaching Messages
+    // ========================================================================
+    /**
+     * Build workload coaching proposal notification.
+     *
+     * Formats coaching proposal with accept/dismiss/snooze buttons.
+     *
+     * Requirements: 12.2 - Workload coaching Slack notification
+     *
+     * @param proposal - Coaching proposal data
+     * @returns List of Block Kit blocks
+     */
+    static coachingProposal(proposal) {
+        const blocks = [];
+        // Header with emoji based on type
+        const emoji = proposal.type === 'workload_adjustment' ? '💪' : '🌱';
+        const title = proposal.type === 'workload_adjustment'
+            ? 'ワークロード調整の提案'
+            : 'ベビーステップの提案';
+        blocks.push(SlackBlockBuilder.header(`${emoji} ${title}`));
+        // Habit name and message
+        blocks.push(SlackBlockBuilder.section(`*${proposal.habitName}*\n${proposal.message}`));
+        // Current vs proposed
+        const unit = proposal.workloadUnit || '回';
+        const changeText = `*現在:* ${proposal.currentTargetCount}${unit}/日 → *提案:* ${proposal.proposedTargetCount}${unit}/日`;
+        blocks.push(SlackBlockBuilder.section(changeText));
+        blocks.push(SlackBlockBuilder.divider());
+        // Action buttons
+        blocks.push(SlackBlockBuilder.actions([
+            SlackBlockBuilder.button('承認する', `coaching_accept_${proposal.id}`, proposal.id, 'primary'),
+            SlackBlockBuilder.button('後で', `coaching_snooze_${proposal.id}`, proposal.id),
+            SlackBlockBuilder.button('拒否', `coaching_dismiss_${proposal.id}`, proposal.id, 'danger'),
+        ]));
+        return blocks;
+    }
+    /**
+     * Build recovery proposal notification.
+     *
+     * Formats recovery proposal with accept/dismiss buttons.
+     *
+     * Requirements: 12.2 - Recovery proposal Slack notification
+     *
+     * @param proposal - Recovery proposal data
+     * @returns List of Block Kit blocks
+     */
+    static recoveryProposal(proposal) {
+        const blocks = [];
+        // Header
+        const emoji = proposal.type === 'full_recovery' ? '🎉' : '📈';
+        const title = proposal.type === 'full_recovery'
+            ? '完全回復の提案'
+            : '段階的回復の提案';
+        blocks.push(SlackBlockBuilder.header(`${emoji} ${title}`));
+        // Habit name and message
+        blocks.push(SlackBlockBuilder.section(`*${proposal.habitName}*\n${proposal.message}`));
+        // Progress info
+        const unit = proposal.workloadUnit || '回';
+        const progressText = `🔥 *${proposal.consecutiveSuccessDays}日連続達成！*\n` +
+            `*現在:* ${proposal.currentTargetCount}${unit}/日 → *提案:* ${proposal.proposedTargetCount}${unit}/日\n` +
+            `_(元の目標: ${proposal.originalTargetCount}${unit}/日)_`;
+        blocks.push(SlackBlockBuilder.section(progressText));
+        blocks.push(SlackBlockBuilder.divider());
+        // Action buttons
+        blocks.push(SlackBlockBuilder.actions([
+            SlackBlockBuilder.button('回復する', `recovery_accept_${proposal.id}`, proposal.id, 'primary'),
+            SlackBlockBuilder.button('今のままで', `recovery_dismiss_${proposal.id}`, proposal.id),
+        ]));
+        return blocks;
+    }
+    /**
+     * Build token warning notification.
+     *
+     * @param percentage - Current usage percentage (70, 90, or 100)
+     * @param remainingTokens - Remaining tokens
+     * @param resetDate - Date when quota resets
+     * @param upgradeUrl - URL to upgrade page
+     * @returns List of Block Kit blocks
+     */
+    static tokenWarning(percentage, remainingTokens, resetDate, upgradeUrl) {
+        const blocks = [];
+        // Header with appropriate emoji
+        let emoji;
+        let title;
+        let message;
+        if (percentage >= 100) {
+            emoji = '🚫';
+            title = 'トークン上限に達しました';
+            message = 'AI機能を引き続きご利用いただくには、プランのアップグレードをご検討ください。';
+        }
+        else if (percentage >= 90) {
+            emoji = '⚠️';
+            title = 'トークン残量が少なくなっています';
+            message = `残り${remainingTokens.toLocaleString()}トークンです。${resetDate}にリセットされます。`;
+        }
+        else {
+            emoji = '📊';
+            title = 'トークン使用状況';
+            message = `${percentage}%使用済み。残り${remainingTokens.toLocaleString()}トークンです。`;
+        }
+        blocks.push(SlackBlockBuilder.header(`${emoji} ${title}`));
+        blocks.push(SlackBlockBuilder.section(message));
+        // Progress bar
+        const progressBar = SlackBlockBuilder.progressBar(percentage);
+        blocks.push(SlackBlockBuilder.section(`\`${progressBar}\` ${percentage}%`));
+        blocks.push(SlackBlockBuilder.divider());
+        // Upgrade button
+        blocks.push(SlackBlockBuilder.actions([
+            {
+                type: 'button',
+                text: {
+                    type: 'plain_text',
+                    text: 'プランを確認',
+                    emoji: true,
+                },
+                url: upgradeUrl,
+                action_id: 'view_plans',
+            },
+        ]));
+        return blocks;
+    }
 }
 //# sourceMappingURL=slackBlockBuilder.js.map

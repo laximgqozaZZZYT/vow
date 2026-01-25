@@ -57,12 +57,14 @@ export declare class SlackRepository {
     getValidConnectionsForReports(_reportDay: number, _reportTime: string): Promise<SlackConnection[]>;
     /**
      * Get Slack notification preferences.
+     * Note: notification_preferences table uses user_id column (not owner_type/owner_id)
      */
-    getPreferences(ownerType: string, ownerId: string): Promise<SlackPreferencesResponse | null>;
+    getPreferences(_ownerType: string, ownerId: string): Promise<SlackPreferencesResponse | null>;
     /**
      * Update Slack notification preferences.
+     * Note: notification_preferences table uses user_id column (not owner_type/owner_id)
      */
-    updatePreferences(ownerType: string, ownerId: string, preferences: SlackPreferencesUpdate): Promise<SlackPreferencesResponse>;
+    updatePreferences(_ownerType: string, ownerId: string, preferences: SlackPreferencesUpdate): Promise<SlackPreferencesResponse>;
     /**
      * Get follow-up status for a habit on a specific date.
      */

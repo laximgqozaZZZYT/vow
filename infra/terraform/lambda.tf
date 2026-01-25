@@ -106,8 +106,15 @@ resource "aws_lambda_function" "api" {
       TOKEN_ENCRYPTION_KEY = var.token_encryption_key
       
       # Supabase
-      SUPABASE_URL      = var.supabase_url
-      SUPABASE_ANON_KEY = var.supabase_anon_key
+      SUPABASE_URL              = var.supabase_url
+      SUPABASE_ANON_KEY         = var.supabase_anon_key
+      SUPABASE_SERVICE_ROLE_KEY = var.supabase_service_role_key
+      
+      # Stripe Integration
+      STRIPE_SECRET_KEY     = var.stripe_secret_key
+      STRIPE_WEBHOOK_SECRET = var.stripe_webhook_secret
+      STRIPE_PRICE_ID_BASIC = var.stripe_price_id_basic
+      STRIPE_PRICE_ID_PRO   = var.stripe_price_id_pro
       
       # Frontend URL
       FRONTEND_URL = var.frontend_url
@@ -162,6 +169,20 @@ resource "aws_lambda_function" "hono_api" {
       SLACK_CLIENT_SECRET  = var.slack_client_secret
       SLACK_SIGNING_SECRET = var.slack_signing_secret
       TOKEN_ENCRYPTION_KEY = var.token_encryption_key
+      
+      # Stripe Integration
+      STRIPE_SECRET_KEY      = var.stripe_secret_key
+      STRIPE_WEBHOOK_SECRET  = var.stripe_webhook_secret
+      STRIPE_PRICE_ID_BASIC  = var.stripe_price_id_basic
+      STRIPE_PRICE_ID_PRO    = var.stripe_price_id_pro
+      
+      # OpenAI Integration
+      OPENAI_API_KEY = var.openai_api_key
+      OPENAI_ENABLED = var.openai_enabled
+      OPENAI_MODEL   = var.openai_model
+      
+      # Admin Access
+      ADMIN_EMAILS = var.admin_emails
       
       # Frontend URL
       FRONTEND_URL = var.frontend_url

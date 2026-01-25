@@ -54,7 +54,7 @@ subscriptionRouter.post(
       const service = getSubscriptionService(supabase);
 
       const result = await service.createCheckoutSession(
-        user['id'] as string,
+        user.sub,
         (user.email ?? '') as string,
         planType,
         successUrl,
@@ -86,8 +86,8 @@ subscriptionRouter.get('/status', async (c: Context<{ Variables: AuthContext }>)
     const supabase = getSupabaseClient();
     const service = getSubscriptionService(supabase);
 
-    const subscription = await service.getSubscriptionStatus(user['id'] as string);
-    const tokenUsage = await service.getTokenUsageInfo(user['id'] as string);
+    const subscription = await service.getSubscriptionStatus(user.sub);
+    const tokenUsage = await service.getTokenUsageInfo(user.sub);
 
     return c.json({
       subscription,
@@ -120,7 +120,7 @@ subscriptionRouter.post(
       const supabase = getSupabaseClient();
       const service = getSubscriptionService(supabase);
 
-      const portalUrl = await service.createCustomerPortalSession(user['id'] as string, returnUrl);
+      const portalUrl = await service.createCustomerPortalSession(user.sub, returnUrl);
 
       return c.json({ portalUrl });
     } catch (err) {
@@ -149,7 +149,7 @@ subscriptionRouter.post('/cancel', async (c: Context<{ Variables: AuthContext }>
     const supabase = getSupabaseClient();
     const service = getSubscriptionService(supabase);
 
-    const result = await service.cancelSubscription(user['id'] as string);
+    const result = await service.cancelSubscription(user.sub);
 
     return c.json({
       success: true,

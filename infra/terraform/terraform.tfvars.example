@@ -130,3 +130,30 @@ amplify_env_dev_next_public_backend_api_url = ""
 # =================================================================
 
 alert_email = ""  # Email for CloudWatch alerts (optional)
+
+# =================================================================
+# Stripe Integration (Premium Subscription)
+# =================================================================
+# Set via environment variables (TF_VAR_xxx) for security
+
+stripe_secret_key     = ""  # TF_VAR_stripe_secret_key
+stripe_webhook_secret = ""  # TF_VAR_stripe_webhook_secret
+stripe_price_id_basic = ""  # Stripe Price ID for Premium Basic (¥980/month)
+stripe_price_id_pro   = ""  # Stripe Price ID for Premium Pro (¥1,980/month)
+
+# =================================================================
+# OpenAI Integration (AI Features)
+# =================================================================
+# Set via environment variables (TF_VAR_xxx) for security
+
+openai_api_key = ""       # TF_VAR_openai_api_key
+openai_enabled = "false"  # Set to "true" to enable AI features
+openai_model   = "gpt-4o-mini"
+
+# =================================================================
+# Admin Access
+# =================================================================
+# Comma-separated list of admin email addresses
+# Admins get all Premium features for free
+
+admin_emails = ""  # TF_VAR_admin_emails (e.g., "admin@example.com,dev@example.com")

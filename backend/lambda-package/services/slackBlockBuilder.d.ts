@@ -279,5 +279,56 @@ export declare class SlackBlockBuilder {
         incompleteCount: number;
         completedCount: number;
     }): SlackBlock[];
+    /**
+     * Build workload coaching proposal notification.
+     *
+     * Formats coaching proposal with accept/dismiss/snooze buttons.
+     *
+     * Requirements: 12.2 - Workload coaching Slack notification
+     *
+     * @param proposal - Coaching proposal data
+     * @returns List of Block Kit blocks
+     */
+    static coachingProposal(proposal: {
+        id: string;
+        habitName: string;
+        type: 'workload_adjustment' | 'baby_step';
+        currentTargetCount: number;
+        proposedTargetCount: number;
+        workloadUnit: string | null;
+        reason: string;
+        message: string;
+    }): SlackBlock[];
+    /**
+     * Build recovery proposal notification.
+     *
+     * Formats recovery proposal with accept/dismiss buttons.
+     *
+     * Requirements: 12.2 - Recovery proposal Slack notification
+     *
+     * @param proposal - Recovery proposal data
+     * @returns List of Block Kit blocks
+     */
+    static recoveryProposal(proposal: {
+        id: string;
+        habitName: string;
+        type: 'partial_recovery' | 'full_recovery';
+        currentTargetCount: number;
+        proposedTargetCount: number;
+        originalTargetCount: number;
+        workloadUnit: string | null;
+        consecutiveSuccessDays: number;
+        message: string;
+    }): SlackBlock[];
+    /**
+     * Build token warning notification.
+     *
+     * @param percentage - Current usage percentage (70, 90, or 100)
+     * @param remainingTokens - Remaining tokens
+     * @param resetDate - Date when quota resets
+     * @param upgradeUrl - URL to upgrade page
+     * @returns List of Block Kit blocks
+     */
+    static tokenWarning(percentage: number, remainingTokens: number, resetDate: string, upgradeUrl: string): SlackBlock[];
 }
 //# sourceMappingURL=slackBlockBuilder.d.ts.map

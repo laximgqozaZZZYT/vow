@@ -47,7 +47,7 @@ async function requirePremium(c: Context<{ Variables: AuthContext }>, next: Next
     return c.json({ error: 'Unauthorized' }, 401);
   }
 
-  const userId = user['id'] as string;
+  const userId = user.sub;
   const userEmail = user.email?.toLowerCase() ?? '';
   const supabase = getSupabaseClient();
   const adminService = getAdminService(supabase);
@@ -108,7 +108,7 @@ async function logAdminAIAction(
   const user = c.get('user');
   if (!user) return;
 
-  const userId = user['id'] as string;
+  const userId = user.sub;
   const supabase = getSupabaseClient();
   const adminService = getAdminService(supabase);
 
@@ -151,14 +151,14 @@ aiRouter.post(
       // Get user's existing goals if not provided
       let parseContext = context;
       if (!parseContext?.existingGoals) {
-        const goals = await parser.getUserGoals(user['id'] as string);
+        const goals = await parser.getUserGoals(user.sub);
         parseContext = {
           ...parseContext,
           existingGoals: goals,
         };
       }
 
-      const result = await parser.parse(user['id'] as string, text, parseContext);
+      const result = await parser.parse(user.sub, text, parseContext);
 
       // Log admin action if applicable
       await logAdminAIAction(c, 'ai_parse_habit', {
@@ -168,7 +168,7 @@ aiRouter.post(
       });
 
       logger.info('Habit parsed successfully', {
-        userId: user['id'],
+        userId: user.sub,
         tokensUsed: result.tokensUsed,
       });
 
@@ -220,7 +220,7 @@ aiRouter.post(
       const parser = getNLHabitParser(supabase);
 
       // Get user's existing habits
-      const existingHabits = await parser.getUserHabits(user['id'] as string);
+      const existingHabits = await parser.getUserHabits(user.sub);
 
       if (existingHabits.length === 0) {
         return c.json(
@@ -232,7 +232,7 @@ aiRouter.post(
         );
       }
 
-      const result = await parser.parseEdit(user['id'] as string, text, existingHabits);
+      const result = await parser.parseEdit(user.sub, text, existingHabits);
 
       // Log admin action if applicable
       await logAdminAIAction(c, 'ai_edit_habit', {
@@ -243,7 +243,7 @@ aiRouter.post(
       });
 
       logger.info('Edit command parsed successfully', {
-        userId: user['id'] as string,
+        userId: user.sub,
         tokensUsed: result.tokensUsed,
         targetHabitId: result.targetHabitId,
       });
@@ -301,7 +301,7 @@ aiRouter.post(
 
     const body = await c.req.json();
     const goalId = body.goalId as string;
-    const userId = user['id'] as string;
+    const userId = user.sub;
 
     try {
       const supabase = getSupabaseClient();

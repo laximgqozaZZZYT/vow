@@ -30,7 +30,7 @@ export declare const habitSchema: z.ZodObject<{
     owner_type: string;
     owner_id: string;
     active: boolean;
-    frequency: "weekly" | "daily" | "monthly";
+    frequency: "daily" | "weekly" | "monthly";
     target_count: number;
     workload_per_count: number;
     description?: string | null | undefined;
@@ -46,7 +46,7 @@ export declare const habitSchema: z.ZodObject<{
     description?: string | null | undefined;
     goal_id?: string | null | undefined;
     active?: boolean | undefined;
-    frequency?: "weekly" | "daily" | "monthly" | undefined;
+    frequency?: "daily" | "weekly" | "monthly" | undefined;
     target_count?: number | undefined;
     workload_unit?: string | null | undefined;
     workload_per_count?: number | undefined;
@@ -66,7 +66,7 @@ export declare const habitCreateSchema: z.ZodObject<{
     workload_per_count: z.ZodDefault<z.ZodNumber>;
 }, "strip", z.ZodTypeAny, {
     name: string;
-    frequency: "weekly" | "daily" | "monthly";
+    frequency: "daily" | "weekly" | "monthly";
     target_count: number;
     workload_per_count: number;
     description?: string | undefined;
@@ -76,7 +76,7 @@ export declare const habitCreateSchema: z.ZodObject<{
     name: string;
     description?: string | undefined;
     goal_id?: string | undefined;
-    frequency?: "weekly" | "daily" | "monthly" | undefined;
+    frequency?: "daily" | "weekly" | "monthly" | undefined;
     target_count?: number | undefined;
     workload_unit?: string | undefined;
     workload_per_count?: number | undefined;
@@ -99,7 +99,7 @@ export declare const habitUpdateSchema: z.ZodObject<{
     description?: string | null | undefined;
     goal_id?: string | null | undefined;
     active?: boolean | undefined;
-    frequency?: "weekly" | "daily" | "monthly" | undefined;
+    frequency?: "daily" | "weekly" | "monthly" | undefined;
     target_count?: number | undefined;
     workload_unit?: string | null | undefined;
     workload_per_count?: number | undefined;
@@ -108,7 +108,7 @@ export declare const habitUpdateSchema: z.ZodObject<{
     description?: string | null | undefined;
     goal_id?: string | null | undefined;
     active?: boolean | undefined;
-    frequency?: "weekly" | "daily" | "monthly" | undefined;
+    frequency?: "daily" | "weekly" | "monthly" | undefined;
     target_count?: number | undefined;
     workload_unit?: string | null | undefined;
     workload_per_count?: number | undefined;

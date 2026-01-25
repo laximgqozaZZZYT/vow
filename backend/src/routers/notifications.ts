@@ -24,6 +24,9 @@ const notificationsRouter = new Hono<{ Variables: AuthContext }>();
 // Schemas
 // ============================================================================
 
+// Time format regex: accepts HH:MM or HH:MM:SS (PostgreSQL TIME type returns HH:MM:SS)
+const timeFormatRegex = /^\d{2}:\d{2}(:\d{2})?$/;
+
 const preferencesUpdateSchema = z.object({
   inApp: z.object({
     workloadCoaching: z.boolean().optional(),
@@ -35,12 +38,12 @@ const preferencesUpdateSchema = z.object({
     workloadCoaching: z.boolean().optional(),
     tokenWarning: z.boolean().optional(),
     weeklyReport: z.boolean().optional(),
-    notificationTime: z.string().regex(/^\d{2}:\d{2}$/).optional(),
+    notificationTime: z.string().regex(timeFormatRegex).optional(),
   }).optional(),
   webPush: z.object({
     enabled: z.boolean().optional(),
     dailyReminder: z.boolean().optional(),
-    dailyReminderTime: z.string().regex(/^\d{2}:\d{2}$/).optional(),
+    dailyReminderTime: z.string().regex(timeFormatRegex).optional(),
     workloadCoaching: z.boolean().optional(),
   }).optional(),
 });
@@ -68,7 +71,7 @@ notificationsRouter.get('/preferences', async (c: Context<{ Variables: AuthConte
     return c.json({ error: 'Unauthorized' }, 401);
   }
 
-  const userId = user['id'] as string;
+  const userId = user.sub;
 
   try {
     const supabase = getSupabaseClient();
@@ -89,20 +92,38 @@ notificationsRouter.get('/preferences', async (c: Context<{ Variables: AuthConte
  */
 notificationsRouter.put(
   '/preferences',
-  zValidator('json', preferencesUpdateSchema),
   async (c: Context<{ Variables: AuthContext }>) => {
     const user = c.get('user');
     if (!user) {
       return c.json({ error: 'Unauthorized' }, 401);
     }
 
-    const userId = user['id'] as string;
-    const body = await c.req.json();
+    const userId = user.sub;
+    
+    // Parse and validate request body manually to avoid zValidator issues
+    let body: unknown;
+    try {
+      body = await c.req.json();
+    } catch {
+      return c.json({ error: 'Invalid JSON body' }, 400);
+    }
+    
     const parseResult = preferencesUpdateSchema.safeParse(body);
     if (!parseResult.success) {
-      return c.json({ error: 'Invalid request body' }, 400);
+      logger.error('Validation failed', undefined, { 
+        errors: parseResult.error.issues,
+        body: JSON.stringify(body)
+      });
+      return c.json({ error: 'Invalid request body', details: parseResult.error.issues }, 400);
     }
-    const updates = parseResult.data;
+    
+    const updates = parseResult.data as {
+      inApp?: { workloadCoaching?: boolean; tokenWarning?: boolean; weeklyReport?: boolean };
+      slack?: { enabled?: boolean; workloadCoaching?: boolean; tokenWarning?: boolean; weeklyReport?: boolean; notificationTime?: string };
+      webPush?: { enabled?: boolean; dailyReminder?: boolean; dailyReminderTime?: string; workloadCoaching?: boolean };
+    };
+
+    logger.info('Updating notification preferences', { userId, updates: JSON.stringify(updates) });
 
     try {
       const supabase = getSupabaseClient();
@@ -171,7 +192,7 @@ notificationsRouter.post(
       return c.json({ error: 'Unauthorized' }, 401);
     }
 
-    const userId = user['id'] as string;
+    const userId = user.sub;
     const body = await c.req.json();
     const parseResult = pushSubscriptionSchema.safeParse(body);
     if (!parseResult.success) {
@@ -211,7 +232,7 @@ notificationsRouter.delete('/push-subscription', async (c: Context<{ Variables: 
     return c.json({ error: 'Unauthorized' }, 401);
   }
 
-  const userId = user['id'] as string;
+  const userId = user.sub;
   const endpoint = c.req.query('endpoint');
 
   try {
@@ -237,7 +258,7 @@ notificationsRouter.get('/push-subscriptions', async (c: Context<{ Variables: Au
     return c.json({ error: 'Unauthorized' }, 401);
   }
 
-  const userId = user['id'] as string;
+  const userId = user.sub;
 
   try {
     const supabase = getSupabaseClient();

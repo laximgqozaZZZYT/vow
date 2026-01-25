@@ -36,21 +36,21 @@ export declare const apiKeyDbSchema: z.ZodObject<{
     id: string;
     name: string;
     user_id: string;
+    is_active: boolean;
     key_hash: string;
     key_prefix: string;
     last_used_at: string | null;
     revoked_at: string | null;
-    is_active: boolean;
 }, {
     created_at: string;
     id: string;
     name: string;
     user_id: string;
+    is_active: boolean;
     key_hash: string;
     key_prefix: string;
     last_used_at: string | null;
     revoked_at: string | null;
-    is_active: boolean;
 }>;
 export type ApiKeyDb = z.infer<typeof apiKeyDbSchema>;
 /**
@@ -86,17 +86,17 @@ export declare const apiKeyResponseSchema: z.ZodObject<{
 }, "strip", z.ZodTypeAny, {
     id: string;
     name: string;
+    isActive: boolean;
     keyPrefix: string;
     createdAt: string;
     lastUsedAt: string | null;
-    isActive: boolean;
 }, {
     id: string;
     name: string;
+    isActive: boolean;
     keyPrefix: string;
     createdAt: string;
     lastUsedAt: string | null;
-    isActive: boolean;
 }>;
 export type ApiKeyResponse = z.infer<typeof apiKeyResponseSchema>;
 /**

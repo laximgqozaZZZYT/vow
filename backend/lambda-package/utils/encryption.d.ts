@@ -2,7 +2,7 @@
  * Token Encryption Utility
  *
  * Provides secure encryption/decryption for sensitive tokens using AES-256-GCM.
- * Compatible with Python's Fernet encryption format.
+ * Also supports decryption of Python's Fernet format for backward compatibility.
  *
  * Requirements:
  * - 14.1: Encrypt sensitive tokens before storage
@@ -37,12 +37,22 @@ export declare class TokenEncryption {
     encrypt(plaintext: string): Promise<string>;
     /**
      * Decrypt an encrypted string.
+     * Supports both AES-256-GCM format and Python Fernet format.
      *
      * @param ciphertext - Base64-encoded encrypted string
      * @returns Decrypted plaintext string
      * @throws Error if decryption fails (wrong key or corrupted data)
      */
     decrypt(ciphertext: string): Promise<string>;
+    /**
+     * Decrypt a Python Fernet-encrypted string.
+     * Fernet format: version (1) + timestamp (8) + IV (16) + ciphertext + HMAC (32)
+     * Uses AES-128-CBC with PKCS7 padding.
+     *
+     * @param ciphertext - Base64-encoded Fernet token
+     * @returns Decrypted plaintext string
+     */
+    private decryptFernet;
     /**
      * Encrypt value if it's not null or empty.
      */

@@ -481,3 +481,67 @@ variable "amplify_env_dev_next_public_backend_api_url" {
   type        = string
   default     = ""
 }
+
+# =================================================================
+# Stripe Integration Variables
+# =================================================================
+
+variable "stripe_secret_key" {
+  description = "Stripe Secret Key"
+  type        = string
+  default     = ""
+  sensitive   = true
+}
+
+variable "stripe_webhook_secret" {
+  description = "Stripe Webhook Signing Secret"
+  type        = string
+  default     = ""
+  sensitive   = true
+}
+
+variable "stripe_price_id_basic" {
+  description = "Stripe Price ID for Premium Basic plan"
+  type        = string
+  default     = ""
+}
+
+variable "stripe_price_id_pro" {
+  description = "Stripe Price ID for Premium Pro plan"
+  type        = string
+  default     = ""
+}
+
+# =================================================================
+# OpenAI Integration Variables
+# =================================================================
+
+variable "openai_api_key" {
+  description = "OpenAI API Key"
+  type        = string
+  default     = ""
+  sensitive   = true
+}
+
+variable "openai_enabled" {
+  description = "Enable OpenAI integration"
+  type        = string
+  default     = "false"
+}
+
+variable "openai_model" {
+  description = "OpenAI model to use"
+  type        = string
+  default     = "gpt-4o-mini"
+}
+
+# =================================================================
+# Admin Access Variables
+# =================================================================
+
+variable "admin_emails" {
+  description = "Comma-separated list of admin email addresses"
+  type        = string
+  default     = ""
+  sensitive   = true
+}
