@@ -23,6 +23,7 @@ import { ChoiceButtons, type Choice } from './Widget.ChoiceButtons';
 import { ProgressIndicator } from './Widget.Progress';
 import { QuickActionButtons, type QuickAction } from './Widget.QuickActions';
 import { HabitModal } from './Modal.Habit';
+import { GoalModal } from './Modal.Goal';
 
 interface Goal {
   id: string;
@@ -54,6 +55,14 @@ interface HabitSuggestion {
   duration?: number | null;
 }
 
+interface GoalSuggestion {
+  name: string;
+  description?: string;
+  icon?: string;
+  reason: string;
+  suggestedHabits?: string[];
+}
+
 interface Message {
   id: string;
   role: 'user' | 'assistant';
@@ -73,11 +82,12 @@ interface UIComponentData {
 interface CoachSectionProps {
   goals: Goal[];
   onHabitCreated?: () => void;
+  onGoalCreated?: () => void;
 }
 
 type DetectedIntent = 'create' | 'edit' | 'suggest' | 'coaching' | 'followup' | null;
 
-export function CoachSection({ goals, onHabitCreated }: CoachSectionProps) {
+export function CoachSection({ goals, onHabitCreated, onGoalCreated }: CoachSectionProps) {
   const [isPremium, setIsPremium] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -104,6 +114,14 @@ export function CoachSection({ goals, onHabitCreated }: CoachSectionProps) {
   const [showCoaching, setShowCoaching] = useState(false);
   const [selectedGoalId, setSelectedGoalId] = useState<string>('');
 
+  // Goal modal state
+  const [goalModalOpen, setGoalModalOpen] = useState(false);
+  const [goalModalInitial, setGoalModalInitial] = useState<{
+    name?: string;
+    parentId?: string | null;
+  } | undefined>(undefined);
+  const [goalSuggestions, setGoalSuggestions] = useState<GoalSuggestion[]>([]);
+
   // Helper to open HabitModal with initial values from AI
   const openHabitModal = useCallback((data: {
     name?: string;
@@ -119,6 +137,18 @@ export function CoachSection({ goals, onHabitCreated }: CoachSectionProps) {
     });
     setHabitModalOpen(true);
   }, [goals]);
+
+  // Helper to open GoalModal with initial values from AI
+  const openGoalModal = useCallback((data: {
+    name?: string;
+    parentId?: string | null;
+  }) => {
+    setGoalModalInitial({
+      name: data.name || '',
+      parentId: data.parentId || null,
+    });
+    setGoalModalOpen(true);
+  }, []);
 
   const apiUrl = process.env.NEXT_PUBLIC_BACKEND_API_URL || process.env.NEXT_PUBLIC_SLACK_API_URL;
 
@@ -210,6 +240,15 @@ export function CoachSection({ goals, onHabitCreated }: CoachSectionProps) {
     setHabitModalInitial(undefined);
     onHabitCreated?.();
   }, [addMessage, onHabitCreated]);
+
+  // Handle goal creation from GoalModal
+  const handleGoalCreated = useCallback((payload: any) => {
+    addMessage('assistant', `✅ ゴール「${payload.name}」を作成しました！このゴールに向けた習慣を追加しますか？`);
+    setGoalModalOpen(false);
+    setGoalModalInitial(undefined);
+    setGoalSuggestions([]);
+    onGoalCreated?.();
+  }, [addMessage, onGoalCreated]);
 
   // Generate follow-up question based on context
   const generateFollowUp = useCallback((intent: DetectedIntent, data: any): string => {
@@ -324,6 +363,28 @@ export function CoachSection({ goals, onHabitCreated }: CoachSectionProps) {
         duration: s.duration || null,
       }));
       setSuggestions(suggestionList);
+    }
+
+    // Handle structured goal data from AI tools
+    if (data.data?.parsedGoal) {
+      // Single goal suggestion - open GoalModal
+      const goal = data.data.parsedGoal;
+      openGoalModal({
+        name: goal.name || '',
+        parentId: null,
+      });
+    }
+
+    // Handle multiple goal suggestions
+    if (data.data?.goalSuggestions && data.data.goalSuggestions.length > 0) {
+      const goalList: GoalSuggestion[] = data.data.goalSuggestions.map((g: any) => ({
+        name: g.name || '',
+        description: g.description || '',
+        icon: g.icon || '🎯',
+        reason: g.reason || '',
+        suggestedHabits: g.suggestedHabits || [],
+      }));
+      setGoalSuggestions(goalList);
     }
 
     // Show analysis data if available
@@ -545,7 +606,10 @@ export function CoachSection({ goals, onHabitCreated }: CoachSectionProps) {
     setMessages([]);
     setHabitModalOpen(false);
     setHabitModalInitial(undefined);
+    setGoalModalOpen(false);
+    setGoalModalInitial(undefined);
     setSuggestions([]);
+    setGoalSuggestions([]);
     setShowCoaching(false);
     setError(null);
   };
@@ -696,12 +760,39 @@ export function CoachSection({ goals, onHabitCreated }: CoachSectionProps) {
             categories={goals}
           />
 
-          {/* Suggestions */}
+          {/* GoalModal for creating goals */}
+          <GoalModal
+            open={goalModalOpen}
+            onClose={() => {
+              setGoalModalOpen(false);
+              setGoalModalInitial(undefined);
+              addMessage('assistant', 'キャンセルしました。他に何かお手伝いできることはありますか？');
+            }}
+            goal={null}
+            onCreate={handleGoalCreated}
+            initial={goalModalInitial}
+            goals={goals}
+          />
+
+          {/* Habit Suggestions */}
           {suggestions.length > 0 && (
             <SuggestionsView
               suggestions={suggestions}
               onClose={() => setSuggestions([])}
               onSelect={handleSelectSuggestion}
+            />
+          )}
+
+          {/* Goal Suggestions */}
+          {goalSuggestions.length > 0 && (
+            <GoalSuggestionsView
+              suggestions={goalSuggestions}
+              onClose={() => setGoalSuggestions([])}
+              onSelect={(suggestion) => {
+                openGoalModal({ name: suggestion.name });
+                setGoalSuggestions([]);
+                addMessage('assistant', `「${suggestion.name}」を選択しました。モーダルで詳細を編集してください。`);
+              }}
             />
           )}
 
@@ -789,6 +880,68 @@ function SuggestionsView({
           
           <p className="text-xs text-primary mt-3 flex items-center gap-1">
             <span>クリックして詳細を編集</span>
+            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+            </svg>
+          </p>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// Goal Suggestions View
+function GoalSuggestionsView({
+  suggestions,
+  onClose,
+  onSelect,
+}: {
+  suggestions: GoalSuggestion[];
+  onClose: () => void;
+  onSelect: (suggestion: GoalSuggestion) => void;
+}) {
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center justify-between">
+        <h4 className="font-medium">提案されたゴール</h4>
+        <button
+          onClick={onClose}
+          className="text-sm text-muted-foreground hover:text-foreground"
+        >
+          閉じる
+        </button>
+      </div>
+      {suggestions.map((suggestion, index) => (
+        <div
+          key={index}
+          className="p-4 bg-muted/50 rounded-lg border border-border hover:border-primary/50 cursor-pointer transition-colors"
+          onClick={() => onSelect(suggestion)}
+        >
+          <div className="flex items-start gap-3">
+            <span className="text-2xl">{suggestion.icon || '🎯'}</span>
+            <div className="flex-1">
+              <div className="font-medium text-base">{suggestion.name}</div>
+              {suggestion.description && (
+                <p className="text-sm text-muted-foreground mt-1">{suggestion.description}</p>
+              )}
+            </div>
+          </div>
+          
+          {suggestion.reason && (
+            <p className="text-sm text-muted-foreground mt-3 italic">
+              💡 {suggestion.reason}
+            </p>
+          )}
+          
+          {suggestion.suggestedHabits && suggestion.suggestedHabits.length > 0 && (
+            <div className="mt-3 text-xs text-muted-foreground">
+              <span className="font-medium">関連する習慣例:</span>
+              <span className="ml-1">{suggestion.suggestedHabits.slice(0, 3).join('、')}</span>
+            </div>
+          )}
+          
+          <p className="text-xs text-primary mt-3 flex items-center gap-1">
+            <span>クリックして作成</span>
             <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
             </svg>

@@ -110,6 +110,69 @@ const COACH_TOOLS: ChatCompletionTool[] = [
       },
     },
   },
+  // === Goal提案ツール ===
+  {
+    type: 'function',
+    function: {
+      name: 'create_goal_suggestion',
+      description: 'ユーザーにゴール（目標）を提案する際に使用。このツールを呼ぶと、フロントエンドにゴール作成用のモーダルが表示される。ユーザーがゴールを作りたい、または目標を提案してほしいと言った場合は必ずこのツールを使う。',
+      parameters: {
+        type: 'object',
+        properties: {
+          name: {
+            type: 'string',
+            description: 'ゴールの名前（例: 健康的な生活を送る、英語力を向上させる）',
+          },
+          description: {
+            type: 'string',
+            description: 'ゴールの詳細説明（省略可）',
+          },
+          reason: {
+            type: 'string',
+            description: 'このゴールを提案する理由',
+          },
+          suggestedHabits: {
+            type: 'array',
+            items: { type: 'string' },
+            description: 'このゴール達成に役立つ習慣の例（省略可）',
+          },
+        },
+        required: ['name', 'reason'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'create_multiple_goal_suggestions',
+      description: '複数のゴールを一度に提案する際に使用。ユーザーが「どんなゴールを設定すればいいか」と聞いた場合などに使う。必ずshow_choice_buttonsと組み合わせて、選択肢をボタン形式で表示する。',
+      parameters: {
+        type: 'object',
+        properties: {
+          suggestions: {
+            type: 'array',
+            items: {
+              type: 'object',
+              properties: {
+                name: { type: 'string', description: 'ゴールの名前' },
+                description: { type: 'string', description: 'ゴールの詳細説明' },
+                icon: { type: 'string', description: 'アイコン（絵文字1つ）' },
+                reason: { type: 'string', description: '提案理由' },
+                suggestedHabits: {
+                  type: 'array',
+                  items: { type: 'string' },
+                  description: 'このゴール達成に役立つ習慣の例',
+                },
+              },
+              required: ['name', 'reason'],
+            },
+            description: '提案するゴールのリスト',
+          },
+        },
+        required: ['suggestions'],
+      },
+    },
+  },
   // === 既存ツール ===
   {
     type: 'function',
@@ -491,6 +554,8 @@ export interface CoachResponse {
     goalProgress?: Record<string, unknown>;
     parsedHabit?: Record<string, unknown>;
     habitSuggestions?: Array<Record<string, unknown>>;
+    parsedGoal?: Record<string, unknown>;
+    goalSuggestions?: Array<Record<string, unknown>>;
     uiComponents?: Array<Record<string, unknown>>;
   } | undefined;
 }
@@ -700,6 +765,13 @@ export class AICoachService {
       case 'create_multiple_habit_suggestions':
         return this.createMultipleHabitSuggestions(args['suggestions'] as Array<Record<string, unknown>>);
 
+      // Goal提案ツール
+      case 'create_goal_suggestion':
+        return this.createGoalSuggestion(args);
+
+      case 'create_multiple_goal_suggestions':
+        return this.createMultipleGoalSuggestions(args['suggestions'] as Array<Record<string, unknown>>);
+
       // 既存ツール
       case 'analyze_habits':
         return this.analyzeHabits(
@@ -787,6 +859,14 @@ export class AICoachService {
         // Store as suggestions for multiple habit suggestions
         data.habitSuggestions = (result as { suggestions: Record<string, unknown>[] }).suggestions;
         break;
+      case 'create_goal_suggestion':
+        // Store as parsedGoal for single goal suggestion
+        data.parsedGoal = result as Record<string, unknown>;
+        break;
+      case 'create_multiple_goal_suggestions':
+        // Store as goalSuggestions for multiple goal suggestions
+        data.goalSuggestions = (result as { suggestions: Record<string, unknown>[] }).suggestions;
+        break;
       case 'analyze_habits':
         data.analysis = result as HabitAnalysis[];
         break;
@@ -848,6 +928,33 @@ export class AICoachService {
         workloadUnit: s['workloadUnit'] as string | null || null,
         reason: s['reason'] as string || '',
         confidence: s['confidence'] as number || 0.8,
+      })),
+    };
+  }
+
+  /**
+   * Create a single goal suggestion (for UI display)
+   */
+  private createGoalSuggestion(args: Record<string, unknown>): Record<string, unknown> {
+    return {
+      name: args['name'] as string,
+      description: args['description'] as string || '',
+      reason: args['reason'] as string || '',
+      suggestedHabits: args['suggestedHabits'] as string[] || [],
+    };
+  }
+
+  /**
+   * Create multiple goal suggestions (for UI display)
+   */
+  private createMultipleGoalSuggestions(suggestions: Array<Record<string, unknown>>): { suggestions: Array<Record<string, unknown>> } {
+    return {
+      suggestions: suggestions.map(s => ({
+        name: s['name'] as string,
+        description: s['description'] as string || '',
+        icon: s['icon'] as string || '🎯',
+        reason: s['reason'] as string || '',
+        suggestedHabits: s['suggestedHabits'] as string[] || [],
       })),
     };
   }
