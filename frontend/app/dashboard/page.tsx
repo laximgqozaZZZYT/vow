@@ -730,7 +730,6 @@ function DashboardLayout(props: any) {
   );
   const currentTabConfig = getTabById(activeTab);
   const supportsFullView = currentTabConfig?.supportsFullView ?? false;
-  const [showMoreTabs, setShowMoreTabs] = useState(false);
 
   // Render section content based on active tab
   const renderSectionContent = () => {
@@ -902,10 +901,10 @@ function DashboardLayout(props: any) {
           />
         </div>
 
-        {/* Mobile Tab Navigation - Bottom fixed */}
-        <div className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-background/95 backdrop-blur-md border-t border-border/50 safe-area-pb">
-          <div className="flex justify-around items-center px-2 py-1">
-            {visibleTabs.slice(0, 5).map((tab) => {
+        {/* Mobile Tab Navigation - Bottom fixed, single row scrollable */}
+        <div className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-background/95 backdrop-blur-md border-t border-border/50">
+          <div className="flex overflow-x-auto scrollbar-hide px-1 py-1.5 gap-0.5" style={{ paddingBottom: 'env(safe-area-inset-bottom, 8px)' }}>
+            {visibleTabs.map((tab) => {
               const isActive = tab.id === activeTab;
               const label = tab.labelJa;
               return (
@@ -913,74 +912,29 @@ function DashboardLayout(props: any) {
                   key={tab.id}
                   onClick={() => setActiveTab(tab.id)}
                   className={`
-                    flex flex-col items-center justify-center
-                    min-w-[48px] min-h-[48px]
-                    px-2 py-1
+                    flex flex-col items-center justify-center flex-shrink-0
+                    w-[56px] min-h-[52px]
+                    py-1.5
                     rounded-lg
                     transition-all duration-150
                     ${isActive
-                      ? 'text-primary'
+                      ? 'text-primary bg-primary/5'
                       : 'text-muted-foreground'
                     }
                   `}
                 >
                   <MobileTabIcon type={tab.iconType} isActive={isActive} />
-                  <span className={`text-[10px] mt-0.5 ${isActive ? 'font-medium' : ''}`}>
+                  <span className={`text-[9px] mt-0.5 leading-tight ${isActive ? 'font-medium' : ''}`}>
                     {label}
                   </span>
                 </button>
               );
             })}
-            {visibleTabs.length > 5 && (
-              <button
-                onClick={() => setShowMoreTabs(prev => !prev)}
-                className="flex flex-col items-center justify-center min-w-[48px] min-h-[48px] px-2 py-1 rounded-lg text-muted-foreground"
-              >
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-                  <circle cx="12" cy="12" r="1" />
-                  <circle cx="19" cy="12" r="1" />
-                  <circle cx="5" cy="12" r="1" />
-                </svg>
-                <span className="text-[10px] mt-0.5">その他</span>
-              </button>
-            )}
           </div>
-          {/* More tabs popup */}
-          {showMoreTabs && visibleTabs.length > 5 && (
-            <div className="absolute bottom-full left-0 right-0 bg-background/95 backdrop-blur-md border-t border-border/50 p-2">
-              <div className="flex flex-wrap justify-center gap-2">
-                {visibleTabs.slice(5).map((tab) => {
-                  const isActive = tab.id === activeTab;
-                  return (
-                    <button
-                      key={tab.id}
-                      onClick={() => {
-                        setActiveTab(tab.id);
-                        setShowMoreTabs(false);
-                      }}
-                      className={`
-                        flex flex-col items-center justify-center
-                        min-w-[64px] min-h-[56px]
-                        px-3 py-2
-                        rounded-lg
-                        transition-all duration-150
-                        ${isActive ? 'bg-primary/10 text-primary' : 'text-muted-foreground hover:bg-muted/50'}
-                      `}
-                    >
-                      <MobileTabIcon type={tab.iconType} isActive={isActive} />
-                      <span className={`text-[10px] mt-0.5 ${isActive ? 'font-medium' : ''}`}>
-                        {tab.labelJa}
-                      </span>
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-          )}
         </div>
 
         {/* Tab Content */}
-        <div className="flex-1 p-4 lg:p-6 pb-20 md:pb-6 overflow-auto">
+        <div className="flex-1 p-4 lg:p-6 pb-[72px] md:pb-6 overflow-auto">
           <TabContent
             activeTab={activeTab}
             isFullView={isFullView}
