@@ -87,23 +87,8 @@ export default function EditLayoutModal({ open, onClose, sections, onChange, onA
             </div>
             <div className="flex items-center gap-2 rounded-lg bg-background p-1">
               <button 
-                onClick={() => setHandedness('right')}
-                className={`flex-1 inline-flex items-center justify-center gap-2 px-3 py-2 text-sm rounded-md transition-colors ${
-                  !isLeftHanded 
-                    ? 'bg-primary text-primary-foreground shadow-sm font-medium' 
-                    : 'text-muted-foreground hover:text-foreground hover:bg-accent'
-                }`}
-                aria-label={locale === 'ja' ? '右側に配置' : 'Position on right'}
-                aria-pressed={!isLeftHanded}
-              >
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M17 8l4 4m0 0l-4 4m4-4H3" />
-                </svg>
-                {locale === 'ja' ? '右' : 'Right'}
-              </button>
-              <button 
                 onClick={() => setHandedness('left')}
-                className={`flex-1 inline-flex items-center justify-center gap-2 px-3 py-2 text-sm rounded-md transition-colors ${
+                className={`flex-1 inline-flex items-center justify-center gap-1 px-3 py-2 text-sm rounded-md transition-colors ${
                   isLeftHanded 
                     ? 'bg-primary text-primary-foreground shadow-sm font-medium' 
                     : 'text-muted-foreground hover:text-foreground hover:bg-accent'
@@ -111,10 +96,19 @@ export default function EditLayoutModal({ open, onClose, sections, onChange, onA
                 aria-label={locale === 'ja' ? '左側に配置' : 'Position on left'}
                 aria-pressed={isLeftHanded}
               >
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M7 16l-4-4m0 0l4-4m-4 4h18" />
-                </svg>
-                {locale === 'ja' ? '左' : 'Left'}
+                ←Left
+              </button>
+              <button 
+                onClick={() => setHandedness('right')}
+                className={`flex-1 inline-flex items-center justify-center gap-1 px-3 py-2 text-sm rounded-md transition-colors ${
+                  !isLeftHanded 
+                    ? 'bg-primary text-primary-foreground shadow-sm font-medium' 
+                    : 'text-muted-foreground hover:text-foreground hover:bg-accent'
+                }`}
+                aria-label={locale === 'ja' ? '右側に配置' : 'Position on right'}
+                aria-pressed={!isLeftHanded}
+              >
+                Right→
               </button>
             </div>
           </div>
