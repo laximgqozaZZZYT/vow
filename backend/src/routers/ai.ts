@@ -475,6 +475,8 @@ aiRouter.post(
         userId,
         toolsUsed: result.toolsUsed,
         tokensUsed: result.tokensUsed,
+        hasGoalSuggestions: !!result.data?.goalSuggestions,
+        goalSuggestionsCount: result.data?.goalSuggestions?.length,
       });
 
       return c.json({

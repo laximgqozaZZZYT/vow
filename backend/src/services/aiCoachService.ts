@@ -865,7 +865,9 @@ export class AICoachService {
         break;
       case 'create_multiple_goal_suggestions':
         // Store as goalSuggestions for multiple goal suggestions
-        data.goalSuggestions = (result as { suggestions: Record<string, unknown>[] }).suggestions;
+        const goalResult = result as { suggestions: Record<string, unknown>[] };
+        data.goalSuggestions = goalResult.suggestions;
+        logger.info('Stored goalSuggestions', { count: goalResult.suggestions?.length, data: goalResult.suggestions });
         break;
       case 'analyze_habits':
         data.analysis = result as HabitAnalysis[];
