@@ -21,7 +21,6 @@ import CoachSection from './components/Section.Coach';
 // Extracted components
 import DashboardHeader from './components/Layout.Header';
 import DashboardSidebar from './components/Layout.Sidebar';
-import HandednessToggle from './components/HandednessToggle';
 import NextSection from './components/Section.Next';
 import ActivitySection from './components/Section.Activity';
 import CalendarWidget from './components/Widget.Calendar';
@@ -532,7 +531,6 @@ export default function DashboardPage() {
         handleMoveGoal={handleMoveGoal}
         handleMoveHabit={handleMoveHabit}
       />
-      <HandednessToggle />
     </HandednessProvider>
     </LocaleProvider>
   );
