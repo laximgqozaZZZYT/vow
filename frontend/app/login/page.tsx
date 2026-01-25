@@ -112,9 +112,15 @@ export default function LoginPage() {
             ログアウト
           </button>
 
-          <div className="text-xs text-zinc-500">
-            ダッシュボードはログインなしでも使用できます。ログインすると現在のゲストデータがアカウントにマージされます。
-          </div>
+          {IS_DEV_ENV ? (
+            <div className="text-xs text-amber-600 bg-amber-50 p-3 rounded-lg border border-amber-200">
+              ⚠️ 開発環境: 管理者アカウントでのログインが必要です。
+            </div>
+          ) : (
+            <div className="text-xs text-zinc-500">
+              ダッシュボードはログインなしでも使用できます。ログインすると現在のゲストデータがアカウントにマージされます。
+            </div>
+          )}
         </div>
       </div>
     </div>
