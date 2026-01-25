@@ -145,33 +145,10 @@ export function CoachSection({ goals, onHabitCreated }: CoachSectionProps) {
     checkStatus();
   }, [apiUrl]);
 
-  // Detect intent from input text
+  // Detect intent is now handled by AI backend - this is kept for type compatibility
   const detectIntent = useCallback((text: string): DetectedIntent => {
-    const lowerText = text.toLowerCase();
-    
-    // Edit patterns
-    if (lowerText.match(/変更|編集|修正|更新|を.*に(する|変える)|時間を|頻度を|回数を/)) {
-      return 'edit';
-    }
-    
-    // Suggestion patterns
-    if (lowerText.match(/提案|おすすめ|サジェスト|何をすれば|どんな習慣|アドバイス.*ゴール|ゴール.*達成/)) {
-      return 'suggest';
-    }
-    
-    // Coaching patterns
-    if (lowerText.match(/コーチ|ワークロード|負荷|調整|バランス|疲れ|きつい|多すぎ|少なすぎ/)) {
-      return 'coaching';
-    }
-    
-    // Follow-up patterns (when in conversation)
-    if (messages.length > 0 && lowerText.match(/はい|いいえ|それ|この|もっと|詳しく|他に|別の/)) {
-      return 'followup';
-    }
-    
-    // Default to create
-    return 'create';
-  }, [messages.length]);
+    return null; // AI will determine intent
+  }, []);
 
   // Add message to conversation
   const addMessage = useCallback((role: 'user' | 'assistant', content: string, intent?: DetectedIntent, data?: any) => {
@@ -210,7 +187,7 @@ export function CoachSection({ goals, onHabitCreated }: CoachSectionProps) {
     }
   }, [goals]);
 
-  // Process input based on detected intent
+  // Process input using AI chat endpoint (natural language understanding)
   const handleProcess = async () => {
     if (!input.trim() || !apiUrl) return;
 
@@ -220,8 +197,7 @@ export function CoachSection({ goals, onHabitCreated }: CoachSectionProps) {
     setError(null);
 
     // Add user message
-    const intent = detectIntent(userInput);
-    addMessage('user', userInput, intent);
+    addMessage('user', userInput);
 
     try {
       const { data: { session } } = await supabase.auth.getSession();
@@ -231,24 +207,8 @@ export function CoachSection({ goals, onHabitCreated }: CoachSectionProps) {
         return;
       }
 
-      switch (intent) {
-        case 'create':
-          await handleCreate(session.access_token, userInput);
-          break;
-        case 'edit':
-          await handleEdit(session.access_token, userInput);
-          break;
-        case 'suggest':
-          await handleSuggest(session.access_token, userInput);
-          break;
-        case 'coaching':
-          setShowCoaching(true);
-          addMessage('assistant', 'ワークロードコーチングを表示します。現在の習慣達成状況に基づいて調整提案を確認できます。');
-          break;
-        case 'followup':
-          await handleFollowUp(session.access_token, userInput);
-          break;
-      }
+      // Use the new AI chat endpoint for natural language understanding
+      await handleAIChat(session.access_token, userInput);
     } catch (err: any) {
       const errorMsg = err.message || 'エラーが発生しました';
       setError(errorMsg);
@@ -258,6 +218,100 @@ export function CoachSection({ goals, onHabitCreated }: CoachSectionProps) {
     }
   };
 
+  // Main AI chat handler - uses NLU to understand intent
+  const handleAIChat = async (token: string, userInput: string) => {
+    // Build conversation history for context
+    const conversationHistory = messages.slice(-10).map(m => ({
+      role: m.role,
+      content: m.content,
+    }));
+
+    const response = await fetch(`${apiUrl}/api/ai/chat`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        message: userInput,
+        conversationHistory,
+        context: {
+          goals: goals.map(g => ({ id: g.id, name: g.name })),
+        },
+      }),
+    });
+
+    if (!response.ok) {
+      const data = await response.json();
+      throw new Error(data.message || 'AI処理に失敗しました');
+    }
+
+    const data = await response.json();
+    const intent = data.intent as string;
+
+    // Add AI response
+    addMessage('assistant', data.response, intent as DetectedIntent, data);
+
+    // Handle based on AI-detected intent
+    switch (intent) {
+      case 'create_habit':
+        if (data.habitData) {
+          const parsed: ParsedHabit = {
+            name: data.habitData.name || '',
+            type: data.habitData.type || 'do',
+            frequency: data.habitData.frequency || 'daily',
+            triggerTime: data.habitData.triggerTime || null,
+            duration: data.habitData.duration || null,
+            targetCount: data.habitData.targetCount || null,
+            workloadUnit: data.habitData.workloadUnit || null,
+            goalId: data.habitData.goalId || null,
+            confidence: data.confidence || 0.8,
+          };
+          setFormData(parsed);
+        }
+        break;
+
+      case 'suggest':
+        if (data.suggestions && data.suggestions.length > 0) {
+          setSuggestions(data.suggestions.map((s: any) => ({
+            name: s.name,
+            type: s.type || 'do',
+            frequency: s.frequency || 'daily',
+            suggestedTargetCount: s.suggestedTargetCount || 1,
+            workloadUnit: s.workloadUnit || null,
+            reason: s.reason || '',
+            confidence: s.confidence || 0.8,
+          })));
+        }
+        break;
+
+      case 'coaching':
+        // AI response already added, optionally show coaching widget
+        if (data.response.includes('ワークロード') || data.response.includes('負荷')) {
+          setShowCoaching(true);
+        }
+        break;
+
+      case 'question':
+        // AI is asking for more details - just show the response (already added)
+        break;
+
+      case 'edit_habit':
+        // Show edit result if available
+        break;
+
+      default:
+        // General conversation - response already added
+        break;
+    }
+
+    // Add follow-up question if provided
+    if (data.followUpQuestion) {
+      setTimeout(() => addMessage('assistant', data.followUpQuestion), 500);
+    }
+  };
+
+  // Legacy handlers for direct actions (kept for backward compatibility)
   const handleCreate = async (token: string, userInput: string) => {
     const response = await fetch(`${apiUrl}/api/ai/parse-habit`, {
       method: 'POST',
@@ -381,77 +435,6 @@ export function CoachSection({ goals, onHabitCreated }: CoachSectionProps) {
     responseMsg += '気になる習慣をクリックすると、詳細を編集して作成できます。';
     
     addMessage('assistant', responseMsg, 'suggest', suggestionList);
-  };
-
-  const handleFollowUp = async (token: string, userInput: string) => {
-    const lowerInput = userInput.toLowerCase();
-    
-    // Check if user is responding to time question
-    const timeMatch = userInput.match(/(\d{1,2})[時:：](\d{0,2})?|朝|昼|夜|夕方/);
-    if (timeMatch && formData) {
-      let time = '';
-      if (timeMatch[1]) {
-        const hour = parseInt(timeMatch[1]);
-        const minute = timeMatch[2] ? parseInt(timeMatch[2]) : 0;
-        time = `${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}`;
-      } else if (timeMatch[0] === '朝') {
-        time = '07:00';
-      } else if (timeMatch[0] === '昼') {
-        time = '12:00';
-      } else if (timeMatch[0] === '夕方') {
-        time = '17:00';
-      } else if (timeMatch[0] === '夜') {
-        time = '21:00';
-      }
-      
-      if (time) {
-        setFormData({ ...formData, triggerTime: time });
-        addMessage('assistant', `時刻を${time}に設定しました。`);
-        
-        // Ask next question
-        if (!formData.duration && formData.type === 'do') {
-          setTimeout(() => addMessage('assistant', 'どのくらいの時間をかけますか？（例: 30分、1時間）'), 500);
-        }
-        return;
-      }
-    }
-    
-    // Check if user is responding to duration question
-    const durationMatch = userInput.match(/(\d+)\s*(分|時間)/);
-    if (durationMatch && formData) {
-      let duration = parseInt(durationMatch[1]);
-      if (durationMatch[2] === '時間') {
-        duration *= 60;
-      }
-      setFormData({ ...formData, duration });
-      addMessage('assistant', `所要時間を${duration}分に設定しました。`);
-      return;
-    }
-    
-    // Check if user is selecting a goal by number
-    const goalMatch = userInput.match(/^(\d+)$/);
-    if (goalMatch && formData && goals.length > 0) {
-      const index = parseInt(goalMatch[1]) - 1;
-      if (index >= 0 && index < goals.length) {
-        setFormData({ ...formData, goalId: goals[index].id });
-        addMessage('assistant', `ゴール「${goals[index].name}」を設定しました。`);
-        return;
-      }
-    }
-    
-    // Check for yes/no responses
-    if (lowerInput.match(/^(はい|yes|うん|そう|ok|おk)$/)) {
-      addMessage('assistant', '了解です！他に何かお手伝いできることはありますか？');
-      return;
-    }
-    
-    if (lowerInput.match(/^(いいえ|no|いや|ない|なし)$/)) {
-      addMessage('assistant', '分かりました。何か新しい習慣を作りたくなったら、いつでも話しかけてください！');
-      return;
-    }
-    
-    // Default: treat as new create request
-    await handleCreate(token, userInput);
   };
 
   // Create habit from form data
