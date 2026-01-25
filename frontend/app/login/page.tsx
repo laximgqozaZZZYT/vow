@@ -27,14 +27,14 @@ function LoginContent() {
         console.log('Processing OAuth callback, hash detected');
       }
       
-      // 少し待ってからセッションを確認（Supabaseがハッシュを処理する時間を与える）
-      await new Promise(resolve => setTimeout(resolve, 500));
+      // 少し待ってからセッションを確認（Supabaseがハッシュを処理してCookieを設定する時間を与える）
+      await new Promise(resolve => setTimeout(resolve, 1000));
       
       const { data: { session }, error } = await supabase.auth.getSession();
-      console.log('Session check:', session?.user?.email, error);
+      console.log('Session check:', session ? 'found' : 'not found', error ? error.message : '');
       
       if (session) {
-        // ログイン済み - リダイレクト先に移動
+        // セッションが確立された
         const redirectPath = searchParams.get('redirect') || '/dashboard';
         console.log('Session found, redirecting to:', redirectPath);
         
@@ -43,7 +43,12 @@ function LoginContent() {
           window.history.replaceState(null, '', window.location.pathname + window.location.search);
         }
         
-        router.push(redirectPath);
+        // Cookieが確実に設定されるまで少し待つ
+        await new Promise(resolve => setTimeout(resolve, 500));
+        
+        // window.locationを使って完全なページリロードでリダイレクト
+        // これによりCookieが確実にリクエストに含まれる
+        window.location.href = redirectPath;
         return;
       }
       
