@@ -6,20 +6,20 @@ export interface TabConfig {
   id: string;
   label: string;
   labelJa: string;
-  icon: string;
+  iconType: 'next' | 'activity' | 'calendar' | 'statistics' | 'diary' | 'stickies' | 'mindmap' | 'notices' | 'coach';
   supportsFullView?: boolean;
 }
 
 export const TAB_CONFIGS: TabConfig[] = [
-  { id: 'next', label: 'Next', labelJa: '次のアクション', icon: '⏰' },
-  { id: 'activity', label: 'Activity', labelJa: 'アクティビティ', icon: '📊' },
-  { id: 'calendar', label: 'Calendar', labelJa: 'カレンダー', icon: '📅', supportsFullView: true },
-  { id: 'statics', label: 'Statistics', labelJa: '統計', icon: '📈' },
-  { id: 'diary', label: 'Diary', labelJa: '日記', icon: '📝' },
-  { id: 'stickies', label: 'Stickies', labelJa: '付箋', icon: '📌' },
-  { id: 'mindmap', label: 'Mindmap', labelJa: 'マインドマップ', icon: '🗺️', supportsFullView: true },
-  { id: 'notices', label: 'Notices', labelJa: '通知', icon: '🔔' },
-  { id: 'coach', label: 'Coach', labelJa: 'コーチ', icon: '🤖' },
+  { id: 'next', label: 'Next', labelJa: '次へ', iconType: 'next' },
+  { id: 'activity', label: 'Activity', labelJa: '活動', iconType: 'activity' },
+  { id: 'calendar', label: 'Calendar', labelJa: '予定', iconType: 'calendar', supportsFullView: true },
+  { id: 'statics', label: 'Stats', labelJa: '統計', iconType: 'statistics' },
+  { id: 'diary', label: 'Diary', labelJa: '日記', iconType: 'diary' },
+  { id: 'stickies', label: 'Notes', labelJa: 'メモ', iconType: 'stickies' },
+  { id: 'mindmap', label: 'Map', labelJa: 'マップ', iconType: 'mindmap', supportsFullView: true },
+  { id: 'notices', label: 'Alerts', labelJa: '通知', iconType: 'notices' },
+  { id: 'coach', label: 'Coach', labelJa: 'コーチ', iconType: 'coach' },
 ];
 
 export const DEFAULT_TAB = 'next';

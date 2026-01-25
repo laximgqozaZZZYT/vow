@@ -538,6 +538,100 @@ export default function DashboardPage() {
   );
 }
 
+// Mobile Tab Icon Component
+const MobileTabIcon = ({ type, isActive }: { type: string; isActive: boolean }) => {
+  const iconProps = {
+    width: 22,
+    height: 22,
+    viewBox: '0 0 24 24',
+    fill: 'none',
+    stroke: 'currentColor',
+    strokeWidth: isActive ? 2 : 1.5,
+    strokeLinecap: 'round' as const,
+    strokeLinejoin: 'round' as const,
+  };
+
+  switch (type) {
+    case 'next':
+      return (
+        <svg {...iconProps}>
+          <circle cx="12" cy="12" r="10" />
+          <polyline points="12 6 12 12 16 14" />
+        </svg>
+      );
+    case 'activity':
+      return (
+        <svg {...iconProps}>
+          <path d="M22 12h-4l-3 9L9 3l-3 9H2" />
+        </svg>
+      );
+    case 'calendar':
+      return (
+        <svg {...iconProps}>
+          <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
+          <line x1="16" y1="2" x2="16" y2="6" />
+          <line x1="8" y1="2" x2="8" y2="6" />
+          <line x1="3" y1="10" x2="21" y2="10" />
+        </svg>
+      );
+    case 'statistics':
+      return (
+        <svg {...iconProps}>
+          <line x1="18" y1="20" x2="18" y2="10" />
+          <line x1="12" y1="20" x2="12" y2="4" />
+          <line x1="6" y1="20" x2="6" y2="14" />
+        </svg>
+      );
+    case 'diary':
+      return (
+        <svg {...iconProps}>
+          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+          <polyline points="14 2 14 8 20 8" />
+          <line x1="16" y1="13" x2="8" y2="13" />
+          <line x1="16" y1="17" x2="8" y2="17" />
+        </svg>
+      );
+    case 'stickies':
+      return (
+        <svg {...iconProps}>
+          <path d="M16 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V8z" />
+          <polyline points="16 3 16 8 21 8" />
+        </svg>
+      );
+    case 'mindmap':
+      return (
+        <svg {...iconProps}>
+          <circle cx="12" cy="12" r="3" />
+          <circle cx="19" cy="5" r="2" />
+          <circle cx="5" cy="5" r="2" />
+          <circle cx="19" cy="19" r="2" />
+          <circle cx="5" cy="19" r="2" />
+          <line x1="14.5" y1="9.5" x2="17.5" y2="6.5" />
+          <line x1="9.5" y1="9.5" x2="6.5" y2="6.5" />
+          <line x1="14.5" y1="14.5" x2="17.5" y2="17.5" />
+          <line x1="9.5" y1="14.5" x2="6.5" y2="17.5" />
+        </svg>
+      );
+    case 'notices':
+      return (
+        <svg {...iconProps}>
+          <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
+          <path d="M13.73 21a2 2 0 0 1-3.46 0" />
+        </svg>
+      );
+    case 'coach':
+      return (
+        <svg {...iconProps}>
+          <path d="M12 2a3 3 0 0 0-3 3v4a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z" />
+          <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
+          <line x1="12" y1="19" x2="12" y2="22" />
+        </svg>
+      );
+    default:
+      return null;
+  }
+};
+
 function DashboardLayout(props: any) {
   const { isLeftHanded } = useHandedness();
   const {
@@ -636,6 +730,7 @@ function DashboardLayout(props: any) {
   );
   const currentTabConfig = getTabById(activeTab);
   const supportsFullView = currentTabConfig?.supportsFullView ?? false;
+  const [showMoreTabs, setShowMoreTabs] = useState(false);
 
   // Render section content based on active tab
   const renderSectionContent = () => {
@@ -795,8 +890,8 @@ function DashboardLayout(props: any) {
       />
 
   {/* Main content pane with left tab navigation */}
-  <main className={`flex-1 pt-16 flex ${showLeftPane ? (isLeftHanded ? 'lg:mr-80' : 'lg:ml-80') : ''}`}>
-        {/* Left Tab Navigation */}
+  <main className={`flex-1 pt-16 flex flex-col md:flex-row ${showLeftPane ? (isLeftHanded ? 'lg:mr-80' : 'lg:ml-80') : ''}`}>
+        {/* Left Tab Navigation - Desktop */}
         <div className="hidden md:flex flex-col h-[calc(100vh-4rem)] sticky top-16">
           <TabNavigation
             tabs={visibleTabs}
@@ -807,38 +902,85 @@ function DashboardLayout(props: any) {
           />
         </div>
 
-        {/* Mobile Tab Navigation (horizontal at top) */}
-        <div className="md:hidden sticky top-16 z-30 w-full bg-card border-b border-border">
-          <div className="flex overflow-x-auto scrollbar-hide px-2 py-1 gap-1">
-            {visibleTabs.map((tab) => {
+        {/* Mobile Tab Navigation - Bottom fixed */}
+        <div className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-background/95 backdrop-blur-md border-t border-border/50 safe-area-pb">
+          <div className="flex justify-around items-center px-2 py-1">
+            {visibleTabs.slice(0, 5).map((tab) => {
               const isActive = tab.id === activeTab;
+              const label = tab.labelJa;
               return (
                 <button
                   key={tab.id}
                   onClick={() => setActiveTab(tab.id)}
                   className={`
-                    flex items-center gap-1.5
-                    px-3 py-2
-                    min-w-[44px] min-h-[44px]
-                    text-sm font-medium
-                    rounded-md
-                    whitespace-nowrap
-                    transition-colors duration-150
+                    flex flex-col items-center justify-center
+                    min-w-[48px] min-h-[48px]
+                    px-2 py-1
+                    rounded-lg
+                    transition-all duration-150
                     ${isActive
-                      ? 'bg-primary text-primary-foreground shadow-sm'
-                      : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+                      ? 'text-primary'
+                      : 'text-muted-foreground'
                     }
                   `}
                 >
-                  <span className="text-base">{tab.icon}</span>
+                  <MobileTabIcon type={tab.iconType} isActive={isActive} />
+                  <span className={`text-[10px] mt-0.5 ${isActive ? 'font-medium' : ''}`}>
+                    {label}
+                  </span>
                 </button>
               );
             })}
+            {visibleTabs.length > 5 && (
+              <button
+                onClick={() => setShowMoreTabs(prev => !prev)}
+                className="flex flex-col items-center justify-center min-w-[48px] min-h-[48px] px-2 py-1 rounded-lg text-muted-foreground"
+              >
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+                  <circle cx="12" cy="12" r="1" />
+                  <circle cx="19" cy="12" r="1" />
+                  <circle cx="5" cy="12" r="1" />
+                </svg>
+                <span className="text-[10px] mt-0.5">その他</span>
+              </button>
+            )}
           </div>
+          {/* More tabs popup */}
+          {showMoreTabs && visibleTabs.length > 5 && (
+            <div className="absolute bottom-full left-0 right-0 bg-background/95 backdrop-blur-md border-t border-border/50 p-2">
+              <div className="flex flex-wrap justify-center gap-2">
+                {visibleTabs.slice(5).map((tab) => {
+                  const isActive = tab.id === activeTab;
+                  return (
+                    <button
+                      key={tab.id}
+                      onClick={() => {
+                        setActiveTab(tab.id);
+                        setShowMoreTabs(false);
+                      }}
+                      className={`
+                        flex flex-col items-center justify-center
+                        min-w-[64px] min-h-[56px]
+                        px-3 py-2
+                        rounded-lg
+                        transition-all duration-150
+                        ${isActive ? 'bg-primary/10 text-primary' : 'text-muted-foreground hover:bg-muted/50'}
+                      `}
+                    >
+                      <MobileTabIcon type={tab.iconType} isActive={isActive} />
+                      <span className={`text-[10px] mt-0.5 ${isActive ? 'font-medium' : ''}`}>
+                        {tab.labelJa}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Tab Content */}
-        <div className="flex-1 p-4 lg:p-6 overflow-auto">
+        <div className="flex-1 p-4 lg:p-6 pb-20 md:pb-6 overflow-auto">
           <TabContent
             activeTab={activeTab}
             isFullView={isFullView}
