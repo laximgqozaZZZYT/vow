@@ -22,6 +22,7 @@ import { WorkloadChart, type WorkloadData } from './Widget.WorkloadChart';
 import { ChoiceButtons, type Choice } from './Widget.ChoiceButtons';
 import { ProgressIndicator } from './Widget.Progress';
 import { QuickActionButtons, type QuickAction } from './Widget.QuickActions';
+import { HabitModal } from './Modal.Habit';
 
 interface Goal {
   id: string;
@@ -89,11 +90,35 @@ export function CoachSection({ goals, onHabitCreated }: CoachSectionProps) {
   const [error, setError] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  // Current action state
-  const [formData, setFormData] = useState<ParsedHabit | null>(null);
+  // Current action state - use HabitModal for habit creation
+  const [habitModalOpen, setHabitModalOpen] = useState(false);
+  const [habitModalInitial, setHabitModalInitial] = useState<{
+    name?: string;
+    date?: string;
+    time?: string;
+    endTime?: string;
+    type?: 'do' | 'avoid';
+    goalId?: string;
+  } | undefined>(undefined);
   const [suggestions, setSuggestions] = useState<HabitSuggestion[]>([]);
   const [showCoaching, setShowCoaching] = useState(false);
   const [selectedGoalId, setSelectedGoalId] = useState<string>('');
+
+  // Helper to open HabitModal with initial values from AI
+  const openHabitModal = useCallback((data: {
+    name?: string;
+    type?: 'do' | 'avoid';
+    triggerTime?: string | null;
+    goalId?: string | null;
+  }) => {
+    setHabitModalInitial({
+      name: data.name || '',
+      type: data.type || 'do',
+      time: data.triggerTime || undefined,
+      goalId: data.goalId || (goals.length > 0 ? goals[0].id : undefined),
+    });
+    setHabitModalOpen(true);
+  }, [goals]);
 
   const apiUrl = process.env.NEXT_PUBLIC_BACKEND_API_URL || process.env.NEXT_PUBLIC_SLACK_API_URL;
 
@@ -177,6 +202,14 @@ export function CoachSection({ goals, onHabitCreated }: CoachSectionProps) {
     setMessages(prev => [...prev, newMessage]);
     return newMessage;
   }, []);
+
+  // Handle habit creation from HabitModal
+  const handleHabitCreated = useCallback((payload: any) => {
+    addMessage('assistant', `✅ 「${payload.name}」を作成しました！他に追加したい習慣はありますか？`);
+    setHabitModalOpen(false);
+    setHabitModalInitial(undefined);
+    onHabitCreated?.();
+  }, [addMessage, onHabitCreated]);
 
   // Generate follow-up question based on context
   const generateFollowUp = useCallback((intent: DetectedIntent, data: any): string => {
@@ -267,20 +300,14 @@ export function CoachSection({ goals, onHabitCreated }: CoachSectionProps) {
 
     // Handle structured habit data from AI tools
     if (data.data?.parsedHabit) {
-      // Single habit suggestion - show the form
+      // Single habit suggestion - open HabitModal
       const habit = data.data.parsedHabit;
-      const parsed: ParsedHabit = {
+      openHabitModal({
         name: habit.name || '',
         type: habit.type === 'avoid' ? 'avoid' : 'do',
-        frequency: habit.frequency || 'daily',
         triggerTime: habit.triggerTime || null,
-        duration: habit.duration || null,
-        targetCount: habit.targetCount || null,
-        workloadUnit: habit.workloadUnit || null,
         goalId: habit.goalId || (goals.length > 0 ? goals[0].id : null),
-        confidence: habit.confidence || 0.8,
-      };
-      setFormData(parsed);
+      });
     }
 
     // Handle multiple habit suggestions
@@ -366,7 +393,14 @@ export function CoachSection({ goals, onHabitCreated }: CoachSectionProps) {
 
     const data = await response.json();
     const parsed = data.parsed as ParsedHabit;
-    setFormData(parsed);
+    
+    // Open HabitModal with parsed data
+    openHabitModal({
+      name: parsed.name,
+      type: parsed.type,
+      triggerTime: parsed.triggerTime,
+      goalId: parsed.goalId,
+    });
     
     // Build response message
     let responseMsg = `「${parsed.name}」を解析しました。\n`;
@@ -375,15 +409,9 @@ export function CoachSection({ goals, onHabitCreated }: CoachSectionProps) {
     if (parsed.triggerTime) responseMsg += `時刻: ${parsed.triggerTime}\n`;
     if (parsed.duration) responseMsg += `所要時間: ${parsed.duration}分\n`;
     if (parsed.targetCount) responseMsg += `目標: ${parsed.targetCount}${parsed.workloadUnit || '回'}\n`;
-    responseMsg += `\n下のフォームで内容を確認・編集してください。`;
+    responseMsg += `\nモーダルで内容を確認・編集してください。`;
     
     addMessage('assistant', responseMsg, 'create', parsed);
-    
-    // Add follow-up question
-    const followUp = generateFollowUp('create', parsed);
-    if (followUp) {
-      setTimeout(() => addMessage('assistant', followUp), 500);
-    }
   };
 
   const handleEdit = async (token: string, userInput: string) => {
@@ -471,61 +499,16 @@ export function CoachSection({ goals, onHabitCreated }: CoachSectionProps) {
     addMessage('assistant', responseMsg, 'suggest', suggestionList);
   };
 
-  // Create habit from form data
-  const handleCreateHabit = async () => {
-    if (!formData || !apiUrl) return;
-
-    try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session?.access_token) return;
-
-      const payload = {
-        name: formData.name,
-        type: formData.type,
-        goalId: formData.goalId || (goals.length > 0 ? goals[0].id : undefined),
-        time: formData.triggerTime || undefined,
-        repeat: formData.frequency || 'daily',
-        workloadUnit: formData.workloadUnit || undefined,
-        workloadTotal: formData.targetCount || undefined,
-        duration: formData.duration || undefined,
-      };
-
-      const response = await fetch(`${apiUrl}/api/habits`, {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${session.access_token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(payload),
-      });
-
-      if (response.ok) {
-        addMessage('assistant', `✅ 「${formData.name}」を作成しました！他に追加したい習慣はありますか？`);
-        setFormData(null);
-        onHabitCreated?.();
-      }
-    } catch (err) {
-      console.error('Failed to create habit:', err);
-      addMessage('assistant', '習慣の作成に失敗しました。もう一度お試しください。');
-    }
-  };
-
-  // Create habit from suggestion
+  // Create habit from suggestion - open HabitModal
   const handleSelectSuggestion = (suggestion: HabitSuggestion) => {
-    const parsed: ParsedHabit = {
+    openHabitModal({
       name: suggestion.name,
       type: suggestion.type,
-      frequency: suggestion.frequency,
       triggerTime: suggestion.triggerTime || null,
-      duration: suggestion.duration || null,
-      targetCount: suggestion.suggestedTargetCount,
-      workloadUnit: suggestion.workloadUnit,
       goalId: selectedGoalId || (goals.length > 0 ? goals[0].id : null),
-      confidence: suggestion.confidence,
-    };
-    setFormData(parsed);
+    });
     setSuggestions([]);
-    addMessage('assistant', `「${suggestion.name}」を選択しました。下のフォームで詳細を編集してください。`);
+    addMessage('assistant', `「${suggestion.name}」を選択しました。モーダルで詳細を編集してください。`);
   };
 
   // Handle choice button selection
@@ -560,7 +543,8 @@ export function CoachSection({ goals, onHabitCreated }: CoachSectionProps) {
   // Clear conversation
   const handleClearConversation = () => {
     setMessages([]);
-    setFormData(null);
+    setHabitModalOpen(false);
+    setHabitModalInitial(undefined);
     setSuggestions([]);
     setShowCoaching(false);
     setError(null);
@@ -698,19 +682,19 @@ export function CoachSection({ goals, onHabitCreated }: CoachSectionProps) {
             </div>
           )}
 
-          {/* Habit Form */}
-          {formData && (
-            <HabitForm
-              data={formData}
-              goals={goals}
-              onChange={setFormData}
-              onSubmit={handleCreateHabit}
-              onCancel={() => {
-                setFormData(null);
-                addMessage('assistant', 'キャンセルしました。他に何かお手伝いできることはありますか？');
-              }}
-            />
-          )}
+          {/* HabitModal for creating habits */}
+          <HabitModal
+            open={habitModalOpen}
+            onClose={() => {
+              setHabitModalOpen(false);
+              setHabitModalInitial(undefined);
+              addMessage('assistant', 'キャンセルしました。他に何かお手伝いできることはありますか？');
+            }}
+            habit={null}
+            onCreate={handleHabitCreated}
+            initial={habitModalInitial}
+            categories={goals}
+          />
 
           {/* Suggestions */}
           {suggestions.length > 0 && (
@@ -738,166 +722,12 @@ export function CoachSection({ goals, onHabitCreated }: CoachSectionProps) {
           )}
 
           {/* Quick Examples (only when no conversation) */}
-          {messages.length === 0 && !formData && suggestions.length === 0 && !showCoaching && !processing && (
+          {messages.length === 0 && !habitModalOpen && suggestions.length === 0 && !showCoaching && !processing && (
             <QuickExamples onSelect={setInput} />
           )}
         </div>
       )}
     </section>
-  );
-}
-
-// Editable Habit Form (matching Modal.Habit fields)
-function HabitForm({
-  data,
-  goals,
-  onChange,
-  onSubmit,
-  onCancel,
-}: {
-  data: ParsedHabit;
-  goals: Goal[];
-  onChange: (data: ParsedHabit) => void;
-  onSubmit: () => void;
-  onCancel: () => void;
-}) {
-  return (
-    <div className="p-4 bg-muted/50 rounded-lg border border-border space-y-4">
-      <div className="flex items-center justify-between">
-        <h4 className="font-medium">習慣の詳細</h4>
-        <span className="text-xs text-muted-foreground">
-          信頼度: {Math.round(data.confidence * 100)}%
-        </span>
-      </div>
-
-      {/* Name */}
-      <div>
-        <label className="block text-sm text-muted-foreground mb-1">名前</label>
-        <input
-          type="text"
-          value={data.name}
-          onChange={(e) => onChange({ ...data, name: e.target.value })}
-          className="w-full px-3 py-2 rounded-md border border-input bg-background text-sm"
-        />
-      </div>
-
-      {/* Type */}
-      <div>
-        <label className="block text-sm text-muted-foreground mb-1">タイプ</label>
-        <div className="flex gap-4">
-          <label className="inline-flex items-center gap-2">
-            <input
-              type="radio"
-              checked={data.type === 'do'}
-              onChange={() => onChange({ ...data, type: 'do' })}
-              className="form-radio"
-            />
-            <span className="text-sm">実行する (Good)</span>
-          </label>
-          <label className="inline-flex items-center gap-2">
-            <input
-              type="radio"
-              checked={data.type === 'avoid'}
-              onChange={() => onChange({ ...data, type: 'avoid' })}
-              className="form-radio"
-            />
-            <span className="text-sm">避ける (Bad)</span>
-          </label>
-        </div>
-      </div>
-
-      {/* Frequency & Time Row */}
-      <div className="grid grid-cols-2 gap-4">
-        <div>
-          <label className="block text-sm text-muted-foreground mb-1">頻度</label>
-          <select
-            value={data.frequency || 'daily'}
-            onChange={(e) => onChange({ ...data, frequency: e.target.value as any })}
-            className="w-full px-3 py-2 rounded-md border border-input bg-background text-sm"
-          >
-            <option value="daily">毎日</option>
-            <option value="weekly">毎週</option>
-            <option value="monthly">毎月</option>
-          </select>
-        </div>
-        <div>
-          <label className="block text-sm text-muted-foreground mb-1">時刻</label>
-          <input
-            type="time"
-            value={data.triggerTime || ''}
-            onChange={(e) => onChange({ ...data, triggerTime: e.target.value || null })}
-            className="w-full px-3 py-2 rounded-md border border-input bg-background text-sm"
-          />
-        </div>
-      </div>
-
-      {/* Duration & Target Row */}
-      <div className="grid grid-cols-3 gap-4">
-        <div>
-          <label className="block text-sm text-muted-foreground mb-1">所要時間 (分)</label>
-          <input
-            type="number"
-            value={data.duration || ''}
-            onChange={(e) => onChange({ ...data, duration: e.target.value ? Number(e.target.value) : null })}
-            placeholder="30"
-            className="w-full px-3 py-2 rounded-md border border-input bg-background text-sm"
-          />
-        </div>
-        <div>
-          <label className="block text-sm text-muted-foreground mb-1">目標回数/量</label>
-          <input
-            type="number"
-            value={data.targetCount || ''}
-            onChange={(e) => onChange({ ...data, targetCount: e.target.value ? Number(e.target.value) : null })}
-            placeholder="1"
-            className="w-full px-3 py-2 rounded-md border border-input bg-background text-sm"
-          />
-        </div>
-        <div>
-          <label className="block text-sm text-muted-foreground mb-1">単位</label>
-          <input
-            type="text"
-            value={data.workloadUnit || ''}
-            onChange={(e) => onChange({ ...data, workloadUnit: e.target.value || null })}
-            placeholder="回"
-            className="w-full px-3 py-2 rounded-md border border-input bg-background text-sm"
-          />
-        </div>
-      </div>
-
-      {/* Goal */}
-      <div>
-        <label className="block text-sm text-muted-foreground mb-1">ゴール</label>
-        <select
-          value={data.goalId || ''}
-          onChange={(e) => onChange({ ...data, goalId: e.target.value || null })}
-          className="w-full px-3 py-2 rounded-md border border-input bg-background text-sm"
-        >
-          <option value="">ゴールを選択...</option>
-          {goals.map((goal) => (
-            <option key={goal.id} value={goal.id}>
-              {goal.name}
-            </option>
-          ))}
-        </select>
-      </div>
-
-      {/* Actions */}
-      <div className="flex gap-2 pt-2">
-        <button
-          onClick={onSubmit}
-          className="flex-1 py-2 px-4 bg-primary text-primary-foreground rounded-md font-medium hover:opacity-90"
-        >
-          この内容で作成
-        </button>
-        <button
-          onClick={onCancel}
-          className="py-2 px-4 border border-border rounded-md hover:bg-accent"
-        >
-          キャンセル
-        </button>
-      </div>
-    </div>
   );
 }
 
