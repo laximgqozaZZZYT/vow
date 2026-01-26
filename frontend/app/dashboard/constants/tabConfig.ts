@@ -21,7 +21,8 @@ export const TAB_CONFIGS: TabConfig[] = [
   { id: 'stickies', label: 'Notes', labelJa: 'メモ', iconType: 'stickies' },
   { id: 'mindmap', label: 'Map', labelJa: 'マップ', iconType: 'mindmap', supportsFullView: true },
   { id: 'notices', label: 'Alerts', labelJa: '通知', iconType: 'notices' },
-  { id: 'coach', label: 'Coach', labelJa: 'コーチ', iconType: 'coach' },
+  // Coach tab is disabled in production - uncomment for development
+  // { id: 'coach', label: 'Coach', labelJa: 'コーチ', iconType: 'coach' },
 ];
 
 export const DEFAULT_TAB = 'board';
