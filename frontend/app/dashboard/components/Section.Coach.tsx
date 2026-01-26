@@ -27,9 +27,48 @@ import { HabitStatsCard, type HabitStats } from './Widget.HabitStats';
 import { WorkloadChart, type WorkloadData } from './Widget.WorkloadChart';
 import { ChoiceButtons, type Choice } from './Widget.ChoiceButtons';
 import { ProgressIndicator } from './Widget.Progress';
-import { QuickActionButtons, DEFAULT_QUICK_ACTIONS, type QuickAction } from './Widget.QuickActions';
 import { HabitModal } from './Modal.Habit';
 import { GoalModal } from './Modal.Goal';
+
+/**
+ * デフォルトのクイックアクション（Choice形式）
+ */
+const DEFAULT_QUICK_ACTIONS: Choice[] = [
+  {
+    id: 'add-habit',
+    label: '習慣を追加',
+    icon: '➕',
+    description: '新しい習慣を作成します',
+  },
+  {
+    id: 'set-goal',
+    label: 'ゴールを設定',
+    icon: '🎯',
+    description: '目標を設定します',
+  },
+  {
+    id: 'check-progress',
+    label: '進捗を確認',
+    icon: '📊',
+    description: '習慣の達成状況を確認します',
+  },
+  {
+    id: 'get-advice',
+    label: 'アドバイス',
+    icon: '💡',
+    description: '習慣継続のアドバイスを受けます',
+  },
+];
+
+/**
+ * クイックアクションIDからプロンプトへのマッピング
+ */
+const QUICK_ACTION_PROMPTS: Record<string, string> = {
+  'add-habit': '新しい習慣を追加したい',
+  'set-goal': 'ゴールを設定したい',
+  'check-progress': '習慣の進捗を確認したい',
+  'get-advice': '習慣を続けるコツを教えて',
+};
 
 interface Goal {
   id: string;
@@ -391,12 +430,13 @@ export function CoachSection({ goals, onHabitCreated, onGoalCreated }: CoachSect
     }
   }, [addMessage, handleAIChat]);
 
-  const handleQuickAction = useCallback(async (action: QuickAction) => {
-    if (!action.prompt || !apiUrl) return;
+  const handleQuickAction = useCallback(async (choice: Choice) => {
+    const prompt = QUICK_ACTION_PROMPTS[choice.id];
+    if (!prompt || !apiUrl) return;
     
     setInput('');
     setProcessing(true);
-    addMessage('user', action.prompt);
+    addMessage('user', prompt);
 
     try {
       const { data: { session } } = await supabase.auth.getSession();
@@ -406,7 +446,7 @@ export function CoachSection({ goals, onHabitCreated, onGoalCreated }: CoachSect
         return;
       }
 
-      await handleAIChat(session.access_token, action.prompt);
+      await handleAIChat(session.access_token, prompt);
     } catch (err: unknown) {
       const errorMsg = err instanceof Error ? err.message : 'エラーが発生しました';
       setError(errorMsg);
@@ -498,10 +538,10 @@ export function CoachSection({ goals, onHabitCreated, onGoalCreated }: CoachSect
               /* Quick Actions - centered when no conversation */
               <div className="h-full flex flex-col items-center justify-center">
                 <p className="text-lg text-muted-foreground mb-6">何をお手伝いしましょうか？</p>
-                <QuickActionButtons
-                  actions={DEFAULT_QUICK_ACTIONS}
-                  onActionSelect={handleQuickAction}
-                  layout="grid"
+                <ChoiceButtons
+                  choices={DEFAULT_QUICK_ACTIONS}
+                  onSelect={handleQuickAction}
+                  layout="vertical"
                   size="md"
                   className="w-full max-w-sm"
                 />
@@ -872,17 +912,18 @@ function UIComponentRenderer({
       );
 
     case 'quick_actions': {
-      const actions = component.data.actions as QuickAction[];
+      const actions = component.data.actions as Array<{ id: string; label: string; icon?: string; description?: string }>;
+      const choices: Choice[] = actions.map(a => ({
+        id: a.id,
+        label: a.label,
+        icon: a.icon,
+        description: a.description,
+      }));
       return (
-        <QuickActionButtons
-          actions={actions}
-          onAction={(actionId) => {
-            const action = actions.find((a) => a.id === actionId);
-            if (action) {
-              onChoiceSelect({ id: action.id, label: action.label, description: action.description });
-            }
-          }}
-          layout={component.data.layout as 'horizontal' | 'grid'}
+        <ChoiceButtons
+          choices={choices}
+          onSelect={onChoiceSelect}
+          layout={component.data.layout as 'vertical' | 'horizontal' | 'grid'}
           size={component.data.size as 'sm' | 'md' | 'lg'}
           className="max-w-md"
         />

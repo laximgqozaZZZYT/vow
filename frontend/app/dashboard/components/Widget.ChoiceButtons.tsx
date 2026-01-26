@@ -128,12 +128,13 @@ export function ChoiceButtons({
             ${getSizeStyles(size)}
             ${getUrgencyStyles(choice.urgency)}
             flex items-start gap-3
-            bg-card hover:bg-muted
-            border border-border rounded-lg
+            bg-muted/50 hover:bg-muted
+            border border-border hover:border-primary/50 rounded-lg
             text-left
             transition-colors duration-200
             disabled:opacity-50 disabled:cursor-not-allowed
             focus-visible:outline-2 focus-visible:outline-primary
+            cursor-pointer
           `}
         >
           {/* アイコン */}
