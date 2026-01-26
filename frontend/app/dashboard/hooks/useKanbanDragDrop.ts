@@ -48,6 +48,7 @@ export interface UseKanbanDragDropReturn {
  * - Drop in 'in_progress' → 'start' action
  * - Drop in 'completed_daily' → 'complete' action
  * - Drop in 'planned' from 'in_progress' → 'pause' action
+ * - Drop in 'planned' from 'completed_daily' → 'pause' action (reset to planned)
  */
 const getActionForDrop = (
   targetColumn: HabitStatus,
@@ -64,8 +65,8 @@ const getActionForDrop = (
     case 'completed_daily':
       return 'complete';
     case 'planned':
-      // Only pause if coming from in_progress
-      if (sourceColumn === 'in_progress') {
+      // Allow moving back to planned from in_progress or completed_daily
+      if (sourceColumn === 'in_progress' || sourceColumn === 'completed_daily') {
         return 'pause';
       }
       return null;

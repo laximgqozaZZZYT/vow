@@ -213,14 +213,22 @@ export default function KanbanLayout({
           <div
             key={column.id}
             className="
-              /* Mobile: each column takes full viewport width */
+              /* Mobile: each column takes ~85% viewport width to show edge of next column */
               min-w-[85vw]
+              max-w-[85vw]
               md:min-w-0
+              md:max-w-none
               md:flex-1
               
               /* Snap alignment for mobile swipe */
               snap-center
               md:snap-align-none
+              
+              /* Add padding on first/last column for edge visibility */
+              first:ml-2
+              last:mr-2
+              md:first:ml-0
+              md:last:mr-0
             "
           >
             <KanbanColumn

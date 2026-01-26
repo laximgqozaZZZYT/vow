@@ -116,17 +116,21 @@ export function useMobileSwipe({
       // Scroll the container to show the target column
       if (containerRef.current) {
         const container = containerRef.current;
-        const columnWidth = container.scrollWidth / totalColumns;
-        const targetScrollLeft = columnWidth * clampedIndex;
+        // Get the actual column element to scroll to
+        const columns = container.querySelectorAll('[class*="snap-center"]');
+        const targetColumn = columns[clampedIndex] as HTMLElement;
         
-        // Use smooth scroll unless user prefers reduced motion
-        if (prefersReducedMotion()) {
-          container.scrollLeft = targetScrollLeft;
-        } else {
-          container.scrollTo({
-            left: targetScrollLeft,
-            behavior: 'smooth'
-          });
+        if (targetColumn) {
+          // Use smooth scroll unless user prefers reduced motion
+          if (prefersReducedMotion()) {
+            targetColumn.scrollIntoView({ inline: 'center', block: 'nearest' });
+          } else {
+            targetColumn.scrollIntoView({ 
+              inline: 'center', 
+              block: 'nearest',
+              behavior: 'smooth' 
+            });
+          }
         }
       }
     }
@@ -222,17 +226,18 @@ export function useMobileSwipe({
   useEffect(() => {
     if (containerRef.current && totalColumns > 0) {
       const container = containerRef.current;
-      const columnWidth = container.scrollWidth / totalColumns;
-      const targetScrollLeft = columnWidth * currentColumnIndex;
+      const columns = container.querySelectorAll('[class*="snap-center"]');
+      const targetColumn = columns[currentColumnIndex] as HTMLElement;
       
-      // Only scroll if significantly different from current position
-      if (Math.abs(container.scrollLeft - targetScrollLeft) > 10) {
+      if (targetColumn) {
+        // Use scrollIntoView for more reliable positioning with snap-center
         if (prefersReducedMotion()) {
-          container.scrollLeft = targetScrollLeft;
+          targetColumn.scrollIntoView({ inline: 'center', block: 'nearest' });
         } else {
-          container.scrollTo({
-            left: targetScrollLeft,
-            behavior: 'smooth'
+          targetColumn.scrollIntoView({ 
+            inline: 'center', 
+            block: 'nearest',
+            behavior: 'smooth' 
           });
         }
       }
