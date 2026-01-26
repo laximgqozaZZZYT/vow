@@ -502,9 +502,8 @@ export function CoachSection({ goals, onHabitCreated, onGoalCreated }: CoachSect
                   actions={DEFAULT_QUICK_ACTIONS}
                   onActionSelect={handleQuickAction}
                   layout="grid"
-                  columns={2}
                   size="md"
-                  className="max-w-xs"
+                  className="w-full max-w-sm"
                 />
               </div>
             ) : (

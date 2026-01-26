@@ -107,21 +107,21 @@ function getSizeClasses(size: 'sm' | 'md' | 'lg'): {
   switch (size) {
     case 'sm':
       return {
-        button: 'p-2 min-w-[48px] min-h-[48px]',
+        button: 'px-3 py-2 min-h-[44px]',
         icon: 'text-lg',
-        label: 'text-xs',
+        label: 'text-sm',
       };
     case 'md':
       return {
-        button: 'p-3 min-w-[64px] min-h-[64px]',
+        button: 'px-4 py-3 min-h-[48px]',
         icon: 'text-xl',
-        label: 'text-sm',
+        label: 'text-base',
       };
     case 'lg':
       return {
-        button: 'p-4 min-w-[80px] min-h-[80px]',
+        button: 'px-5 py-4 min-h-[56px]',
         icon: 'text-2xl',
-        label: 'text-base',
+        label: 'text-lg',
       };
   }
 }
@@ -143,42 +143,40 @@ function getGridColumns(columns: 2 | 3 | 4): string {
 
 /**
  * 個別のアクションボタン
+ * ChoiceButtonsと同じスタイル（横長、アイコンとラベルが横並び）
  */
 function ActionButton({
   action,
   onClick,
   sizeClasses,
-  layout,
 }: {
   action: QuickAction;
   onClick: () => void;
   sizeClasses: ReturnType<typeof getSizeClasses>;
   layout: 'horizontal' | 'grid';
 }) {
-  const variantClasses = getVariantClasses(action.variant);
-
   return (
     <button
       onClick={onClick}
       disabled={action.disabled}
       className={`
         ${sizeClasses.button}
-        ${variantClasses}
-        rounded-lg
-        flex flex-col items-center justify-center gap-1
-        transition-all duration-200
+        bg-card hover:bg-muted
+        border border-border rounded-lg
+        flex items-center gap-3
+        text-left
+        transition-colors duration-200
         focus-visible:outline-2 focus-visible:outline-primary focus-visible:outline-offset-2
         disabled:opacity-50 disabled:cursor-not-allowed
-        ${layout === 'horizontal' ? 'flex-shrink-0' : ''}
       `}
       title={action.description}
     >
       {action.icon && (
-        <span className={sizeClasses.icon} role="img" aria-hidden="true">
+        <span className={`${sizeClasses.icon} flex-shrink-0`} role="img" aria-hidden="true">
           {action.icon}
         </span>
       )}
-      <span className={`${sizeClasses.label} font-medium text-center leading-tight`}>
+      <span className={`${sizeClasses.label} font-medium text-foreground`}>
         {action.label}
       </span>
     </button>
@@ -226,7 +224,7 @@ export function QuickActionButtons({
   const containerClasses =
     layout === 'horizontal'
       ? 'flex flex-wrap gap-2'
-      : `grid ${getGridColumns(columns)} gap-2`;
+      : `flex flex-col gap-2`;
 
   return (
     <div className={`${containerClasses} ${className}`}>
