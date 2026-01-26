@@ -459,7 +459,7 @@ export function CoachSection({ goals, onHabitCreated, onGoalCreated }: CoachSect
 
 
   return (
-    <section className="flex flex-col h-full min-h-[500px] md:min-h-[600px] bg-card border border-border rounded-lg shadow-sm overflow-hidden">
+    <section className="flex flex-col h-[calc(100vh-200px)] min-h-[400px] max-h-[800px] bg-card border border-border rounded-lg shadow-sm overflow-hidden">
       {/* Header - 48px */}
       <header className="flex items-center justify-between px-4 py-3 border-b border-border bg-card shrink-0">
         <h2 className="text-lg font-semibold flex items-center gap-2">
@@ -492,8 +492,8 @@ export function CoachSection({ goals, onHabitCreated, onGoalCreated }: CoachSect
         <UpgradePrompt />
       ) : (
         <>
-          {/* Chat Area - flex-1, min-h-400px desktop, min-h-250px mobile */}
-          <div className="flex-1 min-h-[250px] md:min-h-[400px] overflow-y-auto p-4">
+          {/* Chat Area - flex-1 to fill remaining space, scrollable */}
+          <div className="flex-1 overflow-y-auto p-4">
             {messages.length === 0 ? (
               /* Quick Actions - centered when no conversation */
               <div className="h-full flex flex-col items-center justify-center">
