@@ -73,6 +73,8 @@ const COLUMNS: ColumnConfig[] = [
 const DRAG_SCROLL_THRESHOLD = 60;
 /** Scroll speed for auto-scroll (pixels per frame) */
 const DRAG_SCROLL_SPEED = 12;
+/** Drag preview width (used to detect when preview is cut off) */
+const DRAG_PREVIEW_WIDTH = 100;
 
 /**
  * KanbanLayout component
@@ -133,10 +135,13 @@ export default function KanbanLayout({
   
   // Auto-scroll state
   const scrollAnimationRef = useRef<number | null>(null);
+  const dragPreviewPositionRef = useRef<{ left: number; right: number } | null>(null);
+  const isDraggingRef = useRef(false);
+  
+  // Touch position tracking refs
   const touchPositionRef = useRef<{ x: number; y: number } | null>(null);
   const lastTouchXRef = useRef<number | null>(null);
   const dragDirectionRef = useRef<'left' | 'right' | null>(null);
-  const isDraggingRef = useRef(false);
 
   // Keep isDraggingRef in sync with isDragging state
   useEffect(() => {
@@ -151,39 +156,40 @@ export default function KanbanLayout({
     if (!isDragging && scrollAnimationRef.current) {
       cancelAnimationFrame(scrollAnimationRef.current);
       scrollAnimationRef.current = null;
+      dragPreviewPositionRef.current = null;
     }
   }, [isDragging]);
 
   /**
-   * Auto-scroll container when dragging near screen edges
-   * Scrolls when finger position is within DRAG_SCROLL_THRESHOLD of left/right edge
+   * Auto-scroll container when drag preview is cut off at screen edges
+   * Scrolls when the drag preview extends beyond the visible area
    */
   const performAutoScroll = useCallback(() => {
     const container = scrollContainerRef.current;
     
-    // Must have container, touch position, and be dragging
-    if (!container || !touchPositionRef.current || !isDraggingRef.current) {
+    // Must have container, preview position, and be dragging
+    if (!container || !dragPreviewPositionRef.current || !isDraggingRef.current) {
       scrollAnimationRef.current = null;
       return;
     }
     
-    const rect = container.getBoundingClientRect();
-    const { x } = touchPositionRef.current;
+    const containerRect = container.getBoundingClientRect();
+    const { left: previewLeft, right: previewRight } = dragPreviewPositionRef.current;
     
     let scrollDelta = 0;
     
-    // Calculate distance from edges
-    const distanceFromLeft = x - rect.left;
-    const distanceFromRight = rect.right - x;
-    
-    // Scroll when near edges - speed increases as you get closer to edge
-    if (distanceFromLeft < DRAG_SCROLL_THRESHOLD) {
-      // Near left edge - scroll left
-      const intensity = 1 - (distanceFromLeft / DRAG_SCROLL_THRESHOLD);
+    // Check if drag preview is cut off on the left
+    if (previewLeft < containerRect.left) {
+      // Preview is cut off on left - scroll left
+      const cutOffAmount = containerRect.left - previewLeft;
+      const intensity = Math.min(cutOffAmount / DRAG_PREVIEW_WIDTH, 1);
       scrollDelta = -DRAG_SCROLL_SPEED * (1 + intensity);
-    } else if (distanceFromRight < DRAG_SCROLL_THRESHOLD) {
-      // Near right edge - scroll right
-      const intensity = 1 - (distanceFromRight / DRAG_SCROLL_THRESHOLD);
+    }
+    // Check if drag preview is cut off on the right
+    else if (previewRight > containerRect.right) {
+      // Preview is cut off on right - scroll right
+      const cutOffAmount = previewRight - containerRect.right;
+      const intensity = Math.min(cutOffAmount / DRAG_PREVIEW_WIDTH, 1);
       scrollDelta = DRAG_SCROLL_SPEED * (1 + intensity);
     }
     
@@ -219,7 +225,7 @@ export default function KanbanLayout({
     };
   }, []);
   
-  // Global touch move listener to track finger position during drag
+  // Global touch move listener to track drag preview position during drag
   // This is needed because the drag preview element captures touch events
   useEffect(() => {
     const handleGlobalTouchMove = (e: TouchEvent) => {
@@ -227,17 +233,29 @@ export default function KanbanLayout({
       
       const touch = e.touches[0];
       if (touch) {
-        touchPositionRef.current = { x: touch.clientX, y: touch.clientY };
+        const touchX = touch.clientX;
+        const touchY = touch.clientY;
+        
+        touchPositionRef.current = { x: touchX, y: touchY };
+        
+        // Calculate drag preview bounds (preview is 100px wide, centered on touch)
+        // The preview is positioned at left: touchX - 50, so:
+        // - Preview left edge = touchX - 50
+        // - Preview right edge = touchX + 50
+        dragPreviewPositionRef.current = {
+          left: touchX - 50,
+          right: touchX + 50
+        };
         
         // Track direction
         const prevX = lastTouchXRef.current;
         if (prevX !== null) {
-          const deltaX = touch.clientX - prevX;
+          const deltaX = touchX - prevX;
           if (Math.abs(deltaX) > 1) {
             dragDirectionRef.current = deltaX > 0 ? 'right' : 'left';
           }
         }
-        lastTouchXRef.current = touch.clientX;
+        lastTouchXRef.current = touchX;
       }
     };
     
@@ -246,6 +264,7 @@ export default function KanbanLayout({
         touchPositionRef.current = null;
         lastTouchXRef.current = null;
         dragDirectionRef.current = null;
+        dragPreviewPositionRef.current = null;
       }
     };
     
@@ -290,6 +309,7 @@ export default function KanbanLayout({
     touchPositionRef.current = { x: touch.clientX, y: touch.clientY };
     lastTouchXRef.current = touch.clientX;
     dragDirectionRef.current = null;
+    dragPreviewPositionRef.current = null;
     handleSwipeStart(event);
   }, [handleSwipeStart]);
   
@@ -309,6 +329,13 @@ export default function KanbanLayout({
       if (Math.abs(deltaX) > 1) { // Lower threshold for more responsive direction tracking
         dragDirectionRef.current = deltaX > 0 ? 'right' : 'left';
       }
+      
+      // Update drag preview position for auto-scroll detection
+      // Preview is 100px wide, centered on touch position
+      dragPreviewPositionRef.current = {
+        left: currentX - 50,
+        right: currentX + 50
+      };
     }
     
     // Handle drag preview movement if dragging
@@ -324,6 +351,7 @@ export default function KanbanLayout({
     touchPositionRef.current = null;
     lastTouchXRef.current = null;
     dragDirectionRef.current = null;
+    dragPreviewPositionRef.current = null;
     
     // Stop auto-scroll
     if (scrollAnimationRef.current) {

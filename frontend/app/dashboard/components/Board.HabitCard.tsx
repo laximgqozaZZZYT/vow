@@ -5,6 +5,7 @@
  * 
  * Displays a habit card with:
  * - Habit name (prominently displayed)
+ * - Daily progress bar (background behind name)
  * - Scheduled time (if available)
  * - Progress information (count/must) for habits with targets
  * - Workload information (workloadPerCount, workloadUnit) if configured
@@ -17,7 +18,7 @@
  * Validates: Requirements 3.1, 3.2, 3.3, 3.4, 3.5, 3.6, 5.5
  */
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import type { Habit, Activity } from '../types';
 import type { HabitStatus } from '../utils/habitStatusUtils';
 import { formatTime24 } from '../../../lib/format';
@@ -33,6 +34,41 @@ export interface HabitCardProps {
   onDragStart: () => void;
   onDragEnd: () => void;
   isDragging: boolean;
+}
+
+/**
+ * Calculate daily workload from activities (JST-based)
+ * 
+ * @param habitId - The habit ID to calculate workload for
+ * @param activities - All activities
+ * @returns Total workload completed today
+ */
+function calculateDailyWorkload(habitId: string, activities: Activity[]): number {
+  // JST (UTC+9) での現在時刻を取得
+  const now = new Date();
+  const jstTime = new Date(now.toLocaleString("en-US", {timeZone: "Asia/Tokyo"}));
+  
+  // JST での今日の開始時刻 (0:00 JST) と終了時刻 (23:59:59 JST)
+  const todayStartJST = new Date(jstTime);
+  todayStartJST.setHours(0, 0, 0, 0);
+  
+  const todayEndJST = new Date(jstTime);
+  todayEndJST.setHours(23, 59, 59, 999);
+  
+  // 今日のJST範囲内のActivityをフィルタリング
+  const todayActivities = activities.filter(activity => {
+    if (activity.habitId !== habitId || !activity.timestamp) return false;
+    
+    const activityTime = new Date(activity.timestamp);
+    const activityJST = new Date(activityTime.toLocaleString("en-US", {timeZone: "Asia/Tokyo"}));
+    
+    return activityJST >= todayStartJST && activityJST <= todayEndJST;
+  });
+  
+  // completeタイプのActivityのamount合計を計算
+  return todayActivities
+    .filter(activity => activity.kind === 'complete')
+    .reduce((sum, activity) => sum + (activity.amount || 1), 0);
 }
 
 /**
@@ -122,6 +158,22 @@ export default function HabitCard({
     a => a.habitId === habit.id && a.timestamp.slice(0, 10) === today
   );
   
+  // Calculate daily progress (workload-based)
+  const dailyProgress = useMemo(() => {
+    const dailyTarget = habit.workloadTotal || habit.must || 0;
+    if (dailyTarget <= 0) return null;
+    
+    const currentWorkload = calculateDailyWorkload(habit.id, activities);
+    const progressRate = Math.min((currentWorkload / dailyTarget) * 100, 100);
+    
+    return {
+      current: currentWorkload,
+      target: dailyTarget,
+      rate: progressRate,
+      completed: currentWorkload >= dailyTarget
+    };
+  }, [habit.id, habit.workloadTotal, habit.must, activities]);
+  
   // Update elapsed time every second for in_progress habits
   useEffect(() => {
     if (status !== 'in_progress') {
@@ -197,14 +249,33 @@ export default function HabitCard({
         touchAction: 'pan-y'
       }}
     >
-      {/* Header: Habit name and time */}
+      {/* Header: Habit name and time with background progress bar */}
       <div className={`flex items-start gap-2 mb-2 ${isLeftHanded ? 'flex-row-reverse' : ''}`}>
         {/* Drag handle indicator */}
         <div className="flex-shrink-0 w-1 h-6 bg-muted rounded-full opacity-50" />
         
-        <div className="flex-1 min-w-0">
+        <div className="flex-1 min-w-0 relative">
+          {/* Background progress bar - Daily Progress visualization */}
+          {dailyProgress && (
+            <div 
+              className={`absolute inset-0 rounded transition-all duration-300 ${
+                dailyProgress.completed 
+                  ? 'bg-green-500/20' 
+                  : dailyProgress.rate >= 75 
+                    ? 'bg-blue-500/20' 
+                    : dailyProgress.rate >= 50 
+                      ? 'bg-yellow-500/20' 
+                      : 'bg-red-400/20'
+              }`}
+              style={{ 
+                width: `${dailyProgress.rate}%`,
+                minWidth: dailyProgress.rate > 0 ? '4px' : '0'
+              }}
+            />
+          )}
+          
           {/* Habit name - Requirement 3.1 */}
-          <div className="habit-name-scroll min-w-0 overflow-hidden">
+          <div className="habit-name-scroll min-w-0 overflow-hidden relative z-10">
             <button
               onClick={handleEditClick}
               className={`
@@ -238,17 +309,20 @@ export default function HabitCard({
       
       {/* Progress and workload info */}
       <div className={`flex flex-wrap gap-2 text-xs text-muted-foreground mb-2 ${isLeftHanded ? 'justify-end' : 'justify-start'}`}>
-        {/* Progress info - Requirement 3.3 */}
-        {hasProgress && (
-          <span className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-muted rounded">
-            📊 {habit.count}/{habit.must}
+        {/* Daily Progress info - workload-based */}
+        {dailyProgress && (
+          <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded ${
+            dailyProgress.completed ? 'bg-green-500/20 text-green-700 dark:text-green-400' : 'bg-muted'
+          }`}>
+            📊 {dailyProgress.current}/{dailyProgress.target}
+            {habit.workloadUnit && ` ${habit.workloadUnit}`}
           </span>
         )}
         
-        {/* Workload info - Requirement 3.4 */}
+        {/* Workload per count info - Requirement 3.4 */}
         {hasWorkload && (
           <span className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-muted rounded">
-            ⚡ {habit.workloadPerCount} {habit.workloadUnit}
+            ⚡ {habit.workloadPerCount} {habit.workloadUnit}/回
           </span>
         )}
         
@@ -260,21 +334,21 @@ export default function HabitCard({
         )}
       </div>
       
-      {/* Progress bar - Daily Progress visualization */}
-      {hasProgress && (
+      {/* Progress bar - Daily Progress visualization (thin bar below info) */}
+      {dailyProgress && (
         <div className="mb-2">
           <div className="w-full bg-muted rounded-full h-1.5">
             <div 
               className={`h-1.5 rounded-full transition-all duration-300 ${
-                habit.count >= habit.must 
+                dailyProgress.completed 
                   ? 'bg-green-500' 
-                  : (habit.count / habit.must) >= 0.75 
+                  : dailyProgress.rate >= 75 
                     ? 'bg-blue-500' 
-                    : (habit.count / habit.must) >= 0.5 
+                    : dailyProgress.rate >= 50 
                       ? 'bg-yellow-500' 
                       : 'bg-red-400'
               }`}
-              style={{ width: `${Math.min((habit.count / habit.must) * 100, 100)}%` }}
+              style={{ width: `${dailyProgress.rate}%` }}
             />
           </div>
         </div>
