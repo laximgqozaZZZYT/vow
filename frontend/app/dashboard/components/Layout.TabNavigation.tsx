@@ -205,40 +205,6 @@ export function TabNavigation({
           })}
         </div>
       </div>
-
-      {/* Collapse toggle button */}
-      {onToggleCollapse && (
-        <div className="border-t border-border/50 p-2">
-          <button
-            onClick={onToggleCollapse}
-            className="
-              flex items-center justify-center
-              w-full h-8
-              rounded-md
-              text-muted-foreground
-              hover:bg-muted/50 hover:text-foreground
-              transition-all duration-150
-              focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50
-            "
-            aria-label={collapsed ? (locale === 'ja' ? '展開' : 'Expand') : (locale === 'ja' ? '折りたたむ' : 'Collapse')}
-          >
-            <svg
-              width="16"
-              height="16"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="1.5"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              className={`transition-transform duration-200 ${collapsed ? 'rotate-180' : ''}`}
-            >
-              <path d="m11 17-5-5 5-5" />
-              <path d="m18 17-5-5 5-5" />
-            </svg>
-          </button>
-        </div>
-      )}
     </nav>
   );
 }
