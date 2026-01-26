@@ -871,7 +871,7 @@ function DashboardLayout(props: any) {
   };
 
   return (
-    <div className="flex min-h-screen bg-background text-foreground">
+    <div className="flex flex-col md:flex-row min-h-screen md:min-h-screen bg-background text-foreground">
         <DashboardHeader
           onToggleSidebar={() => setShowLeftPane((s: boolean) => !s)}
           showSidebar={showLeftPane}
@@ -906,7 +906,7 @@ function DashboardLayout(props: any) {
       />
 
   {/* Main content pane with left tab navigation */}
-  <main className={`flex-1 pt-16 flex flex-col md:flex-row h-[100dvh] md:h-auto ${showLeftPane ? (isLeftHanded ? 'lg:mr-80' : 'lg:ml-80') : ''}`}>
+  <main className={`flex-1 pt-16 pb-20 md:pb-0 flex flex-col md:flex-row ${showLeftPane ? (isLeftHanded ? 'lg:mr-80' : 'lg:ml-80') : ''}`}>
         {/* Left Tab Navigation - Desktop */}
         <div className="hidden md:flex flex-col h-[calc(100vh-4rem)] sticky top-16">
           <TabNavigation
@@ -918,45 +918,8 @@ function DashboardLayout(props: any) {
           />
         </div>
 
-        {/* Mobile Tab Navigation - Bottom fixed, single row scrollable */}
-        <div className="md:hidden fixed bottom-0 left-0 right-0 z-50 bg-background border-t border-border shadow-lg">
-          <div 
-            className="flex overflow-x-auto scrollbar-hide px-1 py-1.5 gap-0.5" 
-            style={{ paddingBottom: 'max(env(safe-area-inset-bottom, 0px), 8px)' }}
-          >
-            {visibleTabs.map((tab) => {
-              // Normalize activeTab for comparison (e.g., 'next' -> 'board')
-              const normalizedActiveTab = normalizeTabId(activeTab);
-              const isActive = tab.id === normalizedActiveTab;
-              const label = tab.labelJa;
-              return (
-                <button
-                  key={tab.id}
-                  onClick={() => setActiveTab(tab.id)}
-                  className={`
-                    flex flex-col items-center justify-center flex-shrink-0
-                    w-[56px] min-h-[52px]
-                    py-1.5
-                    rounded-lg
-                    transition-all duration-150
-                    ${isActive
-                      ? 'text-primary bg-primary/5'
-                      : 'text-muted-foreground'
-                    }
-                  `}
-                >
-                  <MobileTabIcon type={tab.iconType} isActive={isActive} />
-                  <span className={`text-[9px] mt-0.5 leading-tight ${isActive ? 'font-medium' : ''}`}>
-                    {label}
-                  </span>
-                </button>
-              );
-            })}
-          </div>
-        </div>
-
-        {/* Tab Content - Use calc to account for header and bottom nav on mobile */}
-        <div className="flex-1 p-4 lg:p-6 pb-[80px] md:pb-6 overflow-y-auto overflow-x-hidden h-[calc(100dvh-4rem)] md:h-auto overscroll-contain">
+        {/* Tab Content */}
+        <div className="flex-1 p-4 lg:p-6">
           <TabContent
             activeTab={activeTab}
             isFullView={isFullView}
@@ -968,6 +931,43 @@ function DashboardLayout(props: any) {
           </TabContent>
         </div>
       </main>
+
+      {/* Mobile Tab Navigation - Bottom fixed, OUTSIDE of main */}
+      <nav className="md:hidden fixed bottom-0 left-0 right-0 z-[9999] bg-background border-t border-border shadow-[0_-2px_10px_rgba(0,0,0,0.1)]">
+        <div 
+          className="flex overflow-x-auto scrollbar-hide px-1 py-1.5 gap-0.5" 
+          style={{ paddingBottom: 'max(env(safe-area-inset-bottom, 0px), 8px)' }}
+        >
+          {visibleTabs.map((tab) => {
+            // Normalize activeTab for comparison (e.g., 'next' -> 'board')
+            const normalizedActiveTab = normalizeTabId(activeTab);
+            const isActive = tab.id === normalizedActiveTab;
+            const label = tab.labelJa;
+            return (
+              <button
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id)}
+                className={`
+                  flex flex-col items-center justify-center flex-shrink-0
+                  w-[56px] min-h-[52px]
+                  py-1.5
+                  rounded-lg
+                  transition-all duration-150
+                  ${isActive
+                    ? 'text-primary bg-primary/5'
+                    : 'text-muted-foreground'
+                  }
+                `}
+              >
+                <MobileTabIcon type={tab.iconType} isActive={isActive} />
+                <span className={`text-[9px] mt-0.5 leading-tight ${isActive ? 'font-medium' : ''}`}>
+                  {label}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      </nav>
 
       <GoalModal
         open={openNewCategory}

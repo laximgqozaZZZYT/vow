@@ -157,17 +157,17 @@ export default function KanbanLayout({
     const nearLeftEdge = x - rect.left < DRAG_SCROLL_THRESHOLD;
     const nearRightEdge = rect.right - x < DRAG_SCROLL_THRESHOLD;
     
-    // If near edge, scroll in that direction
+    // If near edge, scroll faster in that direction
     if (nearLeftEdge) {
-      scrollDelta = -DRAG_SCROLL_SPEED;
+      scrollDelta = -DRAG_SCROLL_SPEED * 1.5;
     } else if (nearRightEdge) {
-      scrollDelta = DRAG_SCROLL_SPEED;
+      scrollDelta = DRAG_SCROLL_SPEED * 1.5;
     }
-    // If not near edge but actively dragging in a direction, scroll slower in that direction
+    // If actively dragging in a direction, scroll in that direction
     else if (dragDirectionRef.current === 'left') {
-      scrollDelta = -DRAG_SCROLL_SPEED * 0.5;
+      scrollDelta = -DRAG_SCROLL_SPEED;
     } else if (dragDirectionRef.current === 'right') {
-      scrollDelta = DRAG_SCROLL_SPEED * 0.5;
+      scrollDelta = DRAG_SCROLL_SPEED;
     }
     
     if (scrollDelta !== 0) {
@@ -178,11 +178,10 @@ export default function KanbanLayout({
       if (newScrollLeft >= 0 && newScrollLeft <= maxScroll) {
         container.scrollLeft = newScrollLeft;
       }
-      
-      scrollAnimationRef.current = requestAnimationFrame(performAutoScroll);
-    } else {
-      scrollAnimationRef.current = null;
     }
+    
+    // Always continue the animation loop while dragging
+    scrollAnimationRef.current = requestAnimationFrame(performAutoScroll);
   }, [containerRef, isDragging]);
   
   // Cleanup auto-scroll on unmount
