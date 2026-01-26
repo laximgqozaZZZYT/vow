@@ -915,7 +915,9 @@ function DashboardLayout(props: any) {
         <div className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-background/95 backdrop-blur-md border-t border-border/50">
           <div className="flex overflow-x-auto scrollbar-hide px-1 py-1.5 gap-0.5" style={{ paddingBottom: 'env(safe-area-inset-bottom, 8px)' }}>
             {visibleTabs.map((tab) => {
-              const isActive = tab.id === activeTab;
+              // Normalize activeTab for comparison (e.g., 'next' -> 'board')
+              const normalizedActiveTab = normalizeTabId(activeTab);
+              const isActive = tab.id === normalizedActiveTab;
               const label = tab.labelJa;
               return (
                 <button

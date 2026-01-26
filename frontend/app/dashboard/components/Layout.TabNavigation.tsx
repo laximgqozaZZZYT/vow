@@ -2,6 +2,7 @@
 
 import { useLocale } from '@/contexts/LocaleContext';
 import type { TabConfig } from '../constants/tabConfig';
+import { normalizeTabId } from '../constants/tabConfig';
 
 interface TabNavigationProps {
   tabs: TabConfig[];
@@ -27,6 +28,15 @@ const TabIcon = ({ type, className = '' }: { type: TabConfig['iconType']; classN
   };
 
   switch (type) {
+    case 'board':
+      // Kanban board icon (3 columns)
+      return (
+        <svg {...iconProps}>
+          <rect x="3" y="3" width="5" height="18" rx="1" />
+          <rect x="10" y="3" width="5" height="12" rx="1" />
+          <rect x="17" y="3" width="5" height="15" rx="1" />
+        </svg>
+      );
     case 'next':
       return (
         <svg {...iconProps}>
@@ -144,7 +154,9 @@ export function TabNavigation({
       <div className="flex-1 py-3 overflow-y-auto scrollbar-hide">
         <div className="flex flex-col items-center gap-1">
           {tabs.map((tab) => {
-            const isActive = tab.id === activeTab;
+            // Normalize activeTab for comparison (e.g., 'next' -> 'board')
+            const normalizedActiveTab = normalizeTabId(activeTab);
+            const isActive = tab.id === normalizedActiveTab;
             const label = locale === 'ja' ? tab.labelJa : tab.label;
 
             return (

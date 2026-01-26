@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect } from 'react';
-import { DEFAULT_TAB } from '../constants/tabConfig';
+import { DEFAULT_TAB, normalizeTabId } from '../constants/tabConfig';
 
 export interface UseTabNavigationReturn {
   activeTab: string;
@@ -18,14 +18,19 @@ export function useTabNavigation(
   initialTab?: string,
   availableTabs?: string[]
 ): UseTabNavigationReturn {
+  // Normalize available tabs for comparison (e.g., 'next' -> 'board')
+  const normalizedAvailableTabs = availableTabs?.map(normalizeTabId);
+  
   // Validate initial tab
   const getValidTab = useCallback((tabId: string | undefined): string => {
     if (!tabId) return DEFAULT_TAB;
-    if (availableTabs && !availableTabs.includes(tabId)) {
-      return availableTabs[0] || DEFAULT_TAB;
+    // Normalize the tab ID for backward compatibility
+    const normalizedId = normalizeTabId(tabId);
+    if (normalizedAvailableTabs && !normalizedAvailableTabs.includes(normalizedId)) {
+      return normalizedAvailableTabs[0] || DEFAULT_TAB;
     }
-    return tabId;
-  }, [availableTabs]);
+    return normalizedId;
+  }, [normalizedAvailableTabs]);
 
   const [activeTab, setActiveTabState] = useState<string>(() => 
     getValidTab(initialTab)
@@ -74,10 +79,11 @@ export function useTabNavigation(
 
   // Validate active tab when available tabs change
   useEffect(() => {
-    if (availableTabs && availableTabs.length > 0 && !availableTabs.includes(activeTab)) {
-      setActiveTabState(availableTabs[0]);
+    const normalizedActiveTab = normalizeTabId(activeTab);
+    if (normalizedAvailableTabs && normalizedAvailableTabs.length > 0 && !normalizedAvailableTabs.includes(normalizedActiveTab)) {
+      setActiveTabState(normalizedAvailableTabs[0]);
     }
-  }, [availableTabs, activeTab]);
+  }, [normalizedAvailableTabs, activeTab]);
 
   return {
     activeTab,
