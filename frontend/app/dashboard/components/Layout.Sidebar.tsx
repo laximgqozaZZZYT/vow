@@ -66,7 +66,7 @@ export default function DashboardSidebar({
         onClick={onClose}
       />
       
-      <aside className={`fixed ${sidePosition} top-14 w-80 max-w-[85vw] h-[calc(100vh-3.5rem)] ${borderSide} border-border bg-card z-40 lg:w-80 flex flex-col`}>
+      <aside className={`fixed ${sidePosition} top-14 w-80 max-w-[85vw] h-[calc(100vh-3.5rem-5rem)] md:h-[calc(100vh-3.5rem)] ${borderSide} border-border bg-card z-40 lg:w-80 flex flex-col`}>
         <div className="flex-shrink-0 p-3">
           <div className="mb-3 flex items-center justify-between">
             <div className={`flex items-center gap-2 ${isLeftHanded ? 'flex-row-reverse' : ''}`}>
