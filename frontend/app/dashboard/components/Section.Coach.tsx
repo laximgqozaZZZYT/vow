@@ -499,7 +499,7 @@ export function CoachSection({ goals, onHabitCreated, onGoalCreated }: CoachSect
 
 
   return (
-    <section className="flex flex-col h-[calc(100vh-200px)] min-h-[400px] max-h-[800px] bg-card border border-border rounded-lg shadow-sm overflow-hidden">
+    <section className="flex flex-col h-[calc(100vh-120px)] md:h-[calc(100vh-200px)] min-h-[400px] bg-card border border-border rounded-lg shadow-sm overflow-hidden">
       {/* Header - 48px */}
       <header className="flex items-center justify-between px-4 py-3 border-b border-border bg-card shrink-0">
         <h2 className="text-lg font-semibold flex items-center gap-2">
@@ -638,8 +638,8 @@ export function CoachSection({ goals, onHabitCreated, onGoalCreated }: CoachSect
             </div>
           )}
 
-          {/* Input Area - sticky bottom, min-h-80px, max-h-160px */}
-          <div className="shrink-0 border-t border-border bg-card p-4">
+          {/* Input Area - fixed at bottom */}
+          <div className="shrink-0 border-t border-border bg-card p-4 mt-auto">
             {error && (
               <div className="mb-3 p-3 bg-destructive/10 border border-destructive/20 rounded-md text-sm text-destructive">
                 {error}
@@ -654,7 +654,7 @@ export function CoachSection({ goals, onHabitCreated, onGoalCreated }: CoachSect
                   ? "例: 毎朝7時に30分ジョギングする"
                   : "続けて入力..."
                 }
-                className="flex-1 min-h-[60px] md:min-h-[80px] max-h-[160px] px-4 py-3 rounded-lg border border-input bg-background text-base resize-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                className="flex-1 min-h-[48px] md:min-h-[60px] max-h-[120px] px-4 py-3 rounded-lg border border-input bg-background text-base resize-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
                 disabled={processing}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter' && !e.shiftKey) {
@@ -666,7 +666,7 @@ export function CoachSection({ goals, onHabitCreated, onGoalCreated }: CoachSect
               <button
                 onClick={handleProcess}
                 disabled={processing || !input.trim()}
-                className="px-6 py-3 min-h-[48px] bg-primary text-primary-foreground rounded-lg font-medium hover:opacity-90 disabled:opacity-50 transition-opacity"
+                className="px-4 md:px-6 py-3 min-h-[48px] bg-primary text-primary-foreground rounded-lg font-medium hover:opacity-90 disabled:opacity-50 transition-opacity"
               >
                 {processing ? '...' : '送信'}
               </button>
