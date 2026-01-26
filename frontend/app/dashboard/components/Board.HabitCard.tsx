@@ -221,6 +221,16 @@ export default function HabitCard({
     onDragEnd();
   }, [onDragEnd]);
   
+  // Handle card tap (single tap opens edit modal)
+  const handleCardClick = useCallback((e: React.MouseEvent) => {
+    // Don't trigger if clicking on interactive elements (buttons, inputs)
+    const target = e.target as HTMLElement;
+    if (target.closest('button') || target.closest('input')) {
+      return;
+    }
+    onEdit();
+  }, [onEdit]);
+  
   const scheduledTime = getScheduledTime(habit);
   const hasProgress = habit.must > 0;
   const hasWorkload = habit.workloadUnit && habit.workloadPerCount;
@@ -230,17 +240,18 @@ export default function HabitCard({
       draggable
       onDragStart={handleDragStart}
       onDragEnd={handleDragEnd}
+      onClick={handleCardClick}
       className={`
         p-3 
         bg-card 
         border border-border 
         rounded-lg 
         shadow-sm
-        cursor-grab
+        cursor-pointer
         active:cursor-grabbing
         transition-all
         duration-200
-        ${isDragging ? 'opacity-50 scale-95 shadow-lg ring-2 ring-primary' : 'hover:shadow-md'}
+        ${isDragging ? 'opacity-50 scale-95 shadow-lg ring-2 ring-primary' : 'hover:shadow-md hover:border-primary/50'}
         ${isLeftHanded ? 'text-right' : 'text-left'}
       `}
       style={{ 

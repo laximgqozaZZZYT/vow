@@ -70,11 +70,9 @@ const COLUMNS: ColumnConfig[] = [
 ];
 
 /** Edge threshold for auto-scroll during drag (pixels from edge) */
-const DRAG_SCROLL_THRESHOLD = 60;
+const DRAG_SCROLL_EDGE_ZONE = 80;
 /** Scroll speed for auto-scroll (pixels per frame) */
-const DRAG_SCROLL_SPEED = 12;
-/** Drag preview width (used to detect when preview is cut off) */
-const DRAG_PREVIEW_WIDTH = 100;
+const DRAG_SCROLL_SPEED = 15;
 
 /**
  * KanbanLayout component
@@ -130,145 +128,112 @@ export default function KanbanLayout({
     onColumnChange: undefined
   });
   
-  // Separate ref for scroll container to ensure we have direct control
+  // Scroll container ref
   const scrollContainerRef = useRef<HTMLDivElement | null>(null);
   
-  // Auto-scroll state
+  // Auto-scroll refs
   const scrollAnimationRef = useRef<number | null>(null);
-  const dragPreviewPositionRef = useRef<{ left: number; right: number } | null>(null);
+  const currentTouchXRef = useRef<number | null>(null);
   const isDraggingRef = useRef(false);
-  
-  // Touch position tracking refs
-  const touchPositionRef = useRef<{ x: number; y: number } | null>(null);
-  const lastTouchXRef = useRef<number | null>(null);
-  const dragDirectionRef = useRef<'left' | 'right' | null>(null);
 
-  // Keep isDraggingRef in sync with isDragging state
+  // Sync isDraggingRef
   useEffect(() => {
     isDraggingRef.current = isDragging;
-    
-    // Start auto-scroll when dragging starts
-    if (isDragging && !scrollAnimationRef.current) {
-      scrollAnimationRef.current = requestAnimationFrame(performAutoScroll);
-    }
-    
-    // Stop auto-scroll when dragging ends
-    if (!isDragging && scrollAnimationRef.current) {
-      cancelAnimationFrame(scrollAnimationRef.current);
-      scrollAnimationRef.current = null;
-      dragPreviewPositionRef.current = null;
-    }
   }, [isDragging]);
 
   /**
-   * Auto-scroll container when drag preview is cut off at screen edges
-   * Scrolls when the drag preview extends beyond the visible area
+   * Auto-scroll function - checks touch position and scrolls if near edge
    */
   const performAutoScroll = useCallback(() => {
     const container = scrollContainerRef.current;
+    const touchX = currentTouchXRef.current;
     
-    // Must have container, preview position, and be dragging
-    if (!container || !dragPreviewPositionRef.current || !isDraggingRef.current) {
+    if (!container || touchX === null || !isDraggingRef.current) {
       scrollAnimationRef.current = null;
       return;
     }
     
     const containerRect = container.getBoundingClientRect();
-    const { left: previewLeft, right: previewRight } = dragPreviewPositionRef.current;
+    const leftEdge = containerRect.left + DRAG_SCROLL_EDGE_ZONE;
+    const rightEdge = containerRect.right - DRAG_SCROLL_EDGE_ZONE;
     
     let scrollDelta = 0;
     
-    // Check if drag preview is cut off on the left
-    if (previewLeft < containerRect.left) {
-      // Preview is cut off on left - scroll left
-      const cutOffAmount = containerRect.left - previewLeft;
-      const intensity = Math.min(cutOffAmount / DRAG_PREVIEW_WIDTH, 1);
-      scrollDelta = -DRAG_SCROLL_SPEED * (1 + intensity);
+    // Near left edge - scroll left
+    if (touchX < leftEdge) {
+      const distance = leftEdge - touchX;
+      const intensity = Math.min(distance / DRAG_SCROLL_EDGE_ZONE, 1);
+      scrollDelta = -DRAG_SCROLL_SPEED * (0.5 + intensity);
     }
-    // Check if drag preview is cut off on the right
-    else if (previewRight > containerRect.right) {
-      // Preview is cut off on right - scroll right
-      const cutOffAmount = previewRight - containerRect.right;
-      const intensity = Math.min(cutOffAmount / DRAG_PREVIEW_WIDTH, 1);
-      scrollDelta = DRAG_SCROLL_SPEED * (1 + intensity);
+    // Near right edge - scroll right
+    else if (touchX > rightEdge) {
+      const distance = touchX - rightEdge;
+      const intensity = Math.min(distance / DRAG_SCROLL_EDGE_ZONE, 1);
+      scrollDelta = DRAG_SCROLL_SPEED * (0.5 + intensity);
     }
     
     if (scrollDelta !== 0) {
-      // Check scroll bounds
       const maxScroll = container.scrollWidth - container.clientWidth;
-      const newScrollLeft = container.scrollLeft + scrollDelta;
-      
-      // Apply scroll within bounds
-      if (newScrollLeft >= 0 && newScrollLeft <= maxScroll) {
-        container.scrollLeft = newScrollLeft;
-      } else if (newScrollLeft < 0) {
-        container.scrollLeft = 0;
-      } else {
-        container.scrollLeft = maxScroll;
-      }
+      const newScrollLeft = Math.max(0, Math.min(maxScroll, container.scrollLeft + scrollDelta));
+      container.scrollLeft = newScrollLeft;
     }
     
-    // Continue the animation loop while dragging
+    // Continue animation loop
     if (isDraggingRef.current) {
       scrollAnimationRef.current = requestAnimationFrame(performAutoScroll);
     } else {
       scrollAnimationRef.current = null;
     }
   }, []);
-  
-  // Cleanup auto-scroll on unmount
-  useEffect(() => {
-    return () => {
-      if (scrollAnimationRef.current) {
-        cancelAnimationFrame(scrollAnimationRef.current);
-      }
-    };
+
+  /**
+   * Start auto-scroll animation
+   */
+  const startAutoScroll = useCallback(() => {
+    if (!scrollAnimationRef.current) {
+      scrollAnimationRef.current = requestAnimationFrame(performAutoScroll);
+    }
+  }, [performAutoScroll]);
+
+  /**
+   * Stop auto-scroll animation
+   */
+  const stopAutoScroll = useCallback(() => {
+    if (scrollAnimationRef.current) {
+      cancelAnimationFrame(scrollAnimationRef.current);
+      scrollAnimationRef.current = null;
+    }
+    currentTouchXRef.current = null;
   }, []);
+
+  // Start/stop auto-scroll based on drag state
+  useEffect(() => {
+    if (isDragging) {
+      startAutoScroll();
+    } else {
+      stopAutoScroll();
+    }
+  }, [isDragging, startAutoScroll, stopAutoScroll]);
   
-  // Global touch move listener to track drag preview position during drag
-  // This is needed because the drag preview element captures touch events
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => stopAutoScroll();
+  }, [stopAutoScroll]);
+  
+  // Global touch listener to track position during drag
   useEffect(() => {
     const handleGlobalTouchMove = (e: TouchEvent) => {
       if (!isDraggingRef.current) return;
-      
       const touch = e.touches[0];
       if (touch) {
-        const touchX = touch.clientX;
-        const touchY = touch.clientY;
-        
-        touchPositionRef.current = { x: touchX, y: touchY };
-        
-        // Calculate drag preview bounds (preview is 100px wide, centered on touch)
-        // The preview is positioned at left: touchX - 50, so:
-        // - Preview left edge = touchX - 50
-        // - Preview right edge = touchX + 50
-        dragPreviewPositionRef.current = {
-          left: touchX - 50,
-          right: touchX + 50
-        };
-        
-        // Track direction
-        const prevX = lastTouchXRef.current;
-        if (prevX !== null) {
-          const deltaX = touchX - prevX;
-          if (Math.abs(deltaX) > 1) {
-            dragDirectionRef.current = deltaX > 0 ? 'right' : 'left';
-          }
-        }
-        lastTouchXRef.current = touchX;
+        currentTouchXRef.current = touch.clientX;
       }
     };
     
     const handleGlobalTouchEnd = () => {
-      if (isDraggingRef.current) {
-        touchPositionRef.current = null;
-        lastTouchXRef.current = null;
-        dragDirectionRef.current = null;
-        dragPreviewPositionRef.current = null;
-      }
+      currentTouchXRef.current = null;
     };
     
-    // Add listeners with passive: false to allow preventDefault if needed
     document.addEventListener('touchmove', handleGlobalTouchMove, { passive: true });
     document.addEventListener('touchend', handleGlobalTouchEnd);
     document.addEventListener('touchcancel', handleGlobalTouchEnd);
@@ -302,41 +267,17 @@ export default function KanbanLayout({
   }, [habitsByStatus, handleDragStart]);
   
   /**
-   * Combined touch handler for mobile with auto-scroll
+   * Combined touch handlers for mobile
    */
   const handleCombinedTouchStart = useCallback((event: React.TouchEvent) => {
     const touch = event.touches[0];
-    touchPositionRef.current = { x: touch.clientX, y: touch.clientY };
-    lastTouchXRef.current = touch.clientX;
-    dragDirectionRef.current = null;
-    dragPreviewPositionRef.current = null;
+    currentTouchXRef.current = touch.clientX;
     handleSwipeStart(event);
   }, [handleSwipeStart]);
   
   const handleCombinedTouchMove = useCallback((event: React.TouchEvent) => {
     const touch = event.touches[0];
-    const currentX = touch.clientX;
-    const currentY = touch.clientY;
-    
-    // Update position refs
-    const prevX = lastTouchXRef.current;
-    lastTouchXRef.current = currentX;
-    touchPositionRef.current = { x: currentX, y: currentY };
-    
-    // Track drag direction based on movement (only when dragging)
-    if (isDraggingRef.current && prevX !== null) {
-      const deltaX = currentX - prevX;
-      if (Math.abs(deltaX) > 1) { // Lower threshold for more responsive direction tracking
-        dragDirectionRef.current = deltaX > 0 ? 'right' : 'left';
-      }
-      
-      // Update drag preview position for auto-scroll detection
-      // Preview is 100px wide, centered on touch position
-      dragPreviewPositionRef.current = {
-        left: currentX - 50,
-        right: currentX + 50
-      };
-    }
+    currentTouchXRef.current = touch.clientX;
     
     // Handle drag preview movement if dragging
     handleTouchMove(event);
@@ -348,22 +289,11 @@ export default function KanbanLayout({
   }, [handleTouchMove, handleSwipeMove]);
   
   const handleCombinedTouchEnd = useCallback(() => {
-    touchPositionRef.current = null;
-    lastTouchXRef.current = null;
-    dragDirectionRef.current = null;
-    dragPreviewPositionRef.current = null;
-    
-    // Stop auto-scroll
-    if (scrollAnimationRef.current) {
-      cancelAnimationFrame(scrollAnimationRef.current);
-      scrollAnimationRef.current = null;
-    }
-    
-    // Handle drag drop if dragging
+    currentTouchXRef.current = null;
+    stopAutoScroll();
     handleTouchEnd();
-    // Handle swipe navigation
     handleSwipeEnd();
-  }, [handleTouchEnd, handleSwipeEnd]);
+  }, [handleTouchEnd, handleSwipeEnd, stopAutoScroll]);
   
   // Sync scrollContainerRef with containerRef from useMobileSwipe
   const setRefs = useCallback((node: HTMLDivElement | null) => {

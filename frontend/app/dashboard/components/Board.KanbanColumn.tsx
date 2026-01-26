@@ -313,8 +313,16 @@ function PendingStickyCard({
   onComplete: () => void;
   onEdit: () => void;
 }) {
+  // Handle card tap (single tap opens edit modal)
+  const handleCardClick = useCallback((e: React.MouseEvent) => {
+    const target = e.target as HTMLElement;
+    if (target.closest('button')) return;
+    onEdit();
+  }, [onEdit]);
+
   return (
     <div
+      onClick={handleCardClick}
       className="
         p-3
         bg-card
@@ -325,6 +333,9 @@ function PendingStickyCard({
         shadow-sm
         transition-all
         duration-150
+        cursor-pointer
+        hover:shadow-md
+        hover:border-warning
       "
     >
       <div className="flex items-start gap-2">
@@ -336,8 +347,8 @@ function PendingStickyCard({
           }}
           className="
             flex-shrink-0
-            w-5
-            h-5
+            w-6
+            h-6
             mt-0.5
             rounded
             border-2
@@ -347,27 +358,26 @@ function PendingStickyCard({
             hover:bg-warning/10
             focus-visible:outline-2
             focus-visible:outline-primary
+            min-w-[44px]
+            min-h-[44px]
+            flex
+            items-center
+            justify-center
           "
           aria-label="Mark as complete"
         />
         
         {/* Content */}
         <div className="flex-1 min-w-0">
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              onEdit();
-            }}
+          <span
             className="
               text-sm
               text-left
               text-foreground
-              hover:text-primary
-              transition-colors
             "
           >
             {sticky.name}
-          </button>
+          </span>
         </div>
       </div>
     </div>
@@ -387,8 +397,16 @@ function CompletedStickyCard({
   onComplete: () => void;
   onEdit: () => void;
 }) {
+  // Handle card tap (single tap opens edit modal)
+  const handleCardClick = useCallback((e: React.MouseEvent) => {
+    const target = e.target as HTMLElement;
+    if (target.closest('button')) return;
+    onEdit();
+  }, [onEdit]);
+
   return (
     <div
+      onClick={handleCardClick}
       className="
         p-3
         bg-card
@@ -399,6 +417,9 @@ function CompletedStickyCard({
         shadow-sm
         transition-all
         duration-150
+        cursor-pointer
+        hover:shadow-md
+        hover:border-success
       "
     >
       <div className="flex items-start gap-2">
@@ -410,8 +431,8 @@ function CompletedStickyCard({
           }}
           className="
             flex-shrink-0
-            w-5
-            h-5
+            w-6
+            h-6
             mt-0.5
             rounded
             border-2
@@ -421,6 +442,11 @@ function CompletedStickyCard({
             transition-colors
             focus-visible:outline-2
             focus-visible:outline-primary
+            min-w-[44px]
+            min-h-[44px]
+            flex
+            items-center
+            justify-center
           "
           aria-label="Mark as incomplete"
         >
@@ -432,7 +458,7 @@ function CompletedStickyCard({
             strokeWidth="3"
             strokeLinecap="round"
             strokeLinejoin="round"
-            className="w-full h-full p-0.5"
+            className="w-4 h-4"
           >
             <polyline points="20 6 9 17 4 12" />
           </svg>
@@ -440,22 +466,16 @@ function CompletedStickyCard({
         
         {/* Content */}
         <div className="flex-1 min-w-0">
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              onEdit();
-            }}
+          <span
             className="
               text-sm
               text-left
               line-through
               text-muted-foreground
-              hover:text-primary
-              transition-colors
             "
           >
             {sticky.name}
-          </button>
+          </span>
         </div>
       </div>
     </div>
