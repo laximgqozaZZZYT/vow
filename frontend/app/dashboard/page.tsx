@@ -916,7 +916,7 @@ function DashboardLayout(props: any) {
       />
 
   {/* Main content pane with left tab navigation */}
-  <main className={`flex-1 pt-16 pb-20 md:pb-0 flex flex-col md:flex-row transition-all duration-200 ${showLeftPane ? (isLeftHanded ? 'md:mr-80' : 'md:ml-80') : ''}`}>
+  <main className="flex-1 pt-16 pb-20 md:pb-0 flex flex-col md:flex-row">
         {/* Left Tab Navigation - Desktop */}
         <div className="hidden md:flex flex-col h-[calc(100vh-4rem)] sticky top-16">
           <TabNavigation
