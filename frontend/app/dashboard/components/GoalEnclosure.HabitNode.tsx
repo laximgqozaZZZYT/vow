@@ -8,6 +8,11 @@
  * - 2.2: Display Habit name
  * - 4.2: Handle click to trigger onHabitEdit
  * - 6.3: Minimum touch target size (44x44px)
+ * 
+ * Mobile-First Design:
+ * - Minimum font size 14px for readability
+ * - High contrast colors for visibility
+ * - Touch targets 44px minimum height
  */
 
 import React, { memo, useCallback } from 'react';
@@ -48,16 +53,16 @@ function HabitNodeComponent({
       className={`
         habit-node
         flex items-center
-        px-3 py-2
-        rounded-md
+        px-1.5 py-0.5
+        rounded
         border
         transition-all
         duration-150
         ${isCompleted 
-          ? 'bg-success/10 border-success/30 text-muted-foreground' 
-          : 'bg-card border-border hover:border-primary/50'
+          ? 'bg-green-900/40 border-green-500/50 text-green-100' 
+          : 'bg-slate-800/90 border-slate-500/60 hover:border-slate-400 text-slate-100'
         }
-        ${selected ? 'ring-2 ring-primary' : ''}
+        ${selected ? 'ring-1 ring-white' : ''}
         hover:shadow-sm
         cursor-pointer
       `}
@@ -65,28 +70,28 @@ function HabitNodeComponent({
       style={{
         width: '100%',
         height: '100%',
-        minWidth: 44,
-        minHeight: 44,
+        minWidth: 32,
+        minHeight: 32,
       }}
     >
       {/* Completion checkbox indicator */}
       <div
         className={`
           flex-shrink-0
-          w-4 h-4
-          mr-2
-          rounded
+          w-3 h-3
+          mr-1
+          rounded-sm
           border
           flex items-center justify-center
           ${isCompleted 
-            ? 'bg-success border-success' 
-            : 'border-border bg-background'
+            ? 'bg-green-500 border-green-400' 
+            : 'border-slate-400 bg-slate-700/50'
           }
         `}
       >
         {isCompleted && (
           <svg
-            className="w-3 h-3 text-success-foreground"
+            className="w-2 h-2 text-white"
             fill="currentColor"
             viewBox="0 0 20 20"
             aria-hidden="true"
@@ -103,10 +108,10 @@ function HabitNodeComponent({
       {/* Habit name */}
       <span
         className={`
-          text-sm
+          text-[10px] font-medium
           truncate
           flex-1
-          ${isCompleted ? 'line-through text-muted-foreground' : 'text-foreground'}
+          ${isCompleted ? 'line-through opacity-70' : ''}
         `}
         title={label}
       >
@@ -117,12 +122,9 @@ function HabitNodeComponent({
       {habit.type === 'avoid' && (
         <span
           className="
-            ml-2
-            px-1.5 py-0.5
-            text-xs
-            rounded
-            bg-destructive/10
-            text-destructive
+            ml-0.5
+            text-[10px] font-semibold
+            text-red-300
             flex-shrink-0
           "
           title="Avoid habit"

@@ -892,7 +892,7 @@ export default function StaticsSection({ habits, activities, goals }: { habits: 
               />
             </div>
           ) : activePage === 'goal-enclosure' ? (
-            <div className="min-w-0 h-full">
+            <div className="min-w-0 h-full max-h-[calc(100vh-200px)] max-w-[calc(100vw-120px)] overflow-auto">
               <GoalEnclosureWidget
                 goals={(goals ?? []) as SharedGoal[]}
                 habits={habits}

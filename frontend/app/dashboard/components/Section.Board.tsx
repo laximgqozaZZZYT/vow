@@ -4,9 +4,10 @@
  * BoardSection Component
  * 
  * Main container for the Board section that replaces the original "Next" section.
- * Provides two layout modes:
+ * Provides three layout modes:
  * - Detailed Layout (default): Kanban board with 3 columns (予定, 進行中, 完了(日次))
  * - Simple Layout: List view similar to the original NextSection
+ * - Gantt Layout: Gantt chart view with timeline
  * 
  * Features:
  * - Layout mode toggle button in the header
@@ -17,13 +18,15 @@
  * 
  * Validates: Requirements 1.1, 1.2, 1.3
  * - 1.1: Board_Section SHALL display the Detailed_Layout (Kanban_Board) by default
- * - 1.2: Board_Section SHALL provide a toggle button to switch between Simple_Layout and Detailed_Layout
+ * - 1.2: Board_Section SHALL provide a toggle button to switch between layouts
  * - 1.3: Clicking the layout toggle SHALL switch to the other Layout_Mode without page reload
  */
 
-import { useBoardLayout } from '../hooks/useBoardLayout';
-import type { Habit, Activity, HabitAction } from '../types';
+import { useBoardLayout, type LayoutMode } from '../hooks/useBoardLayout';
+import type { Habit, Activity, HabitAction, Goal } from '../types';
+import type { HabitRelation } from '../types/shared';
 import KanbanLayout from './Board.KanbanLayout';
+import GanttLayout from './Board.GanttLayout';
 import { useHandedness } from '../contexts/HandednessContext';
 import './Board.css';
 
@@ -37,10 +40,16 @@ export interface BoardSectionProps {
   activities: Activity[];
   /** All stickies to display */
   stickies?: any[];
+  /** All goals (for Gantt view) */
+  goals?: Goal[];
+  /** All habit relations (for Gantt view) */
+  habitRelations?: HabitRelation[];
   /** Callback when a habit action is triggered (start, complete, pause) */
   onHabitAction: (habitId: string, action: HabitAction, amount?: number) => void;
   /** Callback when habit edit is requested */
   onHabitEdit: (habitId: string) => void;
+  /** Callback when goal edit is requested */
+  onGoalEdit?: (goalId: string) => void;
   /** Callback when sticky is completed/uncompleted */
   onStickyComplete?: (stickyId: string) => void;
   /** Callback when sticky edit is requested */
@@ -50,23 +59,97 @@ export interface BoardSectionProps {
 /**
  * Layout Toggle Button Component
  * 
- * Displays current mode and allows switching between layouts
+ * Displays current mode and allows cycling between layouts
  */
 function LayoutToggleButton({
-  isDetailedMode,
+  layoutMode,
   onToggle,
   loading
 }: {
-  isDetailedMode: boolean;
+  layoutMode: LayoutMode;
   onToggle: () => void;
   loading: boolean;
 }) {
+  const getIcon = () => {
+    switch (layoutMode) {
+      case 'detailed':
+        // Kanban icon (grid)
+        return (
+          <svg 
+            xmlns="http://www.w3.org/2000/svg" 
+            width="14" 
+            height="14" 
+            viewBox="0 0 24 24" 
+            fill="none" 
+            stroke="currentColor" 
+            strokeWidth="2" 
+            strokeLinecap="round" 
+            strokeLinejoin="round"
+            aria-hidden="true"
+          >
+            <rect x="3" y="3" width="7" height="18" rx="1" />
+            <rect x="14" y="3" width="7" height="12" rx="1" />
+          </svg>
+        );
+      case 'simple':
+        // List icon
+        return (
+          <svg 
+            xmlns="http://www.w3.org/2000/svg" 
+            width="14" 
+            height="14" 
+            viewBox="0 0 24 24" 
+            fill="none" 
+            stroke="currentColor" 
+            strokeWidth="2" 
+            strokeLinecap="round" 
+            strokeLinejoin="round"
+            aria-hidden="true"
+          >
+            <line x1="8" y1="6" x2="21" y2="6" />
+            <line x1="8" y1="12" x2="21" y2="12" />
+            <line x1="8" y1="18" x2="21" y2="18" />
+            <line x1="3" y1="6" x2="3.01" y2="6" />
+            <line x1="3" y1="12" x2="3.01" y2="12" />
+            <line x1="3" y1="18" x2="3.01" y2="18" />
+          </svg>
+        );
+      case 'gantt':
+        // Gantt chart icon
+        return (
+          <svg 
+            xmlns="http://www.w3.org/2000/svg" 
+            width="14" 
+            height="14" 
+            viewBox="0 0 24 24" 
+            fill="none" 
+            stroke="currentColor" 
+            strokeWidth="2" 
+            strokeLinecap="round" 
+            strokeLinejoin="round"
+            aria-hidden="true"
+          >
+            <rect x="3" y="4" width="12" height="4" rx="1" />
+            <rect x="7" y="10" width="10" height="4" rx="1" />
+            <rect x="5" y="16" width="14" height="4" rx="1" />
+          </svg>
+        );
+    }
+  };
+
+  const getLabel = () => {
+    switch (layoutMode) {
+      case 'detailed': return 'カンバン';
+      case 'simple': return 'リスト';
+      case 'gantt': return 'ガント';
+    }
+  };
+
   return (
     <button
       onClick={onToggle}
       disabled={loading}
-      aria-label={isDetailedMode ? 'Switch to simple layout' : 'Switch to detailed layout'}
-      aria-pressed={isDetailedMode}
+      aria-label={`Switch layout (current: ${getLabel()})`}
       className="
         flex items-center gap-1.5
         px-2.5 py-1.5
@@ -81,48 +164,9 @@ function LayoutToggleButton({
         min-h-[32px]
       "
     >
-      {/* Icon based on current mode */}
-      {isDetailedMode ? (
-        // Kanban icon (grid)
-        <svg 
-          xmlns="http://www.w3.org/2000/svg" 
-          width="14" 
-          height="14" 
-          viewBox="0 0 24 24" 
-          fill="none" 
-          stroke="currentColor" 
-          strokeWidth="2" 
-          strokeLinecap="round" 
-          strokeLinejoin="round"
-          aria-hidden="true"
-        >
-          <rect x="3" y="3" width="7" height="18" rx="1" />
-          <rect x="14" y="3" width="7" height="12" rx="1" />
-        </svg>
-      ) : (
-        // List icon
-        <svg 
-          xmlns="http://www.w3.org/2000/svg" 
-          width="14" 
-          height="14" 
-          viewBox="0 0 24 24" 
-          fill="none" 
-          stroke="currentColor" 
-          strokeWidth="2" 
-          strokeLinecap="round" 
-          strokeLinejoin="round"
-          aria-hidden="true"
-        >
-          <line x1="8" y1="6" x2="21" y2="6" />
-          <line x1="8" y1="12" x2="21" y2="12" />
-          <line x1="8" y1="18" x2="21" y2="18" />
-          <line x1="3" y1="6" x2="3.01" y2="6" />
-          <line x1="3" y1="12" x2="3.01" y2="12" />
-          <line x1="3" y1="18" x2="3.01" y2="18" />
-        </svg>
-      )}
+      {getIcon()}
       <span className="hidden sm:inline">
-        {isDetailedMode ? 'カンバン' : 'リスト'}
+        {getLabel()}
       </span>
     </button>
   );
@@ -131,22 +175,26 @@ function LayoutToggleButton({
 /**
  * BoardSection Component
  * 
- * Main container that renders either KanbanLayout (detailed) or SimpleLayout (simple)
+ * Main container that renders KanbanLayout, SimpleLayout, or GanttLayout
  * based on user preference stored in local storage.
  */
 export default function BoardSection({
   habits,
   activities,
   stickies = [],
+  goals = [],
+  habitRelations = [],
   onHabitAction,
   onHabitEdit,
+  onGoalEdit,
   onStickyComplete,
   onStickyEdit
 }: BoardSectionProps) {
   const { 
     layoutMode, 
     toggleLayoutMode, 
-    isDetailedMode, 
+    isDetailedMode,
+    isGanttMode,
     loading 
   } = useBoardLayout();
   
@@ -155,17 +203,17 @@ export default function BoardSection({
   return (
     <section className="rounded-lg border border-border bg-card text-card-foreground shadow-sm flex flex-col min-h-0">
       {/* Header with title and layout toggle */}
-      <div className={`flex items-center p-4 sm:p-6 pb-2 sm:pb-3 ${isLeftHanded ? 'flex-row-reverse' : 'justify-between'}`}>
+      <div className={`sticky top-0 z-20 flex items-center justify-between p-4 sm:p-6 pb-2 sm:pb-3 bg-card border-b border-border ${isLeftHanded ? 'flex-row-reverse' : ''}`}>
         <h2 className="text-lg font-semibold">Board</h2>
         <LayoutToggleButton
-          isDetailedMode={isDetailedMode}
+          layoutMode={layoutMode}
           onToggle={toggleLayoutMode}
           loading={loading}
         />
       </div>
       
       {/* Content area - conditional rendering based on layout mode */}
-      <div className="flex-1 min-h-0 overflow-visible">
+      <div className={`flex-1 min-h-0 ${isGanttMode ? 'overflow-hidden' : 'overflow-visible'}`}>
         {isDetailedMode ? (
           <KanbanLayout
             habits={habits}
@@ -175,6 +223,15 @@ export default function BoardSection({
             onHabitEdit={onHabitEdit}
             onStickyComplete={onStickyComplete || (() => {})}
             onStickyEdit={onStickyEdit || (() => {})}
+          />
+        ) : isGanttMode ? (
+          <GanttLayout
+            goals={goals}
+            habits={habits}
+            activities={activities}
+            habitRelations={habitRelations}
+            onGoalEdit={onGoalEdit || (() => {})}
+            onHabitEdit={onHabitEdit}
           />
         ) : (
           <SimpleLayout

@@ -125,10 +125,11 @@ function GoalEnclosureFlowInner({
   }, [onGoalEdit, onHabitEdit]);
 
   // Calculate fit view options based on diagram dimensions
+  // Use higher minZoom to make diagram fill the viewport
   const fitViewOptions = useMemo(() => ({
-    padding: 0.2,
-    maxZoom: 1.5,
-    minZoom: 0.1,
+    padding: 0.05,  // Minimal padding to maximize space usage
+    maxZoom: 3,     // Allow larger zoom
+    minZoom: 0.5,   // Higher minimum zoom to prevent tiny diagrams
   }), []);
 
   const hasContent = nodes.length > 0;
@@ -137,20 +138,22 @@ function GoalEnclosureFlowInner({
     <div className={`goal-enclosure-widget h-full w-full ${className}`}>
       {/* Header with Edit Graph button */}
       {onEditGraph && (
-        <div className="flex items-center justify-between px-3 py-2 border-b border-border">
-          <h3 className="text-sm font-medium text-foreground">
+        <div className="flex items-center justify-between px-4 py-3 border-b border-slate-700 bg-slate-900/50">
+          <h3 className="text-base font-semibold text-slate-100">
             Goal Enclosure Diagram
           </h3>
           <button
             onClick={onEditGraph}
             className="
-              px-3 py-1.5
-              text-xs font-medium
-              rounded-md
-              bg-muted hover:bg-muted/80
-              text-muted-foreground hover:text-foreground
-              transition-colors
-              min-h-[32px]
+              px-4 py-2
+              text-sm font-medium
+              rounded-lg
+              bg-slate-700 hover:bg-slate-600
+              text-slate-100 hover:text-white
+              border border-slate-600 hover:border-slate-500
+              transition-all
+              min-h-[40px]
+              shadow-sm hover:shadow
             "
           >
             Edit Graph
@@ -182,11 +185,11 @@ function GoalEnclosureFlowInner({
             zoomOnScroll
             panOnDrag
             preventScrolling={false}
-            minZoom={0.1}
-            maxZoom={2}
+            minZoom={0.3}
+            maxZoom={3}
             attributionPosition="bottom-left"
           >
-            <Background color="var(--color-border)" gap={16} />
+            <Background color="rgba(100, 116, 139, 0.3)" gap={20} size={1} />
             {showControls && (
               <Controls 
                 showZoom
@@ -199,24 +202,27 @@ function GoalEnclosureFlowInner({
               <MiniMap
                 nodeColor={(node) => {
                   if (node.type === NODE_TYPES.GOAL_ENCLOSURE) {
+                    const depth = node.data?.depth ?? 0;
+                    const colors = ['#3b82f6', '#10b981', '#f59e0b', '#a855f7'];
                     return node.data?.isCompleted 
-                      ? 'var(--color-muted)' 
-                      : 'var(--color-card)';
+                      ? 'rgba(100, 116, 139, 0.5)' 
+                      : colors[Math.min(depth, colors.length - 1)];
                   }
                   return node.data?.isCompleted 
-                    ? 'var(--color-success)' 
-                    : 'var(--color-primary)';
+                    ? '#22c55e' 
+                    : '#64748b';
                 }}
-                maskColor="rgba(0, 0, 0, 0.1)"
+                maskColor="rgba(15, 23, 42, 0.7)"
+                style={{ backgroundColor: 'rgba(30, 41, 59, 0.9)' }}
                 position="top-right"
               />
             )}
           </ReactFlow>
         ) : (
-          <div className="flex items-center justify-center h-full text-muted-foreground">
-            <div className="text-center">
-              <p className="text-sm">No Goals to display</p>
-              <p className="text-xs mt-1">
+          <div className="flex items-center justify-center h-full bg-slate-900/50">
+            <div className="text-center p-6">
+              <p className="text-base text-slate-300">No Goals to display</p>
+              <p className="text-sm mt-2 text-slate-500">
                 {visibleGoalIds.length === 0 
                   ? 'Select Goals to show in the diagram'
                   : 'No matching Goals found'

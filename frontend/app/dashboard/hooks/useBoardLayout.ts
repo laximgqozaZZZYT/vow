@@ -18,8 +18,9 @@ import { useLocalStorage } from './useLocalStorage';
  * Layout mode type for the Board section
  * - 'simple': List view similar to original NextSection
  * - 'detailed': Kanban board view with three columns
+ * - 'gantt': Gantt chart view with timeline
  */
-export type LayoutMode = 'simple' | 'detailed';
+export type LayoutMode = 'simple' | 'detailed' | 'gantt';
 
 /**
  * Return type for useBoardLayout hook
@@ -35,6 +36,8 @@ export interface UseBoardLayoutReturn {
   isDetailedMode: boolean;
   /** Whether the layout is in simple (list) mode */
   isSimpleMode: boolean;
+  /** Whether the layout is in gantt chart mode */
+  isGanttMode: boolean;
   /** Loading state (true during SSR) */
   loading: boolean;
 }
@@ -48,7 +51,7 @@ export const DEFAULT_MODE: LayoutMode = 'detailed';
 /**
  * Valid layout modes for validation
  */
-const VALID_MODES: readonly LayoutMode[] = ['simple', 'detailed'] as const;
+const VALID_MODES: readonly LayoutMode[] = ['simple', 'detailed', 'gantt'] as const;
 
 /**
  * Validates if a value is a valid LayoutMode
@@ -109,19 +112,23 @@ export function useBoardLayout(): UseBoardLayoutReturn {
   }, [setValue]);
 
   /**
-   * Toggle between simple and detailed layout modes
+   * Toggle between simple, detailed, and gantt layout modes
    * Requirement 1.3: Switch without page reload
    */
   const toggleLayoutMode = useCallback(() => {
     setValue((current) => {
       const currentMode = isValidLayoutMode(current) ? current : DEFAULT_MODE;
-      return currentMode === 'detailed' ? 'simple' : 'detailed';
+      // Cycle: detailed -> simple -> gantt -> detailed
+      if (currentMode === 'detailed') return 'simple';
+      if (currentMode === 'simple') return 'gantt';
+      return 'detailed';
     });
   }, [setValue]);
 
   // Convenience boolean flags
   const isDetailedMode = layoutMode === 'detailed';
   const isSimpleMode = layoutMode === 'simple';
+  const isGanttMode = layoutMode === 'gantt';
 
   return {
     layoutMode,
@@ -129,6 +136,7 @@ export function useBoardLayout(): UseBoardLayoutReturn {
     toggleLayoutMode,
     isDetailedMode,
     isSimpleMode,
+    isGanttMode,
     loading,
   };
 }

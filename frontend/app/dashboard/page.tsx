@@ -754,10 +754,16 @@ function DashboardLayout(props: any) {
             habits={habits}
             activities={activities}
             stickies={stickies}
+            goals={goals}
+            habitRelations={[]}
             onHabitAction={handleHabitAction}
             onHabitEdit={(habitId) => {
               setSelectedHabitId(habitId);
               setOpenHabitModal(true);
+            }}
+            onGoalEdit={(goalId) => {
+              setEditingGoalId(goalId);
+              setOpenGoalModal(true);
             }}
             onStickyComplete={handleStickyComplete}
             onStickyEdit={handleStickyEdit}

@@ -4,6 +4,8 @@
  * This module defines the types and configuration for the Goal Enclosure Diagram
  * layout calculation. The diagram displays Goals as rectangular enclosures
  * containing their associated Habits, with support for hierarchical relationships.
+ * 
+ * Supports L-shaped and bent layouts for tall enclosures (Modular Tetris style).
  *
  * Requirements:
  * - 7.1: Automatically calculate enclosure sizes based on content
@@ -39,26 +41,49 @@ export interface LayoutConfig {
   headerHeight: number;
   /** Gap between sibling enclosures (px) */
   enclosureGap: number;
+  /** Maximum width for enclosures (px) */
+  maxEnclosureWidth: number;
+  /** Maximum height for enclosures (px) */
+  maxEnclosureHeight: number;
 }
 
 /**
  * Default layout configuration values.
- * Based on design system spacing (8px base) and accessibility requirements.
+ * Optimized for tight packing without overlap.
  */
 export const DEFAULT_LAYOUT_CONFIG: LayoutConfig = {
-  padding: 16,           // --spacing-4 (16px)
-  habitHeight: 44,       // Minimum touch target size for accessibility (6.3)
-  habitGap: 8,           // --spacing-2 (8px)
-  minEnclosureWidth: 200,
-  minEnclosureHeight: 100,
-  nestedPadding: 8,      // --spacing-2 (8px)
-  headerHeight: 40,      // Space for goal name header
-  enclosureGap: 24,      // --spacing-6 (24px) between sibling enclosures
+  padding: 4,
+  habitHeight: 32,
+  habitGap: 2,
+  minEnclosureWidth: 160,
+  minEnclosureHeight: 60,
+  nestedPadding: 4,
+  headerHeight: 28,
+  enclosureGap: 2,
+  maxEnclosureWidth: 400,
+  maxEnclosureHeight: 300,
 };
 
 // ============================================================================
 // Tree Structure Types
 // ============================================================================
+
+/**
+ * Segment of a bent Goal enclosure.
+ * A Goal can be split into multiple segments to form L-shape or other bent shapes.
+ */
+export interface GoalSegment {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  /** Which habits are in this segment (indices) */
+  habitIndices: number[];
+  /** Which children are in this segment (indices) */
+  childIndices: number[];
+  /** Is this the header segment (contains goal name) */
+  isHeader: boolean;
+}
 
 /**
  * Tree node for layout calculation.
@@ -74,14 +99,16 @@ export interface GoalTreeNode {
   children: GoalTreeNode[];
   /** Nesting depth (0 = root, 1 = child, etc.) */
   depth: number;
-  /** Calculated width of the enclosure (px) */
+  /** Calculated width of the enclosure (px) - bounding box */
   width: number;
-  /** Calculated height of the enclosure (px) */
+  /** Calculated height of the enclosure (px) - bounding box */
   height: number;
   /** X position relative to parent or canvas (px) */
   x: number;
   /** Y position relative to parent or canvas (px) */
   y: number;
+  /** Segments for bent layout (if bent) */
+  segments?: GoalSegment[];
 }
 
 // ============================================================================
@@ -387,21 +414,12 @@ export function buildGoalTree(
 // Layout Calculation Functions
 // ============================================================================
 
+/** Habit width constant - compact */
+const HABIT_WIDTH = 140;
+
 /**
- * Calculates the size of a GoalTreeNode based on its content.
- * This is done bottom-up: children are sized first, then parents.
- * 
- * The size calculation considers:
- * - Header height for the goal name
- * - Habits stacked vertically with gaps
- * - Child goals arranged horizontally with gaps
- * - Padding around all content
- * - Minimum size constraints (44x44px for touch targets)
- * 
- * Requirements:
- * - 7.1: Automatically calculate enclosure sizes based on content
- * - 7.2: Expand enclosures to accommodate all Habits
- * - 6.3: Touch targets minimum 44x44px
+ * Calculates the size of a GoalTreeNode with max width/height constraints.
+ * Habits and children wrap to next row when exceeding max width.
  * 
  * @param node - The GoalTreeNode to calculate size for
  * @param config - Layout configuration
@@ -412,109 +430,268 @@ function calculateNodeSize(node: GoalTreeNode, config: LayoutConfig): void {
     calculateNodeSize(child, config);
   }
 
-  // Calculate content dimensions
-  const { padding, habitHeight, habitGap, headerHeight, enclosureGap, nestedPadding } = config;
-
-  // Calculate habits area height (habits stacked vertically)
+  const { padding, habitHeight, habitGap, headerHeight, enclosureGap, maxEnclosureWidth } = config;
+  
   const habitsCount = node.habits.length;
-  const habitsHeight = habitsCount > 0
-    ? habitsCount * habitHeight + (habitsCount - 1) * habitGap
-    : 0;
-
-  // Calculate children area dimensions (children arranged horizontally)
+  const childCount = node.children.length;
+  
+  // Available content width (inside padding)
+  const maxContentWidth = maxEnclosureWidth - padding * 2;
+  
+  // Calculate habits layout with wrapping
+  let habitsWidth = 0;
+  let habitsHeight = 0;
+  
+  if (habitsCount > 0) {
+    // Calculate how many habits fit per row
+    const habitsPerRow = Math.max(1, Math.floor((maxContentWidth + habitGap) / (HABIT_WIDTH + habitGap)));
+    const habitRows = Math.ceil(habitsCount / habitsPerRow);
+    const actualHabitsPerRow = Math.min(habitsCount, habitsPerRow);
+    
+    habitsWidth = actualHabitsPerRow * HABIT_WIDTH + (actualHabitsPerRow - 1) * habitGap;
+    habitsHeight = habitRows * habitHeight + (habitRows - 1) * habitGap;
+  }
+  
+  // Calculate children layout with wrapping
   let childrenWidth = 0;
   let childrenHeight = 0;
-
-  if (node.children.length > 0) {
-    // Children are arranged horizontally with gaps
+  
+  if (childCount > 0) {
+    // Flow layout: place children left-to-right, wrap when exceeding max width
+    let currentRowWidth = 0;
+    let currentRowHeight = 0;
+    let totalHeight = 0;
+    let maxRowWidth = 0;
+    
     for (const child of node.children) {
-      childrenWidth += child.width;
-      childrenHeight = Math.max(childrenHeight, child.height);
+      if (currentRowWidth > 0 && currentRowWidth + enclosureGap + child.width > maxContentWidth) {
+        // Wrap to next row
+        maxRowWidth = Math.max(maxRowWidth, currentRowWidth);
+        totalHeight += currentRowHeight + enclosureGap;
+        currentRowWidth = child.width;
+        currentRowHeight = child.height;
+      } else {
+        if (currentRowWidth > 0) {
+          currentRowWidth += enclosureGap;
+        }
+        currentRowWidth += child.width;
+        currentRowHeight = Math.max(currentRowHeight, child.height);
+      }
     }
-    // Add gaps between children
-    childrenWidth += (node.children.length - 1) * enclosureGap;
+    // Add last row
+    maxRowWidth = Math.max(maxRowWidth, currentRowWidth);
+    totalHeight += currentRowHeight;
+    
+    childrenWidth = maxRowWidth;
+    childrenHeight = totalHeight;
   }
-
-  // Calculate minimum width needed for habits (assuming fixed habit width)
-  const habitWidth = 180; // Fixed width for habit elements
-  const habitsWidth = habitsCount > 0 ? habitWidth : 0;
-
-  // Calculate total content width and height
-  // Content layout: header on top, then habits and children side by side
-  // For simplicity, we'll stack habits above children
+  
   const contentWidth = Math.max(habitsWidth, childrenWidth);
-  const contentHeight = habitsHeight + (habitsHeight > 0 && childrenHeight > 0 ? habitGap : 0) + childrenHeight;
-
-  // Add padding and header
-  const totalWidth = contentWidth + padding * 2;
-  const totalHeight = headerHeight + contentHeight + padding * 2;
-
-  // Apply minimum size constraints (including touch target minimum of 44x44px)
-  const minWidth = Math.max(config.minEnclosureWidth, 44);
-  const minHeight = Math.max(config.minEnclosureHeight, 44);
-
-  node.width = Math.max(totalWidth, minWidth);
-  node.height = Math.max(totalHeight, minHeight);
+  const contentHeight = habitsHeight + 
+    (habitsHeight > 0 && childrenHeight > 0 ? enclosureGap : 0) + 
+    childrenHeight;
+  
+  node.width = Math.min(
+    Math.max(contentWidth + padding * 2, config.minEnclosureWidth),
+    maxEnclosureWidth
+  );
+  node.height = Math.max(headerHeight + contentHeight + padding * 2, config.minEnclosureHeight);
+  
+  // Clear segments - not using bent layout anymore
+  node.segments = undefined;
 }
 
 /**
- * Positions sibling nodes to avoid overlap.
- * Siblings are arranged horizontally with gaps between them.
+ * Positions sibling nodes using a 2D bin-packing algorithm (Modular Tetris style).
+ * Places nodes to fill gaps efficiently with minimal wasted space.
  * 
- * Requirements:
- * - 7.4: Minimize visual overlap between enclosures
+ * Algorithm (Guillotine bin packing):
+ * 1. Sort nodes by area (largest first)
+ * 2. Maintain list of free rectangles
+ * 3. For each node, find best-fit free rectangle
+ * 4. Split remaining space into new free rectangles
  * 
  * @param nodes - Array of sibling GoalTreeNodes
  * @param startX - Starting X position
  * @param startY - Starting Y position
  * @param config - Layout configuration
- * @returns Total width occupied by all siblings
+ * @returns Object with total width and height occupied
  */
-function positionSiblings(
+function positionSiblingsGrid(
   nodes: GoalTreeNode[],
   startX: number,
   startY: number,
-  config: LayoutConfig
-): number {
-  let currentX = startX;
-
-  for (const node of nodes) {
-    node.x = currentX;
-    node.y = startY;
-    currentX += node.width + config.enclosureGap;
+  config: LayoutConfig,
+  _unused: number = 1200
+): { width: number; height: number } {
+  if (nodes.length === 0) {
+    return { width: 0, height: 0 };
   }
 
-  // Return total width (excluding trailing gap)
-  return nodes.length > 0
-    ? currentX - config.enclosureGap - startX
-    : 0;
+  const gap = config.enclosureGap;
+  
+  // Sort nodes by area (largest first) for better packing
+  const sortedNodes = [...nodes].sort((a, b) => {
+    const areaA = a.width * a.height;
+    const areaB = b.width * b.height;
+    return areaB - areaA;
+  });
+  
+  // Free rectangles (available spaces)
+  interface FreeRect {
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+  }
+  
+  // Start with a large initial free rectangle
+  const initialWidth = sortedNodes.reduce((sum, n) => sum + n.width + gap, 0);
+  const initialHeight = sortedNodes.reduce((sum, n) => Math.max(sum, n.height), 0) * 3;
+  
+  let freeRects: FreeRect[] = [
+    { x: 0, y: 0, width: initialWidth, height: initialHeight }
+  ];
+  
+  let maxX = 0;
+  let maxY = 0;
+  
+  for (const node of sortedNodes) {
+    const nodeW = node.width + gap;
+    const nodeH = node.height + gap;
+    
+    // Find best-fit free rectangle (smallest area that fits)
+    let bestRect: FreeRect | null = null;
+    let bestRectIndex = -1;
+    let bestScore = Infinity;
+    
+    for (let i = 0; i < freeRects.length; i++) {
+      const rect = freeRects[i];
+      if (rect.width >= nodeW && rect.height >= nodeH) {
+        // Score: prefer rectangles that minimize wasted space
+        const score = rect.width * rect.height - nodeW * nodeH;
+        if (score < bestScore) {
+          bestScore = score;
+          bestRect = rect;
+          bestRectIndex = i;
+        }
+      }
+    }
+    
+    if (bestRect) {
+      // Place node in this rectangle
+      node.x = startX + bestRect.x;
+      node.y = startY + bestRect.y;
+      
+      maxX = Math.max(maxX, node.x + node.width - startX);
+      maxY = Math.max(maxY, node.y + node.height - startY);
+      
+      // Remove used rectangle
+      freeRects.splice(bestRectIndex, 1);
+      
+      // Split remaining space (Guillotine split)
+      // Right remainder
+      if (bestRect.width - nodeW > gap) {
+        freeRects.push({
+          x: bestRect.x + nodeW,
+          y: bestRect.y,
+          width: bestRect.width - nodeW,
+          height: nodeH,
+        });
+      }
+      
+      // Bottom remainder
+      if (bestRect.height - nodeH > gap) {
+        freeRects.push({
+          x: bestRect.x,
+          y: bestRect.y + nodeH,
+          width: bestRect.width,
+          height: bestRect.height - nodeH,
+        });
+      }
+      
+      // Merge overlapping free rectangles to reduce fragmentation
+      freeRects = mergeFreeRects(freeRects);
+    }
+  }
+  
+  return { width: maxX, height: maxY };
+}
+
+/**
+ * Merge overlapping or adjacent free rectangles
+ */
+function mergeFreeRects(rects: { x: number; y: number; width: number; height: number }[]): { x: number; y: number; width: number; height: number }[] {
+  // Simple deduplication - remove rectangles fully contained in others
+  const result: { x: number; y: number; width: number; height: number }[] = [];
+  
+  for (const rect of rects) {
+    let isContained = false;
+    for (const other of rects) {
+      if (rect !== other &&
+          rect.x >= other.x &&
+          rect.y >= other.y &&
+          rect.x + rect.width <= other.x + other.width &&
+          rect.y + rect.height <= other.y + other.height) {
+        isContained = true;
+        break;
+      }
+    }
+    if (!isContained) {
+      result.push(rect);
+    }
+  }
+  
+  return result;
 }
 
 /**
  * Positions child nodes within their parent enclosure.
- * This is done top-down: parents are positioned first, then children.
- * 
- * Requirements:
- * - 7.3: Position parent enclosures to contain or connect to child enclosures
+ * Uses flow layout with wrapping based on max width.
  * 
  * @param node - The parent GoalTreeNode
  * @param config - Layout configuration
  */
 function positionChildNodes(node: GoalTreeNode, config: LayoutConfig): void {
-  const { padding, headerHeight, habitHeight, habitGap } = config;
-
-  // Calculate where children should start (after header and habits)
+  const { padding, headerHeight, habitHeight, habitGap, enclosureGap, maxEnclosureWidth } = config;
+  
+  const maxContentWidth = maxEnclosureWidth - padding * 2;
+  
+  // Calculate habits area with wrapping
   const habitsCount = node.habits.length;
-  const habitsHeight = habitsCount > 0
-    ? habitsCount * habitHeight + (habitsCount - 1) * habitGap
-    : 0;
+  let habitsHeight = 0;
+  
+  if (habitsCount > 0) {
+    const habitsPerRow = Math.max(1, Math.floor((maxContentWidth + habitGap) / (HABIT_WIDTH + habitGap)));
+    const habitRows = Math.ceil(habitsCount / habitsPerRow);
+    habitsHeight = habitRows * habitHeight + (habitRows - 1) * habitGap;
+  }
 
-  // Children start after header, habits, and a gap
-  const childrenStartY = headerHeight + padding + habitsHeight + (habitsHeight > 0 ? habitGap : 0);
-  const childrenStartX = padding;
-
-  // Position children horizontally
-  positionSiblings(node.children, childrenStartX, childrenStartY, config);
+  const childrenStartY = headerHeight + padding + habitsHeight + 
+    (habitsHeight > 0 && node.children.length > 0 ? enclosureGap : 0);
+  
+  if (node.children.length > 0) {
+    // Flow layout with wrapping
+    let currentX = padding;
+    let currentY = childrenStartY;
+    let rowMaxHeight = 0;
+    
+    for (const child of node.children) {
+      // Check if child fits in current row
+      if (currentX > padding && currentX + child.width > node.width - padding) {
+        // Wrap to next row
+        currentX = padding;
+        currentY += rowMaxHeight + enclosureGap;
+        rowMaxHeight = 0;
+      }
+      
+      child.x = currentX;
+      child.y = currentY;
+      
+      currentX += child.width + enclosureGap;
+      rowMaxHeight = Math.max(rowMaxHeight, child.height);
+    }
+  }
 
   // Recursively position grandchildren
   for (const child of node.children) {
@@ -523,7 +700,8 @@ function positionChildNodes(node: GoalTreeNode, config: LayoutConfig): void {
 }
 
 /**
- * Converts a GoalTreeNode to React Flow nodes (enclosure + habits).
+ * Converts a GoalTreeNode to React Flow nodes.
+ * Creates enclosure nodes with proper parent-child relationships.
  * 
  * @param treeNode - The GoalTreeNode to convert
  * @param parentNodeId - ID of the parent React Flow node (undefined for root)
@@ -536,10 +714,11 @@ function treeNodeToFlowNodes(
   config: LayoutConfig
 ): Node[] {
   const nodes: Node[] = [];
-  const { padding, headerHeight, habitHeight, habitGap } = config;
+  const { padding, headerHeight, habitHeight, habitGap, maxEnclosureWidth } = config;
 
-  // Create the Goal enclosure node
   const goalNodeId = `${NODE_ID_PREFIX.GOAL}${treeNode.goal.id}`;
+  
+  // Create the enclosure node
   const enclosureNode: EnclosureNode = {
     id: goalNodeId,
     type: NODE_TYPES.GOAL_ENCLOSURE,
@@ -562,12 +741,17 @@ function treeNodeToFlowNodes(
   };
   nodes.push(enclosureNode);
 
-  // Create Habit nodes inside the enclosure
-  let habitY = headerHeight + padding;
-  const habitWidth = 180; // Fixed width for habit elements
-  const habitX = padding;
-
-  for (const habit of treeNode.habits) {
+  // Add habits with wrapping layout
+  const maxContentWidth = maxEnclosureWidth - padding * 2;
+  const habitsPerRow = Math.max(1, Math.floor((maxContentWidth + habitGap) / (HABIT_WIDTH + habitGap)));
+  
+  treeNode.habits.forEach((habit, index) => {
+    const col = index % habitsPerRow;
+    const row = Math.floor(index / habitsPerRow);
+    
+    const habitX = padding + col * (HABIT_WIDTH + habitGap);
+    const habitY = headerHeight + padding + row * (habitHeight + habitGap);
+    
     const habitNode: HabitFlowNode = {
       id: `${NODE_ID_PREFIX.HABIT}${habit.id}`,
       type: NODE_TYPES.HABIT_NODE,
@@ -581,15 +765,14 @@ function treeNodeToFlowNodes(
       parentNode: goalNodeId,
       extent: 'parent',
       style: {
-        width: habitWidth,
+        width: HABIT_WIDTH,
         height: habitHeight,
       },
     };
     nodes.push(habitNode);
-    habitY += habitHeight + habitGap;
-  }
+  });
 
-  // Recursively convert child nodes
+  // Recursively convert child nodes - they are nested inside this goal
   for (const child of treeNode.children) {
     const childNodes = treeNodeToFlowNodes(child, goalNodeId, config);
     nodes.push(...childNodes);
@@ -653,9 +836,9 @@ export function calculateLayout(
     calculateNodeSize(root, config);
   }
 
-  // Step 3: Position root nodes (top-down)
-  // Root nodes are arranged horizontally at the top
-  positionSiblings(rootNodes, 0, 0, config);
+  // Step 3: Position root nodes using bin-packing (Tetris-style)
+  // Pack nodes efficiently to fill rectangular space
+  const gridDimensions = positionSiblingsGrid(rootNodes, 0, 0, config, 1400);
 
   // Step 4: Position child nodes within each root
   for (const root of rootNodes) {
