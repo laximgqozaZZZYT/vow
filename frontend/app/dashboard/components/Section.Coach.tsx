@@ -533,17 +533,17 @@ export function CoachSection({ goals, onHabitCreated, onGoalCreated }: CoachSect
       ) : (
         <>
           {/* Chat Area - flex-1 to fill remaining space, scrollable */}
-          <div className="flex-1 overflow-y-auto p-4">
+          <div className="flex-1 overflow-y-auto p-4 flex flex-col">
             {messages.length === 0 ? (
-              /* Quick Actions - centered when no conversation */
-              <div className="h-full flex flex-col items-center justify-center">
-                <p className="text-lg text-muted-foreground mb-6">何をお手伝いしましょうか？</p>
+              /* Quick Actions - left aligned at bottom like ChatGPT/Gemini */
+              <div className="flex-1 flex flex-col justify-end">
+                <p className="text-lg text-muted-foreground mb-4">何をお手伝いしましょうか？</p>
                 <ChoiceButtons
                   choices={DEFAULT_QUICK_ACTIONS}
                   onSelect={handleQuickAction}
                   layout="vertical"
                   size="md"
-                  className="w-full max-w-sm"
+                  className="w-full max-w-md"
                 />
               </div>
             ) : (
