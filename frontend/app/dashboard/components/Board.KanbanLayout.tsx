@@ -155,12 +155,13 @@ export default function KanbanLayout({
   }, [isDragging]);
 
   /**
-   * Auto-scroll container when dragging - follows drag direction (Trello-like)
-   * Scrolls in the direction the user is dragging
+   * Auto-scroll container when dragging near screen edges
+   * Scrolls when finger position is within DRAG_SCROLL_THRESHOLD of left/right edge
    */
   const performAutoScroll = useCallback(() => {
     const container = scrollContainerRef.current;
     
+    // Must have container, touch position, and be dragging
     if (!container || !touchPositionRef.current || !isDraggingRef.current) {
       scrollAnimationRef.current = null;
       return;
@@ -171,21 +172,19 @@ export default function KanbanLayout({
     
     let scrollDelta = 0;
     
-    // Check if near edges
-    const nearLeftEdge = x - rect.left < DRAG_SCROLL_THRESHOLD;
-    const nearRightEdge = rect.right - x < DRAG_SCROLL_THRESHOLD;
+    // Calculate distance from edges
+    const distanceFromLeft = x - rect.left;
+    const distanceFromRight = rect.right - x;
     
-    // Priority 1: If near edge, scroll faster in that direction
-    if (nearLeftEdge) {
-      scrollDelta = -DRAG_SCROLL_SPEED * 1.5;
-    } else if (nearRightEdge) {
-      scrollDelta = DRAG_SCROLL_SPEED * 1.5;
-    }
-    // Priority 2: If actively dragging in a direction, scroll in that direction
-    else if (dragDirectionRef.current === 'left') {
-      scrollDelta = -DRAG_SCROLL_SPEED;
-    } else if (dragDirectionRef.current === 'right') {
-      scrollDelta = DRAG_SCROLL_SPEED;
+    // Scroll when near edges - speed increases as you get closer to edge
+    if (distanceFromLeft < DRAG_SCROLL_THRESHOLD) {
+      // Near left edge - scroll left
+      const intensity = 1 - (distanceFromLeft / DRAG_SCROLL_THRESHOLD);
+      scrollDelta = -DRAG_SCROLL_SPEED * (1 + intensity);
+    } else if (distanceFromRight < DRAG_SCROLL_THRESHOLD) {
+      // Near right edge - scroll right
+      const intensity = 1 - (distanceFromRight / DRAG_SCROLL_THRESHOLD);
+      scrollDelta = DRAG_SCROLL_SPEED * (1 + intensity);
     }
     
     if (scrollDelta !== 0) {
@@ -193,8 +192,13 @@ export default function KanbanLayout({
       const maxScroll = container.scrollWidth - container.clientWidth;
       const newScrollLeft = container.scrollLeft + scrollDelta;
       
+      // Apply scroll within bounds
       if (newScrollLeft >= 0 && newScrollLeft <= maxScroll) {
         container.scrollLeft = newScrollLeft;
+      } else if (newScrollLeft < 0) {
+        container.scrollLeft = 0;
+      } else {
+        container.scrollLeft = maxScroll;
       }
     }
     
@@ -212,6 +216,48 @@ export default function KanbanLayout({
       if (scrollAnimationRef.current) {
         cancelAnimationFrame(scrollAnimationRef.current);
       }
+    };
+  }, []);
+  
+  // Global touch move listener to track finger position during drag
+  // This is needed because the drag preview element captures touch events
+  useEffect(() => {
+    const handleGlobalTouchMove = (e: TouchEvent) => {
+      if (!isDraggingRef.current) return;
+      
+      const touch = e.touches[0];
+      if (touch) {
+        touchPositionRef.current = { x: touch.clientX, y: touch.clientY };
+        
+        // Track direction
+        const prevX = lastTouchXRef.current;
+        if (prevX !== null) {
+          const deltaX = touch.clientX - prevX;
+          if (Math.abs(deltaX) > 1) {
+            dragDirectionRef.current = deltaX > 0 ? 'right' : 'left';
+          }
+        }
+        lastTouchXRef.current = touch.clientX;
+      }
+    };
+    
+    const handleGlobalTouchEnd = () => {
+      if (isDraggingRef.current) {
+        touchPositionRef.current = null;
+        lastTouchXRef.current = null;
+        dragDirectionRef.current = null;
+      }
+    };
+    
+    // Add listeners with passive: false to allow preventDefault if needed
+    document.addEventListener('touchmove', handleGlobalTouchMove, { passive: true });
+    document.addEventListener('touchend', handleGlobalTouchEnd);
+    document.addEventListener('touchcancel', handleGlobalTouchEnd);
+    
+    return () => {
+      document.removeEventListener('touchmove', handleGlobalTouchMove);
+      document.removeEventListener('touchend', handleGlobalTouchEnd);
+      document.removeEventListener('touchcancel', handleGlobalTouchEnd);
     };
   }, []);
   

@@ -191,7 +191,11 @@ export default function HabitCard({
         ${isDragging ? 'opacity-50 scale-95 shadow-lg ring-2 ring-primary' : 'hover:shadow-md'}
         ${isLeftHanded ? 'text-right' : 'text-left'}
       `}
-      style={{ touchAction: 'none' }}
+      style={{ 
+        // Allow vertical pan (scroll) but prevent horizontal pan during drag
+        // This enables normal vertical scrolling while allowing long-press drag
+        touchAction: 'pan-y'
+      }}
     >
       {/* Header: Habit name and time */}
       <div className={`flex items-start gap-2 mb-2 ${isLeftHanded ? 'flex-row-reverse' : ''}`}>
