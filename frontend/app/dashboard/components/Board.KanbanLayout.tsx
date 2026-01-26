@@ -131,9 +131,12 @@ export default function KanbanLayout({
   // Auto-scroll ref for drag operations
   const scrollAnimationRef = useRef<number | null>(null);
   const touchPositionRef = useRef<{ x: number; y: number } | null>(null);
+  const lastTouchXRef = useRef<number | null>(null);
+  const dragDirectionRef = useRef<'left' | 'right' | null>(null);
 
   /**
-   * Auto-scroll container when dragging near edges (mobile)
+   * Auto-scroll container when dragging - follows drag direction (Trello-like)
+   * Scrolls in the direction the user is dragging
    */
   const performAutoScroll = useCallback(() => {
     if (!containerRef.current || !touchPositionRef.current || !isDragging) {
@@ -150,17 +153,32 @@ export default function KanbanLayout({
     
     let scrollDelta = 0;
     
-    // Check if near left edge
-    if (x - rect.left < DRAG_SCROLL_THRESHOLD) {
+    // Scroll based on drag direction when near edges OR when actively dragging in a direction
+    const nearLeftEdge = x - rect.left < DRAG_SCROLL_THRESHOLD;
+    const nearRightEdge = rect.right - x < DRAG_SCROLL_THRESHOLD;
+    
+    // If near edge, scroll in that direction
+    if (nearLeftEdge) {
       scrollDelta = -DRAG_SCROLL_SPEED;
-    }
-    // Check if near right edge
-    else if (rect.right - x < DRAG_SCROLL_THRESHOLD) {
+    } else if (nearRightEdge) {
       scrollDelta = DRAG_SCROLL_SPEED;
+    }
+    // If not near edge but actively dragging in a direction, scroll slower in that direction
+    else if (dragDirectionRef.current === 'left') {
+      scrollDelta = -DRAG_SCROLL_SPEED * 0.5;
+    } else if (dragDirectionRef.current === 'right') {
+      scrollDelta = DRAG_SCROLL_SPEED * 0.5;
     }
     
     if (scrollDelta !== 0) {
-      container.scrollLeft += scrollDelta;
+      // Check scroll bounds
+      const maxScroll = container.scrollWidth - container.clientWidth;
+      const newScrollLeft = container.scrollLeft + scrollDelta;
+      
+      if (newScrollLeft >= 0 && newScrollLeft <= maxScroll) {
+        container.scrollLeft = newScrollLeft;
+      }
+      
       scrollAnimationRef.current = requestAnimationFrame(performAutoScroll);
     } else {
       scrollAnimationRef.current = null;
@@ -203,12 +221,25 @@ export default function KanbanLayout({
   const handleCombinedTouchStart = useCallback((event: React.TouchEvent) => {
     const touch = event.touches[0];
     touchPositionRef.current = { x: touch.clientX, y: touch.clientY };
+    lastTouchXRef.current = touch.clientX;
+    dragDirectionRef.current = null;
     handleSwipeStart(event);
   }, [handleSwipeStart]);
   
   const handleCombinedTouchMove = useCallback((event: React.TouchEvent) => {
     const touch = event.touches[0];
-    touchPositionRef.current = { x: touch.clientX, y: touch.clientY };
+    const currentX = touch.clientX;
+    
+    // Track drag direction based on movement
+    if (isDragging && lastTouchXRef.current !== null) {
+      const deltaX = currentX - lastTouchXRef.current;
+      if (Math.abs(deltaX) > 2) { // Threshold to avoid jitter
+        dragDirectionRef.current = deltaX > 0 ? 'right' : 'left';
+      }
+    }
+    
+    lastTouchXRef.current = currentX;
+    touchPositionRef.current = { x: currentX, y: touch.clientY };
     
     // Handle drag preview movement if dragging
     handleTouchMove(event);
@@ -226,6 +257,8 @@ export default function KanbanLayout({
   
   const handleCombinedTouchEnd = useCallback(() => {
     touchPositionRef.current = null;
+    lastTouchXRef.current = null;
+    dragDirectionRef.current = null;
     
     // Stop auto-scroll
     if (scrollAnimationRef.current) {

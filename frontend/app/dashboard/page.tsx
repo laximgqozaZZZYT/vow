@@ -906,7 +906,7 @@ function DashboardLayout(props: any) {
       />
 
   {/* Main content pane with left tab navigation */}
-  <main className={`flex-1 pt-16 flex flex-col md:flex-row ${showLeftPane ? (isLeftHanded ? 'lg:mr-80' : 'lg:ml-80') : ''}`}>
+  <main className={`flex-1 pt-16 flex flex-col md:flex-row h-[100dvh] md:h-auto ${showLeftPane ? (isLeftHanded ? 'lg:mr-80' : 'lg:ml-80') : ''}`}>
         {/* Left Tab Navigation - Desktop */}
         <div className="hidden md:flex flex-col h-[calc(100vh-4rem)] sticky top-16">
           <TabNavigation
@@ -919,8 +919,11 @@ function DashboardLayout(props: any) {
         </div>
 
         {/* Mobile Tab Navigation - Bottom fixed, single row scrollable */}
-        <div className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-background/95 backdrop-blur-md border-t border-border/50">
-          <div className="flex overflow-x-auto scrollbar-hide px-1 py-1.5 gap-0.5" style={{ paddingBottom: 'env(safe-area-inset-bottom, 8px)' }}>
+        <div className="md:hidden fixed bottom-0 left-0 right-0 z-50 bg-background border-t border-border shadow-lg">
+          <div 
+            className="flex overflow-x-auto scrollbar-hide px-1 py-1.5 gap-0.5" 
+            style={{ paddingBottom: 'max(env(safe-area-inset-bottom, 0px), 8px)' }}
+          >
             {visibleTabs.map((tab) => {
               // Normalize activeTab for comparison (e.g., 'next' -> 'board')
               const normalizedActiveTab = normalizeTabId(activeTab);
@@ -952,8 +955,8 @@ function DashboardLayout(props: any) {
           </div>
         </div>
 
-        {/* Tab Content */}
-        <div className="flex-1 p-4 lg:p-6 pb-[72px] md:pb-6 overflow-auto">
+        {/* Tab Content - Use calc to account for header and bottom nav on mobile */}
+        <div className="flex-1 p-4 lg:p-6 pb-[80px] md:pb-6 overflow-y-auto overflow-x-hidden h-[calc(100dvh-4rem)] md:h-auto overscroll-contain">
           <TabContent
             activeTab={activeTab}
             isFullView={isFullView}
