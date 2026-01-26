@@ -499,9 +499,9 @@ export function CoachSection({ goals, onHabitCreated, onGoalCreated }: CoachSect
 
 
   return (
-    <section className="flex flex-col h-[calc(100vh-120px)] md:h-[calc(100vh-200px)] min-h-[400px] bg-card border border-border rounded-lg shadow-sm overflow-hidden">
-      {/* Header - 48px */}
-      <header className="flex items-center justify-between px-4 py-3 border-b border-border bg-card shrink-0">
+    <section className="relative flex flex-col h-full bg-card border border-border rounded-lg shadow-sm">
+      {/* Header */}
+      <header className="flex items-center justify-between px-4 py-3 border-b border-border bg-card">
         <h2 className="text-lg font-semibold flex items-center gap-2">
           <span>🤖</span>
           <span>AI Coach</span>
@@ -532,11 +532,11 @@ export function CoachSection({ goals, onHabitCreated, onGoalCreated }: CoachSect
         <UpgradePrompt />
       ) : (
         <>
-          {/* Chat Area - flex-1 to fill remaining space, scrollable */}
-          <div className="flex-1 overflow-y-auto p-4 flex flex-col">
+          {/* Chat Area - scrollable, with padding-bottom for fixed input */}
+          <div className="flex-1 overflow-y-auto p-4 pb-40 md:pb-36">
             {messages.length === 0 ? (
-              /* Quick Actions - left aligned at bottom like ChatGPT/Gemini */
-              <div className="flex-1 flex flex-col justify-end">
+              /* Quick Actions - left aligned */
+              <div className="flex flex-col">
                 <p className="text-lg text-muted-foreground mb-4">何をお手伝いしましょうか？</p>
                 <ChoiceButtons
                   choices={DEFAULT_QUICK_ACTIONS}
@@ -619,9 +619,9 @@ export function CoachSection({ goals, onHabitCreated, onGoalCreated }: CoachSect
             )}
           </div>
 
-          {/* Goal Selector */}
+          {/* Goal Selector - fixed above input */}
           {goals.length > 1 && (
-            <div className="px-4 py-2 border-t border-border bg-muted/30 shrink-0">
+            <div className="absolute bottom-24 md:bottom-20 left-0 right-0 px-4 py-2 bg-muted/30 border-t border-border">
               <div className="flex items-center gap-2">
                 <label className="text-xs text-muted-foreground">提案対象ゴール:</label>
                 <select
@@ -638,14 +638,14 @@ export function CoachSection({ goals, onHabitCreated, onGoalCreated }: CoachSect
             </div>
           )}
 
-          {/* Input Area - fixed at bottom */}
-          <div className="shrink-0 border-t border-border bg-card p-4 mt-auto">
+          {/* Input Area - FIXED at absolute bottom */}
+          <div className="absolute bottom-0 left-0 right-0 border-t border-border bg-card p-3 md:p-4">
             {error && (
-              <div className="mb-3 p-3 bg-destructive/10 border border-destructive/20 rounded-md text-sm text-destructive">
+              <div className="mb-2 p-2 bg-destructive/10 border border-destructive/20 rounded-md text-sm text-destructive">
                 {error}
               </div>
             )}
-            <div className="flex gap-3 items-end">
+            <div className="flex gap-2 md:gap-3 items-end">
               <textarea
                 ref={textareaRef}
                 value={input}
@@ -654,7 +654,7 @@ export function CoachSection({ goals, onHabitCreated, onGoalCreated }: CoachSect
                   ? "例: 毎朝7時に30分ジョギングする"
                   : "続けて入力..."
                 }
-                className="flex-1 min-h-[48px] md:min-h-[60px] max-h-[120px] px-4 py-3 rounded-lg border border-input bg-background text-base resize-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                className="flex-1 min-h-[44px] md:min-h-[52px] max-h-[100px] px-3 md:px-4 py-2 md:py-3 rounded-lg border border-input bg-background text-base resize-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
                 disabled={processing}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter' && !e.shiftKey) {
@@ -666,7 +666,7 @@ export function CoachSection({ goals, onHabitCreated, onGoalCreated }: CoachSect
               <button
                 onClick={handleProcess}
                 disabled={processing || !input.trim()}
-                className="px-4 md:px-6 py-3 min-h-[48px] bg-primary text-primary-foreground rounded-lg font-medium hover:opacity-90 disabled:opacity-50 transition-opacity"
+                className="px-4 md:px-6 py-2 md:py-3 min-h-[44px] bg-primary text-primary-foreground rounded-lg font-medium hover:opacity-90 disabled:opacity-50 transition-opacity"
               >
                 {processing ? '...' : '送信'}
               </button>
