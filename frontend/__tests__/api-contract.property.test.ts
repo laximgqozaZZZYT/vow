@@ -190,9 +190,9 @@ describe('API Contract Preservation Property Tests', () => {
       // Essential section components
       const essentialSections = [
         'Section.Activity.tsx',
+        'Section.Board.tsx',
         'Section.Diary.tsx',
         'Section.Mindmap.tsx',
-        'Section.Next.tsx',
         'Section.Statistics.tsx',
       ];
       

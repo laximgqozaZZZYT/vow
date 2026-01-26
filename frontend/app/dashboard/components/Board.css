@@ -1,0 +1,251 @@
+/**
+ * Board Section CSS
+ * 
+ * Styles for the Kanban board layout including:
+ * - Drag and drop visual feedback
+ * - Mobile swipe navigation
+ * - Column styling
+ * - Card animations
+ * - Reduced motion support
+ * 
+ * Validates: Requirements 4.1, 4.2, 5.6
+ */
+
+/* ============================================================================
+ * Kanban Drag Preview
+ * ============================================================================ */
+
+.kanban-drag-preview {
+  position: fixed;
+  z-index: 9999;
+  background: var(--color-card, white);
+  border: 2px solid var(--color-primary, #3b82f6);
+  border-radius: 8px;
+  padding: 8px 12px;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.15), 0 4px 10px rgba(0, 0, 0, 0.1);
+  pointer-events: none;
+  font-size: 14px;
+  max-width: 200px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  animation: kanbanDragPreviewAppear 0.15s ease-out;
+}
+
+@keyframes kanbanDragPreviewAppear {
+  from {
+    opacity: 0;
+    transform: scale(0.9);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+:root.dark .kanban-drag-preview,
+.dark .kanban-drag-preview {
+  background: var(--color-card, #1f2937);
+  border-color: var(--color-primary, #60a5fa);
+  color: var(--color-foreground, white);
+}
+
+/* ============================================================================
+ * Kanban Column Drop Target - Requirement 4.2
+ * ============================================================================ */
+
+.kanban-column-drop-target {
+  background-color: rgba(59, 130, 246, 0.08) !important;
+  border: 2px solid rgba(59, 130, 246, 0.5) !important;
+  box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.1);
+  transition: all 0.2s ease;
+}
+
+:root.dark .kanban-column-drop-target,
+.dark .kanban-column-drop-target {
+  background-color: rgba(59, 130, 246, 0.15) !important;
+  border-color: rgba(59, 130, 246, 0.7) !important;
+}
+
+/* ============================================================================
+ * Kanban Card Dragging State - Requirement 4.1
+ * ============================================================================ */
+
+.kanban-card-dragging {
+  opacity: 0.5;
+  transform: scale(0.95);
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
+  ring: 2px solid var(--color-primary, #3b82f6);
+}
+
+/* ============================================================================
+ * Mobile Swipe Container
+ * ============================================================================ */
+
+/* Hide scrollbar for cleaner mobile experience */
+.scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}
+
+/* Smooth scrolling with iOS momentum */
+.kanban-swipe-container {
+  -webkit-overflow-scrolling: touch;
+  scroll-snap-type: x mandatory;
+  scroll-behavior: smooth;
+}
+
+/* Column snap alignment */
+.kanban-column-snap {
+  scroll-snap-align: center;
+}
+
+/* ============================================================================
+ * Mobile Column Indicators
+ * ============================================================================ */
+
+.kanban-indicator {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background-color: var(--color-muted-foreground, #9ca3af);
+  opacity: 0.3;
+  transition: all 0.2s ease;
+}
+
+.kanban-indicator.active {
+  opacity: 1;
+  background-color: var(--color-primary, #3b82f6);
+  transform: scale(1.25);
+}
+
+/* ============================================================================
+ * Touch Feedback
+ * ============================================================================ */
+
+/* Long press visual feedback */
+.kanban-card-touch-active {
+  animation: kanbanTouchPulse 0.3s ease-in-out;
+}
+
+@keyframes kanbanTouchPulse {
+  0%, 100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.02);
+    box-shadow: 0 4px 12px rgba(59, 130, 246, 0.2);
+  }
+}
+
+/* ============================================================================
+ * Reduced Motion Support - Requirement 5.6
+ * ============================================================================ */
+
+@media (prefers-reduced-motion: reduce) {
+  .kanban-drag-preview,
+  .kanban-card-dragging,
+  .kanban-column-drop-target,
+  .kanban-indicator,
+  .kanban-card-touch-active {
+    animation: none !important;
+    transition: none !important;
+  }
+  
+  .kanban-swipe-container {
+    scroll-behavior: auto;
+  }
+}
+
+/* ============================================================================
+ * Empty Column State
+ * ============================================================================ */
+
+.kanban-empty-column {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100px;
+  border: 2px dashed var(--color-border, #e5e7eb);
+  border-radius: 8px;
+  color: var(--color-muted-foreground, #9ca3af);
+  font-size: 14px;
+  transition: all 0.2s ease;
+}
+
+.kanban-empty-column.drop-active {
+  border-color: var(--color-primary, #3b82f6);
+  background-color: rgba(59, 130, 246, 0.05);
+  color: var(--color-primary, #3b82f6);
+}
+
+:root.dark .kanban-empty-column,
+.dark .kanban-empty-column {
+  border-color: var(--color-border, #374151);
+}
+
+/* ============================================================================
+ * Layout Toggle Button
+ * ============================================================================ */
+
+.board-layout-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  font-size: 12px;
+  font-weight: 500;
+  background-color: var(--color-muted, #f3f4f6);
+  color: var(--color-muted-foreground, #6b7280);
+  border: 1px solid var(--color-border, #e5e7eb);
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.board-layout-toggle:hover {
+  background-color: var(--color-muted, #e5e7eb);
+  color: var(--color-foreground, #111827);
+}
+
+.board-layout-toggle:focus-visible {
+  outline: 2px solid var(--color-primary, #3b82f6);
+  outline-offset: 2px;
+}
+
+:root.dark .board-layout-toggle,
+.dark .board-layout-toggle {
+  background-color: var(--color-muted, #374151);
+  border-color: var(--color-border, #4b5563);
+}
+
+:root.dark .board-layout-toggle:hover,
+.dark .board-layout-toggle:hover {
+  background-color: var(--color-muted, #4b5563);
+}
+
+/* ============================================================================
+ * Elapsed Time Badge
+ * ============================================================================ */
+
+.elapsed-time-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 6px;
+  font-size: 11px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  background-color: rgba(59, 130, 246, 0.1);
+  color: var(--color-primary, #3b82f6);
+  border-radius: 4px;
+}
+
+:root.dark .elapsed-time-badge,
+.dark .elapsed-time-badge {
+  background-color: rgba(96, 165, 250, 0.15);
+  color: #60a5fa;
+}

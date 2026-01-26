@@ -61,7 +61,7 @@ function usePrefersReducedMotion(): boolean {
 }
 
 // Reuse actual dashboard components
-import NextSection from '@/app/dashboard/components/Section.Next';
+import BoardSection from '@/app/dashboard/components/Section.Board';
 import StickiesSection from '@/app/dashboard/components/Section.Stickies';
 import CalendarWidget from '@/app/dashboard/components/Widget.Calendar';
 import StaticsSection from '@/app/dashboard/components/Section.Statistics';
@@ -177,9 +177,10 @@ function DemoDashboardContent() {
             const highlightClass = getHighlightClass(index);
             switch (sec) {
               case 'next':
+              case 'board':
                 return (
-                  <div key="next" className={highlightClass}>
-                    <NextSection
+                  <div key="board" className={highlightClass}>
+                    <BoardSection
                       habits={habits}
                       activities={activities}
                       onHabitAction={onHabitAction}

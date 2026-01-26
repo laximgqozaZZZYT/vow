@@ -1,3 +1,19 @@
+/**
+ * @deprecated This component is deprecated. Use Section.Board.tsx instead.
+ * 
+ * Section.Next has been replaced by Section.Board which provides:
+ * - Kanban board layout (detailed mode) with 3 columns: 予定, 進行中, 完了(日次)
+ * - Simple list layout (simple mode) - equivalent to this component
+ * - Layout mode toggle with local storage persistence
+ * - Drag-and-drop support for habit status changes
+ * - Mobile swipe navigation
+ * 
+ * This file is kept for backward compatibility with the demo page.
+ * It will be removed in a future version.
+ * 
+ * @see Section.Board.tsx
+ */
+
 import { formatTime24, formatDateTime24 } from '../../../lib/format';
 import type { NextSectionProps, Habit } from '../types';
 import { useState } from 'react';
@@ -5,6 +21,7 @@ import './HabitNameScroll.css';
 import { useHandedness } from '../contexts/HandednessContext';
 import { isHabitCumulativelyCompleted } from '../utils/habitCompletionUtils';
 
+/** @deprecated Use BoardSection from Section.Board.tsx instead */
 export default function NextSection({ habits, activities, onHabitAction, onHabitEdit }: NextSectionProps) {
   const [inputValues, setInputValues] = useState<Record<string, string>>({});
   const { isLeftHanded } = useHandedness();

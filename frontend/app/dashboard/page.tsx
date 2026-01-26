@@ -21,7 +21,7 @@ import CoachSection from './components/Section.Coach';
 // Extracted components
 import DashboardHeader from './components/Layout.Header';
 import DashboardSidebar from './components/Layout.Sidebar';
-import NextSection from './components/Section.Next';
+import BoardSection from './components/Section.Board';
 import ActivitySection from './components/Section.Activity';
 import CalendarWidget from './components/Widget.Calendar';
 
@@ -29,7 +29,7 @@ import CalendarWidget from './components/Widget.Calendar';
 import { TabNavigation } from './components/Layout.TabNavigation';
 import { TabContent } from './components/Layout.TabContent';
 import { useTabNavigation } from './hooks/useTabNavigation';
-import { getVisibleTabs, getTabById } from './constants/tabConfig';
+import { getVisibleTabs, getTabById, normalizeTabId } from './constants/tabConfig';
 
 // Hooks
 import { useActivityManager } from './hooks/useActivityManager';
@@ -550,6 +550,15 @@ const MobileTabIcon = ({ type, isActive }: { type: string; isActive: boolean }) 
   };
 
   switch (type) {
+    case 'board':
+      // Kanban board icon (3 columns)
+      return (
+        <svg {...iconProps}>
+          <rect x="3" y="3" width="5" height="18" rx="1" />
+          <rect x="10" y="3" width="5" height="12" rx="1" />
+          <rect x="17" y="3" width="5" height="15" rx="1" />
+        </svg>
+      );
     case 'next':
       return (
         <svg {...iconProps}>
@@ -731,10 +740,13 @@ function DashboardLayout(props: any) {
 
   // Render section content based on active tab
   const renderSectionContent = () => {
-    switch (activeTab) {
-      case 'next':
+    // Normalize tab ID for backward compatibility (next -> board)
+    const normalizedTab = normalizeTabId(activeTab);
+    
+    switch (normalizedTab) {
+      case 'board':
         return (
-          <NextSection 
+          <BoardSection 
             habits={habits}
             activities={activities}
             onHabitAction={handleHabitAction}
