@@ -18,6 +18,7 @@ interface UseActivityManagerReturn {
   handleComplete: (habitId: string, amount?: number) => void;
   handleStart: (habitId: string) => void;
   handlePause: (habitId: string) => void;
+  handleReset: (habitId: string) => void;
   openEditActivity: (activityId: string) => void;
   propagateActivityChanges: (updated: Activity) => void;
   handleDeleteActivity: (activityId: string) => void;
@@ -363,6 +364,117 @@ export function useActivityManager({
     }
   }
 
+  /**
+   * Reset a habit to planned status by removing today's activities
+   * Used by Kanban drag-and-drop to move habits back to "planned" column
+   * Does NOT open the activity modal
+   */
+  function handleReset(habitId: string) {
+    const actionKey = `reset-${habitId}`;
+    if (processingActions.has(actionKey)) {
+      debug.log('[handleReset] Already processing, skipping:', habitId);
+      return;
+    }
+    
+    setProcessingActions(prev => new Set(prev).add(actionKey));
+    
+    try {
+      const habit = habits.find(h => h.id === habitId);
+      if (!habit) {
+        releaseActionLock(actionKey);
+        return;
+      }
+      
+      // Get today's date string
+      const today = new Date().toISOString().slice(0, 10);
+      
+      // Find today's activities for this habit
+      const todayActivities = activities.filter(a => 
+        a.habitId === habitId && 
+        a.timestamp.slice(0, 10) === today
+      );
+      
+      debug.log('[handleReset] Resetting habit:', {
+        habitId,
+        habitName: habit.name,
+        todayActivities: todayActivities.map(a => ({ id: a.id, kind: a.kind }))
+      });
+      
+      // Clear any active start timer
+      const start = starts[habitId];
+      if (start && typeof start.timeoutId === 'number') {
+        clearTimeout(start.timeoutId);
+      }
+      setStarts(s => { const c = { ...s }; delete c[habitId]; return c; });
+      setPausedLoads(s => { const c = { ...s }; delete c[habitId]; return c; });
+      
+      // Delete today's activities from backend and local state
+      deleteTodayActivities(habitId, habit, todayActivities, actionKey);
+    } catch (error) {
+      console.error('[handleReset] Error:', error);
+      releaseActionLock(actionKey);
+    }
+  }
+
+  /** Delete today's activities for a habit */
+  async function deleteTodayActivities(
+    habitId: string, 
+    habit: Habit, 
+    todayActivities: Activity[],
+    actionKey: string
+  ) {
+    try {
+      // Calculate the count before today's activities
+      // Sort by timestamp to find the earliest prevCount
+      const sortedActivities = [...todayActivities].sort((a, b) => 
+        (a.timestamp || '').localeCompare(b.timestamp || '')
+      );
+      const firstActivity = sortedActivities[0];
+      const countBeforeToday = firstActivity?.prevCount ?? 0;
+      
+      // Delete activities from backend
+      for (const activity of todayActivities) {
+        if (!isTemporaryActivityId(activity.id)) {
+          try {
+            await api.deleteActivity(activity.id);
+          } catch (e) {
+            console.error('[handleReset] Failed to delete activity:', activity.id, e);
+          }
+        }
+      }
+      
+      // Remove activities from local state
+      setActivities(prev => prev.filter(a => 
+        !(a.habitId === habitId && a.timestamp.slice(0, 10) === new Date().toISOString().slice(0, 10))
+      ));
+      
+      // Reset habit count to before today's activities
+      setHabits(prev => prev.map(h => {
+        if (h.id !== habitId) return h;
+        const total = (h as any).workloadTotal ?? h.must ?? 0;
+        const completed = total > 0 ? (countBeforeToday >= total) : false;
+        
+        debug.log('[handleReset] Resetting habit count:', {
+          habitName: h.name,
+          oldCount: h.count,
+          newCount: countBeforeToday,
+          completed
+        });
+        
+        return { 
+          ...h, 
+          count: countBeforeToday, 
+          completed,
+          updatedAt: new Date().toISOString() 
+        };
+      }));
+    } catch (error) {
+      console.error('[handleReset] Error deleting activities:', error);
+    } finally {
+      releaseActionLock(actionKey);
+    }
+  }
+
   function openEditActivity(activityId: string) {
     setEditingActivityId(activityId);
     setOpenActivityModal(true);
@@ -551,6 +663,7 @@ export function useActivityManager({
     handleComplete,
     handleStart,
     handlePause,
+    handleReset,
     openEditActivity,
     propagateActivityChanges,
     handleDeleteActivity,

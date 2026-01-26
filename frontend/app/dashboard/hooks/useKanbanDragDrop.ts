@@ -47,8 +47,8 @@ export interface UseKanbanDragDropReturn {
  * Action mapping for drops based on target column
  * - Drop in 'in_progress' → 'start' action
  * - Drop in 'completed_daily' → 'complete' action
- * - Drop in 'planned' from 'in_progress' → 'pause' action
- * - Drop in 'planned' from 'completed_daily' → 'pause' action (reset to planned)
+ * - Drop in 'planned' from 'in_progress' → 'reset' action (cancel start without modal)
+ * - Drop in 'planned' from 'completed_daily' → 'reset' action (undo completion)
  */
 const getActionForDrop = (
   targetColumn: HabitStatus,
@@ -66,8 +66,9 @@ const getActionForDrop = (
       return 'complete';
     case 'planned':
       // Allow moving back to planned from in_progress or completed_daily
+      // Use 'reset' action to avoid opening modal
       if (sourceColumn === 'in_progress' || sourceColumn === 'completed_daily') {
-        return 'pause';
+        return 'reset';
       }
       return null;
     default:

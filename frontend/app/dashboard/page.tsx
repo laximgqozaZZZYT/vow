@@ -181,6 +181,7 @@ export default function DashboardPage() {
     handleComplete,
     handleStart,
     handlePause,
+    handleReset,
     openEditActivity,
     propagateActivityChanges,
     handleDeleteActivity,
@@ -216,7 +217,7 @@ export default function DashboardPage() {
   });
 
   // Unified habit action handler for extracted components
-  function handleHabitAction(habitId: string, action: 'start' | 'complete' | 'pause', amount?: number) {
+  function handleHabitAction(habitId: string, action: 'start' | 'complete' | 'pause' | 'reset', amount?: number) {
     switch (action) {
       case 'start':
         handleStart(habitId);
@@ -226,6 +227,9 @@ export default function DashboardPage() {
         break;
       case 'pause':
         handlePause(habitId);
+        break;
+      case 'reset':
+        handleReset(habitId);
         break;
     }
   }
