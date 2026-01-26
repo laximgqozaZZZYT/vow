@@ -46,6 +46,8 @@ interface NoticeSectionProps {
   onActionClick?: (notice: Notice) => void;
   habits?: Habit[];
   activities?: Activity[];
+  onEditActivity?: (activityId: string) => void;
+  onDeleteActivity?: (activityId: string) => void;
 }
 
 // JST日付範囲でのActivity集計関数
@@ -79,10 +81,11 @@ function calculateDailyWorkload(habitId: string, activities: Activity[]): number
  * Displays user notifications with unread badge, mark as read functionality,
  * and action buttons for actionable notifications.
  * Also displays Daily Progress (from Activity section).
+ * Also displays Activity Timeline with Edit/Delete functionality.
  * 
  * Requirements: 12.1, 12.2
  */
-export default function NoticeSection({ onActionClick, habits = [], activities = [] }: NoticeSectionProps) {
+export default function NoticeSection({ onActionClick, habits = [], activities = [], onEditActivity, onDeleteActivity }: NoticeSectionProps) {
   const { isLeftHanded } = useHandedness();
   const [notices, setNotices] = useState<Notice[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
@@ -407,6 +410,62 @@ export default function NoticeSection({ onActionClick, habits = [], activities =
           ))
         )}
       </div>
+
+      {/* Activity Timeline Section */}
+      {activities.length > 0 && (
+        <details className="mt-4 pt-4 border-t border-border">
+          <summary className={`cursor-pointer text-sm text-muted-foreground hover:text-foreground ${isLeftHanded ? 'text-right' : ''}`}>
+            Activity Timeline ({activities.length})
+          </summary>
+          <div className="mt-2 max-h-48 overflow-y-auto space-y-2 pr-1">
+            {[...activities]
+              .sort((a, b) => (b.timestamp || '').localeCompare(a.timestamp || ''))
+              .slice(0, 20)
+              .map(act => (
+                <div 
+                  key={act.id} 
+                  className={`flex items-center rounded-md px-2 py-1.5 hover:bg-muted/50 text-xs ${isLeftHanded ? 'flex-row-reverse' : 'justify-between'}`}
+                >
+                  <div className={isLeftHanded ? 'text-right' : ''}>
+                    <div className="text-muted-foreground">
+                      {act.timestamp 
+                        ? new Date(act.timestamp).toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' }) 
+                        : 'No timestamp'}
+                    </div>
+                    <div className="text-foreground">
+                      {act.habitName} — {
+                        act.kind === 'start' ? 'started' : 
+                        act.kind === 'complete' ? 'completed' : 
+                        act.kind === 'pause' ? 'paused' : 'skipped'
+                      }
+                      {act.kind === 'complete' && act.amount && ` (${act.amount})`}
+                    </div>
+                  </div>
+                  {(onEditActivity || onDeleteActivity) && (
+                    <div className={`flex items-center gap-2 ${isLeftHanded ? 'flex-row-reverse' : ''}`}>
+                      {onEditActivity && (
+                        <button 
+                          className="text-xs text-primary hover:underline"
+                          onClick={() => onEditActivity(act.id)}
+                        >
+                          Edit
+                        </button>
+                      )}
+                      {onDeleteActivity && (
+                        <button 
+                          className="text-xs text-red-500 hover:text-red-600"
+                          onClick={() => onDeleteActivity(act.id)}
+                        >
+                          Delete
+                        </button>
+                      )}
+                    </div>
+                  )}
+                </div>
+              ))}
+          </div>
+        </details>
+      )}
     </section>
   );
 }

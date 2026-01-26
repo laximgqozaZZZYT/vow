@@ -840,6 +840,8 @@ function DashboardLayout(props: any) {
           <NoticeSection
             habits={habits}
             activities={activities}
+            onEditActivity={openEditActivity}
+            onDeleteActivity={handleDeleteActivity}
             onActionClick={(notice) => {
               debug.log('[Dashboard] Notice action clicked:', notice);
               if (notice.actionType === 'rescue_proposal' || notice.actionType === 'recovery_proposal') {

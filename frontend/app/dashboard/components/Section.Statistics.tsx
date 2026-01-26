@@ -5,6 +5,7 @@ import GoalMermaid from './Widget.GoalDiagram'
 import MultiEventChart from './Widget.MultiEventChart'
 import HeatmapWidget from './Widget.Heatmap'
 import { HabitRelationMap } from './Widget.HabitRelationMap'
+import { GoalEnclosureWidget } from './Widget.GoalEnclosure'
 import type { Goal as SharedGoal, Habit, Activity } from '../types'
 import { useHandedness } from '../contexts/HandednessContext'
 import { isHabitCumulativelyCompleted } from '../utils/habitCompletionUtils'
@@ -487,6 +488,7 @@ export default function StaticsSection({ habits, activities, goals }: { habits: 
     { id: 'heatmap', title: 'Activity Heatmap' },
     { id: 'summary', title: 'Summary' },
     { id: 'goals', title: 'Goals' },
+    { id: 'goal-enclosure', title: 'Goal Enclosure' },
   ] as const), [])
   const [pageIndex, setPageIndex] = React.useState(0)
   const [isTransitioning, setIsTransitioning] = React.useState(false)
@@ -887,6 +889,17 @@ export default function StaticsSection({ habits, activities, goals }: { habits: 
                 showErrorDetails={true} 
                 onEditGraph={() => setEditGoalGraphOpen(true)}
                 visibleGoalIds={visibleGoalIds}
+              />
+            </div>
+          ) : activePage === 'goal-enclosure' ? (
+            <div className="min-w-0 h-full">
+              <GoalEnclosureWidget
+                goals={(goals ?? []) as SharedGoal[]}
+                habits={habits}
+                visibleGoalIds={visibleGoalIds}
+                onEditGraph={() => setEditGoalGraphOpen(true)}
+                showControls={true}
+                showMiniMap={false}
               />
             </div>
           ) : (
