@@ -199,6 +199,30 @@ export default function SettingsPage() {
                     <p className="text-muted-foreground">Profile settings coming soon...</p>
                   </div>
                 </div>
+                
+                {/* Subscription Management */}
+                <div>
+                  <h2 className="text-xl font-semibold mb-4">Subscription</h2>
+                  <div className="bg-card border border-border rounded-lg p-6">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <h3 className="font-medium">プランを管理</h3>
+                        <p className="text-sm text-muted-foreground mt-1">
+                          サブスクリプションプランの確認・変更、トークン使用量の確認ができます。
+                        </p>
+                      </div>
+                      <Link
+                        href="/settings/subscription"
+                        className="inline-flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-md text-sm font-medium hover:bg-primary/90 transition-colors"
+                      >
+                        プランを管理
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                        </svg>
+                      </Link>
+                    </div>
+                  </div>
+                </div>
               </div>
             )}
 
