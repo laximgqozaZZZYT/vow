@@ -28,6 +28,8 @@ export interface ChoiceButtonsProps {
   choices: Choice[];
   /** 選択時のコールバック */
   onSelect: (choice: Choice) => void;
+  /** タイトル（オプション） */
+  title?: string;
   /** レイアウト方向 */
   layout?: 'vertical' | 'horizontal' | 'grid';
   /** サイズ */
@@ -68,13 +70,14 @@ function getSizeStyles(size: 'sm' | 'md' | 'lg'): string {
 
 /**
  * レイアウトに応じたコンテナスタイルを取得
+ * モバイル (<768px) では1列、デスクトップでは指定レイアウト
  */
 function getLayoutStyles(layout: 'vertical' | 'horizontal' | 'grid'): string {
   switch (layout) {
     case 'horizontal':
-      return 'flex flex-row flex-wrap gap-2';
+      return 'flex flex-col md:flex-row flex-wrap gap-2';
     case 'grid':
-      return 'grid grid-cols-2 gap-2';
+      return 'grid grid-cols-1 md:grid-cols-2 gap-2';
     default:
       return 'flex flex-col gap-2';
   }
@@ -87,15 +90,17 @@ function getLayoutStyles(layout: 'vertical' | 'horizontal' | 'grid'): string {
  * 最大5つの選択肢をサポートし、アイコン、説明、緊急度インジケーターを表示できる。
  *
  * Requirements:
- * - 10.1: WHEN presenting options, display as clickable buttons
- * - 10.2: WHEN a choice button is clicked, send the action as a user message
+ * - 4.1: WHEN presenting options, display as clickable buttons
+ * - 4.2: Choice buttons SHALL support title display
+ * - 4.4: Choice buttons SHALL support size variations (sm/md/lg)
+ * - 4.5: Choice buttons SHALL be limited to 5 options maximum
  * - 10.3: Choice buttons SHALL support icons and descriptions
  * - 10.4: Choice buttons SHALL indicate urgency levels visually
- * - 10.5: Choice buttons SHALL be limited to 5 options maximum
  */
 export function ChoiceButtons({
   choices,
   onSelect,
+  title,
   layout = 'vertical',
   size = 'md',
   className = '',
@@ -104,7 +109,16 @@ export function ChoiceButtons({
   const limitedChoices = choices.slice(0, 5);
 
   return (
-    <div className={`${getLayoutStyles(layout)} ${className}`}>
+    <div className={`space-y-2 ${className}`}>
+      {/* タイトル表示 */}
+      {title && (
+        <p className="text-sm font-medium text-muted-foreground mb-2">
+          {title}
+        </p>
+      )}
+      
+      {/* 選択肢ボタン */}
+      <div className={getLayoutStyles(layout)}>
       {limitedChoices.map((choice) => (
         <button
           key={choice.id}
@@ -140,6 +154,7 @@ export function ChoiceButtons({
           </div>
         </button>
       ))}
+      </div>
     </div>
   );
 }

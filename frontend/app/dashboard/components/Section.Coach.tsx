@@ -1,7 +1,7 @@
 'use client';
 
 /**
- * Unified AI Coach Section with Conversation Support
+ * Unified AI Coach Section with Conversation Support (Gemini-style UI)
  *
  * Single intelligent interface that auto-detects user intent:
  * - Create habit from natural language
@@ -12,6 +12,12 @@
  * - UI component rendering from AI responses
  *
  * Requirements: Premium subscription features
+ * 
+ * UI Design:
+ * - Gemini-style spacious layout
+ * - Chat area: flex-1, min-h-400px (desktop), min-h-250px (mobile)
+ * - Input area: sticky bottom, auto-expand (max 160px)
+ * - Quick actions: centered when no conversation
  */
 
 import { useState, useEffect, useCallback, useRef } from 'react';
@@ -21,7 +27,7 @@ import { HabitStatsCard, type HabitStats } from './Widget.HabitStats';
 import { WorkloadChart, type WorkloadData } from './Widget.WorkloadChart';
 import { ChoiceButtons, type Choice } from './Widget.ChoiceButtons';
 import { ProgressIndicator } from './Widget.Progress';
-import { QuickActionButtons, type QuickAction } from './Widget.QuickActions';
+import { QuickActionButtons, DEFAULT_QUICK_ACTIONS, type QuickAction } from './Widget.QuickActions';
 import { HabitModal } from './Modal.Habit';
 import { GoalModal } from './Modal.Goal';
 
@@ -50,7 +56,6 @@ interface HabitSuggestion {
   workloadUnit: string | null;
   reason: string;
   confidence: number;
-  // Additional fields for detailed form
   triggerTime?: string | null;
   duration?: number | null;
 }
@@ -69,14 +74,14 @@ interface Message {
   content: string;
   timestamp: Date;
   intent?: DetectedIntent;
-  data?: any; // Parsed habit, suggestions, etc.
-  uiComponents?: UIComponentData[]; // UI components to render
+  data?: unknown;
+  uiComponents?: UIComponentData[];
 }
 
 interface UIComponentData {
   type: 'ui_component';
   component: 'habit_stats' | 'choice_buttons' | 'workload_chart' | 'progress_indicator' | 'quick_actions';
-  data: any;
+  data: Record<string, unknown>;
 }
 
 interface CoachSectionProps {
@@ -99,8 +104,9 @@ export function CoachSection({ goals, onHabitCreated, onGoalCreated }: CoachSect
   const [processing, setProcessing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-  // Current action state - use HabitModal for habit creation
+  // Current action state
   const [habitModalOpen, setHabitModalOpen] = useState(false);
   const [habitModalInitial, setHabitModalInitial] = useState<{
     name?: string;
@@ -122,7 +128,9 @@ export function CoachSection({ goals, onHabitCreated, onGoalCreated }: CoachSect
   } | undefined>(undefined);
   const [goalSuggestions, setGoalSuggestions] = useState<GoalSuggestion[]>([]);
 
-  // Helper to open HabitModal with initial values from AI
+  // Clear confirmation dialog
+  const [showClearConfirm, setShowClearConfirm] = useState(false);
+
   const openHabitModal = useCallback((data: {
     name?: string;
     type?: 'do' | 'avoid';
@@ -138,7 +146,6 @@ export function CoachSection({ goals, onHabitCreated, onGoalCreated }: CoachSect
     setHabitModalOpen(true);
   }, [goals]);
 
-  // Helper to open GoalModal with initial values from AI
   const openGoalModal = useCallback((data: {
     name?: string;
     parentId?: string | null;
@@ -152,10 +159,20 @@ export function CoachSection({ goals, onHabitCreated, onGoalCreated }: CoachSect
 
   const apiUrl = process.env.NEXT_PUBLIC_BACKEND_API_URL || process.env.NEXT_PUBLIC_SLACK_API_URL;
 
-  // Scroll to bottom when messages change
+  // Auto-scroll to bottom
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
+
+  // Auto-expand textarea
+  useEffect(() => {
+    if (textareaRef.current) {
+      textareaRef.current.style.height = 'auto';
+      const scrollHeight = textareaRef.current.scrollHeight;
+      // Min 80px, max 160px
+      textareaRef.current.style.height = `${Math.min(Math.max(scrollHeight, 80), 160)}px`;
+    }
+  }, [input]);
 
   // Check premium/admin status
   useEffect(() => {
@@ -213,13 +230,7 @@ export function CoachSection({ goals, onHabitCreated, onGoalCreated }: CoachSect
     checkStatus();
   }, [apiUrl]);
 
-  // Detect intent is now handled by AI backend - this is kept for type compatibility
-  const detectIntent = useCallback((text: string): DetectedIntent => {
-    return null; // AI will determine intent
-  }, []);
-
-  // Add message to conversation
-  const addMessage = useCallback((role: 'user' | 'assistant', content: string, intent?: DetectedIntent, data?: any, uiComponents?: UIComponentData[]) => {
+  const addMessage = useCallback((role: 'user' | 'assistant', content: string, intent?: DetectedIntent, data?: unknown, uiComponents?: UIComponentData[]) => {
     const newMessage: Message = {
       id: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
       role,
@@ -233,16 +244,14 @@ export function CoachSection({ goals, onHabitCreated, onGoalCreated }: CoachSect
     return newMessage;
   }, []);
 
-  // Handle habit creation from HabitModal
-  const handleHabitCreated = useCallback((payload: any) => {
+  const handleHabitCreated = useCallback((payload: { name: string }) => {
     addMessage('assistant', `✅ 「${payload.name}」を作成しました！他に追加したい習慣はありますか？`);
     setHabitModalOpen(false);
     setHabitModalInitial(undefined);
     onHabitCreated?.();
   }, [addMessage, onHabitCreated]);
 
-  // Handle goal creation from GoalModal
-  const handleGoalCreated = useCallback((payload: any) => {
+  const handleGoalCreated = useCallback((payload: { name: string }) => {
     addMessage('assistant', `✅ ゴール「${payload.name}」を作成しました！このゴールに向けた習慣を追加しますか？`);
     setGoalModalOpen(false);
     setGoalModalInitial(undefined);
@@ -250,63 +259,9 @@ export function CoachSection({ goals, onHabitCreated, onGoalCreated }: CoachSect
     onGoalCreated?.();
   }, [addMessage, onGoalCreated]);
 
-  // Generate follow-up question based on context
-  const generateFollowUp = useCallback((intent: DetectedIntent, data: any): string => {
-    switch (intent) {
-      case 'create':
-        if (!data?.triggerTime) {
-          return '何時頃に実行しますか？（例: 朝7時、夜9時）';
-        }
-        if (!data?.duration && data?.type === 'do') {
-          return 'どのくらいの時間をかけますか？（例: 30分、1時間）';
-        }
-        if (!data?.goalId && goals.length > 0) {
-          return `どのゴールに関連付けますか？\n${goals.map((g, i) => `${i + 1}. ${g.name}`).join('\n')}`;
-        }
-        return '他に追加したい習慣はありますか？';
-      case 'suggest':
-        return '提案された習慣の中で気になるものはありますか？クリックして詳細を編集できます。';
-      case 'edit':
-        return '他に変更したい習慣はありますか？';
-      default:
-        return '他に何かお手伝いできることはありますか？';
-    }
-  }, [goals]);
 
-  // Process input using AI chat endpoint (natural language understanding)
-  const handleProcess = async () => {
-    if (!input.trim() || !apiUrl) return;
-
-    const userInput = input.trim();
-    setInput('');
-    setProcessing(true);
-    setError(null);
-
-    // Add user message
-    addMessage('user', userInput);
-
-    try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session?.access_token) {
-        setError('認証が必要です');
-        addMessage('assistant', '認証が必要です。ログインしてください。');
-        return;
-      }
-
-      // Use the new AI chat endpoint for natural language understanding
-      await handleAIChat(session.access_token, userInput);
-    } catch (err: any) {
-      const errorMsg = err.message || 'エラーが発生しました';
-      setError(errorMsg);
-      addMessage('assistant', `エラー: ${errorMsg}`);
-    } finally {
-      setProcessing(false);
-    }
-  };
-
-  // Main AI chat handler - uses Function Calling for intelligent coaching
-  const handleAIChat = async (token: string, userInput: string) => {
-    // Build conversation history for context
+  // Main AI chat handler
+  const handleAIChat = useCallback(async (token: string, userInput: string) => {
     const conversationHistory = messages.slice(-10).map(m => ({
       role: m.role,
       content: m.content,
@@ -330,16 +285,12 @@ export function CoachSection({ goals, onHabitCreated, onGoalCreated }: CoachSect
     }
 
     const data = await response.json();
-
-    // Extract UI components from response
     const uiComponents: UIComponentData[] = data.data?.uiComponents || [];
 
-    // Add AI response with UI components
     addMessage('assistant', data.response, null, data, uiComponents);
 
-    // Handle structured habit data from AI tools
+    // Handle structured data from AI tools
     if (data.data?.parsedHabit) {
-      // Single habit suggestion - open HabitModal
       const habit = data.data.parsedHabit;
       openHabitModal({
         name: habit.name || '',
@@ -349,9 +300,8 @@ export function CoachSection({ goals, onHabitCreated, onGoalCreated }: CoachSect
       });
     }
 
-    // Handle multiple habit suggestions
-    if (data.data?.habitSuggestions && data.data.habitSuggestions.length > 0) {
-      const suggestionList: HabitSuggestion[] = data.data.habitSuggestions.map((s: any) => ({
+    if (data.data?.habitSuggestions?.length > 0) {
+      const suggestionList: HabitSuggestion[] = data.data.habitSuggestions.map((s: Record<string, unknown>) => ({
         name: s.name || '',
         type: s.type === 'avoid' ? 'avoid' : 'do',
         frequency: s.frequency || 'daily',
@@ -365,19 +315,13 @@ export function CoachSection({ goals, onHabitCreated, onGoalCreated }: CoachSect
       setSuggestions(suggestionList);
     }
 
-    // Handle structured goal data from AI tools
     if (data.data?.parsedGoal) {
-      // Single goal suggestion - open GoalModal
       const goal = data.data.parsedGoal;
-      openGoalModal({
-        name: goal.name || '',
-        parentId: null,
-      });
+      openGoalModal({ name: goal.name || '', parentId: null });
     }
 
-    // Handle multiple goal suggestions
-    if (data.data?.goalSuggestions && data.data.goalSuggestions.length > 0) {
-      const goalList: GoalSuggestion[] = data.data.goalSuggestions.map((g: any) => ({
+    if (data.data?.goalSuggestions?.length > 0) {
+      const goalList: GoalSuggestion[] = data.data.goalSuggestions.map((g: Record<string, unknown>) => ({
         name: g.name || '',
         description: g.description || '',
         icon: g.icon || '🎯',
@@ -387,194 +331,40 @@ export function CoachSection({ goals, onHabitCreated, onGoalCreated }: CoachSect
       setGoalSuggestions(goalList);
     }
 
-    // Show analysis data if available
-    if (data.data?.analysis && data.data.analysis.length > 0) {
-      // Show habit analysis summary
-      const lowCompletionHabits = data.data.analysis.filter((a: any) => a.completionRate < 0.5);
-      if (lowCompletionHabits.length > 0) {
-        setTimeout(() => {
-          const analysisMsg = `📊 分析結果:\n${lowCompletionHabits.slice(0, 3).map((a: any) => 
-            `• ${a.habitName}: 達成率 ${Math.round(a.completionRate * 100)}% (${a.trend === 'improving' ? '↑改善中' : a.trend === 'declining' ? '↓下降中' : '→安定'})`
-          ).join('\n')}`;
-          addMessage('assistant', analysisMsg);
-        }, 300);
-      }
-    }
-
-    // Show workload summary if available
-    if (data.data?.workload) {
-      const workload = data.data.workload;
-      const statusEmojiMap: Record<string, string> = {
-        light: '🟢',
-        moderate: '🟡',
-        heavy: '🟠',
-        overloaded: '🔴',
-      };
-      const statusEmoji = statusEmojiMap[workload.status as string] || '⚪';
-      
-      setTimeout(() => {
-        addMessage('assistant', `${statusEmoji} ワークロード: 1日約${workload.dailyMinutes}分 (${workload.activeHabits}個の習慣)`);
-      }, 500);
-    }
-
-    // Show suggestions if available (adjustment suggestions, not habit suggestions)
-    if (data.data?.suggestions && data.data.suggestions.length > 0 && !data.data?.habitSuggestions) {
-      setTimeout(() => {
-        const suggestionsMsg = `💡 調整提案:\n${data.data.suggestions.slice(0, 3).map((s: any) => 
-          `• ${s.habitName}: ${s.suggestion}\n  理由: ${s.reason}`
-        ).join('\n\n')}`;
-        addMessage('assistant', suggestionsMsg);
-      }, 700);
-    }
-
-    // Update token info if provided
     if (data.remainingTokens !== undefined) {
       setTokenInfo(prev => prev ? { ...prev, remaining: data.remainingTokens } : null);
     }
-  };
+  }, [apiUrl, messages, addMessage, openHabitModal, openGoalModal, goals]);
 
-  // Legacy handlers for direct actions (kept for backward compatibility)
-  const handleCreate = async (token: string, userInput: string) => {
-    const response = await fetch(`${apiUrl}/api/ai/parse-habit`, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        text: userInput,
-        context: { existingGoals: goals },
-      }),
-    });
+  const handleProcess = async () => {
+    if (!input.trim() || !apiUrl) return;
 
-    if (!response.ok) {
-      const data = await response.json();
-      throw new Error(data.message || 'AI解析に失敗しました');
-    }
+    const userInput = input.trim();
+    setInput('');
+    setProcessing(true);
+    setError(null);
 
-    const data = await response.json();
-    const parsed = data.parsed as ParsedHabit;
-    
-    // Open HabitModal with parsed data
-    openHabitModal({
-      name: parsed.name,
-      type: parsed.type,
-      triggerTime: parsed.triggerTime,
-      goalId: parsed.goalId,
-    });
-    
-    // Build response message
-    let responseMsg = `「${parsed.name}」を解析しました。\n`;
-    responseMsg += `タイプ: ${parsed.type === 'do' ? '実行する習慣' : '避ける習慣'}\n`;
-    if (parsed.frequency) responseMsg += `頻度: ${parsed.frequency === 'daily' ? '毎日' : parsed.frequency === 'weekly' ? '毎週' : '毎月'}\n`;
-    if (parsed.triggerTime) responseMsg += `時刻: ${parsed.triggerTime}\n`;
-    if (parsed.duration) responseMsg += `所要時間: ${parsed.duration}分\n`;
-    if (parsed.targetCount) responseMsg += `目標: ${parsed.targetCount}${parsed.workloadUnit || '回'}\n`;
-    responseMsg += `\nモーダルで内容を確認・編集してください。`;
-    
-    addMessage('assistant', responseMsg, 'create', parsed);
-  };
+    addMessage('user', userInput);
 
-  const handleEdit = async (token: string, userInput: string) => {
-    const response = await fetch(`${apiUrl}/api/ai/edit-habit`, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ text: userInput }),
-    });
-
-    if (!response.ok) {
-      const data = await response.json();
-      throw new Error(data.message || 'AI編集に失敗しました');
-    }
-
-    const data = await response.json();
-    
-    let responseMsg = `編集対象: 「${data.targetHabitName || '不明'}」\n`;
-    responseMsg += `変更内容:\n`;
-    Object.entries(data.changes || {}).forEach(([key, value]) => {
-      responseMsg += `  - ${key}: ${value}\n`;
-    });
-    responseMsg += `信頼度: ${Math.round((data.confidence || 0) * 100)}%`;
-    
-    addMessage('assistant', responseMsg, 'edit', data);
-    
-    // Add follow-up
-    setTimeout(() => addMessage('assistant', generateFollowUp('edit', data)), 500);
-  };
-
-  const handleSuggest = async (token: string, userInput: string) => {
-    // Determine which goal to use
-    let goalId = selectedGoalId;
-    
-    // Try to detect goal from input
-    if (!goalId && goals.length > 0) {
-      const lowerInput = userInput.toLowerCase();
-      const matchedGoal = goals.find(g => lowerInput.includes(g.name.toLowerCase()));
-      if (matchedGoal) {
-        goalId = matchedGoal.id;
-      } else {
-        goalId = goals[0].id;
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.access_token) {
+        setError('認証が必要です');
+        addMessage('assistant', '認証が必要です。ログインしてください。');
+        return;
       }
+
+      await handleAIChat(session.access_token, userInput);
+    } catch (err: unknown) {
+      const errorMsg = err instanceof Error ? err.message : 'エラーが発生しました';
+      setError(errorMsg);
+      addMessage('assistant', `エラー: ${errorMsg}`);
+    } finally {
+      setProcessing(false);
     }
-
-    if (!goalId) {
-      addMessage('assistant', 'まずゴールを作成してください。ゴールがないと習慣の提案ができません。');
-      return;
-    }
-
-    const response = await fetch(`${apiUrl}/api/ai/suggest-habits`, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ goalId }),
-    });
-
-    if (!response.ok) {
-      const data = await response.json();
-      throw new Error(data.message || '提案の取得に失敗しました');
-    }
-
-    const data = await response.json();
-    const suggestionList = (data.suggestions || []) as HabitSuggestion[];
-    setSuggestions(suggestionList);
-    
-    const goalName = goals.find(g => g.id === goalId)?.name || 'ゴール';
-    let responseMsg = `「${goalName}」達成のための習慣を${suggestionList.length}つ提案します:\n\n`;
-    
-    suggestionList.forEach((s, i) => {
-      responseMsg += `${i + 1}. ${s.name}\n`;
-      responseMsg += `   頻度: ${s.frequency === 'daily' ? '毎日' : s.frequency === 'weekly' ? '毎週' : '毎月'}`;
-      if (s.suggestedTargetCount > 1 || s.workloadUnit) {
-        responseMsg += ` / 目標: ${s.suggestedTargetCount}${s.workloadUnit || '回'}`;
-      }
-      responseMsg += `\n   理由: ${s.reason}\n\n`;
-    });
-    
-    responseMsg += '気になる習慣をクリックすると、詳細を編集して作成できます。';
-    
-    addMessage('assistant', responseMsg, 'suggest', suggestionList);
   };
 
-  // Create habit from suggestion - open HabitModal
-  const handleSelectSuggestion = (suggestion: HabitSuggestion) => {
-    openHabitModal({
-      name: suggestion.name,
-      type: suggestion.type,
-      triggerTime: suggestion.triggerTime || null,
-      goalId: selectedGoalId || (goals.length > 0 ? goals[0].id : null),
-    });
-    setSuggestions([]);
-    addMessage('assistant', `「${suggestion.name}」を選択しました。モーダルで詳細を編集してください。`);
-  };
-
-  // Handle choice button selection
   const handleChoiceSelect = useCallback(async (choice: Choice) => {
-    // Send the choice as a user message
     const userMessage = choice.description 
       ? `${choice.label}を選択しました: ${choice.description}`
       : `${choice.label}を選択しました`;
@@ -592,8 +382,8 @@ export function CoachSection({ goals, onHabitCreated, onGoalCreated }: CoachSect
       }
 
       await handleAIChat(session.access_token, userMessage);
-    } catch (err: any) {
-      const errorMsg = err.message || 'エラーが発生しました';
+    } catch (err: unknown) {
+      const errorMsg = err instanceof Error ? err.message : 'エラーが発生しました';
       setError(errorMsg);
       addMessage('assistant', `エラー: ${errorMsg}`);
     } finally {
@@ -601,8 +391,36 @@ export function CoachSection({ goals, onHabitCreated, onGoalCreated }: CoachSect
     }
   }, [addMessage, handleAIChat]);
 
-  // Clear conversation
+  const handleQuickAction = useCallback(async (action: QuickAction) => {
+    if (!action.prompt || !apiUrl) return;
+    
+    setInput('');
+    setProcessing(true);
+    addMessage('user', action.prompt);
+
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.access_token) {
+        setError('認証が必要です');
+        addMessage('assistant', '認証が必要です。ログインしてください。');
+        return;
+      }
+
+      await handleAIChat(session.access_token, action.prompt);
+    } catch (err: unknown) {
+      const errorMsg = err instanceof Error ? err.message : 'エラーが発生しました';
+      setError(errorMsg);
+      addMessage('assistant', `エラー: ${errorMsg}`);
+    } finally {
+      setProcessing(false);
+    }
+  }, [apiUrl, addMessage, handleAIChat]);
+
   const handleClearConversation = () => {
+    setShowClearConfirm(true);
+  };
+
+  const confirmClear = () => {
     setMessages([]);
     setHabitModalOpen(false);
     setHabitModalInitial(undefined);
@@ -612,14 +430,26 @@ export function CoachSection({ goals, onHabitCreated, onGoalCreated }: CoachSect
     setGoalSuggestions([]);
     setShowCoaching(false);
     setError(null);
+    setShowClearConfirm(false);
+  };
+
+  const handleSelectSuggestion = (suggestion: HabitSuggestion) => {
+    openHabitModal({
+      name: suggestion.name,
+      type: suggestion.type,
+      triggerTime: suggestion.triggerTime || null,
+      goalId: selectedGoalId || (goals.length > 0 ? goals[0].id : null),
+    });
+    setSuggestions([]);
+    addMessage('assistant', `「${suggestion.name}」を選択しました。モーダルで詳細を編集してください。`);
   };
 
   const hasAccess = isPremium || isAdmin;
 
   if (loading) {
     return (
-      <section className="p-4 bg-card border border-border rounded-lg">
-        <div className="animate-pulse">
+      <section className="flex flex-col h-full min-h-[500px] bg-card border border-border rounded-lg">
+        <div className="animate-pulse p-4">
           <div className="h-6 bg-muted rounded w-1/4 mb-4"></div>
           <div className="h-32 bg-muted rounded"></div>
         </div>
@@ -627,9 +457,11 @@ export function CoachSection({ goals, onHabitCreated, onGoalCreated }: CoachSect
     );
   }
 
+
   return (
-    <section className="p-4 bg-card border border-border rounded-lg shadow-sm">
-      <div className="flex items-center justify-between mb-4">
+    <section className="flex flex-col h-full min-h-[500px] md:min-h-[600px] bg-card border border-border rounded-lg shadow-sm overflow-hidden">
+      {/* Header - 48px */}
+      <header className="flex items-center justify-between px-4 py-3 border-b border-border bg-card shrink-0">
         <h2 className="text-lg font-semibold flex items-center gap-2">
           <span>🤖</span>
           <span>AI Coach</span>
@@ -639,190 +471,229 @@ export function CoachSection({ goals, onHabitCreated, onGoalCreated }: CoachSect
             </span>
           )}
         </h2>
-        <div className="flex items-center gap-2">
-          {messages.length > 0 && (
-            <button
-              onClick={handleClearConversation}
-              className="text-xs text-muted-foreground hover:text-foreground"
-            >
-              会話をクリア
-            </button>
-          )}
+        <div className="flex items-center gap-3">
           {hasAccess && tokenInfo && (
             <div className="text-xs text-muted-foreground">
               残り: 約{Math.floor(tokenInfo.remaining / 1000)}回
             </div>
           )}
+          {messages.length > 0 && (
+            <button
+              onClick={handleClearConversation}
+              className="text-xs px-2 py-1 text-muted-foreground hover:text-foreground hover:bg-muted rounded transition-colors"
+            >
+              クリア
+            </button>
+          )}
         </div>
-      </div>
+      </header>
 
       {!hasAccess ? (
         <UpgradePrompt />
       ) : (
-        <div className="space-y-4">
-          {/* Conversation History */}
-          {messages.length > 0 && (
-            <div className="max-h-96 overflow-y-auto space-y-3 p-3 bg-muted/30 rounded-lg">
-              {messages.map((msg) => (
-                <div key={msg.id} className="space-y-2">
-                  <div
-                    className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
-                  >
-                    <div
-                      className={`max-w-[85%] px-3 py-2 rounded-lg text-sm whitespace-pre-wrap ${
-                        msg.role === 'user'
-                          ? 'bg-primary text-primary-foreground'
-                          : 'bg-background border border-border'
-                      }`}
-                    >
-                      {msg.content}
+        <>
+          {/* Chat Area - flex-1, min-h-400px desktop, min-h-250px mobile */}
+          <div className="flex-1 min-h-[250px] md:min-h-[400px] overflow-y-auto p-4">
+            {messages.length === 0 ? (
+              /* Quick Actions - centered when no conversation */
+              <div className="h-full flex flex-col items-center justify-center">
+                <p className="text-lg text-muted-foreground mb-6">何をお手伝いしましょうか？</p>
+                <QuickActionButtons
+                  actions={DEFAULT_QUICK_ACTIONS}
+                  onActionSelect={handleQuickAction}
+                  layout="grid"
+                  columns={2}
+                  size="md"
+                  className="max-w-xs"
+                />
+              </div>
+            ) : (
+              /* Conversation History */
+              <div className="space-y-4">
+                {messages.map((msg) => (
+                  <div key={msg.id} className="space-y-2">
+                    <div className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                      <div
+                        className={`max-w-[95%] md:max-w-[85%] px-4 py-3 rounded-xl text-base whitespace-pre-wrap break-words ${
+                          msg.role === 'user'
+                            ? 'bg-primary text-primary-foreground rounded-br-sm'
+                            : 'bg-muted border border-border rounded-bl-sm'
+                        }`}
+                      >
+                        {msg.content}
+                      </div>
                     </div>
+                    {/* UI Components */}
+                    {msg.uiComponents && msg.uiComponents.length > 0 && (
+                      <div className="space-y-2 ml-2">
+                        {msg.uiComponents.map((comp, idx) => (
+                          <UIComponentRenderer
+                            key={`${msg.id}-ui-${idx}`}
+                            component={comp}
+                            onChoiceSelect={handleChoiceSelect}
+                          />
+                        ))}
+                      </div>
+                    )}
                   </div>
-                  {/* Render UI Components */}
-                  {msg.uiComponents && msg.uiComponents.length > 0 && (
-                    <div className="space-y-2 ml-2">
-                      {msg.uiComponents.map((comp, idx) => (
-                        <UIComponentRenderer
-                          key={`${msg.id}-ui-${idx}`}
-                          component={comp}
-                          onChoiceSelect={handleChoiceSelect}
-                        />
-                      ))}
-                    </div>
-                  )}
-                </div>
-              ))}
-              <div ref={messagesEndRef} />
-            </div>
-          )}
-
-          {/* Goal Selector (for suggestions) */}
-          {goals.length > 1 && (
-            <div className="flex items-center gap-2">
-              <label className="text-xs text-muted-foreground">提案対象ゴール:</label>
-              <select
-                value={selectedGoalId}
-                onChange={(e) => setSelectedGoalId(e.target.value)}
-                className="text-xs px-2 py-1 rounded border border-input bg-background"
-              >
-                <option value="">自動選択</option>
-                {goals.map((goal) => (
-                  <option key={goal.id} value={goal.id}>{goal.name}</option>
                 ))}
-              </select>
-            </div>
-          )}
+                <div ref={messagesEndRef} />
+              </div>
+            )}
 
-          {/* Input Area */}
-          <div className="flex gap-2">
-            <textarea
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              placeholder={messages.length === 0 
-                ? "例: 毎朝7時に30分ジョギングする / ゴール達成のための習慣を提案して"
-                : "続けて入力..."
-              }
-              className="flex-1 h-16 px-3 py-2 rounded-md border border-input bg-background text-sm resize-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
-              disabled={processing}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' && !e.shiftKey) {
-                  e.preventDefault();
-                  handleProcess();
-                }
-              }}
-            />
-            <button
-              onClick={handleProcess}
-              disabled={processing || !input.trim()}
-              className="px-4 bg-primary text-primary-foreground rounded-md font-medium hover:opacity-90 disabled:opacity-50 transition-opacity"
-            >
-              {processing ? '...' : '送信'}
-            </button>
+            {/* Habit Suggestions */}
+            {suggestions.length > 0 && (
+              <SuggestionsView
+                suggestions={suggestions}
+                onClose={() => setSuggestions([])}
+                onSelect={handleSelectSuggestion}
+              />
+            )}
+
+            {/* Goal Suggestions */}
+            {goalSuggestions.length > 0 && (
+              <GoalSuggestionsView
+                suggestions={goalSuggestions}
+                onClose={() => setGoalSuggestions([])}
+                onSelect={(suggestion) => {
+                  openGoalModal({ name: suggestion.name });
+                  setGoalSuggestions([]);
+                  addMessage('assistant', `「${suggestion.name}」を選択しました。モーダルで詳細を編集してください。`);
+                }}
+              />
+            )}
+
+            {/* Coaching Widget */}
+            {showCoaching && (
+              <div className="space-y-4 mt-4">
+                <CoachingWidget onProposalApplied={onHabitCreated} />
+                <button
+                  onClick={() => {
+                    setShowCoaching(false);
+                    addMessage('assistant', 'コーチングを閉じました。他に何かお手伝いできることはありますか？');
+                  }}
+                  className="text-sm text-muted-foreground hover:text-foreground"
+                >
+                  閉じる
+                </button>
+              </div>
+            )}
           </div>
 
-          {error && (
-            <div className="p-3 bg-destructive/10 border border-destructive/20 rounded-md text-sm text-destructive">
-              {error}
+          {/* Goal Selector */}
+          {goals.length > 1 && (
+            <div className="px-4 py-2 border-t border-border bg-muted/30 shrink-0">
+              <div className="flex items-center gap-2">
+                <label className="text-xs text-muted-foreground">提案対象ゴール:</label>
+                <select
+                  value={selectedGoalId}
+                  onChange={(e) => setSelectedGoalId(e.target.value)}
+                  className="text-xs px-2 py-1 rounded border border-input bg-background"
+                >
+                  <option value="">自動選択</option>
+                  {goals.map((goal) => (
+                    <option key={goal.id} value={goal.id}>{goal.name}</option>
+                  ))}
+                </select>
+              </div>
             </div>
           )}
 
-          {/* HabitModal for creating habits */}
-          <HabitModal
-            open={habitModalOpen}
-            onClose={() => {
-              setHabitModalOpen(false);
-              setHabitModalInitial(undefined);
-              addMessage('assistant', 'キャンセルしました。他に何かお手伝いできることはありますか？');
-            }}
-            habit={null}
-            onCreate={handleHabitCreated}
-            initial={habitModalInitial}
-            categories={goals}
-          />
-
-          {/* GoalModal for creating goals */}
-          <GoalModal
-            open={goalModalOpen}
-            onClose={() => {
-              setGoalModalOpen(false);
-              setGoalModalInitial(undefined);
-              addMessage('assistant', 'キャンセルしました。他に何かお手伝いできることはありますか？');
-            }}
-            goal={null}
-            onCreate={handleGoalCreated}
-            initial={goalModalInitial}
-            goals={goals}
-          />
-
-          {/* Habit Suggestions */}
-          {suggestions.length > 0 && (
-            <SuggestionsView
-              suggestions={suggestions}
-              onClose={() => setSuggestions([])}
-              onSelect={handleSelectSuggestion}
-            />
-          )}
-
-          {/* Goal Suggestions */}
-          {goalSuggestions.length > 0 && (
-            <GoalSuggestionsView
-              suggestions={goalSuggestions}
-              onClose={() => setGoalSuggestions([])}
-              onSelect={(suggestion) => {
-                openGoalModal({ name: suggestion.name });
-                setGoalSuggestions([]);
-                addMessage('assistant', `「${suggestion.name}」を選択しました。モーダルで詳細を編集してください。`);
-              }}
-            />
-          )}
-
-          {/* Coaching */}
-          {showCoaching && (
-            <div className="space-y-4">
-              <CoachingWidget onProposalApplied={onHabitCreated} />
-              <button
-                onClick={() => {
-                  setShowCoaching(false);
-                  addMessage('assistant', 'コーチングを閉じました。他に何かお手伝いできることはありますか？');
+          {/* Input Area - sticky bottom, min-h-80px, max-h-160px */}
+          <div className="shrink-0 border-t border-border bg-card p-4">
+            {error && (
+              <div className="mb-3 p-3 bg-destructive/10 border border-destructive/20 rounded-md text-sm text-destructive">
+                {error}
+              </div>
+            )}
+            <div className="flex gap-3 items-end">
+              <textarea
+                ref={textareaRef}
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                placeholder={messages.length === 0 
+                  ? "例: 毎朝7時に30分ジョギングする"
+                  : "続けて入力..."
+                }
+                className="flex-1 min-h-[60px] md:min-h-[80px] max-h-[160px] px-4 py-3 rounded-lg border border-input bg-background text-base resize-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                disabled={processing}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    handleProcess();
+                  }
                 }}
-                className="text-sm text-muted-foreground hover:text-foreground"
+              />
+              <button
+                onClick={handleProcess}
+                disabled={processing || !input.trim()}
+                className="px-6 py-3 min-h-[48px] bg-primary text-primary-foreground rounded-lg font-medium hover:opacity-90 disabled:opacity-50 transition-opacity"
               >
-                閉じる
+                {processing ? '...' : '送信'}
               </button>
             </div>
-          )}
+          </div>
+        </>
+      )}
 
-          {/* Quick Examples (only when no conversation) */}
-          {messages.length === 0 && !habitModalOpen && suggestions.length === 0 && !showCoaching && !processing && (
-            <QuickExamples onSelect={setInput} />
-          )}
+      {/* Modals */}
+      <HabitModal
+        open={habitModalOpen}
+        onClose={() => {
+          setHabitModalOpen(false);
+          setHabitModalInitial(undefined);
+          addMessage('assistant', 'キャンセルしました。他に何かお手伝いできることはありますか？');
+        }}
+        habit={null}
+        onCreate={handleHabitCreated}
+        initial={habitModalInitial}
+        categories={goals}
+      />
+
+      <GoalModal
+        open={goalModalOpen}
+        onClose={() => {
+          setGoalModalOpen(false);
+          setGoalModalInitial(undefined);
+          addMessage('assistant', 'キャンセルしました。他に何かお手伝いできることはありますか？');
+        }}
+        goal={null}
+        onCreate={handleGoalCreated}
+        initial={goalModalInitial}
+        goals={goals}
+      />
+
+      {/* Clear Confirmation Dialog */}
+      {showClearConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+          <div className="bg-card border border-border rounded-lg p-6 max-w-sm mx-4 shadow-lg">
+            <h3 className="font-semibold mb-2">会話をクリアしますか？</h3>
+            <p className="text-sm text-muted-foreground mb-4">
+              すべての会話履歴が削除されます。この操作は取り消せません。
+            </p>
+            <div className="flex gap-3 justify-end">
+              <button
+                onClick={() => setShowClearConfirm(false)}
+                className="px-4 py-2 text-sm rounded-md hover:bg-muted transition-colors"
+              >
+                キャンセル
+              </button>
+              <button
+                onClick={confirmClear}
+                className="px-4 py-2 text-sm bg-destructive text-destructive-foreground rounded-md hover:opacity-90 transition-opacity"
+              >
+                クリア
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </section>
   );
 }
 
-// Suggestions View with detailed info
+
+// Suggestions View
 function SuggestionsView({
   suggestions,
   onClose,
@@ -833,13 +704,10 @@ function SuggestionsView({
   onSelect: (suggestion: HabitSuggestion) => void;
 }) {
   return (
-    <div className="space-y-3">
+    <div className="space-y-3 mt-4">
       <div className="flex items-center justify-between">
         <h4 className="font-medium">提案された習慣</h4>
-        <button
-          onClick={onClose}
-          className="text-sm text-muted-foreground hover:text-foreground"
-        >
+        <button onClick={onClose} className="text-sm text-muted-foreground hover:text-foreground">
           閉じる
         </button>
       </div>
@@ -855,8 +723,6 @@ function SuggestionsView({
               {suggestion.type === 'do' ? 'Good' : 'Bad'}
             </span>
           </div>
-          
-          {/* Detailed info grid */}
           <div className="mt-3 grid grid-cols-3 gap-2 text-sm">
             <div className="bg-background/50 rounded px-2 py-1">
               <span className="text-muted-foreground text-xs block">頻度</span>
@@ -871,13 +737,9 @@ function SuggestionsView({
               <span>{Math.round(suggestion.confidence * 100)}%</span>
             </div>
           </div>
-          
           {suggestion.reason && (
-            <p className="text-sm text-muted-foreground mt-3 italic">
-              💡 {suggestion.reason}
-            </p>
+            <p className="text-sm text-muted-foreground mt-3 italic">💡 {suggestion.reason}</p>
           )}
-          
           <p className="text-xs text-primary mt-3 flex items-center gap-1">
             <span>クリックして詳細を編集</span>
             <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -901,13 +763,10 @@ function GoalSuggestionsView({
   onSelect: (suggestion: GoalSuggestion) => void;
 }) {
   return (
-    <div className="space-y-3">
+    <div className="space-y-3 mt-4">
       <div className="flex items-center justify-between">
         <h4 className="font-medium">提案されたゴール</h4>
-        <button
-          onClick={onClose}
-          className="text-sm text-muted-foreground hover:text-foreground"
-        >
+        <button onClick={onClose} className="text-sm text-muted-foreground hover:text-foreground">
           閉じる
         </button>
       </div>
@@ -926,20 +785,15 @@ function GoalSuggestionsView({
               )}
             </div>
           </div>
-          
           {suggestion.reason && (
-            <p className="text-sm text-muted-foreground mt-3 italic">
-              💡 {suggestion.reason}
-            </p>
+            <p className="text-sm text-muted-foreground mt-3 italic">💡 {suggestion.reason}</p>
           )}
-          
           {suggestion.suggestedHabits && suggestion.suggestedHabits.length > 0 && (
             <div className="mt-3 text-xs text-muted-foreground">
               <span className="font-medium">関連する習慣例:</span>
               <span className="ml-1">{suggestion.suggestedHabits.slice(0, 3).join('、')}</span>
             </div>
           )}
-          
           <p className="text-xs text-primary mt-3 flex items-center gap-1">
             <span>クリックして作成</span>
             <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -948,35 +802,6 @@ function GoalSuggestionsView({
           </p>
         </div>
       ))}
-    </div>
-  );
-}
-
-// Quick Examples
-function QuickExamples({ onSelect }: { onSelect: (text: string) => void }) {
-  const examples = [
-    { text: '毎朝7時に30分ジョギング', icon: '🏃' },
-    { text: '寝る前にスマホを見ない', icon: '📵' },
-    { text: 'ジョギングを8時に変更', icon: '✏️' },
-    { text: 'ゴール達成のための習慣を提案して', icon: '💡' },
-    { text: 'ワークロードを調整したい', icon: '📊' },
-  ];
-
-  return (
-    <div className="pt-2 border-t border-border">
-      <p className="text-xs text-muted-foreground mb-2">入力例:</p>
-      <div className="flex flex-wrap gap-2">
-        {examples.map((ex) => (
-          <button
-            key={ex.text}
-            onClick={() => onSelect(ex.text)}
-            className="text-xs px-2 py-1 bg-muted rounded hover:bg-muted/80 flex items-center gap-1"
-          >
-            <span>{ex.icon}</span>
-            <span>{ex.text}</span>
-          </button>
-        ))}
-      </div>
     </div>
   );
 }
@@ -990,71 +815,80 @@ function UIComponentRenderer({
   onChoiceSelect: (choice: Choice) => void;
 }) {
   switch (component.component) {
-    case 'habit_stats':
+    case 'habit_stats': {
+      const recentHistory = component.data.recentHistory as Array<{ date: string; completed: boolean }> | undefined;
       return (
         <HabitStatsCard
           stats={{
-            habitId: component.data.habitId,
-            habitName: component.data.habitName,
-            completionRate: component.data.completionRate,
-            trend: component.data.trend,
-            streakDays: component.data.streak || 0,
-            recentHistory: component.data.recentHistory,
+            habitId: component.data.habitId as string,
+            habitName: component.data.habitName as string,
+            completionRate: component.data.completionRate as number,
+            trend: component.data.trend as 'improving' | 'stable' | 'declining',
+            streakDays: (component.data.streak as number) || 0,
+            recentHistory,
           }}
           className="max-w-sm"
         />
       );
+    }
 
     case 'workload_chart':
       return (
         <WorkloadChart
-          data={component.data as WorkloadData}
-          type={component.data.chartType || 'bar'}
+          data={component.data as unknown as WorkloadData}
+          type={(component.data.chartType as 'bar' | 'donut') || 'bar'}
           className="max-w-md"
         />
       );
 
-    case 'choice_buttons':
+    case 'choice_buttons': {
+      const choices = component.data.choices as Choice[];
+      const title = component.data.title as string | undefined;
+      const layout = component.data.layout as 'vertical' | 'horizontal' | 'grid' | undefined;
+      const size = component.data.size as 'sm' | 'md' | 'lg' | undefined;
       return (
         <div className="space-y-2 max-w-md">
-          {component.data.title && (
-            <p className="text-sm font-medium text-foreground">{component.data.title}</p>
-          )}
+          {title && <p className="text-sm font-medium text-foreground">{title}</p>}
           <ChoiceButtons
-            choices={component.data.choices}
+            choices={choices}
             onSelect={onChoiceSelect}
+            layout={layout}
+            size={size}
           />
         </div>
       );
+    }
 
     case 'progress_indicator':
       return (
         <ProgressIndicator
-          value={component.data.value}
-          max={component.data.max}
-          type={component.data.type}
-          size={component.data.size}
-          color={component.data.color}
-          label={component.data.label}
+          value={component.data.value as number}
+          max={component.data.max as number}
+          type={component.data.type as 'linear' | 'circular'}
+          size={component.data.size as 'sm' | 'md' | 'lg'}
+          color={component.data.color as 'success' | 'primary' | 'warning' | 'danger' | undefined}
+          label={component.data.label as string}
           className="max-w-xs"
         />
       );
 
-    case 'quick_actions':
+    case 'quick_actions': {
+      const actions = component.data.actions as QuickAction[];
       return (
         <QuickActionButtons
-          actions={component.data.actions as QuickAction[]}
+          actions={actions}
           onAction={(actionId) => {
-            const action = component.data.actions.find((a: QuickAction) => a.id === actionId);
+            const action = actions.find((a) => a.id === actionId);
             if (action) {
               onChoiceSelect({ id: action.id, label: action.label, description: action.description });
             }
           }}
-          layout={component.data.layout}
-          size={component.data.size}
+          layout={component.data.layout as 'horizontal' | 'grid'}
+          size={component.data.size as 'sm' | 'md' | 'lg'}
           className="max-w-md"
         />
       );
+    }
 
     default:
       return null;
@@ -1064,21 +898,23 @@ function UIComponentRenderer({
 // Upgrade Prompt
 function UpgradePrompt() {
   return (
-    <div className="p-6 text-center">
-      <div className="text-4xl mb-3">🔒</div>
-      <h3 className="font-medium mb-2">AI Coach機能はPremiumプランで利用可能</h3>
-      <p className="text-sm text-muted-foreground mb-4">
-        自然言語での習慣入力、AI編集、習慣提案などの機能をご利用いただけます。
-      </p>
-      <a
-        href="/settings/subscription"
-        className="inline-flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-md hover:opacity-90 transition-opacity"
-      >
-        プランを見る
-        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-        </svg>
-      </a>
+    <div className="flex-1 flex items-center justify-center p-6">
+      <div className="text-center">
+        <div className="text-4xl mb-3">🔒</div>
+        <h3 className="font-medium mb-2">AI Coach機能はPremiumプランで利用可能</h3>
+        <p className="text-sm text-muted-foreground mb-4">
+          自然言語での習慣入力、AI編集、習慣提案などの機能をご利用いただけます。
+        </p>
+        <a
+          href="/settings/subscription"
+          className="inline-flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-md hover:opacity-90 transition-opacity"
+        >
+          プランを見る
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+          </svg>
+        </a>
+      </div>
     </div>
   );
 }

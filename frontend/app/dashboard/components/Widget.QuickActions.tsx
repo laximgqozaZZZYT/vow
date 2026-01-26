@@ -14,6 +14,8 @@ export interface QuickAction {
   icon?: string;
   /** 説明 */
   description?: string;
+  /** AIに送信するプロンプト */
+  prompt?: string;
   /** 無効状態 */
   disabled?: boolean;
   /** カラーバリエーション */
@@ -21,13 +23,50 @@ export interface QuickAction {
 }
 
 /**
+ * デフォルトのクイックアクション
+ * AIコーチでよく使われる4つのアクションを定義
+ */
+export const DEFAULT_QUICK_ACTIONS: QuickAction[] = [
+  {
+    id: 'add-habit',
+    label: '習慣を追加',
+    icon: '➕',
+    prompt: '新しい習慣を追加したい',
+    description: '新しい習慣を作成します',
+  },
+  {
+    id: 'set-goal',
+    label: 'ゴールを設定',
+    icon: '🎯',
+    prompt: 'ゴールを設定したい',
+    description: '目標を設定します',
+  },
+  {
+    id: 'check-progress',
+    label: '進捗を確認',
+    icon: '📊',
+    prompt: '習慣の進捗を確認したい',
+    description: '習慣の達成状況を確認します',
+  },
+  {
+    id: 'get-advice',
+    label: 'アドバイス',
+    icon: '💡',
+    prompt: '習慣を続けるコツを教えて',
+    description: '習慣継続のアドバイスを受けます',
+  },
+];
+
+/**
  * QuickActionButtonsコンポーネントのProps
  */
 export interface QuickActionButtonsProps {
-  /** アクションリスト */
-  actions: QuickAction[];
-  /** クリック時のコールバック */
-  onAction: (actionId: string) => void;
+  /** アクションリスト（省略時はデフォルトアクションを使用） */
+  actions?: QuickAction[];
+  /** クリック時のコールバック（アクションIDを受け取る） */
+  onAction?: (actionId: string) => void;
+  /** クリック時のコールバック（アクション全体を受け取る） */
+  onActionSelect?: (action: QuickAction) => void;
   /** レイアウト */
   layout?: 'horizontal' | 'grid';
   /** グリッドの列数 */
@@ -58,6 +97,7 @@ function getVariantClasses(variant: QuickAction['variant'] = 'default'): string 
 
 /**
  * サイズに応じたスタイルを取得
+ * 最小高さは48px以上を保証（アクセシビリティ要件）
  */
 function getSizeClasses(size: 'sm' | 'md' | 'lg'): {
   button: string;
@@ -67,19 +107,19 @@ function getSizeClasses(size: 'sm' | 'md' | 'lg'): {
   switch (size) {
     case 'sm':
       return {
-        button: 'p-2 min-w-[44px] min-h-[44px]',
+        button: 'p-2 min-w-[48px] min-h-[48px]',
         icon: 'text-lg',
         label: 'text-xs',
       };
     case 'md':
       return {
-        button: 'p-3 min-w-[56px] min-h-[56px]',
+        button: 'p-3 min-w-[64px] min-h-[64px]',
         icon: 'text-xl',
         label: 'text-sm',
       };
     case 'lg':
       return {
-        button: 'p-4 min-w-[72px] min-h-[72px]',
+        button: 'p-4 min-w-[80px] min-h-[80px]',
         icon: 'text-2xl',
         label: 'text-base',
       };
@@ -150,23 +190,38 @@ function ActionButton({
  *
  * よく使うアクションをアイコンボタンで表示。
  * 水平・グリッドレイアウトをサポート。
+ * デフォルトで4つのアクション（習慣追加、ゴール設定、進捗確認、アドバイス）を提供。
  *
  * Requirements:
- * - 9.2: Display quick action buttons for common operations
+ * - 7.1: Display 4 default quick actions
+ * - 7.2: Use grid layout for quick actions
+ * - 7.4: Button height SHALL be at least 48px
  */
 export function QuickActionButtons({
   actions,
   onAction,
-  layout = 'horizontal',
-  columns = 3,
+  onActionSelect,
+  layout = 'grid',
+  columns = 2,
   size = 'md',
   className = '',
 }: QuickActionButtonsProps) {
   const sizeClasses = getSizeClasses(size);
+  
+  // デフォルトアクションを使用（actionsが指定されていない場合）
+  const displayActions = actions || DEFAULT_QUICK_ACTIONS;
 
-  if (actions.length === 0) {
+  if (displayActions.length === 0) {
     return null;
   }
+
+  const handleClick = (action: QuickAction) => {
+    if (onActionSelect) {
+      onActionSelect(action);
+    } else if (onAction) {
+      onAction(action.id);
+    }
+  };
 
   const containerClasses =
     layout === 'horizontal'
@@ -175,11 +230,11 @@ export function QuickActionButtons({
 
   return (
     <div className={`${containerClasses} ${className}`}>
-      {actions.map((action) => (
+      {displayActions.map((action) => (
         <ActionButton
           key={action.id}
           action={action}
-          onClick={() => onAction(action.id)}
+          onClick={() => handleClick(action)}
           sizeClasses={sizeClasses}
           layout={layout}
         />

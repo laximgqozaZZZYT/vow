@@ -279,6 +279,67 @@ const COACH_TOOLS: ChatCompletionTool[] = [
       },
     },
   },
+  // === 新規ツール: カテゴリ別提案（マスターデータ） ===
+  {
+    type: 'function',
+    function: {
+      name: 'get_category_suggestions',
+      description: 'カテゴリ別の習慣・ゴール提案をマスターデータから取得する。ユーザーが「健康の習慣を教えて」「仕事の生産性を上げたい」などと言った場合に使用。トークン消費を抑えながら質の高い提案ができる。',
+      parameters: {
+        type: 'object',
+        properties: {
+          category: {
+            type: 'string',
+            enum: ['health-fitness', 'work-productivity', 'learning-skills', 'hobbies-relaxation', 'relationships', 'finance', 'mindfulness-spirituality', 'self-care-beauty', 'home-living', 'parenting-family', 'social-contribution', 'digital-technology', 'career-growth'],
+            description: 'カテゴリID。health-fitness=健康・運動、work-productivity=仕事・生産性、learning-skills=学習・スキル、hobbies-relaxation=趣味・リラックス、relationships=人間関係、finance=財務、mindfulness-spirituality=マインドフルネス・精神性、self-care-beauty=セルフケア・美容、home-living=家事・住環境、parenting-family=子育て・家族、social-contribution=社会貢献、digital-technology=デジタル・テクノロジー、career-growth=キャリア・成長',
+          },
+          type: {
+            type: 'string',
+            enum: ['habits', 'goals', 'both'],
+            description: '取得するデータの種類。habits=習慣のみ、goals=ゴールのみ、both=両方',
+          },
+          limit: {
+            type: 'number',
+            description: '取得する提案の最大数（デフォルト: 5）',
+          },
+        },
+        required: ['category'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'list_available_categories',
+      description: '利用可能なカテゴリ一覧を取得する。ユーザーが「どんなカテゴリがある？」「何を始めればいい？」と聞いた場合に使用。',
+      parameters: {
+        type: 'object',
+        properties: {},
+        required: [],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'search_habit_suggestions',
+      description: 'キーワードで習慣提案を検索する。ユーザーが具体的なキーワード（「朝」「運動」「読書」など）で習慣を探している場合に使用。',
+      parameters: {
+        type: 'object',
+        properties: {
+          keyword: {
+            type: 'string',
+            description: '検索キーワード（日本語OK）',
+          },
+          limit: {
+            type: 'number',
+            description: '取得する提案の最大数（デフォルト: 5）',
+          },
+        },
+        required: ['keyword'],
+      },
+    },
+  },
   // === 新規ツール: 行動科学ベース ===
   {
     type: 'function',
@@ -436,10 +497,22 @@ const COACH_TOOLS: ChatCompletionTool[] = [
                 label: { type: 'string', description: '選択肢のラベル（日本語OK）' },
                 icon: { type: 'string', description: 'アイコン（絵文字1つ）' },
                 description: { type: 'string', description: '補足説明（省略可）' },
+                urgency: { type: 'string', enum: ['low', 'medium', 'high'], description: '緊急度（省略可）' },
+                disabled: { type: 'boolean', description: '無効化フラグ（省略可）' },
               },
               required: ['id', 'label'],
             },
             description: '選択肢のリスト（2-5個推奨）',
+          },
+          layout: {
+            type: 'string',
+            enum: ['vertical', 'horizontal', 'grid'],
+            description: 'レイアウト。vertical=縦並び、horizontal=横並び、grid=グリッド（省略時は選択肢数に応じて自動決定）',
+          },
+          size: {
+            type: 'string',
+            enum: ['sm', 'md', 'lg'],
+            description: 'ボタンサイズ。sm=小、md=中、lg=大（省略時はmd）',
           },
         },
         required: ['title', 'choices'],
@@ -475,6 +548,9 @@ import {
 
 // Import SpecLoader for external spec files
 import { getSpecLoader, type SpecContent } from './specLoader.js';
+
+// Import MasterDataLoader for category-based suggestions
+import { getMasterDataLoader } from './masterDataLoader.js';
 
 /**
  * System prompt cache for the AI Coach
@@ -795,6 +871,23 @@ export class AICoachService {
       case 'get_habit_template':
         return this.getHabitTemplate(args['category'] as string);
 
+      // 新規ツール: カテゴリ別提案（マスターデータ）
+      case 'get_category_suggestions':
+        return this.getCategorySuggestions(
+          args['category'] as string,
+          args['type'] as string | undefined,
+          args['limit'] as number | undefined
+        );
+
+      case 'list_available_categories':
+        return this.listAvailableCategories();
+
+      case 'search_habit_suggestions':
+        return this.searchHabitSuggestions(
+          args['keyword'] as string,
+          args['limit'] as number | undefined
+        );
+
       // 新規ツール: 行動科学ベース
       case 'suggest_habit_stacking':
         return this.suggestHabitStacking(args['new_habit_name'] as string);
@@ -828,11 +921,25 @@ export class AICoachService {
       case 'show_habit_stats':
         return this.showHabitStats(args['habit_name'] as string);
 
-      case 'show_choice_buttons':
+      case 'show_choice_buttons': {
+        const layout = args['layout'] as 'vertical' | 'horizontal' | 'grid' | undefined;
+        const size = args['size'] as 'sm' | 'md' | 'lg' | undefined;
+        const options: { layout?: 'vertical' | 'horizontal' | 'grid'; size?: 'sm' | 'md' | 'lg' } = {};
+        if (layout) options.layout = layout;
+        if (size) options.size = size;
         return this.showChoiceButtons(
           args['title'] as string,
-          args['choices'] as Array<{ id: string; label: string; icon?: string; description?: string }>
+          args['choices'] as Array<{ 
+            id: string; 
+            label: string; 
+            icon?: string; 
+            description?: string;
+            urgency?: 'low' | 'medium' | 'high';
+            disabled?: boolean;
+          }>,
+          Object.keys(options).length > 0 ? options : undefined
         );
+      }
 
       case 'show_workload_chart':
         return this.showWorkloadChart(args['chart_type'] as string | undefined);
@@ -1335,6 +1442,194 @@ export class AICoachService {
   }
 
   // ============================================================================
+  // 新規ツール: カテゴリ別提案（マスターデータ）
+  // ============================================================================
+
+  /**
+   * Get category suggestions from master data
+   * This uses pre-defined master data instead of AI generation, saving tokens
+   */
+  private async getCategorySuggestions(
+    category: string,
+    type?: string,
+    limit?: number
+  ): Promise<Record<string, unknown>> {
+    const masterDataLoader = getMasterDataLoader();
+    const categoryData = await masterDataLoader.loadCategory(category);
+
+    if (!categoryData) {
+      const availableCategories = masterDataLoader.getAvailableCategories();
+      return {
+        error: `カテゴリ「${category}」が見つかりません`,
+        availableCategories: availableCategories.map(c => ({ id: c.id, name: c.nameJa })),
+      };
+    }
+
+    const maxItems = limit || 5;
+    const dataType = type || 'both';
+
+    const result: Record<string, unknown> = {
+      category: categoryData.category,
+      categoryName: categoryData.categoryJa,
+      subcategories: categoryData.subcategories,
+    };
+
+    if (dataType === 'habits' || dataType === 'both') {
+      // ランダムに選択して多様性を確保
+      const shuffledHabits = [...categoryData.habits].sort(() => Math.random() - 0.5);
+      result['habits'] = shuffledHabits.slice(0, maxItems).map(h => ({
+        name: h.name,
+        type: h.type,
+        frequency: h.frequency,
+        suggestedTargetCount: h.suggestedTargetCount,
+        workloadUnit: h.workloadUnit,
+        reason: h.reason,
+        triggerTime: h.triggerTime,
+        duration: h.duration,
+        subcategory: h.subcategory,
+      }));
+      result['totalHabitsInCategory'] = categoryData.habits.length;
+    }
+
+    if (dataType === 'goals' || dataType === 'both') {
+      const shuffledGoals = [...categoryData.goals].sort(() => Math.random() - 0.5);
+      result['goals'] = shuffledGoals.slice(0, maxItems).map(g => ({
+        name: g.name,
+        description: g.description,
+        icon: g.icon,
+        reason: g.reason,
+        suggestedHabits: g.suggestedHabits,
+      }));
+      result['totalGoalsInCategory'] = categoryData.goals.length;
+    }
+
+    result['tip'] = 'これらはマスターデータからの提案です。ユーザーの状況に合わせてカスタマイズしてください。';
+
+    // Log token savings from using master data
+    const estimatedTokensSaved = this.estimateTokenSavings(categoryData, dataType, maxItems);
+    logger.info('Master data used for category suggestions', {
+      userId: this.userId,
+      category,
+      dataType,
+      itemsReturned: maxItems,
+      estimatedTokensSaved,
+      source: 'master_data',
+    });
+
+    return result;
+  }
+
+  /**
+   * Estimate tokens saved by using master data instead of AI generation
+   * AI generation typically uses ~500-1000 tokens per suggestion
+   */
+  private estimateTokenSavings(
+    categoryData: { habits: unknown[]; goals: unknown[] },
+    dataType: string,
+    itemCount: number
+  ): number {
+    const tokensPerAISuggestion = 750; // Average tokens for AI-generated suggestion
+    let itemsUsed = 0;
+    
+    if (dataType === 'habits' || dataType === 'both') {
+      itemsUsed += Math.min(itemCount, categoryData.habits.length);
+    }
+    if (dataType === 'goals' || dataType === 'both') {
+      itemsUsed += Math.min(itemCount, categoryData.goals.length);
+    }
+    
+    return itemsUsed * tokensPerAISuggestion;
+  }
+
+  /**
+   * List all available categories
+   */
+  private listAvailableCategories(): Record<string, unknown> {
+    const masterDataLoader = getMasterDataLoader();
+    const categories = masterDataLoader.getAvailableCategories();
+
+    return {
+      categories: categories.map(c => ({
+        id: c.id,
+        name: c.nameJa,
+        icon: this.getCategoryIcon(c.id),
+      })),
+      tip: 'カテゴリを選択すると、そのカテゴリの習慣・ゴール提案を取得できます。',
+    };
+  }
+
+  /**
+   * Get icon for category
+   */
+  private getCategoryIcon(categoryId: string): string {
+    const icons: Record<string, string> = {
+      'health-fitness': '💪',
+      'work-productivity': '💼',
+      'learning-skills': '📚',
+      'hobbies-relaxation': '🎨',
+      'relationships': '🤝',
+      'finance': '💰',
+      'mindfulness-spirituality': '🧘',
+      'self-care-beauty': '✨',
+      'home-living': '🏠',
+      'parenting-family': '👨‍👩‍👧‍👦',
+      'social-contribution': '🌍',
+      'digital-technology': '💻',
+      'career-growth': '📈',
+    };
+    return icons[categoryId] || '📌';
+  }
+
+  /**
+   * Search habit suggestions by keyword
+   * Uses master data for efficient token-free search
+   */
+  private async searchHabitSuggestions(
+    keyword: string,
+    limit?: number
+  ): Promise<Record<string, unknown>> {
+    const masterDataLoader = getMasterDataLoader();
+    const results = await masterDataLoader.searchHabits(keyword);
+    const maxItems = limit || 5;
+
+    // Log token savings from using master data search
+    logger.info('Master data search used for habit suggestions', {
+      userId: this.userId,
+      keyword,
+      resultsFound: results.length,
+      resultsReturned: Math.min(results.length, maxItems),
+      estimatedTokensSaved: Math.min(results.length, maxItems) * 750,
+      source: 'master_data_search',
+    });
+
+    if (results.length === 0) {
+      return {
+        keyword,
+        results: [],
+        message: `「${keyword}」に関連する習慣が見つかりませんでした。`,
+        tip: '別のキーワードで検索するか、カテゴリ一覧から選んでください。',
+      };
+    }
+
+    return {
+      keyword,
+      totalResults: results.length,
+      results: results.slice(0, maxItems).map(h => ({
+        name: h.name,
+        type: h.type,
+        frequency: h.frequency,
+        suggestedTargetCount: h.suggestedTargetCount,
+        workloadUnit: h.workloadUnit,
+        reason: h.reason,
+        category: h.category,
+      })),
+      tip: results.length > maxItems
+        ? `他にも${results.length - maxItems}件の結果があります。`
+        : undefined,
+    };
+  }
+
+  // ============================================================================
   // 新規ツール: 行動科学ベース
   // ============================================================================
 
@@ -1685,13 +1980,43 @@ export class AICoachService {
 
   /**
    * Show choice buttons for user selection
+   * Returns UIComponentData with choice_buttons component
+   * 
+   * Schema:
+   * - type: 'ui_component'
+   * - component: 'choice_buttons'
+   * - data: ChoiceButtonsData
+   *   - title: string (required)
+   *   - choices: Choice[] (required, 2-5 items)
+   *     - id: string (required)
+   *     - label: string (required)
+   *     - icon?: string (emoji)
+   *     - description?: string
+   *     - urgency?: 'low' | 'medium' | 'high'
+   *     - disabled?: boolean
+   *   - layout?: 'vertical' | 'horizontal' | 'grid'
+   *   - size?: 'sm' | 'md' | 'lg'
    */
   private showChoiceButtons(
     title: string,
-    choices: Array<{ id: string; label: string; icon?: string; description?: string }>
+    choices: Array<{ 
+      id: string; 
+      label: string; 
+      icon?: string; 
+      description?: string;
+      urgency?: 'low' | 'medium' | 'high';
+      disabled?: boolean;
+    }>,
+    options?: {
+      layout?: 'vertical' | 'horizontal' | 'grid';
+      size?: 'sm' | 'md' | 'lg';
+    }
   ): Record<string, unknown> {
-    // Limit to 5 choices
+    // Limit to 5 choices (2-5 recommended)
     const limitedChoices = choices.slice(0, 5);
+
+    // Determine default layout based on choice count
+    const defaultLayout = limitedChoices.length <= 3 ? 'horizontal' : 'vertical';
 
     return {
       type: 'ui_component',
@@ -1703,7 +2028,11 @@ export class AICoachService {
           label: c.label,
           icon: c.icon || '📌',
           description: c.description,
+          urgency: c.urgency,
+          disabled: c.disabled || false,
         })),
+        layout: options?.layout || defaultLayout,
+        size: options?.size || 'md',
       },
     };
   }
