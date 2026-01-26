@@ -1,9 +1,11 @@
 "use client";
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useHandedness } from '../contexts/HandednessContext';
 import api from '../../../lib/api';
 import { debug } from '../../../lib/debug';
+import type { Habit, Activity } from '../types';
+import { isHabitCumulativelyCompleted } from '../utils/habitCompletionUtils';
 
 /**
  * Notice types matching backend NoticeType
@@ -31,8 +33,44 @@ interface Notice {
   createdAt: string;
 }
 
+interface HabitProgress {
+  habitId: string;
+  habitName: string;
+  currentCount: number;
+  totalCount: number;
+  progressRate: number;
+  completed: boolean;
+}
+
 interface NoticeSectionProps {
   onActionClick?: (notice: Notice) => void;
+  habits?: Habit[];
+  activities?: Activity[];
+}
+
+// JST日付範囲でのActivity集計関数
+function calculateDailyWorkload(habitId: string, activities: Activity[]): number {
+  const now = new Date();
+  const jstTime = new Date(now.toLocaleString("en-US", {timeZone: "Asia/Tokyo"}));
+  
+  const todayStartJST = new Date(jstTime);
+  todayStartJST.setHours(0, 0, 0, 0);
+  
+  const todayEndJST = new Date(jstTime);
+  todayEndJST.setHours(23, 59, 59, 999);
+  
+  const todayActivities = activities.filter(activity => {
+    if (activity.habitId !== habitId || !activity.timestamp) return false;
+    
+    const activityTime = new Date(activity.timestamp);
+    const activityJST = new Date(activityTime.toLocaleString("en-US", {timeZone: "Asia/Tokyo"}));
+    
+    return activityJST >= todayStartJST && activityJST <= todayEndJST;
+  });
+  
+  return todayActivities
+    .filter(activity => activity.kind === 'complete')
+    .reduce((sum, activity) => sum + (activity.amount || 1), 0);
 }
 
 /**
@@ -40,15 +78,47 @@ interface NoticeSectionProps {
  * 
  * Displays user notifications with unread badge, mark as read functionality,
  * and action buttons for actionable notifications.
+ * Also displays Daily Progress (from Activity section).
  * 
  * Requirements: 12.1, 12.2
  */
-export default function NoticeSection({ onActionClick }: NoticeSectionProps) {
+export default function NoticeSection({ onActionClick, habits = [], activities = [] }: NoticeSectionProps) {
   const { isLeftHanded } = useHandedness();
   const [notices, setNotices] = useState<Notice[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
   const [isExpanded, setIsExpanded] = useState(false);
+  const [showProgress, setShowProgress] = useState(true);
+
+  // Calculate habit progress (Daily Progress from Activity section)
+  const habitProgress = useMemo((): HabitProgress[] => {
+    const progressList: HabitProgress[] = [];
+    
+    habits.forEach(habit => {
+      if (habit.active && habit.type === 'do') {
+        // Skip cumulatively completed habits
+        if (isHabitCumulativelyCompleted(habit, activities)) {
+          return;
+        }
+        
+        const totalCount = habit.workloadTotal || habit.must || 1;
+        const currentCount = calculateDailyWorkload(habit.id, activities);
+        const progressRate = totalCount > 0 ? Math.min((currentCount / totalCount) * 100, 100) : 0;
+        const completed = currentCount >= totalCount;
+        
+        progressList.push({
+          habitId: habit.id,
+          habitName: habit.name,
+          currentCount,
+          totalCount,
+          progressRate,
+          completed
+        });
+      }
+    });
+    
+    return progressList.sort((a, b) => a.habitName.localeCompare(b.habitName));
+  }, [habits, activities]);
 
   // Fetch notices from API
   const fetchNotices = useCallback(async () => {
@@ -186,6 +256,54 @@ export default function NoticeSection({ onActionClick }: NoticeSectionProps) {
 
   return (
     <section className="rounded-lg border border-border bg-card text-card-foreground shadow-sm p-4 sm:p-6 mt-4">
+      {/* Daily Progress Section */}
+      {habitProgress.length > 0 && (
+        <div className="mb-4 pb-4 border-b border-border">
+          <div className={`flex items-center mb-3 ${isLeftHanded ? 'flex-row-reverse justify-end' : 'justify-between'}`}>
+            <h3 className="text-sm font-semibold">Daily Progress</h3>
+            <button
+              onClick={() => setShowProgress(!showProgress)}
+              className="text-xs text-muted-foreground hover:text-foreground"
+            >
+              {showProgress ? '非表示' : '表示'}
+            </button>
+          </div>
+          
+          {showProgress && (
+            <div className="space-y-2 max-h-40 overflow-y-auto pr-1">
+              {habitProgress.map(progress => (
+                <div key={progress.habitId} className="space-y-1">
+                  <div className={`flex items-center text-xs ${isLeftHanded ? 'flex-row-reverse' : 'justify-between'}`}>
+                    <span className={`truncate max-w-[60%] ${
+                      progress.completed ? 'line-through text-muted-foreground' : 'text-foreground'
+                    }`}>
+                      {progress.habitName}
+                    </span>
+                    <span className="text-muted-foreground tabular-nums">
+                      {progress.currentCount}/{progress.totalCount}
+                    </span>
+                  </div>
+                  <div className="w-full bg-muted rounded-full h-1.5">
+                    <div 
+                      className={`h-1.5 rounded-full transition-all duration-300 ${
+                        progress.completed 
+                          ? 'bg-green-500' 
+                          : progress.progressRate >= 75 
+                            ? 'bg-blue-500' 
+                            : progress.progressRate >= 50 
+                              ? 'bg-yellow-500' 
+                              : 'bg-red-400'
+                      }`}
+                      style={{ width: `${Math.min(progress.progressRate, 100)}%` }}
+                    />
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Header */}
       <div className={`flex items-center mb-3 ${isLeftHanded ? 'flex-row-reverse' : 'justify-between'}`}>
         <div className={`flex items-center gap-2 ${isLeftHanded ? 'flex-row-reverse' : ''}`}>

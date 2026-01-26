@@ -1625,7 +1625,7 @@ export class SupabaseDirectClient {
           console.error('Failed to parse guest layout:', e);
         }
       }
-      return { sections: ['next', 'activity', 'calendar', 'statics', 'stickies'] };
+      return { sections: ['next', 'calendar', 'statics', 'stickies'] };
     }
     
     // Authenticated user - use preferences table
@@ -1640,7 +1640,7 @@ export class SupabaseDirectClient {
     if (error) {
       if (error.code === 'PGRST116') {
         // No layout saved yet, return default
-        return { sections: ['next', 'activity', 'calendar', 'statics', 'stickies'] };
+        return { sections: ['next', 'calendar', 'statics', 'stickies'] };
       }
       throw error;
     }

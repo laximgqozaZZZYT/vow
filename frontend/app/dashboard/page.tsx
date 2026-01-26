@@ -838,6 +838,8 @@ function DashboardLayout(props: any) {
       case 'notices':
         return (
           <NoticeSection
+            habits={habits}
+            activities={activities}
             onActionClick={(notice) => {
               debug.log('[Dashboard] Notice action clicked:', notice);
               if (notice.actionType === 'rescue_proposal' || notice.actionType === 'recovery_proposal') {
