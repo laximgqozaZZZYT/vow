@@ -168,8 +168,7 @@ export default function KanbanColumn({
         flex
         flex-col
         flex-1
-        min-w-[280px]
-        max-w-[400px]
+        min-w-0
         bg-muted
         border
         rounded-lg

@@ -14,8 +14,8 @@ import { formatLocalDate } from './dateUtils';
  * Habit status types for Kanban board columns
  * - planned: No activity today, or paused
  * - in_progress: Started but not completed
- * - completed_daily: Completed today (but not fully completed)
- * - completed: Fully completed (cumulative workload >= workloadTotal)
+ * - completed_daily: Daily workload target achieved today
+ * - completed: Fully completed (cumulative workload >= workloadTotalEnd)
  * - stickies: Sticky notes (separate column)
  */
 export type HabitStatus = 'planned' | 'in_progress' | 'completed_daily' | 'completed' | 'stickies';
@@ -49,31 +49,71 @@ export function getTodayActivitiesForHabit(
 }
 
 /**
- * Check if a habit is fully completed (cumulative workload >= workloadTotal)
+ * Calculate today's workload from activities (JST-based)
+ * 
+ * @param habitId - The habit ID to calculate workload for
+ * @param activities - All activities
+ * @returns Total workload completed today
+ */
+export function calculateTodayWorkload(habitId: string, activities: Activity[]): number {
+  const today = getTodayDateString();
+  const todayActivities = getTodayActivitiesForHabit(habitId, activities, today);
+  
+  return todayActivities
+    .filter(activity => activity.kind === 'complete')
+    .reduce((sum, activity) => sum + (activity.amount || 1), 0);
+}
+
+/**
+ * Check if a habit is fully completed (cumulative workload >= workloadTotalEnd)
  * 
  * @param habit - The habit to check
  * @returns True if the habit is fully completed
  */
 export function isHabitFullyCompleted(habit: Habit): boolean {
-  const workloadTotal = (habit as any).workloadTotal ?? habit.must ?? 0;
-  const currentCount = habit.count ?? 0;
-  
-  // If no workloadTotal is set, check the completed flag
-  if (workloadTotal <= 0) {
-    return habit.completed === true;
+  // Check workloadTotalEnd first (cumulative completion target)
+  const workloadTotalEnd = habit.workloadTotalEnd ?? 0;
+  if (workloadTotalEnd > 0) {
+    const currentCount = habit.count ?? 0;
+    return currentCount >= workloadTotalEnd;
   }
   
-  return currentCount >= workloadTotal;
+  // Fallback to completed flag
+  return habit.completed === true;
+}
+
+/**
+ * Check if today's daily workload target is achieved
+ * 
+ * @param habit - The habit to check
+ * @param activities - All activities
+ * @returns True if today's workload >= daily target (workloadTotal or must)
+ */
+export function isDailyTargetAchieved(habit: Habit, activities: Activity[]): boolean {
+  const dailyTarget = habit.workloadTotal ?? habit.must ?? 0;
+  
+  // If no daily target is set, check if there's any complete activity today
+  if (dailyTarget <= 0) {
+    const today = getTodayDateString();
+    const todayActivities = getTodayActivitiesForHabit(habit.id, activities, today);
+    return todayActivities.some(a => a.kind === 'complete');
+  }
+  
+  const todayWorkload = calculateTodayWorkload(habit.id, activities);
+  return todayWorkload >= dailyTarget;
 }
 
 /**
  * Determine the status of a habit based on today's activities
  * 
  * Status determination logic:
- * 1. If habit is fully completed (count >= workloadTotal) → 'completed'
- * 2. If there's a 'complete' activity today → 'completed_daily'
+ * 1. If habit is fully completed (count >= workloadTotalEnd) → 'completed'
+ * 2. If today's workload >= daily target (workloadTotal or must) → 'completed_daily'
  * 3. If there's a 'start' activity today and the last activity is not 'pause' → 'in_progress'
  * 4. Otherwise → 'planned'
+ * 
+ * Note: Simply pressing the [✓] button does NOT move to completed_daily.
+ * The habit only moves to completed_daily when the daily target is actually achieved.
  * 
  * @param habit - The habit to determine status for
  * @param activities - All activities (will be filtered to today's activities)
@@ -88,9 +128,14 @@ export function isHabitFullyCompleted(habit: Habit): boolean {
  * Validates: Requirements 2.3, 2.4, 2.5, 2.6
  */
 export function getHabitStatus(habit: Habit, activities: Activity[]): HabitStatus {
-  // Check if habit is fully completed first
+  // Check if habit is fully completed first (cumulative completion)
   if (isHabitFullyCompleted(habit)) {
     return 'completed';
+  }
+  
+  // Check if today's daily target is achieved
+  if (isDailyTargetAchieved(habit, activities)) {
+    return 'completed_daily';
   }
   
   const today = getTodayDateString();
@@ -99,12 +144,6 @@ export function getHabitStatus(habit: Habit, activities: Activity[]): HabitStatu
   // If no activities today, habit is planned
   if (todayActivities.length === 0) {
     return 'planned';
-  }
-
-  // Check for complete activity - if exists, habit is completed_daily
-  const hasComplete = todayActivities.some(a => a.kind === 'complete');
-  if (hasComplete) {
-    return 'completed_daily';
   }
 
   // Check for start activity
@@ -123,7 +162,7 @@ export function getHabitStatus(habit: Habit, activities: Activity[]): HabitStatu
     }
   }
 
-  // Default to planned (no start, or started but paused)
+  // Default to planned (no start, or started but paused, or partial completion)
   return 'planned';
 }
 

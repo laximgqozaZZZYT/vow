@@ -329,8 +329,8 @@ export default function KanbanLayout({
         onTouchEnd={handleCombinedTouchEnd}
         className="
           flex
-          gap-4
-          p-4
+          gap-2
+          p-2
           overflow-x-auto
           overflow-y-visible
           flex-1
@@ -338,6 +338,8 @@ export default function KanbanLayout({
           
           /* Desktop: columns side by side */
           md:overflow-x-visible
+          md:gap-3
+          md:p-3
           
           /* Mobile: horizontal scroll container */
           snap-x
@@ -357,9 +359,9 @@ export default function KanbanLayout({
           <div
             key={column.id}
             className="
-              /* Mobile: each column takes ~85% viewport width to show edge of next column */
-              min-w-[85vw]
-              max-w-[85vw]
+              /* Mobile: each column takes ~70% viewport width to show adjacent columns */
+              min-w-[70vw]
+              max-w-[70vw]
               md:min-w-0
               md:max-w-none
               md:flex-1
