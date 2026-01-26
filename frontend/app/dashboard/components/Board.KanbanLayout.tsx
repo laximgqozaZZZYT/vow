@@ -3,30 +3,32 @@
 /**
  * KanbanLayout Component for Board Section
  * 
- * Displays a Trello-style Kanban board with three columns:
+ * Displays a Trello-style Kanban board with five columns:
  * - 予定 (Planned): Habits with no activity today
+ * - Sticky'n: Pending sticky notes
  * - 進行中 (In Progress): Habits that have been started but not completed
  * - 完了(日次) (Completed Daily): Habits completed today
+ * - 完了 (Completed): Fully completed habits and checked stickies
  * 
  * Features:
- * - 3-column horizontal layout on desktop
+ * - 5-column horizontal layout on desktop
  * - Horizontally scrollable container on mobile (< 768px)
  * - Drag-and-drop support via useKanbanDragDrop hook
  * - Mobile swipe navigation via useMobileSwipe hook
+ * - Auto-scroll to adjacent column when dragging near edges
  * - Column indicators (dots) for mobile navigation
  * 
  * @module Board.KanbanLayout
- * 
- * Validates: Requirements 2.1, 5.1, 5.3
  */
 
-import { useCallback, useMemo } from 'react';
-import type { Habit, Activity, HabitAction } from '../types';
+import { useCallback, useMemo, useRef, useEffect } from 'react';
+import type { Habit, Activity, HabitAction, Sticky } from '../types';
 import type { HabitStatus } from '../utils/habitStatusUtils';
-import { groupHabitsByStatus } from '../utils/habitStatusUtils';
+import { groupHabitsByStatus, groupStickiesByStatus } from '../utils/habitStatusUtils';
 import { useKanbanDragDrop } from '../hooks/useKanbanDragDrop';
 import { useMobileSwipe } from '../hooks/useMobileSwipe';
 import KanbanColumn from './Board.KanbanColumn';
+import StickyColumn from './Board.StickyColumn';
 
 /**
  * Column configuration for Kanban board
@@ -35,6 +37,7 @@ export interface ColumnConfig {
   id: HabitStatus;
   title: string;
   titleJa: string;
+  type: 'habit' | 'sticky' | 'mixed';
 }
 
 /**
@@ -45,34 +48,46 @@ export interface KanbanLayoutProps {
   habits: Habit[];
   /** All activities (used for status determination and elapsed time) */
   activities: Activity[];
+  /** All stickies to display */
+  stickies: Sticky[];
   /** Callback when a habit action is triggered (start, complete, pause) */
   onHabitAction: (habitId: string, action: HabitAction, amount?: number) => void;
   /** Callback when habit edit is requested */
   onHabitEdit: (habitId: string) => void;
+  /** Callback when sticky is completed/uncompleted */
+  onStickyComplete: (stickyId: string) => void;
+  /** Callback when sticky edit is requested */
+  onStickyEdit: (stickyId: string) => void;
 }
 
 /**
- * Column configuration - Requirement 2.1
- * Three columns: 予定 (Planned), 進行中 (In Progress), 完了(日次) (Completed Daily)
+ * Column configuration
+ * Five columns: 予定, Sticky'n, 進行中, 完了(日次), 完了
  */
 const COLUMNS: ColumnConfig[] = [
-  { id: 'planned', title: 'Planned', titleJa: '予定' },
-  { id: 'in_progress', title: 'In Progress', titleJa: '進行中' },
-  { id: 'completed_daily', title: 'Completed', titleJa: '完了(日次)' }
+  { id: 'planned', title: 'Planned', titleJa: '予定', type: 'habit' },
+  { id: 'stickies', title: "Sticky'n", titleJa: "Sticky'n", type: 'sticky' },
+  { id: 'in_progress', title: 'In Progress', titleJa: '進行中', type: 'habit' },
+  { id: 'completed_daily', title: 'Daily Done', titleJa: '完了(日次)', type: 'habit' },
+  { id: 'completed', title: 'Completed', titleJa: '完了', type: 'mixed' }
 ];
+
+/** Edge threshold for auto-scroll during drag (pixels from edge) */
+const DRAG_SCROLL_THRESHOLD = 60;
+/** Scroll speed for auto-scroll (pixels per frame) */
+const DRAG_SCROLL_SPEED = 8;
 
 /**
  * KanbanLayout component
- * 
- * Renders a 3-column Kanban board with drag-and-drop support.
- * On mobile devices, displays columns in a horizontally scrollable
- * container with swipe navigation and column indicators.
  */
 export default function KanbanLayout({
   habits,
   activities,
+  stickies,
   onHabitAction,
-  onHabitEdit
+  onHabitEdit,
+  onStickyComplete,
+  onStickyEdit
 }: KanbanLayoutProps) {
   
   // Group habits by status for column distribution
@@ -81,11 +96,18 @@ export default function KanbanLayout({
     [habits, activities]
   );
   
+  // Group stickies by completion status
+  const stickiesByStatus = useMemo(() => 
+    groupStickiesByStatus(stickies),
+    [stickies]
+  );
+  
   // Initialize drag-and-drop hook
   const {
     draggedHabitId,
     dropTargetColumn,
     sourceColumn,
+    isDragging,
     handleDragStart,
     handleDragEnd,
     handleDragOver,
@@ -106,12 +128,59 @@ export default function KanbanLayout({
     goToColumn
   } = useMobileSwipe({ 
     totalColumns: COLUMNS.length,
-    onColumnChange: undefined // Optional callback for column change
+    onColumnChange: undefined
   });
+  
+  // Auto-scroll ref for drag operations
+  const scrollAnimationRef = useRef<number | null>(null);
+  const touchPositionRef = useRef<{ x: number; y: number } | null>(null);
+
+  /**
+   * Auto-scroll container when dragging near edges (mobile)
+   */
+  const performAutoScroll = useCallback(() => {
+    if (!containerRef.current || !touchPositionRef.current || !isDragging) {
+      if (scrollAnimationRef.current) {
+        cancelAnimationFrame(scrollAnimationRef.current);
+        scrollAnimationRef.current = null;
+      }
+      return;
+    }
+    
+    const container = containerRef.current;
+    const rect = container.getBoundingClientRect();
+    const { x } = touchPositionRef.current;
+    
+    let scrollDelta = 0;
+    
+    // Check if near left edge
+    if (x - rect.left < DRAG_SCROLL_THRESHOLD) {
+      scrollDelta = -DRAG_SCROLL_SPEED;
+    }
+    // Check if near right edge
+    else if (rect.right - x < DRAG_SCROLL_THRESHOLD) {
+      scrollDelta = DRAG_SCROLL_SPEED;
+    }
+    
+    if (scrollDelta !== 0) {
+      container.scrollLeft += scrollDelta;
+      scrollAnimationRef.current = requestAnimationFrame(performAutoScroll);
+    } else {
+      scrollAnimationRef.current = null;
+    }
+  }, [containerRef, isDragging]);
+  
+  // Cleanup auto-scroll on unmount
+  useEffect(() => {
+    return () => {
+      if (scrollAnimationRef.current) {
+        cancelAnimationFrame(scrollAnimationRef.current);
+      }
+    };
+  }, []);
   
   /**
    * Handle drop on a column
-   * Wraps the drag-drop hook's handleDrop
    */
   const handleColumnDrop = useCallback((habitId: string, targetStatus: HabitStatus) => {
     handleDrop(targetStatus);
@@ -119,10 +188,8 @@ export default function KanbanLayout({
   
   /**
    * Handle drag start on a habit card
-   * Determines the source column from the habit's current status
    */
   const handleCardDragStart = useCallback((habitId: string) => {
-    // Find which column the habit is in
     let habitSourceColumn: HabitStatus = 'planned';
     for (const [status, habitsInColumn] of Object.entries(habitsByStatus)) {
       if (habitsInColumn.some(h => h.id === habitId)) {
@@ -134,42 +201,60 @@ export default function KanbanLayout({
   }, [habitsByStatus, handleDragStart]);
   
   /**
-   * Handle touch start on a habit card (for mobile long-press drag)
-   */
-  const handleCardTouchStart = useCallback((habitId: string, event: React.TouchEvent) => {
-    // Find which column the habit is in
-    let habitSourceColumn: HabitStatus = 'planned';
-    for (const [status, habitsInColumn] of Object.entries(habitsByStatus)) {
-      if (habitsInColumn.some(h => h.id === habitId)) {
-        habitSourceColumn = status as HabitStatus;
-        break;
-      }
-    }
-    handleTouchStart(habitId, habitSourceColumn, event);
-  }, [habitsByStatus, handleTouchStart]);
-  
-  /**
-   * Combined touch handler for mobile
-   * Handles both swipe navigation and drag-and-drop
+   * Combined touch handler for mobile with auto-scroll
    */
   const handleCombinedTouchStart = useCallback((event: React.TouchEvent) => {
-    // Let the swipe handler process the event
+    const touch = event.touches[0];
+    touchPositionRef.current = { x: touch.clientX, y: touch.clientY };
     handleSwipeStart(event);
   }, [handleSwipeStart]);
   
   const handleCombinedTouchMove = useCallback((event: React.TouchEvent) => {
+    const touch = event.touches[0];
+    touchPositionRef.current = { x: touch.clientX, y: touch.clientY };
+    
     // Handle drag preview movement if dragging
     handleTouchMove(event);
-    // Handle swipe navigation
-    handleSwipeMove(event);
-  }, [handleTouchMove, handleSwipeMove]);
+    
+    // Start auto-scroll if dragging
+    if (isDragging && !scrollAnimationRef.current) {
+      scrollAnimationRef.current = requestAnimationFrame(performAutoScroll);
+    }
+    
+    // Handle swipe navigation (only if not dragging)
+    if (!isDragging) {
+      handleSwipeMove(event);
+    }
+  }, [handleTouchMove, handleSwipeMove, isDragging, performAutoScroll]);
   
   const handleCombinedTouchEnd = useCallback(() => {
+    touchPositionRef.current = null;
+    
+    // Stop auto-scroll
+    if (scrollAnimationRef.current) {
+      cancelAnimationFrame(scrollAnimationRef.current);
+      scrollAnimationRef.current = null;
+    }
+    
     // Handle drag drop if dragging
     handleTouchEnd();
     // Handle swipe navigation
     handleSwipeEnd();
   }, [handleTouchEnd, handleSwipeEnd]);
+  
+  /**
+   * Get column count for display
+   */
+  const getColumnCount = (columnId: HabitStatus): number => {
+    switch (columnId) {
+      case 'stickies':
+        return stickiesByStatus.pending.length;
+      case 'completed':
+        return habitsByStatus.completed.length + stickiesByStatus.completed.length;
+      default:
+        return habitsByStatus[columnId]?.length || 0;
+    }
+  };
   
   return (
     <div className="flex flex-col h-full">
@@ -188,10 +273,10 @@ export default function KanbanLayout({
           flex-1
           min-h-0
           
-          /* Desktop: 3 columns side by side */
+          /* Desktop: columns side by side */
           md:overflow-x-visible
           
-          /* Mobile: horizontal scroll container - Requirement 5.1 */
+          /* Mobile: horizontal scroll container */
           snap-x
           snap-mandatory
           md:snap-none
@@ -205,7 +290,6 @@ export default function KanbanLayout({
           [-webkit-overflow-scrolling:touch]
         "
         style={{
-          // Ensure columns take full width on mobile for snap scrolling
           scrollSnapType: 'x mandatory'
         }}
       >
@@ -231,25 +315,52 @@ export default function KanbanLayout({
               md:last:mr-0
             "
           >
-            <KanbanColumn
-              column={column}
-              habits={habitsByStatus[column.id]}
-              activities={activities}
-              onHabitAction={onHabitAction}
-              onHabitEdit={onHabitEdit}
-              onDrop={handleColumnDrop}
-              isDragOver={dropTargetColumn === column.id}
-              onDragOver={() => handleDragOver(column.id)}
-              onDragLeave={handleDragLeave}
-              draggedHabitId={draggedHabitId}
-              onDragStart={handleCardDragStart}
-              onDragEnd={handleDragEnd}
-            />
+            {column.type === 'sticky' ? (
+              <StickyColumn
+                column={column}
+                stickies={stickiesByStatus.pending}
+                onStickyComplete={onStickyComplete}
+                onStickyEdit={onStickyEdit}
+              />
+            ) : column.type === 'mixed' ? (
+              <KanbanColumn
+                column={column}
+                habits={habitsByStatus.completed}
+                activities={activities}
+                onHabitAction={onHabitAction}
+                onHabitEdit={onHabitEdit}
+                onDrop={handleColumnDrop}
+                isDragOver={dropTargetColumn === column.id}
+                onDragOver={() => handleDragOver(column.id)}
+                onDragLeave={handleDragLeave}
+                draggedHabitId={draggedHabitId}
+                onDragStart={handleCardDragStart}
+                onDragEnd={handleDragEnd}
+                completedStickies={stickiesByStatus.completed}
+                onStickyComplete={onStickyComplete}
+                onStickyEdit={onStickyEdit}
+              />
+            ) : (
+              <KanbanColumn
+                column={column}
+                habits={habitsByStatus[column.id] || []}
+                activities={activities}
+                onHabitAction={onHabitAction}
+                onHabitEdit={onHabitEdit}
+                onDrop={handleColumnDrop}
+                isDragOver={dropTargetColumn === column.id}
+                onDragOver={() => handleDragOver(column.id)}
+                onDragLeave={handleDragLeave}
+                draggedHabitId={draggedHabitId}
+                onDragStart={handleCardDragStart}
+                onDragEnd={handleDragEnd}
+              />
+            )}
           </div>
         ))}
       </div>
       
-      {/* Mobile Column Indicators - Requirement 5.3 */}
+      {/* Mobile Column Indicators */}
       <div className="
         flex
         justify-center
@@ -296,7 +407,7 @@ export default function KanbanLayout({
         ))}
       </div>
       
-      {/* Mobile Column Label - Shows current column name */}
+      {/* Mobile Column Label */}
       <div className="
         text-center
         text-sm
@@ -306,7 +417,7 @@ export default function KanbanLayout({
       ">
         {COLUMNS[currentColumnIndex]?.titleJa}
         <span className="text-xs ml-2">
-          ({habitsByStatus[COLUMNS[currentColumnIndex]?.id]?.length || 0})
+          ({getColumnCount(COLUMNS[currentColumnIndex]?.id)})
         </span>
       </div>
     </div>

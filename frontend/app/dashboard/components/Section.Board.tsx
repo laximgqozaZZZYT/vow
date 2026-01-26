@@ -35,10 +35,16 @@ export interface BoardSectionProps {
   habits: Habit[];
   /** All activities (used for status determination) */
   activities: Activity[];
+  /** All stickies to display */
+  stickies?: any[];
   /** Callback when a habit action is triggered (start, complete, pause) */
   onHabitAction: (habitId: string, action: HabitAction, amount?: number) => void;
   /** Callback when habit edit is requested */
   onHabitEdit: (habitId: string) => void;
+  /** Callback when sticky is completed/uncompleted */
+  onStickyComplete?: (stickyId: string) => void;
+  /** Callback when sticky edit is requested */
+  onStickyEdit?: (stickyId: string) => void;
 }
 
 /**
@@ -131,8 +137,11 @@ function LayoutToggleButton({
 export default function BoardSection({
   habits,
   activities,
+  stickies = [],
   onHabitAction,
-  onHabitEdit
+  onHabitEdit,
+  onStickyComplete,
+  onStickyEdit
 }: BoardSectionProps) {
   const { 
     layoutMode, 
@@ -161,8 +170,11 @@ export default function BoardSection({
           <KanbanLayout
             habits={habits}
             activities={activities}
+            stickies={stickies}
             onHabitAction={onHabitAction}
             onHabitEdit={onHabitEdit}
+            onStickyComplete={onStickyComplete || (() => {})}
+            onStickyEdit={onStickyEdit || (() => {})}
           />
         ) : (
           <SimpleLayout

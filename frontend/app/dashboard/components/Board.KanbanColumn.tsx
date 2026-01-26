@@ -6,6 +6,7 @@
  * Displays a single column in the Kanban board with:
  * - Column header (title in Japanese, habit count badge)
  * - List of HabitCard components
+ * - Optional completed stickies (for mixed columns)
  * - Drop target styling for drag-and-drop
  * - Visual feedback when being dragged over
  * 
@@ -15,7 +16,7 @@
  */
 
 import { useCallback } from 'react';
-import type { Habit, Activity, HabitAction } from '../types';
+import type { Habit, Activity, HabitAction, Sticky } from '../types';
 import type { HabitStatus } from '../utils/habitStatusUtils';
 import HabitCard from './Board.HabitCard';
 
@@ -26,6 +27,7 @@ export interface ColumnConfig {
   id: HabitStatus;
   title: string;
   titleJa: string;
+  type?: 'habit' | 'sticky' | 'mixed';
 }
 
 export interface KanbanColumnProps {
@@ -53,6 +55,12 @@ export interface KanbanColumnProps {
   onDragStart?: (habitId: string) => void;
   /** Callback when drag ends */
   onDragEnd?: () => void;
+  /** Completed stickies to display (for mixed columns) */
+  completedStickies?: Sticky[];
+  /** Callback when sticky is completed/uncompleted */
+  onStickyComplete?: (stickyId: string) => void;
+  /** Callback when sticky edit is requested */
+  onStickyEdit?: (stickyId: string) => void;
 }
 
 /**
@@ -73,8 +81,14 @@ export default function KanbanColumn({
   onDragLeave,
   draggedHabitId,
   onDragStart,
-  onDragEnd
+  onDragEnd,
+  completedStickies,
+  onStickyComplete,
+  onStickyEdit
 }: KanbanColumnProps) {
+  
+  // Calculate total count for mixed columns
+  const totalCount = habits.length + (completedStickies?.length || 0);
   
   /**
    * Handle drag over event
@@ -192,7 +206,7 @@ export default function KanbanColumn({
           text-muted-foreground
           rounded-full
         ">
-          {habits.length}
+          {totalCount}
         </span>
       </div>
       
@@ -206,7 +220,7 @@ export default function KanbanColumn({
         min-h-[200px]
         flex-1
       ">
-        {habits.length === 0 ? (
+        {totalCount === 0 ? (
           /* Empty state */
           <div className={`
             flex
@@ -225,20 +239,129 @@ export default function KanbanColumn({
             {isDragOver ? 'ここにドロップ' : '習慣がありません'}
           </div>
         ) : (
-          habits.map(habit => (
-            <HabitCard
-              key={habit.id}
-              habit={habit}
-              activities={activities}
-              status={column.id}
-              onComplete={handleHabitComplete(habit.id)}
-              onEdit={handleHabitEdit(habit.id)}
-              onDragStart={handleCardDragStart(habit.id)}
-              onDragEnd={handleCardDragEnd}
-              isDragging={draggedHabitId === habit.id}
-            />
-          ))
+          <>
+            {/* Habits */}
+            {habits.map(habit => (
+              <HabitCard
+                key={habit.id}
+                habit={habit}
+                activities={activities}
+                status={column.id}
+                onComplete={handleHabitComplete(habit.id)}
+                onEdit={handleHabitEdit(habit.id)}
+                onDragStart={handleCardDragStart(habit.id)}
+                onDragEnd={handleCardDragEnd}
+                isDragging={draggedHabitId === habit.id}
+              />
+            ))}
+            
+            {/* Completed Stickies (for mixed columns) */}
+            {completedStickies && completedStickies.length > 0 && (
+              <>
+                {habits.length > 0 && (
+                  <div className="border-t border-border my-2" />
+                )}
+                <div className="text-xs text-muted-foreground mb-1">Sticky'n</div>
+                {completedStickies.map(sticky => (
+                  <CompletedStickyCard
+                    key={sticky.id}
+                    sticky={sticky}
+                    onComplete={() => onStickyComplete?.(sticky.id)}
+                    onEdit={() => onStickyEdit?.(sticky.id)}
+                  />
+                ))}
+              </>
+            )}
+          </>
         )}
+      </div>
+    </div>
+  );
+}
+
+
+/**
+ * CompletedStickyCard component for displaying completed stickies in mixed columns
+ */
+function CompletedStickyCard({
+  sticky,
+  onComplete,
+  onEdit
+}: {
+  sticky: Sticky;
+  onComplete: () => void;
+  onEdit: () => void;
+}) {
+  return (
+    <div
+      className="
+        p-3
+        bg-card
+        border
+        border-success/50
+        bg-success/5
+        rounded-lg
+        shadow-sm
+        transition-all
+        duration-150
+      "
+    >
+      <div className="flex items-start gap-2">
+        {/* Checkbox */}
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            onComplete();
+          }}
+          className="
+            flex-shrink-0
+            w-5
+            h-5
+            mt-0.5
+            rounded
+            border-2
+            bg-success
+            border-success
+            text-white
+            transition-colors
+            focus-visible:outline-2
+            focus-visible:outline-primary
+          "
+          aria-label="Mark as incomplete"
+        >
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="3"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            className="w-full h-full p-0.5"
+          >
+            <polyline points="20 6 9 17 4 12" />
+          </svg>
+        </button>
+        
+        {/* Content */}
+        <div className="flex-1 min-w-0">
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              onEdit();
+            }}
+            className="
+              text-sm
+              text-left
+              line-through
+              text-muted-foreground
+              hover:text-primary
+              transition-colors
+            "
+          >
+            {sticky.name}
+          </button>
+        </div>
       </div>
     </div>
   );

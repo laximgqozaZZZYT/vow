@@ -4,7 +4,7 @@ import type { HabitAction } from '../types';
 /**
  * Habit status for Kanban columns
  */
-export type HabitStatus = 'planned' | 'in_progress' | 'completed_daily';
+export type HabitStatus = 'planned' | 'in_progress' | 'completed_daily' | 'completed' | 'stickies';
 
 /**
  * Props for useKanbanDragDrop hook

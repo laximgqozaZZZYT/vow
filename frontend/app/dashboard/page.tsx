@@ -753,11 +753,14 @@ function DashboardLayout(props: any) {
           <BoardSection 
             habits={habits}
             activities={activities}
+            stickies={stickies}
             onHabitAction={handleHabitAction}
             onHabitEdit={(habitId) => {
               setSelectedHabitId(habitId);
               setOpenHabitModal(true);
             }}
+            onStickyComplete={handleStickyComplete}
+            onStickyEdit={handleStickyEdit}
           />
         );
       case 'activity':

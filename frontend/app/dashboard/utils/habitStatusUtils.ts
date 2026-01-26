@@ -7,16 +7,18 @@
  * @module habitStatusUtils
  */
 
-import type { Habit, Activity } from '../types';
+import type { Habit, Activity, Sticky } from '../types';
 import { formatLocalDate } from './dateUtils';
 
 /**
  * Habit status types for Kanban board columns
  * - planned: No activity today, or paused
  * - in_progress: Started but not completed
- * - completed_daily: Completed today
+ * - completed_daily: Completed today (but not fully completed)
+ * - completed: Fully completed (cumulative workload >= workloadTotal)
+ * - stickies: Sticky notes (separate column)
  */
-export type HabitStatus = 'planned' | 'in_progress' | 'completed_daily';
+export type HabitStatus = 'planned' | 'in_progress' | 'completed_daily' | 'completed' | 'stickies';
 
 /**
  * Get today's date in YYYY-MM-DD format using local timezone
@@ -47,12 +49,31 @@ export function getTodayActivitiesForHabit(
 }
 
 /**
+ * Check if a habit is fully completed (cumulative workload >= workloadTotal)
+ * 
+ * @param habit - The habit to check
+ * @returns True if the habit is fully completed
+ */
+export function isHabitFullyCompleted(habit: Habit): boolean {
+  const workloadTotal = (habit as any).workloadTotal ?? habit.must ?? 0;
+  const currentCount = habit.count ?? 0;
+  
+  // If no workloadTotal is set, check the completed flag
+  if (workloadTotal <= 0) {
+    return habit.completed === true;
+  }
+  
+  return currentCount >= workloadTotal;
+}
+
+/**
  * Determine the status of a habit based on today's activities
  * 
  * Status determination logic:
- * 1. If there's a 'complete' activity today → 'completed_daily'
- * 2. If there's a 'start' activity today and the last activity is not 'pause' → 'in_progress'
- * 3. Otherwise → 'planned'
+ * 1. If habit is fully completed (count >= workloadTotal) → 'completed'
+ * 2. If there's a 'complete' activity today → 'completed_daily'
+ * 3. If there's a 'start' activity today and the last activity is not 'pause' → 'in_progress'
+ * 4. Otherwise → 'planned'
  * 
  * @param habit - The habit to determine status for
  * @param activities - All activities (will be filtered to today's activities)
@@ -61,12 +82,17 @@ export function getTodayActivitiesForHabit(
  * @example
  * ```typescript
  * const status = getHabitStatus(habit, activities);
- * // Returns: 'planned' | 'in_progress' | 'completed_daily'
+ * // Returns: 'planned' | 'in_progress' | 'completed_daily' | 'completed'
  * ```
  * 
  * Validates: Requirements 2.3, 2.4, 2.5, 2.6
  */
 export function getHabitStatus(habit: Habit, activities: Activity[]): HabitStatus {
+  // Check if habit is fully completed first
+  if (isHabitFullyCompleted(habit)) {
+    return 'completed';
+  }
+  
   const today = getTodayDateString();
   const todayActivities = getTodayActivitiesForHabit(habit.id, activities, today);
 
@@ -114,7 +140,9 @@ export function getHabitStatus(habit: Habit, activities: Activity[]): HabitStatu
  * // Returns: {
  * //   planned: [...],
  * //   in_progress: [...],
- * //   completed_daily: [...]
+ * //   completed_daily: [...],
+ * //   completed: [...],
+ * //   stickies: []
  * // }
  * ```
  * 
@@ -127,7 +155,9 @@ export function groupHabitsByStatus(
   const result: Record<HabitStatus, Habit[]> = {
     planned: [],
     in_progress: [],
-    completed_daily: []
+    completed_daily: [],
+    completed: [],
+    stickies: []
   };
 
   for (const habit of habits) {
@@ -148,7 +178,7 @@ export function groupHabitsByStatus(
  * @example
  * ```typescript
  * const counts = getHabitStatusCounts(habits, activities);
- * // Returns: { planned: 5, in_progress: 2, completed_daily: 3 }
+ * // Returns: { planned: 5, in_progress: 2, completed_daily: 3, completed: 1, stickies: 0 }
  * ```
  */
 export function getHabitStatusCounts(
@@ -159,6 +189,31 @@ export function getHabitStatusCounts(
   return {
     planned: grouped.planned.length,
     in_progress: grouped.in_progress.length,
-    completed_daily: grouped.completed_daily.length
+    completed_daily: grouped.completed_daily.length,
+    completed: grouped.completed.length,
+    stickies: grouped.stickies.length
   };
+}
+
+/**
+ * Group stickies by completion status
+ * 
+ * @param stickies - Array of stickies to group
+ * @returns Object with stickies grouped by completion status
+ */
+export function groupStickiesByStatus(
+  stickies: Sticky[]
+): { pending: Sticky[]; completed: Sticky[] } {
+  const pending: Sticky[] = [];
+  const completed: Sticky[] = [];
+  
+  for (const sticky of stickies) {
+    if (sticky.completed) {
+      completed.push(sticky);
+    } else {
+      pending.push(sticky);
+    }
+  }
+  
+  return { pending, completed };
 }
