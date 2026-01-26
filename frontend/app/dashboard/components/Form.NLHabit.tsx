@@ -50,13 +50,13 @@ export default function NLHabitForm({
     clearResult();
   }, [clearResult]);
 
-  // Non-premium users see upgrade prompt (disabled in production)
+  // Non-premium users see upgrade prompt
   if (!isPremium) {
     return (
       <div className="p-4 bg-muted/50 rounded-lg border border-border">
         <div className="flex items-center gap-2 mb-2">
           <svg
-            className="w-5 h-5 text-muted-foreground"
+            className="w-5 h-5 text-primary"
             fill="none"
             stroke="currentColor"
             viewBox="0 0 24 24"
@@ -68,14 +68,20 @@ export default function NLHabitForm({
               d="M13 10V3L4 14h7v7l9-11h-7z"
             />
           </svg>
-          <span className="font-medium text-muted-foreground">AI入力モード</span>
+          <span className="font-medium">AI入力モード</span>
         </div>
         <p className="text-sm text-muted-foreground mb-3">
-          AI機能は準備中です。
+          自然言語でHabitを登録できるAI機能はPremiumプランで利用可能です。
         </p>
-        <span className="inline-flex items-center gap-1 text-sm text-muted-foreground cursor-not-allowed">
-          Coming Soon
-        </span>
+        <a
+          href="/settings/subscription"
+          className="inline-flex items-center gap-1 text-sm text-primary hover:underline"
+        >
+          プランを見る
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+          </svg>
+        </a>
       </div>
     );
   }

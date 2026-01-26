@@ -20,9 +20,8 @@ export const TAB_CONFIGS: TabConfig[] = [
   { id: 'diary', label: 'Diary', labelJa: '日記', iconType: 'diary' },
   { id: 'stickies', label: 'Notes', labelJa: 'メモ', iconType: 'stickies' },
   { id: 'mindmap', label: 'Map', labelJa: 'マップ', iconType: 'mindmap', supportsFullView: true },
-  // AI Coach tabs hidden in production
-  // { id: 'notices', label: 'Alerts', labelJa: '通知', iconType: 'notices' },
-  // { id: 'coach', label: 'Coach', labelJa: 'コーチ', iconType: 'coach' },
+  { id: 'notices', label: 'Alerts', labelJa: '通知', iconType: 'notices' },
+  { id: 'coach', label: 'Coach', labelJa: 'コーチ', iconType: 'coach' },
 ];
 
 export const DEFAULT_TAB = 'board';

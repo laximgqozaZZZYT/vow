@@ -126,10 +126,11 @@ export default function NoticeSection({ onActionClick, habits = [], activities =
   // Fetch notices from API
   const fetchNotices = useCallback(async () => {
     try {
-      // TODO: Implement notices API endpoint
-      // For now, just set empty notices since this feature is not yet available
-      setNotices([]);
-      setUnreadCount(0);
+      const response = await api.get('/api/notices?limit=20');
+      if (response && response.notices) {
+        setNotices(response.notices);
+        setUnreadCount(response.unreadCount || 0);
+      }
     } catch (error) {
       debug.log('[NoticeSection] Failed to fetch notices:', error);
     } finally {
@@ -148,7 +149,7 @@ export default function NoticeSection({ onActionClick, habits = [], activities =
   // Mark single notice as read
   const handleMarkAsRead = async (noticeId: string) => {
     try {
-      // TODO: Implement notices API endpoint
+      await api.patch(`/api/notices/${noticeId}/read`);
       setNotices(prev => prev.map(n => 
         n.id === noticeId ? { ...n, read: true } : n
       ));
@@ -161,7 +162,7 @@ export default function NoticeSection({ onActionClick, habits = [], activities =
   // Mark all notices as read
   const handleMarkAllAsRead = async () => {
     try {
-      // TODO: Implement notices API endpoint
+      await api.post('/api/notices/read-all');
       setNotices(prev => prev.map(n => ({ ...n, read: true })));
       setUnreadCount(0);
     } catch (error) {
@@ -172,7 +173,7 @@ export default function NoticeSection({ onActionClick, habits = [], activities =
   // Delete a notice
   const handleDelete = async (noticeId: string) => {
     try {
-      // TODO: Implement notices API endpoint
+      await api.delete(`/api/notices/${noticeId}`);
       const notice = notices.find(n => n.id === noticeId);
       setNotices(prev => prev.filter(n => n.id !== noticeId));
       if (notice && !notice.read) {

@@ -349,7 +349,7 @@ describe('Demo Layout Property Tests', () => {
               const demoSource = readFileContent('app/demo/components/Section.Demo.tsx');
               
               // Should import from dashboard components
-              expect(demoSource).toContain("from '@/app/dashboard/components/Section.Next'");
+              expect(demoSource).toContain("from '@/app/dashboard/components/Section.Board'");
               expect(demoSource).toContain("from '@/app/dashboard/components/Section.Stickies'");
               expect(demoSource).toContain("from '@/app/dashboard/components/Widget.Calendar'");
               expect(demoSource).toContain("from '@/app/dashboard/components/Section.Statistics'");
