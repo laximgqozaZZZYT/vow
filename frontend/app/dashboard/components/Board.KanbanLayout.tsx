@@ -133,13 +133,20 @@ export default function KanbanLayout({
   const touchPositionRef = useRef<{ x: number; y: number } | null>(null);
   const lastTouchXRef = useRef<number | null>(null);
   const dragDirectionRef = useRef<'left' | 'right' | null>(null);
+  const isDraggingRef = useRef(false);
+
+  // Keep isDraggingRef in sync with isDragging state
+  useEffect(() => {
+    isDraggingRef.current = isDragging;
+  }, [isDragging]);
 
   /**
    * Auto-scroll container when dragging - follows drag direction (Trello-like)
    * Scrolls in the direction the user is dragging
    */
   const performAutoScroll = useCallback(() => {
-    if (!containerRef.current || !touchPositionRef.current || !isDragging) {
+    // Use ref instead of state to avoid stale closure
+    if (!containerRef.current || !touchPositionRef.current || !isDraggingRef.current) {
       if (scrollAnimationRef.current) {
         cancelAnimationFrame(scrollAnimationRef.current);
         scrollAnimationRef.current = null;
@@ -159,9 +166,9 @@ export default function KanbanLayout({
     
     // If near edge, scroll faster in that direction
     if (nearLeftEdge) {
-      scrollDelta = -DRAG_SCROLL_SPEED * 1.5;
+      scrollDelta = -DRAG_SCROLL_SPEED * 2;
     } else if (nearRightEdge) {
-      scrollDelta = DRAG_SCROLL_SPEED * 1.5;
+      scrollDelta = DRAG_SCROLL_SPEED * 2;
     }
     // If actively dragging in a direction, scroll in that direction
     else if (dragDirectionRef.current === 'left') {
@@ -182,7 +189,7 @@ export default function KanbanLayout({
     
     // Always continue the animation loop while dragging
     scrollAnimationRef.current = requestAnimationFrame(performAutoScroll);
-  }, [containerRef, isDragging]);
+  }, [containerRef]);
   
   // Cleanup auto-scroll on unmount
   useEffect(() => {
@@ -228,31 +235,34 @@ export default function KanbanLayout({
   const handleCombinedTouchMove = useCallback((event: React.TouchEvent) => {
     const touch = event.touches[0];
     const currentX = touch.clientX;
+    const currentY = touch.clientY;
     
-    // Track drag direction based on movement
-    if (isDragging && lastTouchXRef.current !== null) {
-      const deltaX = currentX - lastTouchXRef.current;
-      if (Math.abs(deltaX) > 2) { // Threshold to avoid jitter
+    // Update position refs
+    const prevX = lastTouchXRef.current;
+    lastTouchXRef.current = currentX;
+    touchPositionRef.current = { x: currentX, y: currentY };
+    
+    // Track drag direction based on movement (only when dragging)
+    if (isDraggingRef.current && prevX !== null) {
+      const deltaX = currentX - prevX;
+      if (Math.abs(deltaX) > 1) { // Lower threshold for more responsive direction tracking
         dragDirectionRef.current = deltaX > 0 ? 'right' : 'left';
       }
     }
     
-    lastTouchXRef.current = currentX;
-    touchPositionRef.current = { x: currentX, y: touch.clientY };
-    
     // Handle drag preview movement if dragging
     handleTouchMove(event);
     
-    // Start auto-scroll if dragging
-    if (isDragging && !scrollAnimationRef.current) {
+    // Start auto-scroll animation loop if dragging and not already running
+    if (isDraggingRef.current && !scrollAnimationRef.current) {
       scrollAnimationRef.current = requestAnimationFrame(performAutoScroll);
     }
     
     // Handle swipe navigation (only if not dragging)
-    if (!isDragging) {
+    if (!isDraggingRef.current) {
       handleSwipeMove(event);
     }
-  }, [handleTouchMove, handleSwipeMove, isDragging, performAutoScroll]);
+  }, [handleTouchMove, handleSwipeMove, performAutoScroll]);
   
   const handleCombinedTouchEnd = useCallback(() => {
     touchPositionRef.current = null;
@@ -299,7 +309,6 @@ export default function KanbanLayout({
           gap-4
           p-4
           overflow-x-auto
-          overflow-y-hidden
           flex-1
           min-h-0
           
@@ -310,10 +319,6 @@ export default function KanbanLayout({
           snap-x
           snap-mandatory
           md:snap-none
-          
-          /* Smooth scrolling with reduced motion support */
-          scroll-smooth
-          motion-reduce:scroll-auto
           
           /* Hide scrollbar on mobile for cleaner look */
           scrollbar-hide
