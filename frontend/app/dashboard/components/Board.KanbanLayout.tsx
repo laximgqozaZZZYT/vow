@@ -14,13 +14,13 @@
  * - Horizontally scrollable container on mobile (< 768px)
  * - Drag-and-drop support via useKanbanDragDrop hook
  * - Mobile swipe navigation via useMobileSwipe hook
- * - Auto-scroll to adjacent column when dragging near edges
+ * - Auto-scroll follows drag direction (Trello-like behavior)
  * - Column indicators (dots) for mobile navigation
  * 
  * @module Board.KanbanLayout
  */
 
-import { useCallback, useMemo, useRef, useEffect } from 'react';
+import { useCallback, useMemo, useRef, useEffect, useState } from 'react';
 import type { Habit, Activity, HabitAction, Sticky } from '../types';
 import type { HabitStatus } from '../utils/habitStatusUtils';
 import { groupHabitsByStatus, groupStickiesByStatus } from '../utils/habitStatusUtils';
@@ -72,7 +72,7 @@ const COLUMNS: ColumnConfig[] = [
 /** Edge threshold for auto-scroll during drag (pixels from edge) */
 const DRAG_SCROLL_THRESHOLD = 60;
 /** Scroll speed for auto-scroll (pixels per frame) */
-const DRAG_SCROLL_SPEED = 8;
+const DRAG_SCROLL_SPEED = 12;
 
 /**
  * KanbanLayout component
@@ -128,7 +128,10 @@ export default function KanbanLayout({
     onColumnChange: undefined
   });
   
-  // Auto-scroll ref for drag operations
+  // Separate ref for scroll container to ensure we have direct control
+  const scrollContainerRef = useRef<HTMLDivElement | null>(null);
+  
+  // Auto-scroll state
   const scrollAnimationRef = useRef<number | null>(null);
   const touchPositionRef = useRef<{ x: number; y: number } | null>(null);
   const lastTouchXRef = useRef<number | null>(null);
@@ -138,6 +141,17 @@ export default function KanbanLayout({
   // Keep isDraggingRef in sync with isDragging state
   useEffect(() => {
     isDraggingRef.current = isDragging;
+    
+    // Start auto-scroll when dragging starts
+    if (isDragging && !scrollAnimationRef.current) {
+      scrollAnimationRef.current = requestAnimationFrame(performAutoScroll);
+    }
+    
+    // Stop auto-scroll when dragging ends
+    if (!isDragging && scrollAnimationRef.current) {
+      cancelAnimationFrame(scrollAnimationRef.current);
+      scrollAnimationRef.current = null;
+    }
   }, [isDragging]);
 
   /**
@@ -145,32 +159,29 @@ export default function KanbanLayout({
    * Scrolls in the direction the user is dragging
    */
   const performAutoScroll = useCallback(() => {
-    // Use ref instead of state to avoid stale closure
-    if (!containerRef.current || !touchPositionRef.current || !isDraggingRef.current) {
-      if (scrollAnimationRef.current) {
-        cancelAnimationFrame(scrollAnimationRef.current);
-        scrollAnimationRef.current = null;
-      }
+    const container = scrollContainerRef.current;
+    
+    if (!container || !touchPositionRef.current || !isDraggingRef.current) {
+      scrollAnimationRef.current = null;
       return;
     }
     
-    const container = containerRef.current;
     const rect = container.getBoundingClientRect();
     const { x } = touchPositionRef.current;
     
     let scrollDelta = 0;
     
-    // Scroll based on drag direction when near edges OR when actively dragging in a direction
+    // Check if near edges
     const nearLeftEdge = x - rect.left < DRAG_SCROLL_THRESHOLD;
     const nearRightEdge = rect.right - x < DRAG_SCROLL_THRESHOLD;
     
-    // If near edge, scroll faster in that direction
+    // Priority 1: If near edge, scroll faster in that direction
     if (nearLeftEdge) {
-      scrollDelta = -DRAG_SCROLL_SPEED * 2;
+      scrollDelta = -DRAG_SCROLL_SPEED * 1.5;
     } else if (nearRightEdge) {
-      scrollDelta = DRAG_SCROLL_SPEED * 2;
+      scrollDelta = DRAG_SCROLL_SPEED * 1.5;
     }
-    // If actively dragging in a direction, scroll in that direction
+    // Priority 2: If actively dragging in a direction, scroll in that direction
     else if (dragDirectionRef.current === 'left') {
       scrollDelta = -DRAG_SCROLL_SPEED;
     } else if (dragDirectionRef.current === 'right') {
@@ -187,9 +198,13 @@ export default function KanbanLayout({
       }
     }
     
-    // Always continue the animation loop while dragging
-    scrollAnimationRef.current = requestAnimationFrame(performAutoScroll);
-  }, [containerRef]);
+    // Continue the animation loop while dragging
+    if (isDraggingRef.current) {
+      scrollAnimationRef.current = requestAnimationFrame(performAutoScroll);
+    } else {
+      scrollAnimationRef.current = null;
+    }
+  }, []);
   
   // Cleanup auto-scroll on unmount
   useEffect(() => {
@@ -253,16 +268,11 @@ export default function KanbanLayout({
     // Handle drag preview movement if dragging
     handleTouchMove(event);
     
-    // Start auto-scroll animation loop if dragging and not already running
-    if (isDraggingRef.current && !scrollAnimationRef.current) {
-      scrollAnimationRef.current = requestAnimationFrame(performAutoScroll);
-    }
-    
     // Handle swipe navigation (only if not dragging)
     if (!isDraggingRef.current) {
       handleSwipeMove(event);
     }
-  }, [handleTouchMove, handleSwipeMove, performAutoScroll]);
+  }, [handleTouchMove, handleSwipeMove]);
   
   const handleCombinedTouchEnd = useCallback(() => {
     touchPositionRef.current = null;
@@ -280,6 +290,15 @@ export default function KanbanLayout({
     // Handle swipe navigation
     handleSwipeEnd();
   }, [handleTouchEnd, handleSwipeEnd]);
+  
+  // Sync scrollContainerRef with containerRef from useMobileSwipe
+  const setRefs = useCallback((node: HTMLDivElement | null) => {
+    scrollContainerRef.current = node;
+    // Also update the containerRef from useMobileSwipe
+    if (containerRef) {
+      (containerRef as React.MutableRefObject<HTMLDivElement | null>).current = node;
+    }
+  }, [containerRef]);
   
   /**
    * Get column count for display
@@ -300,7 +319,7 @@ export default function KanbanLayout({
     <div className="flex flex-col h-full">
       {/* Kanban Board Container */}
       <div
-        ref={containerRef}
+        ref={setRefs}
         onTouchStart={handleCombinedTouchStart}
         onTouchMove={handleCombinedTouchMove}
         onTouchEnd={handleCombinedTouchEnd}
@@ -309,6 +328,7 @@ export default function KanbanLayout({
           gap-4
           p-4
           overflow-x-auto
+          overflow-y-visible
           flex-1
           min-h-0
           
@@ -325,7 +345,8 @@ export default function KanbanLayout({
           [-webkit-overflow-scrolling:touch]
         "
         style={{
-          scrollSnapType: 'x mandatory'
+          scrollSnapType: 'x mandatory',
+          WebkitOverflowScrolling: 'touch'
         }}
       >
         {COLUMNS.map((column, index) => (

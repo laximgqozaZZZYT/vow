@@ -317,6 +317,15 @@ body {
   background-color: rgba(148,163,184,0.7);
 }
 
+/* Hide scrollbar utility class - for Kanban and other horizontal scroll containers */
+.scrollbar-hide {
+  -ms-overflow-style: none;  /* IE and Edge */
+  scrollbar-width: none;  /* Firefox */
+}
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;  /* Chrome, Safari, Opera */
+}
+
 /* Slight padding helper to ensure scrollbars don't overlap content */
 .modal-scroll-gap { padding-right: 0.6rem; }
 

@@ -153,7 +153,7 @@ export default function BoardSection({
   const { isLeftHanded } = useHandedness();
 
   return (
-    <section className="rounded-lg border border-border bg-card text-card-foreground shadow-sm flex flex-col">
+    <section className="rounded-lg border border-border bg-card text-card-foreground shadow-sm flex flex-col min-h-0">
       {/* Header with title and layout toggle */}
       <div className={`flex items-center p-4 sm:p-6 pb-2 sm:pb-3 ${isLeftHanded ? 'flex-row-reverse' : 'justify-between'}`}>
         <h2 className="text-lg font-semibold">Board</h2>
@@ -165,7 +165,7 @@ export default function BoardSection({
       </div>
       
       {/* Content area - conditional rendering based on layout mode */}
-      <div className="flex-1">
+      <div className="flex-1 min-h-0 overflow-visible">
         {isDetailedMode ? (
           <KanbanLayout
             habits={habits}

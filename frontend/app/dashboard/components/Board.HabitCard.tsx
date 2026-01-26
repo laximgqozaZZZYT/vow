@@ -256,6 +256,26 @@ export default function HabitCard({
         )}
       </div>
       
+      {/* Progress bar - Daily Progress visualization */}
+      {hasProgress && (
+        <div className="mb-2">
+          <div className="w-full bg-muted rounded-full h-1.5">
+            <div 
+              className={`h-1.5 rounded-full transition-all duration-300 ${
+                habit.count >= habit.must 
+                  ? 'bg-green-500' 
+                  : (habit.count / habit.must) >= 0.75 
+                    ? 'bg-blue-500' 
+                    : (habit.count / habit.must) >= 0.5 
+                      ? 'bg-yellow-500' 
+                      : 'bg-red-400'
+              }`}
+              style={{ width: `${Math.min((habit.count / habit.must) * 100, 100)}%` }}
+            />
+          </div>
+        </div>
+      )}
+      
       {/* Complete button and amount input - Requirement 3.6 */}
       <div className={`flex items-center gap-2 ${isLeftHanded ? 'flex-row-reverse' : ''}`}>
         <button
