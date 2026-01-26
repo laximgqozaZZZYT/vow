@@ -27,7 +27,7 @@ export interface ColumnConfig {
   id: HabitStatus;
   title: string;
   titleJa: string;
-  type?: 'habit' | 'sticky' | 'mixed';
+  type?: 'habit' | 'sticky' | 'mixed' | 'planned_with_stickies';
 }
 
 export interface KanbanColumnProps {
@@ -57,6 +57,8 @@ export interface KanbanColumnProps {
   onDragEnd?: () => void;
   /** Completed stickies to display (for mixed columns) */
   completedStickies?: Sticky[];
+  /** Pending stickies to display (for planned column) */
+  pendingStickies?: Sticky[];
   /** Callback when sticky is completed/uncompleted */
   onStickyComplete?: (stickyId: string) => void;
   /** Callback when sticky edit is requested */
@@ -83,12 +85,13 @@ export default function KanbanColumn({
   onDragStart,
   onDragEnd,
   completedStickies,
+  pendingStickies,
   onStickyComplete,
   onStickyEdit
 }: KanbanColumnProps) {
   
-  // Calculate total count for mixed columns
-  const totalCount = habits.length + (completedStickies?.length || 0);
+  // Calculate total count for mixed columns or planned column with stickies
+  const totalCount = habits.length + (completedStickies?.length || 0) + (pendingStickies?.length || 0);
   
   /**
    * Handle drag over event
@@ -255,6 +258,24 @@ export default function KanbanColumn({
               />
             ))}
             
+            {/* Pending Stickies (for planned column) */}
+            {pendingStickies && pendingStickies.length > 0 && (
+              <>
+                {habits.length > 0 && (
+                  <div className="border-t border-border my-2" />
+                )}
+                <div className="text-xs text-muted-foreground mb-1">Sticky'n</div>
+                {pendingStickies.map(sticky => (
+                  <PendingStickyCard
+                    key={sticky.id}
+                    sticky={sticky}
+                    onComplete={() => onStickyComplete?.(sticky.id)}
+                    onEdit={() => onStickyEdit?.(sticky.id)}
+                  />
+                ))}
+              </>
+            )}
+            
             {/* Completed Stickies (for mixed columns) */}
             {completedStickies && completedStickies.length > 0 && (
               <>
@@ -274,6 +295,80 @@ export default function KanbanColumn({
             )}
           </>
         )}
+      </div>
+    </div>
+  );
+}
+
+
+/**
+ * PendingStickyCard component for displaying pending stickies in planned column
+ */
+function PendingStickyCard({
+  sticky,
+  onComplete,
+  onEdit
+}: {
+  sticky: Sticky;
+  onComplete: () => void;
+  onEdit: () => void;
+}) {
+  return (
+    <div
+      className="
+        p-3
+        bg-card
+        border
+        border-warning/50
+        bg-warning/5
+        rounded-lg
+        shadow-sm
+        transition-all
+        duration-150
+      "
+    >
+      <div className="flex items-start gap-2">
+        {/* Checkbox */}
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            onComplete();
+          }}
+          className="
+            flex-shrink-0
+            w-5
+            h-5
+            mt-0.5
+            rounded
+            border-2
+            border-warning
+            bg-transparent
+            transition-colors
+            hover:bg-warning/10
+            focus-visible:outline-2
+            focus-visible:outline-primary
+          "
+          aria-label="Mark as complete"
+        />
+        
+        {/* Content */}
+        <div className="flex-1 min-w-0">
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              onEdit();
+            }}
+            className="
+              text-sm
+              text-left
+              text-foreground
+              hover:text-primary
+              transition-colors
+            "
+          >
+            {sticky.name}
+          </button>
+        </div>
       </div>
     </div>
   );

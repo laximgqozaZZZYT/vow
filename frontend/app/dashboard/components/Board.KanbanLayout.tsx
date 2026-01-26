@@ -3,15 +3,14 @@
 /**
  * KanbanLayout Component for Board Section
  * 
- * Displays a Trello-style Kanban board with five columns:
- * - 予定 (Planned): Habits with no activity today
- * - Sticky'n: Pending sticky notes
+ * Displays a Trello-style Kanban board with four columns:
+ * - 予定 (Planned): Habits with no activity today + pending Sticky'n
  * - 進行中 (In Progress): Habits that have been started but not completed
  * - 完了(日次) (Completed Daily): Habits completed today
  * - 完了 (Completed): Fully completed habits and checked stickies
  * 
  * Features:
- * - 5-column horizontal layout on desktop
+ * - 4-column horizontal layout on desktop
  * - Horizontally scrollable container on mobile (< 768px)
  * - Drag-and-drop support via useKanbanDragDrop hook
  * - Mobile swipe navigation via useMobileSwipe hook
@@ -28,7 +27,6 @@ import { groupHabitsByStatus, groupStickiesByStatus } from '../utils/habitStatus
 import { useKanbanDragDrop } from '../hooks/useKanbanDragDrop';
 import { useMobileSwipe } from '../hooks/useMobileSwipe';
 import KanbanColumn from './Board.KanbanColumn';
-import StickyColumn from './Board.StickyColumn';
 
 /**
  * Column configuration for Kanban board
@@ -37,7 +35,7 @@ export interface ColumnConfig {
   id: HabitStatus;
   title: string;
   titleJa: string;
-  type: 'habit' | 'sticky' | 'mixed';
+  type: 'habit' | 'sticky' | 'mixed' | 'planned_with_stickies';
 }
 
 /**
@@ -62,11 +60,10 @@ export interface KanbanLayoutProps {
 
 /**
  * Column configuration
- * Five columns: 予定, Sticky'n, 進行中, 完了(日次), 完了
+ * Four columns: 予定 (with Sticky'n), 進行中, 完了(日次), 完了
  */
 const COLUMNS: ColumnConfig[] = [
-  { id: 'planned', title: 'Planned', titleJa: '予定', type: 'habit' },
-  { id: 'stickies', title: "Sticky'n", titleJa: "Sticky'n", type: 'sticky' },
+  { id: 'planned', title: 'Planned', titleJa: '予定', type: 'planned_with_stickies' },
   { id: 'in_progress', title: 'In Progress', titleJa: '進行中', type: 'habit' },
   { id: 'completed_daily', title: 'Daily Done', titleJa: '完了(日次)', type: 'habit' },
   { id: 'completed', title: 'Completed', titleJa: '完了', type: 'mixed' }
@@ -247,8 +244,9 @@ export default function KanbanLayout({
    */
   const getColumnCount = (columnId: HabitStatus): number => {
     switch (columnId) {
-      case 'stickies':
-        return stickiesByStatus.pending.length;
+      case 'planned':
+        // Planned column includes both habits and pending stickies
+        return (habitsByStatus.planned?.length || 0) + stickiesByStatus.pending.length;
       case 'completed':
         return habitsByStatus.completed.length + stickiesByStatus.completed.length;
       default:
@@ -315,14 +313,7 @@ export default function KanbanLayout({
               md:last:mr-0
             "
           >
-            {column.type === 'sticky' ? (
-              <StickyColumn
-                column={column}
-                stickies={stickiesByStatus.pending}
-                onStickyComplete={onStickyComplete}
-                onStickyEdit={onStickyEdit}
-              />
-            ) : column.type === 'mixed' ? (
+            {column.type === 'mixed' ? (
               <KanbanColumn
                 column={column}
                 habits={habitsByStatus.completed}
@@ -337,6 +328,24 @@ export default function KanbanLayout({
                 onDragStart={handleCardDragStart}
                 onDragEnd={handleDragEnd}
                 completedStickies={stickiesByStatus.completed}
+                onStickyComplete={onStickyComplete}
+                onStickyEdit={onStickyEdit}
+              />
+            ) : column.type === 'planned_with_stickies' ? (
+              <KanbanColumn
+                column={column}
+                habits={habitsByStatus.planned || []}
+                activities={activities}
+                onHabitAction={onHabitAction}
+                onHabitEdit={onHabitEdit}
+                onDrop={handleColumnDrop}
+                isDragOver={dropTargetColumn === column.id}
+                onDragOver={() => handleDragOver(column.id)}
+                onDragLeave={handleDragLeave}
+                draggedHabitId={draggedHabitId}
+                onDragStart={handleCardDragStart}
+                onDragEnd={handleDragEnd}
+                pendingStickies={stickiesByStatus.pending}
                 onStickyComplete={onStickyComplete}
                 onStickyEdit={onStickyEdit}
               />
