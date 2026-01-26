@@ -1,6 +1,6 @@
 // Shared type definitions for dashboard components
 
-export type SectionId = 'next' | 'activity' | 'calendar' | 'statics' | 'diary' | 'stickies';
+export type SectionId = 'board' | 'next' | 'activity' | 'calendar' | 'statics' | 'diary' | 'stickies' | 'mindmap' | 'notices' | 'coach';
 export type ActivityKind = 'start' | 'complete' | 'skip' | 'pause';
 export type HabitAction = 'start' | 'complete' | 'pause' | 'reset';
 
