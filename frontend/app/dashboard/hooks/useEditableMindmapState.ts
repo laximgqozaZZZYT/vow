@@ -95,6 +95,11 @@ export function useEditableMindmapState({
     const initialNodes: Node[] = [];
     const initialEdges: Edge[] = [];
 
+    // コンパクトなレイアウト定数
+    const GOAL_Y_SPACING = 150;
+    const HABIT_X_OFFSET = 200;
+    const HABIT_Y_SPACING = 60;
+
     goals.forEach((goal, index) => {
       const habitsInGoal = habits.filter(h => h.goalId === goal.id);
       const completedHabits = habitsInGoal.filter(h => h.completed).length;
@@ -103,7 +108,7 @@ export function useEditableMindmapState({
       initialNodes.push({
         id: `goal-${goal.id}`,
         type: 'goalNode',
-        position: { x: 100, y: 100 + index * 300 },
+        position: { x: 50, y: 50 + index * GOAL_Y_SPACING },
         data: {
           goal,
           habitCount: habitsInGoal.length,
@@ -122,7 +127,7 @@ export function useEditableMindmapState({
         initialNodes.push({
           id: `habit-${habit.id}`,
           type: 'habitNode',
-          position: { x: 400, y: 100 + index * 300 + hIndex * 100 },
+          position: { x: 50 + HABIT_X_OFFSET, y: 50 + index * GOAL_Y_SPACING + hIndex * HABIT_Y_SPACING },
           data: {
             habit,
             goal,

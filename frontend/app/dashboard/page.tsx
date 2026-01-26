@@ -19,10 +19,15 @@ import MindmapSection from './components/Section.Mindmap';
 // Extracted components
 import DashboardHeader from './components/Layout.Header';
 import DashboardSidebar from './components/Layout.Sidebar';
-import HandednessToggle from './components/HandednessToggle';
-import NextSection from './components/Section.Next';
+import BoardSection from './components/Section.Board';
 import ActivitySection from './components/Section.Activity';
 import CalendarWidget from './components/Widget.Calendar';
+
+// Tab navigation components
+import { TabNavigation } from './components/Layout.TabNavigation';
+import { TabContent } from './components/Layout.TabContent';
+import { useTabNavigation } from './hooks/useTabNavigation';
+import { getVisibleTabs, getTabById, normalizeTabId } from './constants/tabConfig';
 
 // Hooks
 import { useActivityManager } from './hooks/useActivityManager';
@@ -174,6 +179,7 @@ export default function DashboardPage() {
     handleComplete,
     handleStart,
     handlePause,
+    handleReset,
     openEditActivity,
     propagateActivityChanges,
     handleDeleteActivity,
@@ -209,7 +215,7 @@ export default function DashboardPage() {
   });
 
   // Unified habit action handler for extracted components
-  function handleHabitAction(habitId: string, action: 'start' | 'complete' | 'pause', amount?: number) {
+  function handleHabitAction(habitId: string, action: 'start' | 'complete' | 'pause' | 'reset', amount?: number) {
     switch (action) {
       case 'start':
         handleStart(habitId);
@@ -219,6 +225,9 @@ export default function DashboardPage() {
         break;
       case 'pause':
         handlePause(habitId);
+        break;
+      case 'reset':
+        handleReset(habitId);
         break;
     }
   }
@@ -524,11 +533,98 @@ export default function DashboardPage() {
         handleMoveGoal={handleMoveGoal}
         handleMoveHabit={handleMoveHabit}
       />
-      <HandednessToggle />
     </HandednessProvider>
     </LocaleProvider>
   );
 }
+
+// Mobile Tab Icon Component
+const MobileTabIcon = ({ type, isActive }: { type: string; isActive: boolean }) => {
+  const iconProps = {
+    width: 22,
+    height: 22,
+    viewBox: '0 0 24 24',
+    fill: 'none',
+    stroke: 'currentColor',
+    strokeWidth: isActive ? 2 : 1.5,
+    strokeLinecap: 'round' as const,
+    strokeLinejoin: 'round' as const,
+  };
+
+  switch (type) {
+    case 'board':
+      // Kanban board icon (3 columns)
+      return (
+        <svg {...iconProps}>
+          <rect x="3" y="3" width="5" height="18" rx="1" />
+          <rect x="10" y="3" width="5" height="12" rx="1" />
+          <rect x="17" y="3" width="5" height="15" rx="1" />
+        </svg>
+      );
+    case 'next':
+      return (
+        <svg {...iconProps}>
+          <circle cx="12" cy="12" r="10" />
+          <polyline points="12 6 12 12 16 14" />
+        </svg>
+      );
+    case 'activity':
+      return (
+        <svg {...iconProps}>
+          <path d="M22 12h-4l-3 9L9 3l-3 9H2" />
+        </svg>
+      );
+    case 'calendar':
+      return (
+        <svg {...iconProps}>
+          <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
+          <line x1="16" y1="2" x2="16" y2="6" />
+          <line x1="8" y1="2" x2="8" y2="6" />
+          <line x1="3" y1="10" x2="21" y2="10" />
+        </svg>
+      );
+    case 'statistics':
+      return (
+        <svg {...iconProps}>
+          <line x1="18" y1="20" x2="18" y2="10" />
+          <line x1="12" y1="20" x2="12" y2="4" />
+          <line x1="6" y1="20" x2="6" y2="14" />
+        </svg>
+      );
+    case 'diary':
+      return (
+        <svg {...iconProps}>
+          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+          <polyline points="14 2 14 8 20 8" />
+          <line x1="16" y1="13" x2="8" y2="13" />
+          <line x1="16" y1="17" x2="8" y2="17" />
+        </svg>
+      );
+    case 'stickies':
+      return (
+        <svg {...iconProps}>
+          <path d="M16 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V8z" />
+          <polyline points="16 3 16 8 21 8" />
+        </svg>
+      );
+    case 'mindmap':
+      return (
+        <svg {...iconProps}>
+          <circle cx="12" cy="12" r="3" />
+          <circle cx="19" cy="5" r="2" />
+          <circle cx="5" cy="5" r="2" />
+          <circle cx="19" cy="19" r="2" />
+          <circle cx="5" cy="19" r="2" />
+          <line x1="14.5" y1="9.5" x2="17.5" y2="6.5" />
+          <line x1="9.5" y1="9.5" x2="6.5" y2="6.5" />
+          <line x1="14.5" y1="14.5" x2="17.5" y2="17.5" />
+          <line x1="9.5" y1="14.5" x2="6.5" y2="17.5" />
+        </svg>
+      );
+    default:
+      return null;
+  }
+};
 
 function DashboardLayout(props: any) {
   const { isLeftHanded } = useHandedness();
@@ -620,8 +716,121 @@ function DashboardLayout(props: any) {
     handleMoveHabit,
   } = props;
 
+  // Tab navigation state
+  const visibleTabs = getVisibleTabs(pageSections);
+  const { activeTab, setActiveTab, isFullView, toggleFullView, exitFullView, isCollapsed, toggleCollapse } = useTabNavigation(
+    pageSections[0],
+    pageSections
+  );
+  const currentTabConfig = getTabById(activeTab);
+  const supportsFullView = currentTabConfig?.supportsFullView ?? false;
+
+  // Render section content based on active tab
+  const renderSectionContent = () => {
+    // Normalize tab ID for backward compatibility (next -> board)
+    const normalizedTab = normalizeTabId(activeTab);
+    
+    switch (normalizedTab) {
+      case 'board':
+        return (
+          <BoardSection 
+            habits={habits}
+            activities={activities}
+            stickies={stickies}
+            goals={goals}
+            habitRelations={[]}
+            onHabitAction={handleHabitAction}
+            onHabitEdit={(habitId) => {
+              setSelectedHabitId(habitId);
+              setOpenHabitModal(true);
+            }}
+            onGoalEdit={(goalId) => {
+              setEditingGoalId(goalId);
+              setOpenGoalModal(true);
+            }}
+            onStickyComplete={handleStickyComplete}
+            onStickyEdit={handleStickyEdit}
+          />
+        );
+      case 'activity':
+        return (
+          <ActivitySection 
+            activities={activities} 
+            onEditActivity={openEditActivity} 
+            onDeleteActivity={handleDeleteActivity} 
+            habits={habits}
+          />
+        );
+      case 'calendar':
+        return (
+          <CalendarWidget
+            habits={habits}
+            goals={goals}
+            activities={activities}
+            onEventClick={(id: string) => { setSelectedHabitId(id); setOpenHabitModal(true); }}
+            onSlotSelect={(isoDate: string, time?: string, endTime?: string) => {
+              const dateOnly = (isoDate || '').slice(0, 10);
+              setNewHabitInitial({ date: dateOnly, time, endTime });
+              setOpenNewHabit(true);
+            }}
+            onEventChange={(id: string, updated) => handleEventChange(id, updated)}
+            onRecurringAttempt={(habitId: string, updated) => { setRecurringRequest({ habitId, start: updated.start, end: updated.end }); }}
+            onRecurringHabitRequest={handleRecurringHabitRequest}
+          />
+        );
+      case 'statics':
+        return <StaticsSection habits={habits as any} activities={activities as any} goals={goals as any} />;
+      case 'diary':
+        return (
+          <DiarySection 
+            goals={goals as any} 
+            habits={habits as any}
+            onManageTags={() => setOpenManageTags(true)}
+          />
+        );
+      case 'stickies':
+        return (
+          <StickiesSection
+            stickies={stickies}
+            onStickyCreate={handleStickyCreate}
+            onStickyEdit={handleStickyEdit}
+            onStickyComplete={handleStickyComplete}
+            onStickyDelete={handleStickyDelete}
+            onStickyNameChange={handleStickyNameChange}
+          />
+        );
+      case 'mindmap':
+        return (
+          <MindmapSection
+            goals={goals as any}
+            habits={habits as any}
+            onRegisterAsHabit={async (data) => {
+              const createdHabit = await createHabit(data);
+              return createdHabit;
+            }}
+            onRegisterAsGoal={async (payload) => {
+              const createdGoal = await createGoal(payload);
+              return createdGoal;
+            }}
+            onDataChange={async () => {
+              try {
+                const gs = await api.getGoals();
+                setGoals(gs || []);
+                const hs = await api.getHabits();
+                setHabits(hs || []);
+              } catch (e) {
+                console.error('Failed to reload data', e);
+              }
+            }}
+          />
+        );
+      default:
+        return null;
+    }
+  };
+
   return (
-    <div className="flex min-h-screen bg-background text-foreground">
+    <div className="flex flex-col md:flex-row min-h-screen md:min-h-screen bg-background text-foreground">
         <DashboardHeader
           onToggleSidebar={() => setShowLeftPane((s: boolean) => !s)}
           showSidebar={showLeftPane}
@@ -655,94 +864,69 @@ function DashboardLayout(props: any) {
         onMoveHabit={handleMoveHabit}
       />
 
-  {/* Main content pane */}
-  <main className={`flex-1 pt-20 p-6 lg:p-8 ${showLeftPane ? (isLeftHanded ? 'lg:mr-80' : 'lg:ml-80') : ''}`}>
-        <div className="grid grid-cols-1 gap-6 max-w-full overflow-hidden">
-          {pageSections.map((sec: string) => (
-            sec === 'next' ? (
-              <NextSection 
-                key="next" 
-                habits={habits}
-                activities={activities}
-                onHabitAction={handleHabitAction}
-                onHabitEdit={(habitId) => {
-                  setSelectedHabitId(habitId);
-                  setOpenHabitModal(true);
-                }}
-              />
-            ) : sec === 'activity' ? (
-              <ActivitySection 
-                key="activity" 
-                activities={activities} 
-                onEditActivity={openEditActivity} 
-                onDeleteActivity={handleDeleteActivity} 
-                habits={habits}
-              />
-            ) : sec === 'calendar' ? (
-              <CalendarWidget
-                key="calendar"
-                habits={habits}
-                goals={goals}
-                activities={activities}
-                onEventClick={(id: string) => { setSelectedHabitId(id); setOpenHabitModal(true); }}
-                onSlotSelect={(isoDate: string, time?: string, endTime?: string) => {
-                  const dateOnly = (isoDate || '').slice(0, 10);
-                  setNewHabitInitial({ date: dateOnly, time, endTime });
-                  setOpenNewHabit(true);
-                }}
-                onEventChange={(id: string, updated) => handleEventChange(id, updated)}
-                onRecurringAttempt={(habitId: string, updated) => { setRecurringRequest({ habitId, start: updated.start, end: updated.end }); }}
-                onRecurringHabitRequest={handleRecurringHabitRequest}
-              />
-            ) : sec === 'statics' ? (
-              <StaticsSection key="statics" habits={habits as any} activities={activities as any} goals={goals as any} />
-            ) : sec === 'diary' ? (
-              <DiarySection 
-                key="diary" 
-                goals={goals as any} 
-                habits={habits as any}
-                onManageTags={() => setOpenManageTags(true)}
-              />
-            ) : sec === 'stickies' ? (
-              <StickiesSection
-                key="stickies"
-                stickies={stickies}
-                onStickyCreate={handleStickyCreate}
-                onStickyEdit={handleStickyEdit}
-                onStickyComplete={handleStickyComplete}
-                onStickyDelete={handleStickyDelete}
-                onStickyNameChange={handleStickyNameChange}
-              />
-            ) : sec === 'mindmap' ? (
-              <MindmapSection
-                key="mindmap"
-                goals={goals as any}
-                habits={habits as any}
-                onRegisterAsHabit={async (data) => {
-                  const createdHabit = await createHabit(data);
-                  return createdHabit;
-                }}
-                onRegisterAsGoal={async (payload) => {
-                  const createdGoal = await createGoal(payload);
-                  return createdGoal;
-                }}
-                onDataChange={async () => {
-                  // データを再読み込み
-                  try {
-                    const gs = await api.getGoals();
-                    setGoals(gs || []);
-                    const hs = await api.getHabits();
-                    setHabits(hs || []);
-                  } catch (e) {
-                    console.error('Failed to reload data', e);
-                  }
-                }}
-              />
-            ) : null
-          ))}
+  {/* Main content pane with left tab navigation */}
+  <main className={`flex-1 pt-16 pb-20 md:pb-0 flex flex-col md:flex-row ${showLeftPane ? (isLeftHanded ? 'lg:mr-80' : 'lg:ml-80') : ''}`}>
+        {/* Left Tab Navigation - Desktop */}
+        <div className="hidden md:flex flex-col h-[calc(100vh-4rem)] sticky top-16">
+          <TabNavigation
+            tabs={visibleTabs}
+            activeTab={activeTab}
+            onTabChange={setActiveTab}
+            collapsed={isCollapsed}
+            onToggleCollapse={toggleCollapse}
+          />
         </div>
-        
+
+        {/* Tab Content */}
+        <div className="flex-1 p-4 lg:p-6">
+          <TabContent
+            activeTab={activeTab}
+            isFullView={isFullView}
+            onToggleFullView={toggleFullView}
+            onExitFullView={exitFullView}
+            supportsFullView={supportsFullView}
+          >
+            {renderSectionContent()}
+          </TabContent>
+        </div>
       </main>
+
+      {/* Mobile Tab Navigation - Bottom fixed, OUTSIDE of main */}
+      <nav className="md:hidden fixed bottom-0 left-0 right-0 z-[9999] bg-background border-t border-border shadow-[0_-2px_10px_rgba(0,0,0,0.1)]">
+        <div 
+          className="flex overflow-x-auto scrollbar-hide px-1 py-1.5 gap-0.5" 
+          style={{ paddingBottom: 'max(env(safe-area-inset-bottom, 0px), 8px)' }}
+        >
+          {visibleTabs.map((tab) => {
+            // Normalize activeTab for comparison (e.g., 'next' -> 'board')
+            const normalizedActiveTab = normalizeTabId(activeTab);
+            const isActive = tab.id === normalizedActiveTab;
+            const label = tab.labelJa;
+            return (
+              <button
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id)}
+                className={`
+                  flex flex-col items-center justify-center flex-shrink-0
+                  w-[56px] min-h-[52px]
+                  py-1.5
+                  rounded-lg
+                  transition-all duration-150
+                  ${isActive
+                    ? 'text-primary bg-primary/5'
+                    : 'text-muted-foreground'
+                  }
+                `}
+              >
+                <MobileTabIcon type={tab.iconType} isActive={isActive} />
+                <span className={`text-[9px] mt-0.5 leading-tight ${isActive ? 'font-medium' : ''}`}>
+                  {label}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      </nav>
 
       <GoalModal
         open={openNewCategory}

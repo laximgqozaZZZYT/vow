@@ -638,18 +638,18 @@ function UnifiedRelationMapFlow({ habits, goals, onClose, embedded = false, onRe
       habitsByGoal.get(habit.goalId)!.push(habit);
     });
 
-    // レイアウト定数
-    const GOAL_WIDTH = 250;
-    const HABIT_WIDTH = 240;
-    const MAIN_GROUP_WIDTH = 320;
-    const GOAL_VERTICAL_SPACING = 700;
-    const ROOT_GOAL_VERTICAL_SPACING = 1200;
-    const HABIT_VERTICAL_OFFSET = 150;
-    const HABIT_HORIZONTAL_OFFSET = 500;
-    const HABIT_INDEX_OFFSET = 150;
-    const HABIT_VERTICAL_GAP = 50;
-    const MIN_HORIZONTAL_GAP = 300;
-    const ROOT_GOAL_X_START = 50;
+    // レイアウト定数 - コンパクト配置
+    const GOAL_WIDTH = 200;
+    const HABIT_WIDTH = 180;
+    const MAIN_GROUP_WIDTH = 240;
+    const GOAL_VERTICAL_SPACING = 200;
+    const ROOT_GOAL_VERTICAL_SPACING = 300;
+    const HABIT_VERTICAL_OFFSET = 80;
+    const HABIT_HORIZONTAL_OFFSET = 250;
+    const HABIT_INDEX_OFFSET = 80;
+    const HABIT_VERTICAL_GAP = 20;
+    const MIN_HORIZONTAL_GAP = 100;
+    const ROOT_GOAL_X_START = 30;
 
     function calculateSubtreeHeight(goalId: string): number {
       const children = goalChildren.get(goalId) || [];
@@ -662,9 +662,9 @@ function UnifiedRelationMapFlow({ habits, goals, onClose, embedded = false, onRe
           const subHabits = subHabitIds.map(id => habits.find(h => h.id === id)).filter(Boolean) as Habit[];
           
           if (subHabits.length > 0) {
-            habitAreaHeight += 200 + subHabits.length * 100 + HABIT_VERTICAL_GAP;
+            habitAreaHeight += 80 + subHabits.length * 40 + HABIT_VERTICAL_GAP;
           } else {
-            habitAreaHeight += 150 + HABIT_VERTICAL_GAP;
+            habitAreaHeight += 50 + HABIT_VERTICAL_GAP;
           }
         });
       }
@@ -676,7 +676,7 @@ function UnifiedRelationMapFlow({ habits, goals, onClose, embedded = false, onRe
         });
       }
       
-      const goalHeight = 100;
+      const goalHeight = 60;
       const totalHeight = goalHeight + Math.max(habitAreaHeight, childrenHeight) + GOAL_VERTICAL_SPACING;
       
       return totalHeight;
@@ -763,7 +763,7 @@ function UnifiedRelationMapFlow({ habits, goals, onClose, embedded = false, onRe
               animated: false,
             });
             
-            const groupHeight = 200 + subHabits.length * 100 + HABIT_VERTICAL_GAP;
+            const groupHeight = 80 + subHabits.length * 40 + HABIT_VERTICAL_GAP;
             habitY += groupHeight;
             maxHabitY = Math.max(maxHabitY, habitY);
           } else {
@@ -795,13 +795,13 @@ function UnifiedRelationMapFlow({ habits, goals, onClose, embedded = false, onRe
               animated: false,
             });
             
-            habitY += 150 + HABIT_VERTICAL_GAP;
+            habitY += 50 + HABIT_VERTICAL_GAP;
             maxHabitY = Math.max(maxHabitY, habitY);
           }
         });
       }
 
-      let childYOffset = Math.max(goalY + GOAL_VERTICAL_SPACING, maxHabitY + 200);
+      let childYOffset = Math.max(goalY + GOAL_VERTICAL_SPACING, maxHabitY + 50);
       let childXOffset = xStart;
       
       children.forEach((childId) => {
@@ -826,10 +826,54 @@ function UnifiedRelationMapFlow({ habits, goals, onClose, embedded = false, onRe
       return Math.max(maxHabitY, childYOffset);
     }
 
+    // 実際のサブツリー高さを計算（間隔なし）
+    function calculateActualSubtreeHeight(goalId: string): number {
+      const children = goalChildren.get(goalId) || [];
+      const habitsInGoal = habitsByGoal.get(goalId) || [];
+      
+      let habitAreaHeight = 0;
+      if (habitsInGoal.length > 0) {
+        habitsInGoal.forEach((habit) => {
+          const subHabitIds = Array.from(mainToSubs.get(habit.id) || []);
+          const subHabits = subHabitIds.map(id => habits.find(h => h.id === id)).filter(Boolean) as Habit[];
+          
+          if (subHabits.length > 0) {
+            habitAreaHeight += 80 + subHabits.length * 40 + HABIT_VERTICAL_GAP;
+          } else {
+            habitAreaHeight += 50 + HABIT_VERTICAL_GAP;
+          }
+        });
+      }
+      
+      let childrenHeight = 0;
+      if (children.length > 0) {
+        childrenHeight = Math.max(...children.map(childId => calculateActualSubtreeHeight(childId)));
+        childrenHeight += GOAL_VERTICAL_SPACING;
+      }
+      
+      return 60 + Math.max(habitAreaHeight, childrenHeight);
+    }
+
     let currentY = 0;
+    let currentX = ROOT_GOAL_X_START;
+    const MAX_WIDTH = 1200;
+    let rowMaxHeight = 0;
+    
     rootGoals.forEach((rootGoal) => {
-      const endY = layoutGoalTree(rootGoal.id, 0, ROOT_GOAL_X_START, currentY);
-      currentY = endY + ROOT_GOAL_VERTICAL_SPACING;
+      const subtreeWidth = calculateSubtreeWidth(rootGoal.id);
+      const actualHeight = calculateActualSubtreeHeight(rootGoal.id);
+      
+      // 幅を超えたら次の行へ
+      if (currentX > ROOT_GOAL_X_START && currentX + subtreeWidth > MAX_WIDTH) {
+        currentX = ROOT_GOAL_X_START;
+        currentY += rowMaxHeight + 30; // 行間は30px
+        rowMaxHeight = 0;
+      }
+      
+      layoutGoalTree(rootGoal.id, 0, currentX, currentY);
+      
+      currentX += subtreeWidth + MIN_HORIZONTAL_GAP;
+      rowMaxHeight = Math.max(rowMaxHeight, actualHeight);
     });
 
     // Next関係のエッジ

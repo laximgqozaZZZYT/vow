@@ -27,3 +27,21 @@ export { useMindmapEvents } from './useMindmapEvents';
 
 // Persistence
 export { useMindmapPersistence } from './useMindmapPersistence';
+
+// Board layout
+export { useBoardLayout, type LayoutMode, type UseBoardLayoutReturn, STORAGE_KEY, DEFAULT_MODE, isValidLayoutMode } from './useBoardLayout';
+
+// Kanban drag and drop
+export { 
+  useKanbanDragDrop, 
+  type HabitStatus, 
+  type UseKanbanDragDropProps, 
+  type UseKanbanDragDropReturn 
+} from './useKanbanDragDrop';
+
+// Mobile swipe navigation
+export {
+  useMobileSwipe,
+  type UseMobileSwipeProps,
+  type UseMobileSwipeReturn
+} from './useMobileSwipe';
