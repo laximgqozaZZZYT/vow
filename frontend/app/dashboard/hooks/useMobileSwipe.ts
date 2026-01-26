@@ -113,22 +113,26 @@ export function useMobileSwipe({
       setCurrentColumnIndex(clampedIndex);
       onColumnChange?.(clampedIndex);
       
-      // Scroll the container to show the target column
+      // Scroll the container to show the target column (horizontal only)
       if (containerRef.current) {
         const container = containerRef.current;
-        // Get the actual column element to scroll to
         const columns = container.querySelectorAll('[class*="snap-center"]');
         const targetColumn = columns[clampedIndex] as HTMLElement;
         
         if (targetColumn) {
-          // Use smooth scroll unless user prefers reduced motion
+          // Use horizontal scrollLeft to avoid vertical scroll
+          const columnRect = targetColumn.getBoundingClientRect();
+          const containerRect = container.getBoundingClientRect();
+          const columnCenter = targetColumn.offsetLeft + columnRect.width / 2;
+          const containerCenter = containerRect.width / 2;
+          const scrollTarget = columnCenter - containerCenter;
+          
           if (prefersReducedMotion()) {
-            targetColumn.scrollIntoView({ inline: 'center', block: 'nearest' });
+            container.scrollLeft = scrollTarget;
           } else {
-            targetColumn.scrollIntoView({ 
-              inline: 'center', 
-              block: 'nearest',
-              behavior: 'smooth' 
+            container.scrollTo({
+              left: scrollTarget,
+              behavior: 'smooth'
             });
           }
         }
@@ -223,21 +227,35 @@ export function useMobileSwipe({
   }, [currentColumnIndex, goToColumn]);
 
   // Sync scroll position when currentColumnIndex changes externally
+  // Use a ref to track if this is the initial mount to avoid unwanted scroll
+  const isInitialMountRef = useRef(true);
+  
   useEffect(() => {
+    // Skip scroll on initial mount to prevent unwanted vertical scroll
+    if (isInitialMountRef.current) {
+      isInitialMountRef.current = false;
+      return;
+    }
+    
     if (containerRef.current && totalColumns > 0) {
       const container = containerRef.current;
       const columns = container.querySelectorAll('[class*="snap-center"]');
       const targetColumn = columns[currentColumnIndex] as HTMLElement;
       
       if (targetColumn) {
-        // Use scrollIntoView for more reliable positioning with snap-center
+        // Use horizontal scrollLeft instead of scrollIntoView to avoid vertical scroll
+        const columnRect = targetColumn.getBoundingClientRect();
+        const containerRect = container.getBoundingClientRect();
+        const columnCenter = targetColumn.offsetLeft + columnRect.width / 2;
+        const containerCenter = containerRect.width / 2;
+        const scrollTarget = columnCenter - containerCenter;
+        
         if (prefersReducedMotion()) {
-          targetColumn.scrollIntoView({ inline: 'center', block: 'nearest' });
+          container.scrollLeft = scrollTarget;
         } else {
-          targetColumn.scrollIntoView({ 
-            inline: 'center', 
-            block: 'nearest',
-            behavior: 'smooth' 
+          container.scrollTo({
+            left: scrollTarget,
+            behavior: 'smooth'
           });
         }
       }
