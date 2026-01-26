@@ -736,7 +736,7 @@ function DashboardLayout(props: any) {
   // Tab navigation state
   const visibleTabs = getVisibleTabs(pageSections);
   const { activeTab, setActiveTab, isFullView, toggleFullView, exitFullView, isCollapsed, toggleCollapse } = useTabNavigation(
-    pageSections[0],
+    'board', // Always start with Board tab
     pageSections
   );
   const currentTabConfig = getTabById(activeTab);
