@@ -2,7 +2,7 @@
 
 export type SectionId = 'next' | 'activity' | 'calendar' | 'statics' | 'diary' | 'stickies';
 export type ActivityKind = 'start' | 'complete' | 'skip' | 'pause';
-export type HabitAction = 'start' | 'complete' | 'pause';
+export type HabitAction = 'start' | 'complete' | 'pause' | 'reset';
 
 export interface Tag {
   id: string;

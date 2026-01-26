@@ -9,7 +9,7 @@ export function useDataManager() {
   const [goals, setGoals] = useState<Goal[]>([]);
   const [habits, setHabits] = useState<Habit[]>([]);
   const [activities, setActivities] = useState<Activity[]>([]);
-  const [pageSections, setPageSections] = useState<SectionId[]>(['next','activity','calendar','statics','stickies']);
+  const [pageSections, setPageSections] = useState<SectionId[]>(['next','calendar','statics','stickies']);
   const [isClient, setIsClient] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [lastResetDate, setLastResetDate] = useState<string>('');
@@ -135,7 +135,7 @@ export function useDataManager() {
         debug.log('[dashboard] No layout from API, using default');
         // デフォルト値を保存
         try {
-          await api.saveLayout(['next','activity','calendar','statics','stickies']);
+          await api.saveLayout(['next','calendar','statics','stickies']);
         } catch (e) {
           console.error('Failed to save default layout', e);
         }

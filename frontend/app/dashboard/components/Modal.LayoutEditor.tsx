@@ -2,13 +2,15 @@
 
 import React from 'react'
 import { useLocale } from '@/contexts/LocaleContext'
+import { useHandedness } from '../contexts/HandednessContext'
 
-type SectionId = 'next' | 'activity' | 'calendar' | 'statics' | 'diary' | 'stickies' | 'mindmap'
+type SectionId = 'next' | 'activity' | 'calendar' | 'statics' | 'diary' | 'stickies' | 'mindmap' | 'notices' | 'coach'
 
 export default function EditLayoutModal({ open, onClose, sections, onChange, onAdd, onDelete }: { open: boolean; onClose: () => void; sections: SectionId[]; onChange: (s: SectionId[]) => void; onAdd: (id: SectionId) => void; onDelete: (id: SectionId) => void }) {
   const [local, setLocal] = React.useState<SectionId[]>(sections || [])
   const dragIdRef = React.useRef<SectionId | null>(null)
   const { locale, setLocale } = useLocale()
+  const { handedness, setHandedness, isLeftHanded } = useHandedness()
 
   React.useEffect(() => setLocal(sections || []), [sections, open])
   if (!open) return null
@@ -32,6 +34,8 @@ export default function EditLayoutModal({ open, onClose, sections, onChange, onA
     { id: 'diary', label: 'Diary' },
     { id: 'stickies', label: 'Sticky\'n' },
     { id: 'mindmap', label: 'Mind Map' },
+    { id: 'notices', label: 'Notices' },
+    { id: 'coach', label: 'AI Coach' },
   ]
 
   return (
@@ -72,6 +76,39 @@ export default function EditLayoutModal({ open, onClose, sections, onChange, onA
                 aria-pressed={locale === 'ja'}
               >
                 日本語
+              </button>
+            </div>
+          </div>
+
+          {/* Handedness Settings */}
+          <div className="p-4 rounded-lg border border-border bg-muted">
+            <div className="mb-3">
+              <span className="text-sm font-medium">{locale === 'ja' ? 'サイドバー位置' : 'Sidebar Position'}</span>
+            </div>
+            <div className="flex items-center gap-2 rounded-lg bg-background p-1">
+              <button 
+                onClick={() => setHandedness('left')}
+                className={`flex-1 inline-flex items-center justify-center gap-1 px-3 py-2 text-sm rounded-md transition-colors ${
+                  isLeftHanded 
+                    ? 'bg-primary text-primary-foreground shadow-sm font-medium' 
+                    : 'text-muted-foreground hover:text-foreground hover:bg-accent'
+                }`}
+                aria-label={locale === 'ja' ? '左側に配置' : 'Position on left'}
+                aria-pressed={isLeftHanded}
+              >
+                ←Left
+              </button>
+              <button 
+                onClick={() => setHandedness('right')}
+                className={`flex-1 inline-flex items-center justify-center gap-1 px-3 py-2 text-sm rounded-md transition-colors ${
+                  !isLeftHanded 
+                    ? 'bg-primary text-primary-foreground shadow-sm font-medium' 
+                    : 'text-muted-foreground hover:text-foreground hover:bg-accent'
+                }`}
+                aria-label={locale === 'ja' ? '右側に配置' : 'Position on right'}
+                aria-pressed={!isLeftHanded}
+              >
+                Right→
               </button>
             </div>
           </div>

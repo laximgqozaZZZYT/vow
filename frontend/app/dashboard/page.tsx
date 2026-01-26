@@ -15,6 +15,8 @@ import StaticsSection from './components/Section.Statistics';
 import DiarySection from './components/Section.Diary';
 import StickiesSection from './components/Section.Stickies';
 import MindmapSection from './components/Section.Mindmap';
+import NoticeSection from './components/Section.Notice';
+import CoachSection from './components/Section.Coach';
 
 // Extracted components
 import DashboardHeader from './components/Layout.Header';
@@ -621,6 +623,21 @@ const MobileTabIcon = ({ type, isActive }: { type: string; isActive: boolean }) 
           <line x1="9.5" y1="14.5" x2="6.5" y2="17.5" />
         </svg>
       );
+    case 'notices':
+      return (
+        <svg {...iconProps}>
+          <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
+          <path d="M13.73 21a2 2 0 0 1-3.46 0" />
+        </svg>
+      );
+    case 'coach':
+      return (
+        <svg {...iconProps}>
+          <path d="M12 2a3 3 0 0 0-3 3v4a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z" />
+          <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
+          <line x1="12" y1="19" x2="12" y2="22" />
+        </svg>
+      );
     default:
       return null;
   }
@@ -718,8 +735,9 @@ function DashboardLayout(props: any) {
 
   // Tab navigation state
   const visibleTabs = getVisibleTabs(pageSections);
+  // Always start with 'board' tab (DEFAULT_TAB)
   const { activeTab, setActiveTab, isFullView, toggleFullView, exitFullView, isCollapsed, toggleCollapse } = useTabNavigation(
-    pageSections[0],
+    'board',
     pageSections
   );
   const currentTabConfig = getTabById(activeTab);
@@ -820,6 +838,40 @@ function DashboardLayout(props: any) {
                 setHabits(hs || []);
               } catch (e) {
                 console.error('Failed to reload data', e);
+              }
+            }}
+          />
+        );
+      case 'notices':
+        return (
+          <NoticeSection
+            habits={habits}
+            activities={activities}
+            onEditActivity={openEditActivity}
+            onDeleteActivity={handleDeleteActivity}
+            onActionClick={(notice) => {
+              debug.log('[Dashboard] Notice action clicked:', notice);
+              if (notice.actionType === 'rescue_proposal' || notice.actionType === 'recovery_proposal') {
+                // Could open coaching modal or navigate to coaching page
+              } else if (notice.actionType === 'subscription') {
+                window.location.href = '/settings/subscription';
+              } else if (notice.actionType === 'habit_suggestion' && notice.actionPayload?.goalId) {
+                setEditingGoalId(notice.actionPayload.goalId);
+                setOpenGoalModal(true);
+              }
+            }}
+          />
+        );
+      case 'coach':
+        return (
+          <CoachSection
+            goals={goals}
+            onHabitCreated={async () => {
+              try {
+                const hs = await api.getHabits();
+                setHabits(hs || []);
+              } catch (e) {
+                console.error('Failed to reload habits', e);
               }
             }}
           />

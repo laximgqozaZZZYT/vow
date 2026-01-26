@@ -6,7 +6,7 @@ export interface TabConfig {
   id: string;
   label: string;
   labelJa: string;
-  iconType: 'board' | 'next' | 'activity' | 'calendar' | 'statistics' | 'diary' | 'stickies' | 'mindmap';
+  iconType: 'board' | 'next' | 'activity' | 'calendar' | 'statistics' | 'diary' | 'stickies' | 'mindmap' | 'notices' | 'coach';
   supportsFullView?: boolean;
   /** Alias IDs that should be treated as equivalent to this tab (for backward compatibility) */
   aliases?: string[];
@@ -20,6 +20,9 @@ export const TAB_CONFIGS: TabConfig[] = [
   { id: 'diary', label: 'Diary', labelJa: '日記', iconType: 'diary' },
   { id: 'stickies', label: 'Notes', labelJa: 'メモ', iconType: 'stickies' },
   { id: 'mindmap', label: 'Map', labelJa: 'マップ', iconType: 'mindmap', supportsFullView: true },
+  // AI Coach tabs hidden in production
+  // { id: 'notices', label: 'Alerts', labelJa: '通知', iconType: 'notices' },
+  // { id: 'coach', label: 'Coach', labelJa: 'コーチ', iconType: 'coach' },
 ];
 
 export const DEFAULT_TAB = 'board';

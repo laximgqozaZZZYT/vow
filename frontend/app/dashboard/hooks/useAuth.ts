@@ -7,6 +7,10 @@ import { GuestDataMigration, type GuestDataMigrationResult } from '../../../lib/
 import { debug } from '../../../lib/debug';
 import type { AuthContext } from '../types';
 
+// 開発環境で許可されるメールアドレス（環境変数から取得）
+const ALLOWED_EMAILS_DEV = process.env.NEXT_PUBLIC_ALLOWED_EMAILS_DEV?.split(',').map(e => e.trim().toLowerCase()) || [];
+const IS_DEV_ENV = process.env.NEXT_PUBLIC_ENV === 'development';
+
 export function useAuth(): AuthContext {
   const router = useRouter();
   const [isAuthed, setIsAuthed] = useState<boolean | null>(null);
@@ -231,9 +235,22 @@ export function useAuth(): AuthContext {
       const { data } = supabase.auth.onAuthStateChange(async (event: AuthChangeEvent, session: Session | null) => {
         const token = session?.access_token ?? null;
         const userId = session?.user?.id ?? null;
+        const userEmail = session?.user?.email?.toLowerCase() ?? null;
         const wasGuest = isGuest;
         
         debug.log('[auth] Auth state change:', { event, hasToken: !!token, userId, wasGuest });
+        
+        // 開発環境でのアクセス制限チェック
+        if (IS_DEV_ENV && token && userEmail && ALLOWED_EMAILS_DEV.length > 0) {
+          if (!ALLOWED_EMAILS_DEV.includes(userEmail)) {
+            debug.log('[auth] Dev environment: User not in allowed list, signing out');
+            setAuthError('この開発環境へのアクセスは許可されていません。');
+            await supabase.auth.signOut();
+            setIsAuthed(false);
+            router.push('/login');
+            return;
+          }
+        }
         
         setIsAuthed(!!token);
         
