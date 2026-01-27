@@ -12,17 +12,22 @@
  * - Elapsed time display (for in_progress status)
  * - Complete button with amount input
  * - Drag handle for drag-and-drop
+ * - Subtask expansion (when subtasks exist)
+ * - Warning indicator (when all subtasks are incomplete)
  * 
  * @module Board.HabitCard
  * 
- * Validates: Requirements 3.1, 3.2, 3.3, 3.4, 3.5, 3.6, 5.5
+ * Validates: Requirements 2.1, 2.2, 3.1, 3.2, 3.3, 3.4, 3.5, 3.6, 5.1, 5.2, 5.3, 5.5
  */
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import type { Habit, Activity } from '../types';
+import type { Habit, Activity, Sticky } from '../types';
 import type { HabitStatus } from '../utils/habitStatusUtils';
 import { formatTime24 } from '../../../lib/format';
 import { useHandedness } from '../contexts/HandednessContext';
+import { ExpandButton } from './Board.ExpandButton';
+import { WarningIndicator } from './Board.WarningIndicator';
+import SubtaskList from './Board.SubtaskList';
 import './HabitNameScroll.css';
 
 export interface HabitCardProps {
@@ -34,6 +39,18 @@ export interface HabitCardProps {
   onDragStart: () => void;
   onDragEnd: () => void;
   isDragging: boolean;
+  /** Subtasks (Sticky'n items) associated with this Habit - Validates: Requirements 2.1, 3.1 */
+  subtasks?: Sticky[];
+  /** Whether the subtask list is expanded - Validates: Requirements 3.1 */
+  isExpanded?: boolean;
+  /** Callback to toggle expand/collapse state - Validates: Requirements 3.1 */
+  onToggleExpand?: () => void;
+  /** Callback when a subtask completion is toggled - Validates: Requirements 6.1 */
+  onSubtaskComplete?: (stickyId: string) => void;
+  /** Callback when a subtask edit is requested - Validates: Requirements 6.2 */
+  onSubtaskEdit?: (stickyId: string) => void;
+  /** Whether to show warning indicator (all subtasks incomplete) - Validates: Requirements 5.1, 5.2, 5.3 */
+  showWarning?: boolean;
 }
 
 /**
@@ -144,7 +161,13 @@ export default function HabitCard({
   onEdit,
   onDragStart,
   onDragEnd,
-  isDragging
+  isDragging,
+  subtasks,
+  isExpanded,
+  onToggleExpand,
+  onSubtaskComplete,
+  onSubtaskEdit,
+  showWarning
 }: HabitCardProps) {
   const [inputValue, setInputValue] = useState<string>(
     String(habit.workloadPerCount ?? 1)
@@ -285,7 +308,7 @@ export default function HabitCard({
             />
           )}
           
-          {/* Habit name - Requirement 3.1 */}
+          {/* Habit name with warning indicator - Requirements 3.1, 5.1, 5.2, 5.3 */}
           <div className="habit-name-scroll min-w-0 overflow-hidden relative z-10">
             <button
               onClick={handleEditClick}
@@ -302,9 +325,12 @@ export default function HabitCard({
                 min-w-[44px]
                 flex
                 items-center
+                gap-1
                 ${habit.completed ? 'line-through text-muted-foreground' : 'text-foreground'}
               `}
             >
+              {/* Warning indicator - Validates: Requirements 5.1, 5.2, 5.3 */}
+              {showWarning && <WarningIndicator tooltip="すべてのサブタスクが未完了です" />}
               {habit.name}
             </button>
           </div>
@@ -425,7 +451,28 @@ export default function HabitCard({
             </span>
           </>
         )}
+        
+        {/* Spacer to push expand button to the right */}
+        <div className="flex-1" />
+        
+        {/* Expand button - Validates: Requirements 2.1, 2.2 */}
+        {subtasks && subtasks.length > 0 && onToggleExpand && (
+          <ExpandButton
+            isExpanded={isExpanded ?? false}
+            onClick={onToggleExpand}
+            count={subtasks.length}
+          />
+        )}
       </div>
+      
+      {/* Subtask list - Validates: Requirements 3.1, 3.4 */}
+      {isExpanded && subtasks && subtasks.length > 0 && onSubtaskComplete && onSubtaskEdit && (
+        <SubtaskList
+          subtasks={subtasks}
+          onComplete={onSubtaskComplete}
+          onEdit={onSubtaskEdit}
+        />
+      )}
     </div>
   );
 }

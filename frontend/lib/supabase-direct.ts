@@ -2657,21 +2657,104 @@ export class SupabaseDirectClient {
     const { data: session } = await supabase.auth.getSession();
     
     if (!session?.session?.user) {
+      // Guest mode: load stickies with habit relations
       const guestStickies = JSON.parse(localStorage.getItem('guest-stickies') || '[]');
-      return guestStickies;
+      const guestStickyHabits = JSON.parse(localStorage.getItem('guest-sticky-habits') || '[]');
+      const guestHabits = JSON.parse(localStorage.getItem('guest-habits') || '[]');
+      
+      return guestStickies.map((s: any) => {
+        // Find habit IDs related to this sticky
+        const relatedHabitIds = guestStickyHabits
+          .filter((sh: any) => sh.stickyId === s.id)
+          .map((sh: any) => sh.habitId);
+        
+        // Get the actual habit objects
+        const habits = guestHabits.filter((h: any) => relatedHabitIds.includes(h.id));
+        
+        return {
+          ...s,
+          habits
+        };
+      });
     }
     
-    const { data, error } = await supabase
+    const userId = session.session.user.id;
+    
+    // Get all stickies
+    const { data: stickiesData, error: stickiesError } = await supabase
       .from('stickies')
       .select('*')
       .eq('owner_type', 'user')
-      .eq('owner_id', session.session.user.id)
+      .eq('owner_id', userId)
       .order('display_order', { ascending: true })
       .order('created_at', { ascending: false });
     
-    if (error) throw error;
+    if (stickiesError) throw stickiesError;
     
-    return (data || []).map((s: any) => ({
+    const stickies = stickiesData || [];
+    
+    if (stickies.length === 0) {
+      return [];
+    }
+    
+    // Get all sticky-habit relations for these stickies
+    const stickyIds = stickies.map((s: any) => s.id);
+    const { data: stickyHabitsData, error: stickyHabitsError } = await supabase
+      .from('sticky_habits')
+      .select('sticky_id, habit_id')
+      .in('sticky_id', stickyIds)
+      .eq('owner_type', 'user')
+      .eq('owner_id', userId);
+    
+    if (stickyHabitsError) throw stickyHabitsError;
+    
+    const stickyHabits = stickyHabitsData || [];
+    
+    // Get all related habits
+    const habitIds = [...new Set(stickyHabits.map((sh: any) => sh.habit_id))];
+    let habitsMap: Record<string, any> = {};
+    
+    if (habitIds.length > 0) {
+      const { data: habitsData, error: habitsError } = await supabase
+        .from('habits')
+        .select('*')
+        .in('id', habitIds)
+        .eq('owner_type', 'user')
+        .eq('owner_id', userId);
+      
+      if (habitsError) throw habitsError;
+      
+      // Create a map of habit ID to habit object
+      (habitsData || []).forEach((h: any) => {
+        habitsMap[h.id] = {
+          id: h.id,
+          goalId: h.goal_id,
+          name: h.name,
+          active: h.active,
+          type: h.type,
+          count: h.count,
+          must: h.must,
+          completed: h.completed,
+          createdAt: h.created_at,
+          updatedAt: h.updated_at
+        };
+      });
+    }
+    
+    // Build sticky-to-habits mapping
+    const stickyHabitsMap: Record<string, any[]> = {};
+    stickyHabits.forEach((sh: any) => {
+      if (!stickyHabitsMap[sh.sticky_id]) {
+        stickyHabitsMap[sh.sticky_id] = [];
+      }
+      const habit = habitsMap[sh.habit_id];
+      if (habit) {
+        stickyHabitsMap[sh.sticky_id].push(habit);
+      }
+    });
+    
+    // Return stickies with their related habits
+    return stickies.map((s: any) => ({
       id: s.id,
       name: s.name,
       description: s.description,
@@ -2679,7 +2762,8 @@ export class SupabaseDirectClient {
       completedAt: s.completed_at,
       displayOrder: s.display_order,
       createdAt: s.created_at,
-      updatedAt: s.updated_at
+      updatedAt: s.updated_at,
+      habits: stickyHabitsMap[s.id] || []
     }));
   }
 

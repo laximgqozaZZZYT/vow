@@ -26,6 +26,8 @@ import type { HabitStatus } from '../utils/habitStatusUtils';
 import { groupHabitsByStatus, groupStickiesByStatus } from '../utils/habitStatusUtils';
 import { useKanbanDragDrop } from '../hooks/useKanbanDragDrop';
 import { useMobileSwipe } from '../hooks/useMobileSwipe';
+import { useHabitSubtasks } from '../hooks/useHabitSubtasks';
+import { useExpandedHabits } from '../hooks/useExpandedHabits';
 import KanbanColumn from './Board.KanbanColumn';
 
 /**
@@ -56,6 +58,10 @@ export interface KanbanLayoutProps {
   onStickyComplete: (stickyId: string) => void;
   /** Callback when sticky edit is requested */
   onStickyEdit: (stickyId: string) => void;
+  /** Callback when new habit is requested */
+  onNewHabit?: () => void;
+  /** Callback when new sticky is requested */
+  onNewSticky?: () => void;
 }
 
 /**
@@ -84,7 +90,9 @@ export default function KanbanLayout({
   onHabitAction,
   onHabitEdit,
   onStickyComplete,
-  onStickyEdit
+  onStickyEdit,
+  onNewHabit,
+  onNewSticky
 }: KanbanLayoutProps) {
   
   // Group habits by status for column distribution
@@ -98,6 +106,17 @@ export default function KanbanLayout({
     groupStickiesByStatus(stickies),
     [stickies]
   );
+  
+  // Initialize habit subtasks hook - Task 6.1
+  // Calculate subtasksByHabit from stickies (Requirements: 1.1)
+  const { subtasksByHabit, needsWarning } = useHabitSubtasks({
+    habits,
+    stickies
+  });
+  
+  // Initialize expanded habits hook - Task 6.2
+  // Manage expand state and persistence (Requirements: 7.1, 7.2)
+  const { isExpanded, toggleExpanded } = useExpandedHabits();
   
   // Initialize drag-and-drop hook
   const {
@@ -394,6 +413,12 @@ export default function KanbanLayout({
                 completedStickies={stickiesByStatus.completed}
                 onStickyComplete={onStickyComplete}
                 onStickyEdit={onStickyEdit}
+                subtasksByHabit={subtasksByHabit}
+                isExpanded={isExpanded}
+                onToggleExpand={toggleExpanded}
+                onSubtaskComplete={onStickyComplete}
+                onSubtaskEdit={onStickyEdit}
+                needsWarning={needsWarning}
               />
             ) : column.type === 'planned_with_stickies' ? (
               <KanbanColumn
@@ -412,6 +437,14 @@ export default function KanbanLayout({
                 pendingStickies={stickiesByStatus.pending}
                 onStickyComplete={onStickyComplete}
                 onStickyEdit={onStickyEdit}
+                onNewHabit={onNewHabit}
+                onNewSticky={onNewSticky}
+                subtasksByHabit={subtasksByHabit}
+                isExpanded={isExpanded}
+                onToggleExpand={toggleExpanded}
+                onSubtaskComplete={onStickyComplete}
+                onSubtaskEdit={onStickyEdit}
+                needsWarning={needsWarning}
               />
             ) : (
               <KanbanColumn
@@ -427,6 +460,12 @@ export default function KanbanLayout({
                 draggedHabitId={draggedHabitId}
                 onDragStart={handleCardDragStart}
                 onDragEnd={handleDragEnd}
+                subtasksByHabit={subtasksByHabit}
+                isExpanded={isExpanded}
+                onToggleExpand={toggleExpanded}
+                onSubtaskComplete={onStickyComplete}
+                onSubtaskEdit={onStickyEdit}
+                needsWarning={needsWarning}
               />
             )}
           </div>

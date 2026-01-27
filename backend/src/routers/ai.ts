@@ -513,4 +513,155 @@ aiRouter.post(
   }
 );
 
+/**
+ * GET /api/ai/suggestion-history
+ * Get user's AI suggestion history.
+ */
+aiRouter.get(
+  '/suggestion-history',
+  requirePremium,
+  async (c: Context<{ Variables: AuthContext }>) => {
+    const user = c.get('user');
+    if (!user) {
+      return c.json({ error: 'Unauthorized' }, 401);
+    }
+
+    const userId = user.sub;
+    const type = c.req.query('type'); // 'habit' | 'goal' | undefined (all)
+    const status = c.req.query('status'); // 'pending' | 'accepted' | 'dismissed' | undefined (all)
+    const limit = parseInt(c.req.query('limit') || '50', 10);
+
+    try {
+      const supabase = getSupabaseClient();
+      
+      let query = supabase
+        .from('ai_suggestion_history')
+        .select('*')
+        .eq('user_id', userId)
+        .order('created_at', { ascending: false })
+        .limit(Math.min(limit, 100));
+
+      if (type) {
+        query = query.eq('suggestion_type', type);
+      }
+      if (status) {
+        query = query.eq('status', status);
+      }
+
+      const { data, error } = await query;
+
+      if (error) {
+        logger.error('Failed to fetch suggestion history', error);
+        return c.json({ error: 'FETCH_FAILED', message: '履歴の取得に失敗しました' }, 500);
+      }
+
+      return c.json({ suggestions: data || [] });
+    } catch (err) {
+      logger.error('Suggestion history error', err instanceof Error ? err : undefined);
+      return c.json({ error: 'FETCH_FAILED', message: '履歴の取得に失敗しました' }, 500);
+    }
+  }
+);
+
+/**
+ * Request schema for saving suggestion.
+ */
+const SaveSuggestionRequestSchema = z.object({
+  suggestionType: z.enum(['habit', 'goal']),
+  goalId: z.string().uuid().optional(),
+  suggestionData: z.record(z.unknown()),
+  status: z.enum(['pending', 'accepted', 'dismissed']).default('pending'),
+  acceptedEntityId: z.string().uuid().optional(),
+});
+
+/**
+ * POST /api/ai/suggestion-history
+ * Save an AI suggestion to history.
+ */
+aiRouter.post(
+  '/suggestion-history',
+  requirePremium,
+  zValidator('json', SaveSuggestionRequestSchema),
+  async (c: Context<{ Variables: AuthContext }>) => {
+    const user = c.get('user');
+    if (!user) {
+      return c.json({ error: 'Unauthorized' }, 401);
+    }
+
+    const userId = user.sub;
+    const body = await c.req.json();
+
+    try {
+      const supabase = getSupabaseClient();
+      
+      const { data, error } = await supabase
+        .from('ai_suggestion_history')
+        .insert({
+          user_id: userId,
+          suggestion_type: body.suggestionType,
+          goal_id: body.goalId || null,
+          suggestion_data: body.suggestionData,
+          status: body.status,
+          accepted_entity_id: body.acceptedEntityId || null,
+        })
+        .select()
+        .single();
+
+      if (error) {
+        logger.error('Failed to save suggestion', error);
+        return c.json({ error: 'SAVE_FAILED', message: '提案の保存に失敗しました' }, 500);
+      }
+
+      return c.json({ suggestion: data });
+    } catch (err) {
+      logger.error('Save suggestion error', err instanceof Error ? err : undefined);
+      return c.json({ error: 'SAVE_FAILED', message: '提案の保存に失敗しました' }, 500);
+    }
+  }
+);
+
+/**
+ * PATCH /api/ai/suggestion-history/:id
+ * Update suggestion status.
+ */
+aiRouter.patch(
+  '/suggestion-history/:id',
+  requirePremium,
+  async (c: Context<{ Variables: AuthContext }>) => {
+    const user = c.get('user');
+    if (!user) {
+      return c.json({ error: 'Unauthorized' }, 401);
+    }
+
+    const userId = user.sub;
+    const suggestionId = c.req.param('id');
+    const body = await c.req.json();
+
+    try {
+      const supabase = getSupabaseClient();
+      
+      const { data, error } = await supabase
+        .from('ai_suggestion_history')
+        .update({
+          status: body.status,
+          accepted_entity_id: body.acceptedEntityId || null,
+        })
+        .eq('id', suggestionId)
+        .eq('user_id', userId)
+        .select()
+        .single();
+
+      if (error) {
+        logger.error('Failed to update suggestion', error);
+        return c.json({ error: 'UPDATE_FAILED', message: '提案の更新に失敗しました' }, 500);
+      }
+
+      return c.json({ suggestion: data });
+    } catch (err) {
+      logger.error('Update suggestion error', err instanceof Error ? err : undefined);
+      return c.json({ error: 'UPDATE_FAILED', message: '提案の更新に失敗しました' }, 500);
+    }
+  }
+);
+
 export { aiRouter };

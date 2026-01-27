@@ -100,13 +100,13 @@ export const PLAN_CONFIGS: Record<PlanType, PlanConfig> = {
     features: [
       'All Premium Basic features',
       'AI habit suggestions for goals',
-      'ChatGPT connector',
+      'AI Coach conversation history',
       'Priority support',
     ],
     featuresJa: [
       'プレミアム ベーシックの全機能',
       'Goal向けAI Habit提案',
-      'ChatGPTコネクタ',
+      'AI Coach提案履歴',
       '優先サポート',
     ],
     estimatedOperations: 2000,

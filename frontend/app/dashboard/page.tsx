@@ -767,6 +767,13 @@ function DashboardLayout(props: any) {
             }}
             onStickyComplete={handleStickyComplete}
             onStickyEdit={handleStickyEdit}
+            onNewGoal={() => setOpenNewCategory(true)}
+            onNewHabit={() => {
+              setNewHabitInitial({ date: new Date().toISOString().slice(0, 10) });
+              setOpenNewHabit(true);
+            }}
+            onNewSticky={handleStickyCreate}
+            onManageTags={() => setOpenManageTags(true)}
           />
         );
       case 'activity':

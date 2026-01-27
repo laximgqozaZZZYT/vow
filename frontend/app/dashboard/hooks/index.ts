@@ -45,3 +45,22 @@ export {
   type UseMobileSwipeProps,
   type UseMobileSwipeReturn
 } from './useMobileSwipe';
+
+// Habit subtasks management
+export {
+  useHabitSubtasks,
+  buildSubtasksByHabitMap,
+  type UseHabitSubtasksOptions,
+  type HabitSubtasksMap,
+  type UseHabitSubtasksReturn
+} from './useHabitSubtasks';
+
+// Expanded habits state management
+export {
+  useExpandedHabits,
+  loadExpandedState,
+  saveExpandedState,
+  EXPANDED_HABITS_KEY,
+  type ExpandedHabitsState,
+  type UseExpandedHabitsReturn
+} from './useExpandedHabits';

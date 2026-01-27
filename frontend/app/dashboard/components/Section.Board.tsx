@@ -28,7 +28,11 @@ import type { HabitRelation } from '../types/shared';
 import KanbanLayout from './Board.KanbanLayout';
 import GanttLayout from './Board.GanttLayout';
 import { useHandedness } from '../contexts/HandednessContext';
+import { useState, useRef, useEffect } from 'react';
+import { formatTime24, formatDateTime24 } from '../../../lib/format';
+import { isHabitCumulativelyCompleted } from '../utils/habitCompletionUtils';
 import './Board.css';
+import './HabitNameScroll.css';
 
 /**
  * Props for BoardSection component
@@ -54,6 +58,14 @@ export interface BoardSectionProps {
   onStickyComplete?: (stickyId: string) => void;
   /** Callback when sticky edit is requested */
   onStickyEdit?: (stickyId: string) => void;
+  /** Callback when new goal is requested */
+  onNewGoal?: () => void;
+  /** Callback when new habit is requested */
+  onNewHabit?: () => void;
+  /** Callback when new sticky is requested */
+  onNewSticky?: () => void;
+  /** Callback when manage tags is requested */
+  onManageTags?: () => void;
 }
 
 /**
@@ -178,6 +190,182 @@ function LayoutToggleButton({
  * Main container that renders KanbanLayout, SimpleLayout, or GanttLayout
  * based on user preference stored in local storage.
  */
+/**
+ * Add Button Component for Board Header
+ * Provides quick access to create Goal, Habit, or manage Tags
+ */
+function AddButton({
+  onNewGoal,
+  onNewHabit,
+  onManageTags
+}: {
+  onNewGoal?: () => void;
+  onNewHabit?: () => void;
+  onManageTags?: () => void;
+}) {
+  const [isOpen, setIsOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  // Close menu when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
+        setIsOpen(false);
+      }
+    };
+
+    if (isOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [isOpen]);
+
+  const handleAction = (action: () => void) => {
+    setIsOpen(false);
+    action();
+  };
+
+  return (
+    <div className="relative" ref={menuRef}>
+      <button
+        onClick={() => setIsOpen(!isOpen)}
+        aria-label="Add new item"
+        aria-expanded={isOpen}
+        className="
+          flex items-center justify-center
+          w-8 h-8
+          text-primary-foreground
+          bg-primary hover:bg-primary/90
+          border border-primary
+          rounded-md
+          transition-colors
+          focus-visible:outline-2 focus-visible:outline-primary focus-visible:outline-offset-2
+          shadow-sm
+        "
+      >
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          width="16"
+          height="16"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2.5"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          aria-hidden="true"
+        >
+          <line x1="12" y1="5" x2="12" y2="19" />
+          <line x1="5" y1="12" x2="19" y2="12" />
+        </svg>
+      </button>
+
+      {isOpen && (
+        <div className="
+          absolute right-0 top-full mt-1
+          w-36
+          bg-card
+          border border-border
+          rounded-md shadow-lg
+          z-50
+          py-1
+        ">
+          {onNewGoal && (
+            <button
+              onClick={() => handleAction(onNewGoal)}
+              className="
+                w-full px-3 py-2
+                text-sm text-left
+                hover:bg-muted
+                transition-colors
+                flex items-center gap-2
+              "
+            >
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                width="14"
+                height="14"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                className="text-green-600"
+              >
+                <circle cx="12" cy="12" r="10" />
+                <circle cx="12" cy="12" r="6" />
+                <circle cx="12" cy="12" r="2" />
+              </svg>
+              Goal
+            </button>
+          )}
+          {onNewHabit && (
+            <button
+              onClick={() => handleAction(onNewHabit)}
+              className="
+                w-full px-3 py-2
+                text-sm text-left
+                hover:bg-muted
+                transition-colors
+                flex items-center gap-2
+              "
+            >
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                width="14"
+                height="14"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                className="text-blue-600"
+              >
+                <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
+                <polyline points="22 4 12 14.01 9 11.01" />
+              </svg>
+              Habit
+            </button>
+          )}
+          {onManageTags && (
+            <button
+              onClick={() => handleAction(onManageTags)}
+              className="
+                w-full px-3 py-2
+                text-sm text-left
+                hover:bg-muted
+                transition-colors
+                flex items-center gap-2
+              "
+            >
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                width="14"
+                height="14"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                className="text-purple-600"
+              >
+                <path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z" />
+                <line x1="7" y1="7" x2="7.01" y2="7" />
+              </svg>
+              Tags
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function BoardSection({
   habits,
   activities,
@@ -188,7 +376,11 @@ export default function BoardSection({
   onHabitEdit,
   onGoalEdit,
   onStickyComplete,
-  onStickyEdit
+  onStickyEdit,
+  onNewGoal,
+  onNewHabit,
+  onNewSticky,
+  onManageTags
 }: BoardSectionProps) {
   const { 
     layoutMode, 
@@ -200,16 +392,28 @@ export default function BoardSection({
   
   const { isLeftHanded } = useHandedness();
 
+  // Check if any add actions are available
+  const hasAddActions = onNewGoal || onNewHabit || onManageTags;
+
   return (
     <section className="rounded-lg border border-border bg-card text-card-foreground shadow-sm flex flex-col min-h-0">
-      {/* Header with title and layout toggle */}
+      {/* Header with title, add button, and layout toggle */}
       <div className={`sticky top-0 z-20 flex items-center justify-between p-4 sm:p-6 pb-2 sm:pb-3 bg-card border-b border-border ${isLeftHanded ? 'flex-row-reverse' : ''}`}>
         <h2 className="text-lg font-semibold">Board</h2>
-        <LayoutToggleButton
-          layoutMode={layoutMode}
-          onToggle={toggleLayoutMode}
-          loading={loading}
-        />
+        <div className={`flex items-center gap-2 ${isLeftHanded ? 'flex-row-reverse' : ''}`}>
+          {hasAddActions && (
+            <AddButton
+              onNewGoal={onNewGoal}
+              onNewHabit={onNewHabit}
+              onManageTags={onManageTags}
+            />
+          )}
+          <LayoutToggleButton
+            layoutMode={layoutMode}
+            onToggle={toggleLayoutMode}
+            loading={loading}
+          />
+        </div>
       </div>
       
       {/* Content area - conditional rendering based on layout mode */}
@@ -223,6 +427,8 @@ export default function BoardSection({
             onHabitEdit={onHabitEdit}
             onStickyComplete={onStickyComplete || (() => {})}
             onStickyEdit={onStickyEdit || (() => {})}
+            onNewHabit={onNewHabit}
+            onNewSticky={onNewSticky}
           />
         ) : isGanttMode ? (
           <GanttLayout
@@ -257,10 +463,6 @@ export default function BoardSection({
  * - 6.2: Simple_Layout SHALL maintain all existing functionality
  * - 6.3: Simple_Layout SHALL display the same habits that would appear in the Kanban_Board
  */
-import { useState } from 'react';
-import { formatTime24, formatDateTime24 } from '../../../lib/format';
-import { isHabitCumulativelyCompleted } from '../utils/habitCompletionUtils';
-import './HabitNameScroll.css';
 
 interface SimpleLayoutProps {
   habits: Habit[];

@@ -18,6 +18,7 @@
 import { useCallback } from 'react';
 import type { Habit, Activity, HabitAction, Sticky } from '../types';
 import type { HabitStatus } from '../utils/habitStatusUtils';
+import type { HabitSubtasksMap } from '../hooks/useHabitSubtasks';
 import HabitCard from './Board.HabitCard';
 
 /**
@@ -63,6 +64,22 @@ export interface KanbanColumnProps {
   onStickyComplete?: (stickyId: string) => void;
   /** Callback when sticky edit is requested */
   onStickyEdit?: (stickyId: string) => void;
+  /** Callback when new habit is requested */
+  onNewHabit?: () => void;
+  /** Callback when new sticky is requested */
+  onNewSticky?: () => void;
+  /** Map of habit IDs to their subtasks - Task 6.1 (Requirements: 1.1) */
+  subtasksByHabit?: HabitSubtasksMap;
+  /** Function to check if a habit is expanded - Task 6.2 (Requirements: 7.1, 7.2) */
+  isExpanded?: (habitId: string) => boolean;
+  /** Callback to toggle expand state - Task 6.2 (Requirements: 7.1, 7.2) */
+  onToggleExpand?: (habitId: string) => void;
+  /** Callback when subtask completion is toggled - Task 6.3 (Requirements: 6.1) */
+  onSubtaskComplete?: (stickyId: string) => void;
+  /** Callback when subtask edit is requested - Task 6.3 (Requirements: 6.2) */
+  onSubtaskEdit?: (stickyId: string) => void;
+  /** Function to check if a habit needs warning indicator - Task 6.4 (Requirements: 5.1, 5.2, 5.5) */
+  needsWarning?: (habitId: string) => boolean;
 }
 
 /**
@@ -87,7 +104,15 @@ export default function KanbanColumn({
   completedStickies,
   pendingStickies,
   onStickyComplete,
-  onStickyEdit
+  onStickyEdit,
+  onNewHabit,
+  onNewSticky,
+  subtasksByHabit,
+  isExpanded,
+  onToggleExpand,
+  onSubtaskComplete,
+  onSubtaskEdit,
+  needsWarning
 }: KanbanColumnProps) {
   
   // Calculate total count for mixed columns or planned column with stickies
@@ -222,6 +247,41 @@ export default function KanbanColumn({
         min-h-[200px]
         flex-1
       ">
+        {/* Add Habit Button for planned column */}
+        {column.id === 'planned' && onNewHabit && (
+          <button
+            onClick={onNewHabit}
+            className="
+              flex items-center justify-center gap-1.5
+              px-3 py-2
+              text-xs font-medium
+              bg-primary hover:bg-primary/90
+              text-primary-foreground
+              rounded-md
+              transition-colors
+              shadow-sm
+              min-h-[36px]
+              mb-1
+            "
+          >
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2.5"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <line x1="12" y1="5" x2="12" y2="19" />
+              <line x1="5" y1="12" x2="19" y2="12" />
+            </svg>
+            New Habit
+          </button>
+        )}
+        
         {totalCount === 0 ? (
           /* Empty state */
           <div className={`
@@ -254,6 +314,12 @@ export default function KanbanColumn({
                 onDragStart={handleCardDragStart(habit.id)}
                 onDragEnd={handleCardDragEnd}
                 isDragging={draggedHabitId === habit.id}
+                subtasks={subtasksByHabit?.[habit.id]}
+                isExpanded={isExpanded?.(habit.id)}
+                onToggleExpand={onToggleExpand ? () => onToggleExpand(habit.id) : undefined}
+                onSubtaskComplete={onSubtaskComplete}
+                onSubtaskEdit={onSubtaskEdit}
+                showWarning={needsWarning?.(habit.id)}
               />
             ))}
             
@@ -263,7 +329,38 @@ export default function KanbanColumn({
                 {habits.length > 0 && (
                   <div className="border-t border-border my-2" />
                 )}
-                <div className="text-xs text-muted-foreground mb-1">Sticky'n</div>
+                <div className="flex items-center justify-between mb-1">
+                  <span className="text-xs text-muted-foreground">Sticky'n</span>
+                  {onNewSticky && (
+                    <button
+                      onClick={onNewSticky}
+                      className="
+                        flex items-center justify-center
+                        w-6 h-6
+                        text-warning hover:text-warning/80
+                        bg-warning/10 hover:bg-warning/20
+                        rounded
+                        transition-colors
+                      "
+                      aria-label="Add Sticky'n"
+                    >
+                      <svg
+                        xmlns="http://www.w3.org/2000/svg"
+                        width="12"
+                        height="12"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2.5"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      >
+                        <line x1="12" y1="5" x2="12" y2="19" />
+                        <line x1="5" y1="12" x2="19" y2="12" />
+                      </svg>
+                    </button>
+                  )}
+                </div>
                 {pendingStickies.map(sticky => (
                   <PendingStickyCard
                     key={sticky.id}
@@ -272,6 +369,45 @@ export default function KanbanColumn({
                     onEdit={() => onStickyEdit?.(sticky.id)}
                   />
                 ))}
+              </>
+            )}
+            
+            {/* Show Sticky'n add button even when no stickies exist (for planned column) */}
+            {column.id === 'planned' && (!pendingStickies || pendingStickies.length === 0) && onNewSticky && (
+              <>
+                {habits.length > 0 && (
+                  <div className="border-t border-border my-2" />
+                )}
+                <div className="flex items-center justify-between mb-1">
+                  <span className="text-xs text-muted-foreground">Sticky'n</span>
+                  <button
+                    onClick={onNewSticky}
+                    className="
+                      flex items-center justify-center
+                      w-6 h-6
+                      text-warning hover:text-warning/80
+                      bg-warning/10 hover:bg-warning/20
+                      rounded
+                      transition-colors
+                    "
+                    aria-label="Add Sticky'n"
+                  >
+                    <svg
+                      xmlns="http://www.w3.org/2000/svg"
+                      width="12"
+                      height="12"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2.5"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    >
+                      <line x1="12" y1="5" x2="12" y2="19" />
+                      <line x1="5" y1="12" x2="19" y2="12" />
+                    </svg>
+                  </button>
+                </div>
               </>
             )}
             

@@ -4,6 +4,7 @@ import type { AuthChangeEvent, Session, Subscription } from '@supabase/supabase-
 import api from '../../../lib/api';
 import { supabase } from '../../../lib/supabaseClient';
 import { GuestDataMigration, type GuestDataMigrationResult } from '../../../lib/guest-data-migration';
+import { initializeGuestData } from '../../../lib/guest-initial-data';
 import { debug } from '../../../lib/debug';
 import type { AuthContext } from '../types';
 
@@ -147,6 +148,12 @@ export function useAuth(): AuthContext {
             debug.log('[auth] Setting isAuthed to true for guest user');
             setIsAuthed(true);
             setIsGuest(true);
+            
+            // Initialize guest data with sample data if not already initialized
+            const wasInitialized = initializeGuestData();
+            if (wasInitialized) {
+              debug.log('[auth] Guest data initialized with sample data');
+            }
           } else {
             debug.log('[auth] No valid actor found');
             setActorLabel('');

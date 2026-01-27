@@ -6,7 +6,8 @@ import { debug } from '../../../lib/debug'
 import { Popover } from "@headlessui/react"
 import { DayPicker } from "react-day-picker"
 import "react-day-picker/dist/style.css"
-import TagSelector from './Widget.TagSelector'
+import SmartSelector, { SmartSelectorItem } from './Widget.SmartSelector'
+import StickyFooter from './Widget.StickyFooter'
 import { useLocalStorage } from '../hooks/useLocalStorage'
 import { useLocale } from '@/contexts/LocaleContext'
 
@@ -448,7 +449,7 @@ export function HabitModal({ open, onClose, habit, onUpdate, onDelete, onCreate,
     }
 
     return (
-        <div className="fixed inset-0 z-50 flex items-start justify-center pt-4 sm:pt-12 bg-background/80 backdrop-blur-sm p-4">
+        <div className="fixed inset-0 z-[10001] flex items-start justify-center pt-4 sm:pt-12 bg-background/80 backdrop-blur-sm p-4">
             <div className="w-full max-w-[720px] rounded-lg border border-border bg-card px-4 pt-4 pb-0 shadow-lg text-card-foreground flex flex-col max-h-[95vh] sm:max-h-[90vh]">
                 <div className="flex items-center justify-between">
                     <h2 className="text-xl sm:text-2xl font-semibold">{t('habit.title')}</h2>
@@ -963,35 +964,38 @@ export function HabitModal({ open, onClose, habit, onUpdate, onDelete, onCreate,
                                     <textarea value={notes} onChange={(e) => setNotes(e.target.value)} className="flex min-h-[100px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:cursor-not-allowed disabled:opacity-50" placeholder="Add description" />
                                 </div>
 
-                                {/* Tags - always visible */}
+                                {/* Tags - SmartSelector */}
                                 {tags && tags.length > 0 && (
                                     <div className="mt-6">
-                                        <h3 className="text-lg font-medium">Tags</h3>
-                                        <div className="mt-3">
-                                            <TagSelector
-                                                availableTags={tags}
-                                                selectedTagIds={selectedTagIds}
-                                                onTagAdd={async (tagId) => {
-                                                    if (habit && onTagsChange) {
-                                                        const newTagIds = [...selectedTagIds, tagId]
-                                                        await onTagsChange(habit.id, newTagIds)
-                                                        setSelectedTagIds(newTagIds)
-                                                    } else {
-                                                        setSelectedTagIds([...selectedTagIds, tagId])
-                                                    }
-                                                }}
-                                                onTagRemove={async (tagId) => {
-                                                    if (habit && onTagsChange) {
-                                                        const newTagIds = selectedTagIds.filter(id => id !== tagId)
-                                                        await onTagsChange(habit.id, newTagIds)
-                                                        setSelectedTagIds(newTagIds)
-                                                    } else {
-                                                        setSelectedTagIds(selectedTagIds.filter(id => id !== tagId))
-                                                    }
-                                                }}
-                                                placeholder="Search and add tags..."
-                                            />
-                                        </div>
+                                        <SmartSelector
+                                            items={tags.map((tag: any) => ({
+                                                id: tag.id,
+                                                name: tag.name,
+                                                color: tag.color
+                                            }))}
+                                            selectedIds={selectedTagIds}
+                                            onSelect={async (tagId) => {
+                                                if (habit && onTagsChange) {
+                                                    const newTagIds = [...selectedTagIds, tagId]
+                                                    await onTagsChange(habit.id, newTagIds)
+                                                    setSelectedTagIds(newTagIds)
+                                                } else {
+                                                    setSelectedTagIds([...selectedTagIds, tagId])
+                                                }
+                                            }}
+                                            onDeselect={async (tagId) => {
+                                                if (habit && onTagsChange) {
+                                                    const newTagIds = selectedTagIds.filter(id => id !== tagId)
+                                                    await onTagsChange(habit.id, newTagIds)
+                                                    setSelectedTagIds(newTagIds)
+                                                } else {
+                                                    setSelectedTagIds(selectedTagIds.filter(id => id !== tagId))
+                                                }
+                                            }}
+                                            label="Tags"
+                                            placeholder="Search and add tags..."
+                                            emptyMessage="No tags available"
+                                        />
                                     </div>
                                 )}
                                 
@@ -1108,11 +1112,17 @@ export function HabitModal({ open, onClose, habit, onUpdate, onDelete, onCreate,
 
                 </div>
 
-                <div className="flex flex-col sm:flex-row gap-3 p-4 border-t border-slate-200 dark:border-slate-700">
-                    <button onClick={handleSave} className="rounded bg-blue-600 px-6 py-3 text-white text-base font-medium min-h-[44px]">{t('habit.button.save')}</button>
-                    <button onClick={onClose} className="px-6 py-3 dark:bg-slate-800 dark:text-slate-100 text-black border rounded text-base font-medium min-h-[44px]">{t('habit.button.cancel')}</button>
-                    {habit && <button onClick={handleDelete} className="sm:ml-auto text-base text-red-600 px-6 py-3 font-medium min-h-[44px]">{t('habit.button.delete')}</button>}
-                </div>
+                {/* 固定フッター */}
+                <StickyFooter
+                    onSave={handleSave}
+                    onCancel={onClose}
+                    onDelete={habit ? handleDelete : undefined}
+                    saveDisabled={!name.trim()}
+                    saveLabel={t('habit.button.save')}
+                    cancelLabel={t('habit.button.cancel')}
+                    deleteLabel={t('habit.button.delete')}
+                    deleteConfirmMessage="Are you sure you want to delete this habit?"
+                />
             </div>
         </div>
     )

@@ -10,6 +10,7 @@
  * - Coaching/workload advice
  * - Continuous conversation with follow-up questions
  * - UI component rendering from AI responses
+ * - View past AI suggestions history
  *
  * Requirements: Premium subscription features
  * 

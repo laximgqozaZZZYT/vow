@@ -43,14 +43,14 @@ export class GuestDataMigration {
       const goalIdMapping = await this.migrateGoals(userId, result);
       debug.log('[Migration] Goals migration completed. Mapping:', goalIdMapping);
       
-      // 2. Habits移行（goalId参照を更新）
+      // 2. Habits移行（goalId参照を更新、habitIdマッピングを取得）
       debug.log('[Migration] Step 2: Migrating habits...');
-      await this.migrateHabits(userId, goalIdMapping, result);
-      debug.log('[Migration] Habits migration completed');
+      const habitIdMapping = await this.migrateHabits(userId, goalIdMapping, result);
+      debug.log('[Migration] Habits migration completed. Mapping:', habitIdMapping);
       
-      // 3. Activities移行
+      // 3. Activities移行（habitIdマッピングを使用）
       debug.log('[Migration] Step 3: Migrating activities...');
-      await this.migrateActivities(userId, result);
+      await this.migrateActivities(userId, habitIdMapping, result);
       debug.log('[Migration] Activities migration completed');
 
       // 4. 移行成功時のクリーンアップ（エラーがない場合のみ）
@@ -148,14 +148,15 @@ export class GuestDataMigration {
   }
 
   /**
-   * ゲストHabitsをSupabaseに移行（goalId参照を更新）
+   * ゲストHabitsをSupabaseに移行（goalId参照を更新）、habitIdマッピングを返す
    */
-  private static async migrateHabits(userId: string, goalIdMapping: Map<string, string>, result: GuestDataMigrationResult) {
+  private static async migrateHabits(userId: string, goalIdMapping: Map<string, string>, result: GuestDataMigrationResult): Promise<Map<string, string>> {
     const guestHabits = JSON.parse(localStorage.getItem('guest-habits') || '[]');
+    const habitIdMapping = new Map<string, string>(); // ゲストID → Supabase ID
     
     if (guestHabits.length === 0) {
       debug.log('[Migration] No guest habits to migrate');
-      return;
+      return habitIdMapping;
     }
 
     debug.log('[Migration] Migrating', guestHabits.length, 'habits');
@@ -182,6 +183,8 @@ export class GuestDataMigration {
 
         if (existingHabits && existingHabits.length > 0) {
           debug.log('[Migration] Habit already exists, skipping:', habit.name);
+          // 既存のハビットIDをマッピングに追加
+          habitIdMapping.set(habit.id, existingHabits[0].id);
           continue;
         }
 
@@ -230,19 +233,22 @@ export class GuestDataMigration {
           result.errors.push(`Habit "${habit.name}": ${error.message}`);
         } else {
           result.migratedHabits++;
-          debug.log('[Migration] Habit migrated:', habit.name, '→', data.id, 'goalId:', targetGoalId);
+          habitIdMapping.set(habit.id, data.id); // ゲストID → Supabase IDのマッピング
+          debug.log('[Migration] Habit migrated:', habit.name, habit.id, '→', data.id, 'goalId:', targetGoalId);
         }
       } catch (error) {
         console.error('[Migration] Habit migration exception:', error);
         result.errors.push(`Habit "${habit.name}": ${(error as any)?.message || error}`);
       }
     }
+
+    return habitIdMapping;
   }
 
   /**
-   * ゲストActivitiesをSupabaseに移行
+   * ゲストActivitiesをSupabaseに移行（habitIdマッピングを使用）
    */
-  private static async migrateActivities(userId: string, result: GuestDataMigrationResult) {
+  private static async migrateActivities(userId: string, habitIdMapping: Map<string, string>, result: GuestDataMigrationResult) {
     const guestActivities = JSON.parse(localStorage.getItem('guest-activities') || '[]');
     
     if (guestActivities.length === 0) {
@@ -254,6 +260,16 @@ export class GuestDataMigration {
 
     for (const activity of guestActivities) {
       try {
+        // habitIdマッピングを確認
+        const mappedHabitId = activity.habitId ? habitIdMapping.get(activity.habitId) : null;
+        
+        // habit_idがマッピングできない場合はスキップ（NOT NULL制約があるため）
+        if (!mappedHabitId) {
+          debug.log('[Migration] Activity skipped - no valid habit_id mapping:', activity.habitName, activity.habitId);
+          // エラーとしてカウントせず、スキップとして扱う
+          continue;
+        }
+
         // 重複チェック: 同じタイムスタンプとhabitNameのアクティビティが既に存在するかチェック
         const { data: existingActivities, error: checkError } = await supabase!
           .from('activities')
@@ -279,7 +295,7 @@ export class GuestDataMigration {
           .from('activities')
           .insert({
             kind: activity.kind,
-            habit_id: null, // ゲストActivityのhabitIdは無効なので、nullに設定
+            habit_id: mappedHabitId, // マッピングされたhabitIdを使用
             habit_name: activity.habitName,
             timestamp: activity.timestamp,
             amount: activity.amount,
