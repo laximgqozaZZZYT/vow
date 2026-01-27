@@ -98,6 +98,8 @@ resource "aws_amplify_branch" "main" {
     NEXT_PUBLIC_USE_EDGE_FUNCTIONS   = var.amplify_env_next_public_use_edge_functions
     NEXT_PUBLIC_USE_SUPABASE_API     = var.amplify_env_next_public_use_supabase_api
     NEXT_PUBLIC_BACKEND_API_URL      = var.amplify_env_next_public_backend_api_url
+    NEXT_PUBLIC_ENABLE_AI_COACH      = tostring(var.enable_ai_coach)
+    NEXT_PUBLIC_ENABLE_SUBSCRIPTION  = tostring(var.enable_subscription)
   }
 
   tags = {
@@ -131,6 +133,8 @@ resource "aws_amplify_branch" "develop" {
     NEXT_PUBLIC_USE_EDGE_FUNCTIONS   = var.amplify_env_next_public_use_edge_functions
     NEXT_PUBLIC_USE_SUPABASE_API     = var.amplify_env_next_public_use_supabase_api
     NEXT_PUBLIC_BACKEND_API_URL      = var.amplify_env_dev_next_public_backend_api_url
+    NEXT_PUBLIC_ENABLE_AI_COACH      = "true"
+    NEXT_PUBLIC_ENABLE_SUBSCRIPTION  = "true"
   }
 
   tags = {

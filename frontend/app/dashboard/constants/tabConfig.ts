@@ -2,6 +2,11 @@
  * Tab configuration for dashboard navigation
  */
 
+// Feature flag for AI Coach
+const ENABLE_AI_COACH = typeof window !== 'undefined' 
+  ? process.env.NEXT_PUBLIC_ENABLE_AI_COACH !== 'false'
+  : true;
+
 export interface TabConfig {
   id: string;
   label: string;
@@ -10,20 +15,25 @@ export interface TabConfig {
   supportsFullView?: boolean;
   /** Alias IDs that should be treated as equivalent to this tab (for backward compatibility) */
   aliases?: string[];
+  /** Whether this tab is enabled (controlled by feature flags) */
+  enabled?: boolean;
 }
 
-// All tabs available in all environments (Coach tab now enabled in production)
-export const TAB_CONFIGS: TabConfig[] = [
-  { id: 'board', label: 'Board', labelJa: 'ボード', iconType: 'board', aliases: ['next'] },
-  { id: 'activity', label: 'Activity', labelJa: '活動', iconType: 'activity' },
-  { id: 'calendar', label: 'Calendar', labelJa: '予定', iconType: 'calendar', supportsFullView: true },
-  { id: 'statics', label: 'Stats', labelJa: '統計', iconType: 'statistics' },
-  { id: 'diary', label: 'Diary', labelJa: '日記', iconType: 'diary' },
-  { id: 'stickies', label: 'Notes', labelJa: 'メモ', iconType: 'stickies' },
-  { id: 'mindmap', label: 'Map', labelJa: 'マップ', iconType: 'mindmap', supportsFullView: true },
-  { id: 'notices', label: 'Alerts', labelJa: '通知', iconType: 'notices' },
-  { id: 'coach', label: 'Coach', labelJa: 'コーチ', iconType: 'coach' },
+// All tabs available in all environments
+const ALL_TAB_CONFIGS: TabConfig[] = [
+  { id: 'board', label: 'Board', labelJa: 'ボード', iconType: 'board', aliases: ['next'], enabled: true },
+  { id: 'activity', label: 'Activity', labelJa: '活動', iconType: 'activity', enabled: true },
+  { id: 'calendar', label: 'Calendar', labelJa: '予定', iconType: 'calendar', supportsFullView: true, enabled: true },
+  { id: 'statics', label: 'Stats', labelJa: '統計', iconType: 'statistics', enabled: true },
+  { id: 'diary', label: 'Diary', labelJa: '日記', iconType: 'diary', enabled: true },
+  { id: 'stickies', label: 'Notes', labelJa: 'メモ', iconType: 'stickies', enabled: true },
+  { id: 'mindmap', label: 'Map', labelJa: 'マップ', iconType: 'mindmap', supportsFullView: true, enabled: true },
+  { id: 'notices', label: 'Alerts', labelJa: '通知', iconType: 'notices', enabled: true },
+  { id: 'coach', label: 'Coach', labelJa: 'コーチ', iconType: 'coach', enabled: ENABLE_AI_COACH },
 ];
+
+// Filter tabs based on feature flags
+export const TAB_CONFIGS: TabConfig[] = ALL_TAB_CONFIGS.filter(tab => tab.enabled !== false);
 
 export const DEFAULT_TAB = 'board';
 

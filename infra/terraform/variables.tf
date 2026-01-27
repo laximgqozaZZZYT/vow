@@ -545,3 +545,19 @@ variable "admin_emails" {
   default     = ""
   sensitive   = true
 }
+
+# =================================================================
+# Feature Flags
+# =================================================================
+
+variable "enable_ai_coach" {
+  description = "Enable AI Coach feature"
+  type        = bool
+  default     = true
+}
+
+variable "enable_subscription" {
+  description = "Enable Subscription management feature"
+  type        = bool
+  default     = true
+}
