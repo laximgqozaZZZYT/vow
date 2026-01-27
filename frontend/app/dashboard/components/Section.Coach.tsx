@@ -30,6 +30,7 @@ import { ChoiceButtons, type Choice } from './Widget.ChoiceButtons';
 import { ProgressIndicator } from './Widget.Progress';
 import { HabitModal } from './Modal.Habit';
 import { GoalModal } from './Modal.Goal';
+import { SuggestionHistory } from './Widget.SuggestionHistory';
 
 /**
  * デフォルトのクイックアクション（Choice形式）
@@ -171,6 +172,10 @@ export function CoachSection({ goals, onHabitCreated, onGoalCreated }: CoachSect
   // Clear confirmation dialog
   const [showClearConfirm, setShowClearConfirm] = useState(false);
 
+  // Suggestion history panel
+  const [showHistory, setShowHistory] = useState(false);
+  const [isPro, setIsPro] = useState(false);
+
   const openHabitModal = useCallback((data: {
     name?: string;
     type?: 'do' | 'avoid';
@@ -237,6 +242,7 @@ export function CoachSection({ goals, onHabitCreated, onGoalCreated }: CoachSect
           const data = await response.json();
           const planType = data.subscription?.planType;
           setIsPremium(planType === 'premium_basic' || planType === 'premium_pro');
+          setIsPro(planType === 'premium_pro');
           
           if (data.tokenUsage) {
             setTokenInfo({
@@ -518,6 +524,20 @@ export function CoachSection({ goals, onHabitCreated, onGoalCreated }: CoachSect
               残り: 約{Math.floor(tokenInfo.remaining / 1000)}回
             </div>
           )}
+          {(isPro || isAdmin) && (
+            <button
+              onClick={() => setShowHistory(!showHistory)}
+              className={`text-xs px-2 py-1 rounded transition-colors flex items-center gap-1 ${
+                showHistory 
+                  ? 'bg-primary/10 text-primary' 
+                  : 'text-muted-foreground hover:text-foreground hover:bg-muted'
+              }`}
+              title="AI提案履歴"
+            >
+              <span>📋</span>
+              <span className="hidden sm:inline">履歴</span>
+            </button>
+          )}
           {messages.length > 0 && (
             <button
               onClick={handleClearConversation}
@@ -531,6 +551,30 @@ export function CoachSection({ goals, onHabitCreated, onGoalCreated }: CoachSect
 
       {!hasAccess ? (
         <UpgradePrompt />
+      ) : showHistory ? (
+        /* Suggestion History Panel */
+        <div className="flex-1 overflow-y-auto p-4">
+          <SuggestionHistory
+            onClose={() => setShowHistory(false)}
+            onSelectSuggestion={(suggestion) => {
+              if (suggestion.suggestionType === 'habit') {
+                openHabitModal({
+                  name: suggestion.suggestionData.name || '',
+                  type: suggestion.suggestionData.type || 'do',
+                  triggerTime: null,
+                  goalId: suggestion.goalId || (goals.length > 0 ? goals[0].id : null),
+                });
+              } else {
+                openGoalModal({
+                  name: suggestion.suggestionData.name || '',
+                  parentId: null,
+                });
+              }
+              setShowHistory(false);
+              addMessage('assistant', `履歴から「${suggestion.suggestionData.name}」を選択しました。モーダルで詳細を編集してください。`);
+            }}
+          />
+        </div>
       ) : (
         <>
           {/* Chat Area - scrollable, with padding-bottom for fixed input */}

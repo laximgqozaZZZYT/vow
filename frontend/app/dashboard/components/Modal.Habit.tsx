@@ -595,7 +595,7 @@ export function HabitModal({ open, onClose, habit, onUpdate, onDelete, onCreate,
                                                     <div className="rounded border bg-white text-black dark:bg-slate-800 dark:text-slate-100">
                                                         <Popover className="relative">
                                                             <Popover.Button className="w-full text-left px-3 py-3 text-base">{t.type === 'Date' ? 'A Day' : t.type}</Popover.Button>
-                                                            <Popover.Panel className={`absolute z-50 mt-2 left-0 w-36`}>
+                                                            <Popover.Panel className={`absolute z-[10002] mt-2 left-0 w-36`}>
                                                                 <div className="rounded bg-white p-2 shadow text-black dark:bg-slate-800 dark:text-slate-100 max-w-full">
                                                                     <button type="button" onClick={() => setTimings(s => s.map((x, i) => i === idx ? { ...x, type: 'Date' } : x))} className={`w-full text-left px-3 py-2 hover:bg-gray-100 dark:hover:bg-slate-700 ${t.type === 'Date' ? 'bg-sky-600 text-white' : ''}`}>A Day</button>
                                                                     <button type="button" onClick={() => setTimings(s => s.map((x, i) => i === idx ? { ...x, type: 'Daily' } : x))} className={`w-full text-left px-3 py-2 hover:bg-gray-100 dark:hover:bg-slate-700 ${t.type === 'Daily' ? 'bg-sky-600 text-white' : ''}`}>Daily</button>
@@ -612,7 +612,7 @@ export function HabitModal({ open, onClose, habit, onUpdate, onDelete, onCreate,
                                                     <div className="rounded border bg-white text-black dark:bg-slate-800 dark:text-slate-100">
                                                         <Popover className="relative">
                                                             <Popover.Button className="w-full text-left px-3 py-3 text-base">{t.date ? (parseYMD(t.date) ? parseYMD(t.date)!.toDateString() : new Date(t.date).toDateString()) : 'Select date'}</Popover.Button>
-                                                            <Popover.Panel className={`absolute z-50 mt-2 left-0 w-[min(380px,90vw)]`}>
+                                                            <Popover.Panel className={`absolute z-[10002] mt-2 left-0 w-[min(380px,90vw)]`}>
                                                                 <div className="rounded bg-white p-4 shadow text-black dark:bg-slate-800 dark:text-slate-100 max-w-full">
                                                                     <DayPicker mode="single" selected={t.date ? parseYMD(t.date) : undefined} onSelect={(d) => setTimings(s => s.map((x, i) => i === idx ? { ...x, date: d ? formatLocalDate(d) : undefined } : x))} />
                                                                 </div>
@@ -627,7 +627,7 @@ export function HabitModal({ open, onClose, habit, onUpdate, onDelete, onCreate,
                                                     <div className="rounded border bg-white text-black dark:bg-slate-800 dark:text-slate-100">
                                                         <Popover className="relative">
                                                             <Popover.Button className="w-full text-left px-3 py-3 text-base">{t.start ?? '--:--'}</Popover.Button>
-                                                            <Popover.Panel className={`absolute z-50 mt-2 left-0 w-40`}>
+                                                            <Popover.Panel className={`absolute z-[10002] mt-2 left-0 w-40`}>
                                                                 <div className="rounded bg-white p-3 shadow text-black dark:bg-slate-800 dark:text-slate-100 max-w-full">
                                                                     <div className="max-h-56 overflow-auto">
                                                                         {buildTimeOptions().map((opt) => (
@@ -645,7 +645,7 @@ export function HabitModal({ open, onClose, habit, onUpdate, onDelete, onCreate,
                                                     <div className="rounded border bg-white text-black dark:bg-slate-800 dark:text-slate-100">
                                                         <Popover className="relative">
                                                             <Popover.Button className="w-full text-left px-3 py-3 text-base">{t.end ?? '--:--'}</Popover.Button>
-                                                            <Popover.Panel className={`absolute z-50 mt-2 left-0 w-40`}>
+                                                            <Popover.Panel className={`absolute z-[10002] mt-2 left-0 w-40`}>
                                                                 <div className="rounded bg-white p-3 shadow text-black dark:bg-slate-800 dark:text-slate-100 max-w-full">
                                                                     <div className="max-h-56 overflow-auto">
                                                                         {buildTimeOptions().map((opt) => (
@@ -736,7 +736,7 @@ export function HabitModal({ open, onClose, habit, onUpdate, onDelete, onCreate,
                                                     <div className="rounded border bg-white text-black dark:bg-slate-800 dark:text-slate-100">
                                                         <Popover className="relative">
                                                             <Popover.Button className="w-full text-left px-3 py-2 text-sm">{t.type === 'Date' ? 'A Day' : t.type}</Popover.Button>
-                                                            <Popover.Panel className={`absolute z-50 mt-2 left-0 w-36`}>
+                                                            <Popover.Panel className={`absolute z-[10002] mt-2 left-0 w-36`}>
                                                                 <div className="rounded bg-white p-2 shadow text-black dark:bg-slate-800 dark:text-slate-100 max-w-full">
                                                                     <button type="button" onClick={() => setOutdates(s => s.map((x, i) => i === idx ? { ...x, type: 'Date' } : x))} className={`w-full text-left px-2 py-1 hover:bg-gray-100 dark:hover:bg-slate-700 ${t.type === 'Date' ? 'bg-sky-600 text-white' : ''}`}>A Day</button>
                                                                     <button type="button" onClick={() => setOutdates(s => s.map((x, i) => i === idx ? { ...x, type: 'Daily' } : x))} className={`w-full text-left px-2 py-1 hover:bg-gray-100 dark:hover:bg-slate-700 ${t.type === 'Daily' ? 'bg-sky-600 text-white' : ''}`}>Daily</button>
@@ -753,7 +753,7 @@ export function HabitModal({ open, onClose, habit, onUpdate, onDelete, onCreate,
                                                     <div className="rounded border bg-white text-black dark:bg-slate-800 dark:text-slate-100">
                                                         <Popover className="relative">
                                                             <Popover.Button className="w-full text-left px-3 py-2 text-sm">{t.date ? (parseYMD(t.date) ? parseYMD(t.date)!.toDateString() : new Date(t.date).toDateString()) : 'Select date'}</Popover.Button>
-                                                            <Popover.Panel className={`absolute z-50 mt-2 left-0 w-[min(380px,90vw)]`}>
+                                                            <Popover.Panel className={`absolute z-[10002] mt-2 left-0 w-[min(380px,90vw)]`}>
                                                                 <div className="rounded bg-white p-4 shadow text-black dark:bg-slate-800 dark:text-slate-100 max-w-full">
                                                                     <DayPicker mode="single" selected={t.date ? parseYMD(t.date) : undefined} onSelect={(d) => setOutdates(s => s.map((x, i) => i === idx ? { ...x, date: d ? formatLocalDate(d) : undefined } : x))} />
                                                                 </div>
@@ -768,7 +768,7 @@ export function HabitModal({ open, onClose, habit, onUpdate, onDelete, onCreate,
                                                     <div className="rounded border bg-white text-black dark:bg-slate-800 dark:text-slate-100">
                                                         <Popover className="relative">
                                                             <Popover.Button className="w-full text-left px-3 py-2 text-sm">{t.start ?? '--:--'}</Popover.Button>
-                                                            <Popover.Panel className={`absolute z-50 mt-2 left-0 w-40`}>
+                                                            <Popover.Panel className={`absolute z-[10002] mt-2 left-0 w-40`}>
                                                                 <div className="rounded bg-white p-3 shadow text-black dark:bg-slate-800 dark:text-slate-100 max-w-full">
                                                                     <div className="max-h-56 overflow-auto">
                                                                         {buildTimeOptions().map((opt) => (
@@ -786,7 +786,7 @@ export function HabitModal({ open, onClose, habit, onUpdate, onDelete, onCreate,
                                                     <div className="rounded border bg-white text-black dark:bg-slate-800 dark:text-slate-100">
                                                         <Popover className="relative">
                                                             <Popover.Button className="w-full text-left px-3 py-2 text-sm">{t.end ?? '--:--'}</Popover.Button>
-                                                            <Popover.Panel className={`absolute z-50 mt-2 left-0 w-40`}>
+                                                            <Popover.Panel className={`absolute z-[10002] mt-2 left-0 w-40`}>
                                                                 <div className="rounded bg-white p-3 shadow text-black dark:bg-slate-800 dark:text-slate-100 max-w-full">
                                                                     <div className="max-h-56 overflow-auto">
                                                                         {buildTimeOptions().map((opt) => (
