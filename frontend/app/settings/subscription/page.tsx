@@ -1,10 +1,32 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { useSubscription, PLAN_CONFIGS, type PlanType } from '@/hooks/useSubscription';
 
+// Feature flag - must be 'true' to enable
+const ENABLE_SUBSCRIPTION = process.env.NEXT_PUBLIC_ENABLE_SUBSCRIPTION === 'true';
+
 export default function SubscriptionPage() {
+  const router = useRouter();
+  
+  // Redirect if subscription feature is disabled
+  useEffect(() => {
+    if (!ENABLE_SUBSCRIPTION) {
+      router.replace('/settings');
+    }
+  }, [router]);
+  
+  // Don't render if disabled
+  if (!ENABLE_SUBSCRIPTION) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="text-muted-foreground">リダイレクト中...</div>
+      </div>
+    );
+  }
+  
   const {
     subscription,
     tokenUsage,
