@@ -172,6 +172,16 @@ export default function DashboardPage() {
     }
   }, [isClient, isLoading]);
 
+  // Sticky'n データ再読み込み関数
+  const reloadStickies = async () => {
+    try {
+      const stickyList = await api.getStickies();
+      setStickies(stickyList);
+    } catch (error) {
+      console.error('Failed to reload stickies:', error);
+    }
+  };
+
   // Activity management hook
   const {
     starts,
@@ -307,6 +317,7 @@ export default function DashboardPage() {
       const newSticky = await api.createSticky({ name: 'New Sticky\'n', displayOrder: stickies.length });
       setStickies(prev => [...prev, newSticky]);
       // 編集モーダルは開かない - 付箋を貼り付けるイメージ
+      return newSticky; // 新規作成したStickyを返す（スクロール用）
     } catch (error) {
       console.error('Failed to create sticky:', error);
     }
@@ -463,6 +474,7 @@ export default function DashboardPage() {
           setPageSections={setPageSections}
         stickies={stickies}
         setStickies={setStickies}
+        reloadStickies={reloadStickies}
         openStickyModal={openStickyModal}
         setOpenStickyModal={setOpenStickyModal}
         editingStickyId={editingStickyId}
@@ -660,6 +672,7 @@ function DashboardLayout(props: any) {
     setPageSections,
     stickies,
     setStickies,
+    reloadStickies,
     openStickyModal,
     setOpenStickyModal,
     editingStickyId,
@@ -821,6 +834,7 @@ function DashboardLayout(props: any) {
             onStickyComplete={handleStickyComplete}
             onStickyDelete={handleStickyDelete}
             onStickyNameChange={handleStickyNameChange}
+            onStickyUpdate={reloadStickies}
           />
         );
       case 'mindmap':

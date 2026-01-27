@@ -204,6 +204,36 @@ export function CoachSection({ goals, onHabitCreated, onGoalCreated }: CoachSect
 
   const apiUrl = process.env.NEXT_PUBLIC_BACKEND_API_URL || process.env.NEXT_PUBLIC_SLACK_API_URL;
 
+  // Helper function to save suggestion to history
+  const saveSuggestionToHistory = useCallback(async (
+    suggestionType: 'habit' | 'goal',
+    suggestionData: Record<string, unknown>,
+    goalId?: string | null
+  ) => {
+    if (!apiUrl) return;
+    
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.access_token) return;
+
+      await fetch(`${apiUrl}/api/ai/suggestion-history`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${session.access_token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          suggestionType,
+          suggestionData,
+          goalId: goalId || null,
+          status: 'pending',
+        }),
+      });
+    } catch (err) {
+      console.error('Failed to save suggestion to history:', err);
+    }
+  }, [apiUrl]);
+
   // Auto-scroll to bottom
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -337,13 +367,22 @@ export function CoachSection({ goals, onHabitCreated, onGoalCreated }: CoachSect
 
     // Handle structured data from AI tools
     if (data.data?.parsedHabit) {
+      // 単一の習慣提案も候補リストとして表示（即座にモーダルを開かない）
       const habit = data.data.parsedHabit;
-      openHabitModal({
+      const suggestionList: HabitSuggestion[] = [{
         name: habit.name || '',
         type: habit.type === 'avoid' ? 'avoid' : 'do',
+        frequency: habit.frequency || 'daily',
+        suggestedTargetCount: habit.targetCount || habit.suggestedTargetCount || 1,
+        workloadUnit: habit.workloadUnit || null,
+        reason: habit.reason || '',
+        confidence: habit.confidence || 0.8,
         triggerTime: habit.triggerTime || null,
-        goalId: habit.goalId || (goals.length > 0 ? goals[0].id : null),
-      });
+        duration: habit.duration || null,
+      }];
+      setSuggestions(suggestionList);
+      // 履歴に保存
+      saveSuggestionToHistory('habit', habit, selectedGoalId || null);
     }
 
     if (data.data?.habitSuggestions?.length > 0) {
@@ -359,11 +398,25 @@ export function CoachSection({ goals, onHabitCreated, onGoalCreated }: CoachSect
         duration: s.duration || null,
       }));
       setSuggestions(suggestionList);
+      // 各提案を履歴に保存
+      for (const s of data.data.habitSuggestions) {
+        saveSuggestionToHistory('habit', s as Record<string, unknown>, selectedGoalId || null);
+      }
     }
 
     if (data.data?.parsedGoal) {
+      // 単一のゴール提案も候補リストとして表示（即座にモーダルを開かない）
       const goal = data.data.parsedGoal;
-      openGoalModal({ name: goal.name || '', parentId: null });
+      const goalList: GoalSuggestion[] = [{
+        name: goal.name || '',
+        description: goal.description || '',
+        icon: goal.icon || '🎯',
+        reason: goal.reason || '',
+        suggestedHabits: goal.suggestedHabits || [],
+      }];
+      setGoalSuggestions(goalList);
+      // 履歴に保存
+      saveSuggestionToHistory('goal', goal);
     }
 
     if (data.data?.goalSuggestions?.length > 0) {
@@ -375,12 +428,16 @@ export function CoachSection({ goals, onHabitCreated, onGoalCreated }: CoachSect
         suggestedHabits: g.suggestedHabits || [],
       }));
       setGoalSuggestions(goalList);
+      // 各提案を履歴に保存
+      for (const g of data.data.goalSuggestions) {
+        saveSuggestionToHistory('goal', g as Record<string, unknown>);
+      }
     }
 
     if (data.remainingTokens !== undefined) {
       setTokenInfo(prev => prev ? { ...prev, remaining: data.remainingTokens } : null);
     }
-  }, [apiUrl, messages, addMessage, openHabitModal, openGoalModal, goals]);
+  }, [apiUrl, messages, addMessage, saveSuggestionToHistory, selectedGoalId]);
 
   const handleProcess = async () => {
     if (!input.trim() || !apiUrl) return;
@@ -580,9 +637,9 @@ export function CoachSection({ goals, onHabitCreated, onGoalCreated }: CoachSect
           {/* Chat Area - scrollable, with padding-bottom for fixed input */}
           <div className="flex-1 overflow-y-auto p-4 pb-40 md:pb-36">
             {messages.length === 0 ? (
-              /* Quick Actions - left aligned */
-              <div className="flex flex-col">
-                <p className="text-lg text-muted-foreground mb-4">何をお手伝いしましょうか？</p>
+              /* Quick Actions - centered with more top spacing */
+              <div className="flex flex-col items-center justify-center min-h-[300px] pt-12">
+                <p className="text-lg text-muted-foreground mb-6 text-center">何をお手伝いしましょうか？</p>
                 <ChoiceButtons
                   choices={DEFAULT_QUICK_ACTIONS}
                   onSelect={handleQuickAction}
@@ -621,6 +678,23 @@ export function CoachSection({ goals, onHabitCreated, onGoalCreated }: CoachSect
                     )}
                   </div>
                 ))}
+              
+                {/* Loading indicator when processing */}
+                {processing && (
+                  <div className="flex justify-start">
+                    <div className="px-4 py-3 rounded-xl bg-muted border border-border rounded-bl-sm">
+                      <div className="flex items-center gap-2">
+                        <div className="flex gap-1">
+                          <span className="w-2 h-2 bg-primary rounded-full animate-bounce [animation-delay:0ms]"></span>
+                          <span className="w-2 h-2 bg-primary rounded-full animate-bounce [animation-delay:150ms]"></span>
+                          <span className="w-2 h-2 bg-primary rounded-full animate-bounce [animation-delay:300ms]"></span>
+                        </div>
+                        <span className="text-sm text-muted-foreground">考え中...</span>
+                      </div>
+                    </div>
+                  </div>
+                )}
+                
                 <div ref={messagesEndRef} />
               </div>
             )}
