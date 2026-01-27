@@ -5,11 +5,14 @@ import api from '../../../lib/api';
 import { debug } from '../../../lib/debug';
 import type { Goal, Habit, Activity, SectionId } from '../types/index';
 
+// Default sections - coach is now available in all environments
+const DEFAULT_SECTIONS: SectionId[] = ['board', 'calendar', 'statics', 'stickies', 'coach'];
+
 export function useDataManager() {
   const [goals, setGoals] = useState<Goal[]>([]);
   const [habits, setHabits] = useState<Habit[]>([]);
   const [activities, setActivities] = useState<Activity[]>([]);
-  const [pageSections, setPageSections] = useState<SectionId[]>(['board','calendar','statics','stickies']);
+  const [pageSections, setPageSections] = useState<SectionId[]>(DEFAULT_SECTIONS);
   const [isClient, setIsClient] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [lastResetDate, setLastResetDate] = useState<string>('');
@@ -135,7 +138,7 @@ export function useDataManager() {
         debug.log('[dashboard] No layout from API, using default');
         // デフォルト値を保存
         try {
-          await api.saveLayout(['board','calendar','statics','stickies']);
+          await api.saveLayout(DEFAULT_SECTIONS);
         } catch (e) {
           console.error('Failed to save default layout', e);
         }
