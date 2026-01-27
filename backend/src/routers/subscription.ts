@@ -86,8 +86,8 @@ subscriptionRouter.get('/status', async (c: Context<{ Variables: AuthContext }>)
     const supabase = getSupabaseClient();
     const service = getSubscriptionService(supabase);
 
-    const subscription = await service.getSubscriptionStatus(user.sub);
-    const tokenUsage = await service.getTokenUsageInfo(user.sub);
+    const subscription = await service.getSubscriptionStatus(user.sub, user.email);
+    const tokenUsage = await service.getTokenUsageInfo(user.sub, user.email);
 
     return c.json({
       subscription,

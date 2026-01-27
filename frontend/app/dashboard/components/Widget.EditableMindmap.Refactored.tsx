@@ -497,7 +497,7 @@ function EditableMindmapFlow({
           onNodeClick={onNodeClick}
           onNodeDoubleClick={onNodeDoubleClick}
           nodeTypes={editableNodeTypes}
-          defaultViewport={{ x: 50, y: 50, zoom: 0.8 }}
+          defaultViewport={{ x: 50, y: 50, zoom: 0.6 }}
           minZoom={0.1}
           maxZoom={2}
         >

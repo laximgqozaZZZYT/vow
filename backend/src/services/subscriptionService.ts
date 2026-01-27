@@ -260,9 +260,31 @@ export class SubscriptionService {
 
   /**
    * Get subscription status for a user.
+   * Admins get premium_pro status even without Stripe subscription.
    */
-  async getSubscriptionStatus(userId: string): Promise<SubscriptionInfo | null> {
+  async getSubscriptionStatus(userId: string, userEmail?: string): Promise<SubscriptionInfo | null> {
+    // Check admin status first - admins get premium_pro without subscription
+    const adminService = getAdminService(this.supabase);
+    const isAdmin = await adminService.isAdmin(userId, userEmail);
+    
     const subscription = await this.subscriptionRepo.getByUserId(userId);
+    
+    // If admin and no active subscription, return virtual premium_pro status
+    if (isAdmin) {
+      if (!subscription || subscription.status !== 'active' || subscription.plan_type === 'free') {
+        logger.info('Returning virtual premium_pro status for admin', { userId });
+        return {
+          id: 'admin-virtual',
+          planType: 'premium_pro',
+          status: 'active',
+          currentPeriodStart: null,
+          currentPeriodEnd: null,
+          stripeCustomerId: subscription?.stripe_customer_id ?? '',
+          cancelAt: null,
+        };
+      }
+    }
+    
     if (!subscription) {
       return null;
     }
@@ -280,8 +302,24 @@ export class SubscriptionService {
 
   /**
    * Get token usage info for a user.
+   * Admins get unlimited quota.
    */
-  async getTokenUsageInfo(userId: string): Promise<TokenUsageInfo> {
+  async getTokenUsageInfo(userId: string, userEmail?: string): Promise<TokenUsageInfo> {
+    // Check admin status - admins get unlimited quota
+    const adminService = getAdminService(this.supabase);
+    const isAdmin = await adminService.isAdmin(userId, userEmail);
+    
+    if (isAdmin) {
+      const quota = await this.tokenQuotaRepo.getByUserId(userId);
+      return {
+        monthlyQuota: 10000000, // 10M tokens for admin (effectively unlimited)
+        usedQuota: quota?.used_quota ?? 0,
+        resetAt: quota?.reset_at ?? new Date().toISOString(),
+        estimatedOperations: 10000,
+        percentageUsed: 0,
+      };
+    }
+    
     const quota = await this.tokenQuotaRepo.getByUserId(userId);
 
     if (!quota) {
