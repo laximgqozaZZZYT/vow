@@ -8,7 +8,8 @@ import { useNotificationPreferences } from '../hooks/useNotificationPreferences'
 import { usePushNotifications } from '../hooks/usePushNotifications';
 
 // Feature flags from environment variables
-const ENABLE_SUBSCRIPTION = process.env.NEXT_PUBLIC_ENABLE_SUBSCRIPTION !== 'false';
+// Default to false if not set (safer for production)
+const ENABLE_SUBSCRIPTION = process.env.NEXT_PUBLIC_ENABLE_SUBSCRIPTION === 'true';
 
 type SettingsSection = 'profile' | 'notifications' | 'integrations' | 'api-keys';
 

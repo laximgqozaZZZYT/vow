@@ -2,10 +2,9 @@
  * Tab configuration for dashboard navigation
  */
 
-// Feature flag for AI Coach
-const ENABLE_AI_COACH = typeof window !== 'undefined' 
-  ? process.env.NEXT_PUBLIC_ENABLE_AI_COACH !== 'false'
-  : true;
+// Feature flag for AI Coach - explicitly check for 'true' value
+// Default to false if not set (safer for production)
+const ENABLE_AI_COACH = process.env.NEXT_PUBLIC_ENABLE_AI_COACH === 'true';
 
 export interface TabConfig {
   id: string;
