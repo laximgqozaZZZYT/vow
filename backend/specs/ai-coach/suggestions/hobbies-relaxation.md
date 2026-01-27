@@ -14,6 +14,8 @@
 - triggerTime: 20:00
 - duration: 30
 - reason: 趣味の時間は心のリフレッシュに不可欠です。毎日少しでも好きなことをする時間を作りましょう。
+- difficultyLevel: beginner
+- habitStackingTriggers: 仕事終わり, 夕食後
 
 #### 映画・ドラマを観る
 - type: do
@@ -23,6 +25,8 @@
 - triggerTime: null
 - duration: 120
 - reason: 物語に没頭することで、日常から離れてリフレッシュできます。
+- difficultyLevel: beginner
+- habitStackingTriggers: 週末, 休日
 
 #### ゲームを楽しむ
 - type: do
@@ -32,6 +36,8 @@
 - triggerTime: null
 - duration: 60
 - reason: 適度なゲームは脳の活性化とストレス解消に効果的です。
+- difficultyLevel: beginner
+- habitStackingTriggers: 仕事終わり, 週末
 
 #### 漫画・アニメを楽しむ
 - type: do
@@ -41,6 +47,8 @@
 - triggerTime: null
 - duration: 60
 - reason: 好きな作品を楽しむことで、ストレス解消と想像力の刺激になります。
+- difficultyLevel: beginner
+- habitStackingTriggers: 週末, 休日, 夕食後
 
 #### スポーツ観戦
 - type: do
@@ -50,6 +58,8 @@
 - triggerTime: null
 - duration: 120
 - reason: スポーツ観戦は興奮と感動を味わえ、良いリフレッシュになります。
+- difficultyLevel: beginner
+- habitStackingTriggers: 週末, 休日
 
 ### 音楽・芸術
 
@@ -61,6 +71,8 @@
 - triggerTime: null
 - duration: 20
 - reason: 音楽はストレス解消とリラックスに効果的です。好きな音楽で気分転換しましょう。
+- difficultyLevel: beginner
+- habitStackingTriggers: 通勤中, 仕事中, リラックス時
 
 #### 楽器を練習する
 - type: do
@@ -70,6 +82,8 @@
 - triggerTime: null
 - duration: 30
 - reason: 楽器演奏は脳を活性化し、達成感と創造性を高めます。
+- difficultyLevel: intermediate
+- habitStackingTriggers: 仕事終わり, 朝の時間
 
 #### 歌を歌う
 - type: do
@@ -79,6 +93,8 @@
 - triggerTime: null
 - duration: 30
 - reason: 歌うことはストレス発散と気分転換に効果的です。
+- difficultyLevel: beginner
+- habitStackingTriggers: 入浴中, カラオケ時
 
 #### 絵を描く
 - type: do
@@ -88,6 +104,8 @@
 - triggerTime: null
 - duration: 60
 - reason: 絵を描くことは創造性を発揮し、心を落ち着かせる効果があります。
+- difficultyLevel: intermediate
+- habitStackingTriggers: 週末, 休日
 
 #### 写真を撮る
 - type: do
@@ -97,6 +115,8 @@
 - triggerTime: null
 - duration: 60
 - reason: 写真は日常の美しさを発見し、思い出を残す素晴らしい趣味です。
+- difficultyLevel: beginner
+- habitStackingTriggers: 散歩中, 外出時
 
 #### 美術館・博物館に行く
 - type: do
@@ -106,6 +126,8 @@
 - triggerTime: null
 - duration: 120
 - reason: 芸術に触れることで、感性が磨かれ、新しいインスピレーションを得られます。
+- difficultyLevel: beginner
+- habitStackingTriggers: 週末, 休日
 
 #### コンサート・ライブに行く
 - type: do
@@ -115,6 +137,8 @@
 - triggerTime: null
 - duration: 180
 - reason: 生の音楽体験は特別な感動と思い出を与えてくれます。
+- difficultyLevel: beginner
+- habitStackingTriggers: 週末, 休日
 
 ### 創作活動
 
@@ -126,6 +150,8 @@
 - triggerTime: null
 - duration: 60
 - reason: 創作活動は自己表現の場であり、達成感と充実感を得られます。
+- difficultyLevel: intermediate
+- habitStackingTriggers: 週末, 休日
 
 #### 手芸・クラフト
 - type: do
@@ -135,6 +161,8 @@
 - triggerTime: null
 - duration: 60
 - reason: 手を動かす創作は集中力を高め、完成時の達成感が得られます。
+- difficultyLevel: intermediate
+- habitStackingTriggers: 週末, 休日, 夕食後
 
 #### DIY・ものづくり
 - type: do
@@ -144,6 +172,8 @@
 - triggerTime: null
 - duration: 90
 - reason: 自分で作る喜びと、実用的なものが手に入る満足感があります。
+- difficultyLevel: intermediate
+- habitStackingTriggers: 週末, 休日
 
 #### 文章を書く
 - type: do
@@ -153,6 +183,8 @@
 - triggerTime: null
 - duration: 30
 - reason: 文章を書くことは思考を整理し、自己表現力を高めます。
+- difficultyLevel: intermediate
+- habitStackingTriggers: 朝の時間, 夜の時間
 
 #### 動画を作る
 - type: do
@@ -162,6 +194,8 @@
 - triggerTime: null
 - duration: 120
 - reason: 動画制作は創造性を発揮でき、思い出を形に残せます。
+- difficultyLevel: advanced
+- habitStackingTriggers: 週末, 休日
 
 ### 料理・食
 
@@ -173,6 +207,8 @@
 - triggerTime: null
 - duration: 60
 - reason: 料理は創造的な活動であり、達成感と美味しい食事の両方を得られます。
+- difficultyLevel: beginner
+- habitStackingTriggers: 週末, 休日
 
 #### 新しいレシピに挑戦
 - type: do
@@ -182,6 +218,8 @@
 - triggerTime: null
 - duration: 90
 - reason: 新しいレシピへの挑戦は、料理の幅を広げ、食の楽しみを増やします。
+- difficultyLevel: intermediate
+- habitStackingTriggers: 週末, 休日
 
 #### お菓子作り
 - type: do
@@ -191,6 +229,8 @@
 - triggerTime: null
 - duration: 90
 - reason: お菓子作りは創造性を発揮でき、家族や友人と分かち合う喜びがあります。
+- difficultyLevel: intermediate
+- habitStackingTriggers: 週末, 休日
 
 #### カフェ巡り
 - type: do
@@ -200,6 +240,8 @@
 - triggerTime: null
 - duration: 60
 - reason: 新しいカフェを発見することは、小さな冒険と癒しの時間になります。
+- difficultyLevel: beginner
+- habitStackingTriggers: 週末, 休日, 仕事終わり
 
 #### お酒を楽しむ（適量）
 - type: do
@@ -209,6 +251,8 @@
 - triggerTime: null
 - duration: null
 - reason: 適量のお酒は、リラックスと社交の潤滑油になります。
+- difficultyLevel: beginner
+- habitStackingTriggers: 夕食時, 週末
 
 ### 自然・アウトドア
 
@@ -220,6 +264,8 @@
 - triggerTime: null
 - duration: 20
 - reason: 自然の中を歩くことで、心身がリフレッシュされ、創造性も高まります。
+- difficultyLevel: beginner
+- habitStackingTriggers: 昼休み, 仕事終わり, 朝
 
 #### ガーデニング・植物の世話
 - type: do
@@ -229,6 +275,8 @@
 - triggerTime: null
 - duration: 15
 - reason: 植物の世話は心を落ち着かせ、達成感と癒しを与えてくれます。
+- difficultyLevel: beginner
+- habitStackingTriggers: 朝, 夕方
 
 #### キャンプ
 - type: do
@@ -238,6 +286,8 @@
 - triggerTime: null
 - duration: null
 - reason: キャンプは日常から離れ、自然の中でリフレッシュできる特別な体験です。
+- difficultyLevel: intermediate
+- habitStackingTriggers: 週末, 連休
 
 #### 登山・ハイキング
 - type: do
@@ -247,6 +297,8 @@
 - triggerTime: null
 - duration: 240
 - reason: 登山は達成感と絶景を楽しめ、心身のリフレッシュに最適です。
+- difficultyLevel: intermediate
+- habitStackingTriggers: 週末, 休日
 
 #### 釣り
 - type: do
@@ -256,6 +308,8 @@
 - triggerTime: null
 - duration: 180
 - reason: 釣りは自然の中で静かに過ごし、集中力と忍耐力を養えます。
+- difficultyLevel: intermediate
+- habitStackingTriggers: 週末, 休日
 
 #### 旅行の計画を立てる
 - type: do
@@ -265,6 +319,8 @@
 - triggerTime: null
 - duration: 30
 - reason: 旅行の計画を立てること自体が、ワクワクする楽しい時間です。
+- difficultyLevel: beginner
+- habitStackingTriggers: 週末, 休日
 
 ### リラックス
 
@@ -276,6 +332,8 @@
 - triggerTime: 21:00
 - duration: 20
 - reason: ゆっくりお風呂に入ることで、体の疲れを癒し、睡眠の質も向上します。
+- difficultyLevel: beginner
+- habitStackingTriggers: 夕食後, 就寝前
 
 #### アロマを楽しむ
 - type: do
@@ -285,6 +343,8 @@
 - triggerTime: null
 - duration: null
 - reason: アロマの香りはリラックス効果があり、気分を整えてくれます。
+- difficultyLevel: beginner
+- habitStackingTriggers: 入浴時, 就寝前, 仕事中
 
 #### マッサージを受ける
 - type: do
@@ -294,6 +354,8 @@
 - triggerTime: null
 - duration: 60
 - reason: プロのマッサージは体の疲れを効果的に解消し、リフレッシュできます。
+- difficultyLevel: beginner
+- habitStackingTriggers: 週末, 休日
 
 #### 昼寝をする
 - type: do
@@ -303,6 +365,8 @@
 - triggerTime: 13:00
 - duration: 20
 - reason: 短い昼寝は午後の活力を回復させ、生産性を高めます。
+- difficultyLevel: beginner
+- habitStackingTriggers: 昼食後
 
 #### デジタルデトックス
 - type: do
@@ -312,6 +376,8 @@
 - triggerTime: null
 - duration: 120
 - reason: スマホやPCから離れる時間を作ることで、心身をリセットできます。
+- difficultyLevel: intermediate
+- habitStackingTriggers: 週末, 休日
 
 #### 何もしない時間を作る
 - type: do
@@ -321,6 +387,8 @@
 - triggerTime: null
 - duration: 30
 - reason: 意図的に何もしない時間は、心の余裕と創造性を生み出します。
+- difficultyLevel: intermediate
+- habitStackingTriggers: 週末, 休日
 
 ## Goals
 

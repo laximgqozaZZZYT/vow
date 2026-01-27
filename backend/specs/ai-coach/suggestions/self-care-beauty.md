@@ -14,6 +14,8 @@
 - triggerTime: 07:00
 - duration: 10
 - reason: 朝のスキンケアは肌を保護し、一日中健康な肌を維持します。
+- difficultyLevel: beginner
+- habitStackingTriggers: 洗顔後, 起床後
 
 #### 夜のスキンケア
 - type: do
@@ -23,6 +25,8 @@
 - triggerTime: 22:00
 - duration: 15
 - reason: 夜のスキンケアは肌の回復を助け、エイジングケアに効果的です。
+- difficultyLevel: beginner
+- habitStackingTriggers: 入浴後, 就寝前
 
 #### 日焼け止めを塗る
 - type: do
@@ -32,6 +36,8 @@
 - triggerTime: 08:00
 - duration: null
 - reason: 紫外線対策は肌の老化防止と皮膚がん予防に最も重要です。
+- difficultyLevel: beginner
+- habitStackingTriggers: 朝のスキンケア後, 外出前
 
 #### 保湿をしっかりする
 - type: do
@@ -41,6 +47,8 @@
 - triggerTime: null
 - duration: null
 - reason: 保湿は肌のバリア機能を維持し、乾燥やシワを防ぎます。
+- difficultyLevel: beginner
+- habitStackingTriggers: 洗顔後, 入浴後
 
 #### パックをする
 - type: do
@@ -50,6 +58,8 @@
 - triggerTime: null
 - duration: 15
 - reason: 週に数回のパックは、肌に集中的な栄養を与えます。
+- difficultyLevel: beginner
+- habitStackingTriggers: 入浴後, 夜のスキンケア時
 
 #### 角質ケアをする
 - type: do
@@ -59,6 +69,8 @@
 - triggerTime: null
 - duration: 10
 - reason: 定期的な角質ケアは、肌のターンオーバーを促進します。
+- difficultyLevel: intermediate
+- habitStackingTriggers: 入浴時, 週末
 
 #### 美容液を使う
 - type: do
@@ -68,6 +80,8 @@
 - triggerTime: 22:00
 - duration: null
 - reason: 美容液は有効成分を肌に届け、特定の肌悩みに効果的です。
+- difficultyLevel: intermediate
+- habitStackingTriggers: 化粧水後, 夜のスキンケア時
 
 #### アイクリームを塗る
 - type: do
@@ -77,6 +91,8 @@
 - triggerTime: 22:00
 - duration: null
 - reason: 目元は皮膚が薄く、専用のケアでシワやクマを予防できます。
+- difficultyLevel: intermediate
+- habitStackingTriggers: 美容液後, 夜のスキンケア時
 
 ### ヘアケア
 
@@ -88,6 +104,8 @@
 - triggerTime: null
 - duration: 3
 - reason: ブラッシングは頭皮の血行を促進し、髪の艶を出します。
+- difficultyLevel: beginner
+- habitStackingTriggers: 起床後, 就寝前
 
 #### トリートメントをする
 - type: do
@@ -97,6 +115,8 @@
 - triggerTime: null
 - duration: 10
 - reason: トリートメントは髪のダメージを補修し、潤いを与えます。
+- difficultyLevel: beginner
+- habitStackingTriggers: シャンプー後
 
 #### 頭皮マッサージをする
 - type: do
@@ -106,6 +126,8 @@
 - triggerTime: null
 - duration: 5
 - reason: 頭皮マッサージは血行を促進し、健康な髪の成長を助けます。
+- difficultyLevel: beginner
+- habitStackingTriggers: シャンプー時, 入浴時
 
 #### ヘアオイルを使う
 - type: do
@@ -115,6 +137,8 @@
 - triggerTime: null
 - duration: null
 - reason: ヘアオイルは髪を保護し、艶やかな髪を維持します。
+- difficultyLevel: beginner
+- habitStackingTriggers: ドライヤー前, 朝のスタイリング時
 
 #### 定期的にカットする
 - type: do
@@ -124,6 +148,8 @@
 - triggerTime: null
 - duration: 60
 - reason: 定期的なカットは、髪の健康と清潔感を維持します。
+- difficultyLevel: beginner
+- habitStackingTriggers: 月に一度
 
 ### ボディケア
 
@@ -135,6 +161,8 @@
 - triggerTime: 22:00
 - duration: 5
 - reason: ボディクリームは全身の肌を保湿し、乾燥を防ぎます。
+- difficultyLevel: beginner
+- habitStackingTriggers: 入浴後
 
 #### ボディスクラブをする
 - type: do
@@ -144,6 +172,8 @@
 - triggerTime: null
 - duration: 10
 - reason: ボディスクラブは古い角質を除去し、肌を滑らかにします。
+- difficultyLevel: intermediate
+- habitStackingTriggers: 入浴時, 週末
 
 #### ハンドクリームを塗る
 - type: do
@@ -153,6 +183,8 @@
 - triggerTime: null
 - duration: null
 - reason: 手は年齢が出やすい部分です。こまめな保湿が大切です。
+- difficultyLevel: beginner
+- habitStackingTriggers: 手洗い後, 仕事の合間
 
 #### リップケアをする
 - type: do
@@ -162,6 +194,8 @@
 - triggerTime: null
 - duration: null
 - reason: 唇は乾燥しやすいため、こまめなケアで潤いを保ちましょう。
+- difficultyLevel: beginner
+- habitStackingTriggers: 朝, 昼, 夜
 
 #### ネイルケアをする
 - type: do
@@ -171,6 +205,8 @@
 - triggerTime: null
 - duration: 20
 - reason: 清潔で整った爪は、清潔感と美しさを演出します。
+- difficultyLevel: beginner
+- habitStackingTriggers: 週末, 入浴後
 
 #### フットケアをする
 - type: do
@@ -180,6 +216,8 @@
 - triggerTime: null
 - duration: 15
 - reason: 足のケアは、健康と美しさの両方に重要です。
+- difficultyLevel: beginner
+- habitStackingTriggers: 入浴後, 週末
 
 ### オーラルケア
 
@@ -191,6 +229,8 @@
 - triggerTime: null
 - duration: 3
 - reason: 適切な歯磨きは虫歯や歯周病を予防し、口臭も防ぎます。
+- difficultyLevel: beginner
+- habitStackingTriggers: 起床後, 就寝前
 
 #### フロスを使う
 - type: do
@@ -200,6 +240,8 @@
 - triggerTime: 22:00
 - duration: 2
 - reason: フロスは歯ブラシでは届かない歯間の汚れを除去します。
+- difficultyLevel: beginner
+- habitStackingTriggers: 歯磨き後
 
 #### マウスウォッシュを使う
 - type: do
@@ -209,6 +251,8 @@
 - triggerTime: null
 - duration: null
 - reason: マウスウォッシュは口内を清潔に保ち、口臭を予防します。
+- difficultyLevel: beginner
+- habitStackingTriggers: 歯磨き後, フロス後
 
 #### 舌を磨く
 - type: do
@@ -218,6 +262,8 @@
 - triggerTime: null
 - duration: null
 - reason: 舌の汚れは口臭の原因になります。毎日のケアが大切です。
+- difficultyLevel: beginner
+- habitStackingTriggers: 歯磨き時
 
 #### 定期的に歯科検診を受ける
 - type: do
@@ -227,6 +273,8 @@
 - triggerTime: null
 - duration: 60
 - reason: 定期検診は、問題の早期発見と予防に重要です。
+- difficultyLevel: beginner
+- habitStackingTriggers: 3-6ヶ月に一度
 
 ### リラクゼーション
 
@@ -238,6 +286,8 @@
 - triggerTime: 21:00
 - duration: null
 - reason: 入浴剤はリラックス効果を高め、肌にも良い影響を与えます。
+- difficultyLevel: beginner
+- habitStackingTriggers: 入浴時
 
 #### アロマを楽しむ
 - type: do
@@ -247,6 +297,8 @@
 - triggerTime: null
 - duration: null
 - reason: アロマの香りはリラックス効果があり、気分を整えてくれます。
+- difficultyLevel: beginner
+- habitStackingTriggers: 入浴時, 就寝前, 仕事中
 
 #### セルフマッサージをする
 - type: do
@@ -256,6 +308,8 @@
 - triggerTime: 22:00
 - duration: 10
 - reason: セルフマッサージは血行を促進し、むくみを解消します。
+- difficultyLevel: beginner
+- habitStackingTriggers: 入浴後, 就寝前
 
 #### 半身浴をする
 - type: do
@@ -265,6 +319,8 @@
 - triggerTime: null
 - duration: 20
 - reason: 半身浴は体を芯から温め、デトックス効果があります。
+- difficultyLevel: intermediate
+- habitStackingTriggers: 週末, 休日
 
 #### サウナに行く
 - type: do
@@ -274,6 +330,8 @@
 - triggerTime: null
 - duration: 90
 - reason: サウナは血行促進とリラックス効果で、心身をリフレッシュします。
+- difficultyLevel: intermediate
+- habitStackingTriggers: 週末, 休日
 
 ### 身だしなみ
 
@@ -285,6 +343,8 @@
 - triggerTime: 22:00
 - duration: 5
 - reason: 前日に服を選ぶことで、朝の時間に余裕ができます。
+- difficultyLevel: beginner
+- habitStackingTriggers: 就寝前
 
 #### 靴を磨く
 - type: do
@@ -294,6 +354,8 @@
 - triggerTime: null
 - duration: 10
 - reason: 清潔な靴は、全体の印象を大きく左右します。
+- difficultyLevel: beginner
+- habitStackingTriggers: 週末, 外出前
 
 #### 姿勢を意識する
 - type: do
@@ -303,6 +365,8 @@
 - triggerTime: null
 - duration: null
 - reason: 良い姿勢は、見た目の印象と健康の両方に影響します。
+- difficultyLevel: beginner
+- habitStackingTriggers: デスクワーク中, 歩行中
 
 #### 笑顔の練習をする
 - type: do
@@ -312,6 +376,8 @@
 - triggerTime: 07:00
 - duration: 1
 - reason: 自然な笑顔は、最高の美容法であり、人間関係も良くします。
+- difficultyLevel: beginner
+- habitStackingTriggers: 鏡を見た時, 起床後
 
 ## Goals
 

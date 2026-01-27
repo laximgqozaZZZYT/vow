@@ -74,9 +74,9 @@ export function StickyFooter({
   return (
     <div 
       className="
-        sticky bottom-0 left-0 right-0
+        flex-shrink-0
         bg-card border-t border-border
-        px-4 py-3 mt-4
+        px-4 py-3
         shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.1)]
         dark:shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.3)]
         z-10

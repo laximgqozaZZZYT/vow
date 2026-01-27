@@ -425,7 +425,11 @@ export class SupabaseDirectClient {
       lastCompletedAt: h.last_completed_at,
       createdAt: h.created_at,
       updatedAt: h.updated_at,
-      tags: tagsByHabitId[h.id] || []
+      tags: tagsByHabitId[h.id] || [],
+      // THLI-24 level fields - Validates: Requirements 8.1
+      level: h.level,
+      levelTier: h.level_tier,
+      levelAssessedAt: h.level_assessed_at
     }));
     
     debug.log('[getHabits] Converted habits data with tags:', habits);
@@ -2773,7 +2777,11 @@ export class SupabaseDirectClient {
           must: h.must,
           completed: h.completed,
           createdAt: h.created_at,
-          updatedAt: h.updated_at
+          updatedAt: h.updated_at,
+          // THLI-24 level fields
+          level: h.level,
+          levelTier: h.level_tier,
+          levelAssessedAt: h.level_assessed_at
         };
       });
     }
@@ -3309,7 +3317,11 @@ export class SupabaseDirectClient {
       allDay: h.all_day,
       notes: h.notes,
       createdAt: h.created_at,
-      updatedAt: h.updated_at
+      updatedAt: h.updated_at,
+      // THLI-24 level fields
+      level: h.level,
+      levelTier: h.level_tier,
+      levelAssessedAt: h.level_assessed_at
     }));
   }
 

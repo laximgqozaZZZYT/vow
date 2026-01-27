@@ -1773,6 +1773,7 @@ function UnifiedRelationMapFlow({ habits, goals, onClose, embedded = false, onRe
             handleGoalCreate(payload);
           }}
           goals={goals}
+          habits={habits}
         />
       </div>
     );

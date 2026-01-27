@@ -11,6 +11,7 @@
  * - Continuous conversation with follow-up questions
  * - UI component rendering from AI responses
  * - View past AI suggestions history
+ * - Level assessment for habits (THLI-24)
  *
  * Requirements: Premium subscription features
  * 
@@ -31,11 +32,18 @@ import { ProgressIndicator } from './Widget.Progress';
 import { HabitModal } from './Modal.Habit';
 import { GoalModal } from './Modal.Goal';
 import { SuggestionHistory } from './Widget.SuggestionHistory';
+import LevelAssessmentSliders, { type LevelVariables, calculateLevel } from './Widget.LevelAssessmentSliders';
 
 /**
  * デフォルトのクイックアクション（Choice形式）
  */
 const DEFAULT_QUICK_ACTIONS: Choice[] = [
+  {
+    id: 'assess-level',
+    label: 'レベル設定',
+    icon: '📈',
+    description: '習慣のレベルを設定します',
+  },
   {
     id: 'add-habit',
     label: '習慣を追加',
@@ -66,6 +74,7 @@ const DEFAULT_QUICK_ACTIONS: Choice[] = [
  * クイックアクションIDからプロンプトへのマッピング
  */
 const QUICK_ACTION_PROMPTS: Record<string, string> = {
+  'assess-level': '既存の習慣のレベル設定をして下さい',
   'add-habit': '新しい習慣を追加したい',
   'set-goal': 'ゴールを設定したい',
   'check-progress': '習慣の進捗を確認したい',
@@ -127,13 +136,15 @@ interface UIComponentData {
 
 interface CoachSectionProps {
   goals: Goal[];
+  habits?: { id: string; goalId: string; name: string; level?: number | null; completed?: boolean }[];
   onHabitCreated?: () => void;
   onGoalCreated?: () => void;
+  onHabitUpdated?: () => void;
 }
 
-type DetectedIntent = 'create' | 'edit' | 'suggest' | 'coaching' | 'followup' | null;
+type DetectedIntent = 'create' | 'edit' | 'suggest' | 'coaching' | 'followup' | 'level_assessment' | null;
 
-export function CoachSection({ goals, onHabitCreated, onGoalCreated }: CoachSectionProps) {
+export function CoachSection({ goals, habits, onHabitCreated, onGoalCreated, onHabitUpdated }: CoachSectionProps) {
   const [isPremium, setIsPremium] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -146,6 +157,10 @@ export function CoachSection({ goals, onHabitCreated, onGoalCreated }: CoachSect
   const [error, setError] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  // Level assessment state
+  const [levelAssessmentHabit, setLevelAssessmentHabit] = useState<{ id: string; name: string } | null>(null);
+  const [levelAssessmentLoading, setLevelAssessmentLoading] = useState(false);
 
   // Current action state
   const [habitModalOpen, setHabitModalOpen] = useState(false);
@@ -335,6 +350,108 @@ export function CoachSection({ goals, onHabitCreated, onGoalCreated }: CoachSect
     onGoalCreated?.();
   }, [addMessage, onGoalCreated]);
 
+  // Level assessment handlers
+  const handleStartLevelAssessment = useCallback(() => {
+    // 未完了の習慣を優先、レベル未設定の習慣を優先
+    const unassessedHabits = (habits || [])
+      .filter(h => h.level === null || h.level === undefined)
+      .sort((a, b) => {
+        // 未完了を優先
+        if (a.completed !== b.completed) {
+          return a.completed ? 1 : -1;
+        }
+        return 0;
+      });
+
+    if (unassessedHabits.length === 0) {
+      addMessage('assistant', 'すべての習慣にレベルが設定されています。特定の習慣のレベルを再設定したい場合は、その習慣名を教えてください。');
+      return;
+    }
+
+    const firstHabit = unassessedHabits[0];
+    setLevelAssessmentHabit({ id: firstHabit.id, name: firstHabit.name });
+    addMessage('assistant', `「${firstHabit.name}」のレベルを設定しましょう。以下のスライダーで各観点を評価してください。`, 'level_assessment');
+  }, [habits, addMessage]);
+
+  const handleLevelAssessmentSubmit = useCallback(async (habitId: string, variables: LevelVariables, level: number) => {
+    setLevelAssessmentLoading(true);
+    try {
+      if (!supabase) {
+        addMessage('assistant', 'Supabaseが初期化されていません。');
+        return;
+      }
+
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.user) {
+        addMessage('assistant', '認証が必要です。ログインしてください。');
+        return;
+      }
+
+      // Calculate tier
+      const tier = level < 50 ? 'beginner' : level < 100 ? 'intermediate' : level < 150 ? 'advanced' : 'expert';
+      const now = new Date().toISOString();
+
+      // Update habit level directly via Supabase
+      // Note: level_tier is auto-calculated by database trigger, but we set it explicitly for consistency
+      const { error } = await supabase
+        .from('habits')
+        .update({
+          level,
+          level_tier: tier,
+          level_assessed_at: now,
+          level_assessment_raw: {
+            assessmentType: 'manual_slider',
+            variables,
+            level,
+            tier,
+            assessedAt: now,
+          },
+          updated_at: now,
+        })
+        .eq('id', habitId)
+        .eq('owner_id', session.user.id);
+
+      if (error) {
+        throw new Error(`レベルの保存に失敗しました: ${error.message}`);
+      }
+
+      // Record in level_history
+      await supabase.from('level_history').insert({
+        habit_id: habitId,
+        user_id: session.user.id,
+        old_level: null,
+        new_level: level,
+        change_reason: 'manual_adjustment',
+        workload_delta: variables,
+      });
+
+      const habitName = levelAssessmentHabit?.name || '習慣';
+      const tierLabel = tier === 'beginner' ? '初級' : tier === 'intermediate' ? '中級' : tier === 'advanced' ? '上級' : '達人';
+      addMessage('assistant', `✅ 「${habitName}」のレベルを Lv. ${level} (${tierLabel}) に設定しました！`);
+      
+      setLevelAssessmentHabit(null);
+      onHabitUpdated?.();
+
+      // 次の未設定習慣があれば提案
+      const remainingUnassessed = (habits || [])
+        .filter(h => h.id !== habitId && (h.level === null || h.level === undefined));
+      
+      if (remainingUnassessed.length > 0) {
+        addMessage('assistant', `まだ ${remainingUnassessed.length} 件の習慣にレベルが設定されていません。続けて設定しますか？`);
+      }
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : 'エラーが発生しました';
+      addMessage('assistant', `エラー: ${errorMsg}`);
+    } finally {
+      setLevelAssessmentLoading(false);
+    }
+  }, [levelAssessmentHabit, habits, addMessage, onHabitUpdated]);
+
+  const handleLevelAssessmentCancel = useCallback(() => {
+    setLevelAssessmentHabit(null);
+    addMessage('assistant', 'レベル設定をキャンセルしました。他に何かお手伝いできることはありますか？');
+  }, [addMessage]);
+
 
   // Main AI chat handler
   const handleAIChat = useCallback(async (token: string, userInput: string) => {
@@ -498,6 +615,13 @@ export function CoachSection({ goals, onHabitCreated, onGoalCreated }: CoachSect
     const prompt = QUICK_ACTION_PROMPTS[choice.id];
     if (!prompt || !apiUrl) return;
     
+    // レベル設定アクションは特別に処理
+    if (choice.id === 'assess-level') {
+      addMessage('user', prompt);
+      handleStartLevelAssessment();
+      return;
+    }
+    
     setInput('');
     setProcessing(true);
     addMessage('user', prompt);
@@ -518,7 +642,7 @@ export function CoachSection({ goals, onHabitCreated, onGoalCreated }: CoachSect
     } finally {
       setProcessing(false);
     }
-  }, [apiUrl, addMessage, handleAIChat]);
+  }, [apiUrl, addMessage, handleAIChat, handleStartLevelAssessment]);
 
   const handleClearConversation = () => {
     setShowClearConfirm(true);
@@ -679,6 +803,19 @@ export function CoachSection({ goals, onHabitCreated, onGoalCreated }: CoachSect
                   </div>
                 ))}
               
+                {/* Level Assessment Slider UI */}
+                {levelAssessmentHabit && (
+                  <div className="mt-4">
+                    <LevelAssessmentSliders
+                      habitId={levelAssessmentHabit.id}
+                      habitName={levelAssessmentHabit.name}
+                      onSubmit={handleLevelAssessmentSubmit}
+                      onCancel={handleLevelAssessmentCancel}
+                      isLoading={levelAssessmentLoading}
+                    />
+                  </div>
+                )}
+
                 {/* Loading indicator when processing */}
                 {processing && (
                   <div className="flex justify-start">
@@ -819,6 +956,7 @@ export function CoachSection({ goals, onHabitCreated, onGoalCreated }: CoachSect
         onCreate={handleGoalCreated}
         initial={goalModalInitial}
         goals={goals}
+        habits={habits}
       />
 
       {/* Clear Confirmation Dialog */}

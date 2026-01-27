@@ -9,6 +9,7 @@ import StickyFooter from './Widget.StickyFooter'
 import { supabaseDirectClient } from '../../../lib/supabase-direct'
 import { useSubscription } from '../../../hooks/useSubscription'
 import { supabase } from '../../../lib/supabaseClient'
+import LevelAssessmentSliders, { type LevelVariables } from './Widget.LevelAssessmentSliders'
 
 /**
  * GoalModal - Goal編集モーダル
@@ -111,13 +112,21 @@ function CollapsibleSection({
     );
 }
 
-export function GoalModal({ open, onClose, goal, onUpdate, onDelete, onCreate, onComplete, goals, tags, onTagsChange, initial, onCreateHabit }: { open: boolean; onClose: () => void; goal: Goal | null; onUpdate?: (g: Goal) => void; onDelete?: (id: string) => void; onCreate?: (payload: { name: string; details?: string; dueDate?: string; parentId?: string | null }) => void; onComplete?: (goalId: string) => void; goals?: Goal[]; tags?: any[]; onTagsChange?: (goalId: string, tagIds: string[]) => Promise<void>; initial?: { name?: string; parentId?: string | null }; onCreateHabit?: (habit: { name: string; goalId: string; frequency: string; targetCount: number; workloadUnit?: string }) => void }) {
+export function GoalModal({ open, onClose, goal, onUpdate, onDelete, onCreate, onComplete, goals, tags, onTagsChange, initial, onCreateHabit, habits }: { open: boolean; onClose: () => void; goal: Goal | null; onUpdate?: (g: Goal) => void; onDelete?: (id: string) => void; onCreate?: (payload: { name: string; details?: string; dueDate?: string; parentId?: string | null }) => void; onComplete?: (goalId: string) => void; goals?: Goal[]; tags?: any[]; onTagsChange?: (goalId: string, tagIds: string[]) => Promise<void>; initial?: { name?: string; parentId?: string | null }; onCreateHabit?: (habit: { name: string; goalId: string; frequency: string; targetCount: number; workloadUnit?: string }) => void; habits?: { id: string; goalId: string; level?: number | null }[] }) {
     const [name, setName] = useState(goal?.name ?? "")
     const [details, setDetails] = useState(goal?.details ?? "")
     const [dueDate, setDueDate] = useState<Date | undefined>(goal?.dueDate ? (typeof goal.dueDate === 'string' ? parseYMD(goal.dueDate) : (goal.dueDate as Date)) : undefined)
     const [parentId, setParentId] = useState<string | null>(goal?.parentId ?? null)
     const [selectedTagIds, setSelectedTagIds] = useState<string[]>([])
     const [isLoading, setIsLoading] = useState(false)
+    
+    // Calculate goal level from child habits (MAX of child habit levels)
+    const goalLevel = useMemo(() => {
+        if (!goal || !habits) return null
+        const childHabits = habits.filter(h => h.goalId === goal.id && h.level !== null && h.level !== undefined)
+        if (childHabits.length === 0) return null
+        return Math.max(...childHabits.map(h => h.level as number))
+    }, [goal, habits])
     
     // 折りたたみセクションの状態
     const [showAISuggestions, setShowAISuggestions] = useState(false)
@@ -324,6 +333,26 @@ export function GoalModal({ open, onClose, goal, onUpdate, onDelete, onCreate, o
                                 placeholder="Goal name" 
                             />
                         </div>
+
+                        {/* Level display - only show for existing goals */}
+                        {goal && (
+                            <div>
+                                <label className="block text-sm font-medium mb-1">Level</label>
+                                <div className="flex items-center gap-2 px-3 py-2 rounded-md bg-muted border border-border">
+                                    <span className="text-sm font-medium text-foreground">
+                                        {goalLevel !== null ? `Lv. ${goalLevel}` : 'Lv. ???'}
+                                    </span>
+                                    {goalLevel !== null && (
+                                        <span className="text-xs text-muted-foreground">
+                                            ({goalLevel < 50 ? '初級' : goalLevel < 100 ? '中級' : goalLevel < 150 ? '上級' : '達人'})
+                                        </span>
+                                    )}
+                                    <span className="ml-auto text-xs text-muted-foreground">
+                                        子Habitの最大値
+                                    </span>
+                                </div>
+                            </div>
+                        )}
 
                         {/* Details - 主要項目 */}
                         <div>

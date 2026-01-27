@@ -296,8 +296,8 @@ export function StickyModal({
   return (
     <div className="fixed inset-0 z-50 flex items-start justify-center pt-4 sm:pt-12 bg-background/80 backdrop-blur-sm p-4">
       <div className="w-full max-w-2xl rounded-lg border border-border bg-card shadow-lg text-card-foreground flex flex-col max-h-[95vh] sm:max-h-[90vh]">
-        {/* ヘッダー */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-border">
+        {/* ヘッダー - 固定 */}
+        <div className="flex-shrink-0 flex items-center justify-between px-6 py-4 border-b border-border">
           <h2 className="text-xl font-semibold">
             {sticky ? 'Edit Sticky\'n' : 'New Sticky\'n'}
           </h2>
@@ -312,8 +312,8 @@ export function StickyModal({
           </button>
         </div>
 
-        {/* スクロール可能なコンテンツ */}
-        <div className="flex-1 overflow-y-auto px-6 py-4">
+        {/* スクロール可能なコンテンツ - フッター分の余白を確保 */}
+        <div className="flex-1 overflow-y-auto px-6 py-4 min-h-0">
           <style>{`
             @keyframes fadeIn {
               from { opacity: 0; transform: translateY(-10px); }

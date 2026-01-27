@@ -52,6 +52,12 @@ export interface Habit {
   workloadPerCount?: number;
   timings?: Timing[];
   outdates?: Timing[];
+  /** THLI-24 level (0-199 scale) - Validates: Requirements 8.1 */
+  level?: number | null;
+  /** Level tier: beginner/intermediate/advanced/expert - Validates: Requirements 8.1 */
+  levelTier?: 'beginner' | 'intermediate' | 'advanced' | 'expert' | null;
+  /** Timestamp of last level assessment */
+  levelAssessedAt?: string | null;
   createdAt: string;
   updatedAt: string;
 }

@@ -551,13 +551,26 @@ aiRouter.get(
       const { data, error } = await query;
 
       if (error) {
-        logger.error('Failed to fetch suggestion history', error);
-        return c.json({ error: 'FETCH_FAILED', message: '履歴の取得に失敗しました' }, 500);
+        logger.error('Failed to fetch suggestion history', error, {
+          userId,
+          errorCode: error.code,
+          errorMessage: error.message,
+          errorDetails: error.details,
+          errorHint: error.hint,
+        });
+        return c.json({ 
+          error: 'FETCH_FAILED', 
+          message: '履歴の取得に失敗しました',
+          details: error.message,
+        }, 500);
       }
 
       return c.json({ suggestions: data || [] });
     } catch (err) {
-      logger.error('Suggestion history error', err instanceof Error ? err : undefined);
+      logger.error('Suggestion history error', err instanceof Error ? err : undefined, {
+        userId,
+        errorMessage: err instanceof Error ? err.message : String(err),
+      });
       return c.json({ error: 'FETCH_FAILED', message: '履歴の取得に失敗しました' }, 500);
     }
   }
@@ -568,10 +581,10 @@ aiRouter.get(
  */
 const SaveSuggestionRequestSchema = z.object({
   suggestionType: z.enum(['habit', 'goal']),
-  goalId: z.string().uuid().optional(),
+  goalId: z.string().nullable().optional(),
   suggestionData: z.record(z.unknown()),
   status: z.enum(['pending', 'accepted', 'dismissed']).default('pending'),
-  acceptedEntityId: z.string().uuid().optional(),
+  acceptedEntityId: z.string().nullable().optional(),
 });
 
 /**

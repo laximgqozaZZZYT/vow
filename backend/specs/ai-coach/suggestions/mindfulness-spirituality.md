@@ -14,6 +14,8 @@
 - triggerTime: 06:30
 - duration: 10
 - reason: 朝の瞑想は一日を穏やかに始め、集中力と心の安定を高めます。
+- difficultyLevel: beginner
+- habitStackingTriggers: 起床後, 朝のストレッチ後
 
 #### 夜の瞑想
 - type: do
@@ -23,6 +25,8 @@
 - triggerTime: 22:00
 - duration: 10
 - reason: 夜の瞑想は一日の疲れを癒し、質の良い睡眠を促します。
+- difficultyLevel: beginner
+- habitStackingTriggers: 就寝前, 入浴後
 
 #### マインドフルネス呼吸
 - type: do
@@ -32,6 +36,8 @@
 - triggerTime: null
 - duration: 3
 - reason: 短い呼吸瞑想は、いつでもどこでも心を落ち着かせられます。
+- difficultyLevel: beginner
+- habitStackingTriggers: ストレスを感じた時, 会議前, 仕事の合間
 
 #### ボディスキャン瞑想
 - type: do
@@ -41,6 +47,8 @@
 - triggerTime: 22:00
 - duration: 15
 - reason: 体の感覚に意識を向けることで、緊張を解放し、リラックスできます。
+- difficultyLevel: intermediate
+- habitStackingTriggers: 就寝前, 入浴後
 
 #### 歩く瞑想
 - type: do
@@ -50,6 +58,8 @@
 - triggerTime: null
 - duration: 15
 - reason: 歩きながらの瞑想は、日常の中でマインドフルネスを実践できます。
+- difficultyLevel: intermediate
+- habitStackingTriggers: 昼休み, 散歩中
 
 #### 食べる瞑想
 - type: do
@@ -59,6 +69,8 @@
 - triggerTime: null
 - duration: null
 - reason: 食事に集中することで、味わいを深め、過食を防ぎます。
+- difficultyLevel: intermediate
+- habitStackingTriggers: 食事時
 
 #### 慈悲の瞑想
 - type: do
@@ -68,6 +80,8 @@
 - triggerTime: null
 - duration: 10
 - reason: 自分と他者への慈しみを育むことで、心が穏やかになります。
+- difficultyLevel: intermediate
+- habitStackingTriggers: 朝の瞑想後, 就寝前
 
 #### 瞑想アプリを使う
 - type: do
@@ -77,6 +91,8 @@
 - triggerTime: null
 - duration: 10
 - reason: ガイド付き瞑想は、初心者でも効果的に瞑想を実践できます。
+- difficultyLevel: beginner
+- habitStackingTriggers: 起床後, 就寝前, 昼休み
 
 ### 感謝・ポジティブ思考
 
@@ -88,6 +104,8 @@
 - triggerTime: 22:00
 - duration: 5
 - reason: 感謝を書き出すことで、ポジティブな思考が習慣化し、幸福感が高まります。
+- difficultyLevel: beginner
+- habitStackingTriggers: 就寝前, 夕食後
 
 #### 3つの良いことを書く
 - type: do
@@ -97,6 +115,8 @@
 - triggerTime: 22:00
 - duration: 5
 - reason: 一日の良かったことを振り返ることで、ポジティブな視点が養われます。
+- difficultyLevel: beginner
+- habitStackingTriggers: 就寝前, 日記を書く時
 
 #### アファメーションを唱える
 - type: do
@@ -106,6 +126,8 @@
 - triggerTime: 07:00
 - duration: 5
 - reason: 肯定的な言葉を繰り返すことで、自己肯定感と自信が高まります。
+- difficultyLevel: beginner
+- habitStackingTriggers: 起床後, 鏡を見た時
 
 #### ポジティブな言葉を使う
 - type: do
@@ -115,6 +137,8 @@
 - triggerTime: null
 - duration: null
 - reason: 言葉は思考に影響します。ポジティブな言葉で心を前向きに保ちましょう。
+- difficultyLevel: beginner
+- habitStackingTriggers: 会話中, 自分に話しかける時
 
 #### 小さな幸せを見つける
 - type: do
@@ -124,6 +148,8 @@
 - triggerTime: null
 - duration: null
 - reason: 日常の小さな幸せに気づくことで、幸福感が高まります。
+- difficultyLevel: beginner
+- habitStackingTriggers: 散歩中, 食事中, 休憩中
 
 #### 感謝の手紙を書く
 - type: do
@@ -133,6 +159,8 @@
 - triggerTime: null
 - duration: 15
 - reason: 感謝を言葉にして伝えることで、関係が深まり、自分も幸せになります。
+- difficultyLevel: intermediate
+- habitStackingTriggers: 週末, 休日
 
 ### 内省・自己理解
 
@@ -144,6 +172,8 @@
 - triggerTime: 22:00
 - duration: 10
 - reason: 日記は思考を整理し、自己理解を深める効果的な方法です。
+- difficultyLevel: beginner
+- habitStackingTriggers: 就寝前, 入浴後
 
 #### モーニングページを書く
 - type: do
@@ -153,6 +183,8 @@
 - triggerTime: 06:30
 - duration: 15
 - reason: 朝に思いつくままに書くことで、頭がクリアになり、創造性が高まります。
+- difficultyLevel: intermediate
+- habitStackingTriggers: 起床後, 朝食前
 
 #### 自分と対話する時間を持つ
 - type: do
@@ -162,6 +194,8 @@
 - triggerTime: null
 - duration: 10
 - reason: 静かに自分と向き合う時間は、自己理解と心の安定に重要です。
+- difficultyLevel: intermediate
+- habitStackingTriggers: 瞑想後, 散歩中
 
 #### 価値観を振り返る
 - type: do
@@ -171,6 +205,8 @@
 - triggerTime: null
 - duration: 15
 - reason: 自分の価値観を確認することで、人生の方向性が明確になります。
+- difficultyLevel: intermediate
+- habitStackingTriggers: 週末, 休日
 
 #### 夢を記録する
 - type: do
@@ -180,6 +216,8 @@
 - triggerTime: 07:00
 - duration: 5
 - reason: 夢を記録することで、潜在意識からのメッセージに気づけます。
+- difficultyLevel: intermediate
+- habitStackingTriggers: 起床直後
 
 #### 感情を観察する
 - type: do
@@ -189,6 +227,8 @@
 - triggerTime: null
 - duration: null
 - reason: 感情を客観的に観察することで、感情に振り回されなくなります。
+- difficultyLevel: intermediate
+- habitStackingTriggers: 感情が動いた時, 瞑想中
 
 ### 心の浄化
 
@@ -200,6 +240,8 @@
 - triggerTime: null
 - duration: 5
 - reason: ネガティブな思考を意識的に手放すことで、心が軽くなります。
+- difficultyLevel: intermediate
+- habitStackingTriggers: ネガティブな思考に気づいた時, 瞑想中
 
 #### 許しの実践
 - type: do
@@ -209,6 +251,8 @@
 - triggerTime: null
 - duration: 10
 - reason: 過去の傷を許すことで、心の重荷が軽くなり、前に進めます。
+- difficultyLevel: advanced
+- habitStackingTriggers: 瞑想中, 就寝前
 
 #### 心配事を書き出す
 - type: do
@@ -218,6 +262,8 @@
 - triggerTime: null
 - duration: 10
 - reason: 心配事を書き出すことで、頭の中が整理され、不安が軽減します。
+- difficultyLevel: beginner
+- habitStackingTriggers: 就寝前, 不安を感じた時
 
 #### デジタルデトックス
 - type: do
@@ -227,6 +273,8 @@
 - triggerTime: null
 - duration: 120
 - reason: デジタル機器から離れることで、心が静まり、本当の自分と向き合えます。
+- difficultyLevel: intermediate
+- habitStackingTriggers: 週末, 休日
 
 #### 断捨離をする
 - type: do
@@ -236,6 +284,8 @@
 - triggerTime: null
 - duration: 30
 - reason: 物を手放すことは、心の整理にもつながります。
+- difficultyLevel: beginner
+- habitStackingTriggers: 週末, 掃除の時
 
 ### 精神的な実践
 
@@ -247,6 +297,8 @@
 - triggerTime: null
 - duration: 5
 - reason: 祈りは心を落ち着かせ、大きな存在とのつながりを感じさせます。
+- difficultyLevel: beginner
+- habitStackingTriggers: 起床後, 就寝前
 
 #### 聖典・哲学書を読む
 - type: do
@@ -256,6 +308,8 @@
 - triggerTime: null
 - duration: 15
 - reason: 古典的な知恵に触れることで、人生の指針を得られます。
+- difficultyLevel: intermediate
+- habitStackingTriggers: 朝の時間, 就寝前
 
 #### 静寂の時間を持つ
 - type: do
@@ -265,6 +319,8 @@
 - triggerTime: null
 - duration: 10
 - reason: 静寂の中で過ごすことで、内なる声に耳を傾けられます。
+- difficultyLevel: beginner
+- habitStackingTriggers: 起床後, 瞑想前
 
 #### 自然の中で過ごす
 - type: do
@@ -274,6 +330,8 @@
 - triggerTime: null
 - duration: 60
 - reason: 自然の中で過ごすことは、精神的なリフレッシュと気づきをもたらします。
+- difficultyLevel: beginner
+- habitStackingTriggers: 週末, 休日
 
 #### 奉仕活動をする
 - type: do
@@ -283,6 +341,8 @@
 - triggerTime: null
 - duration: 120
 - reason: 他者のために行動することで、自分の存在意義を感じられます。
+- difficultyLevel: intermediate
+- habitStackingTriggers: 週末, 休日
 
 ## Goals
 

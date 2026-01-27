@@ -14,6 +14,8 @@
 - triggerTime: 22:00
 - duration: 30
 - reason: 毎日の読書は知識を広げ、思考力を高めます。寝る前の読書は睡眠の質も向上させます。
+- difficultyLevel: beginner
+- habitStackingTriggers: 就寝前, 入浴後, 夕食後
 
 #### ニュースを読む
 - type: do
@@ -23,6 +25,8 @@
 - triggerTime: 08:00
 - duration: 15
 - reason: 毎日のニュースチェックで、社会の動向を把握し、視野を広げられます。
+- difficultyLevel: beginner
+- habitStackingTriggers: 朝食時, 通勤中, 起床後
 
 #### ポッドキャストを聴く
 - type: do
@@ -32,6 +36,8 @@
 - triggerTime: null
 - duration: 20
 - reason: 通勤時間などを活用して、効率的に知識をインプットできます。
+- difficultyLevel: beginner
+- habitStackingTriggers: 通勤中, 家事中, ウォーキング中
 
 #### オーディオブックを聴く
 - type: do
@@ -41,6 +47,8 @@
 - triggerTime: null
 - duration: 30
 - reason: 移動中や家事中でも学習でき、読書時間を増やせます。
+- difficultyLevel: beginner
+- habitStackingTriggers: 通勤中, 家事中, 運動中
 
 #### 専門書を読む
 - type: do
@@ -50,6 +58,8 @@
 - triggerTime: null
 - duration: 60
 - reason: 専門書で深い知識を得ることで、専門性が高まります。
+- difficultyLevel: intermediate
+- habitStackingTriggers: 週末の朝, 休日
 
 #### 論文を読む
 - type: do
@@ -59,6 +69,8 @@
 - triggerTime: null
 - duration: 45
 - reason: 最新の研究を追うことで、分野の最前線を把握できます。
+- difficultyLevel: advanced
+- habitStackingTriggers: 週末, 仕事終わり
 
 ### 語学学習
 
@@ -70,6 +82,8 @@
 - triggerTime: 07:30
 - duration: 20
 - reason: 毎日少しずつ英語に触れることで、着実に語学力が向上します。
+- difficultyLevel: beginner
+- habitStackingTriggers: 起床後, 朝食後, 通勤前
 
 #### 英単語を覚える
 - type: do
@@ -79,6 +93,8 @@
 - triggerTime: null
 - duration: 15
 - reason: 毎日少しずつ単語を覚えることで、語彙力が着実に増えます。
+- difficultyLevel: beginner
+- habitStackingTriggers: 通勤中, 昼休み, 就寝前
 
 #### 英語でニュースを読む
 - type: do
@@ -88,6 +104,8 @@
 - triggerTime: null
 - duration: 15
 - reason: 英語ニュースは実践的な読解力と時事知識を同時に身につけられます。
+- difficultyLevel: intermediate
+- habitStackingTriggers: 朝食時, 昼休み
 
 #### 英会話練習
 - type: do
@@ -97,6 +115,8 @@
 - triggerTime: null
 - duration: 30
 - reason: 実際に話す練習をすることで、スピーキング力が向上します。
+- difficultyLevel: intermediate
+- habitStackingTriggers: 仕事終わり, 週末
 
 #### 第二外国語学習
 - type: do
@@ -106,6 +126,8 @@
 - triggerTime: null
 - duration: 20
 - reason: 複数の言語を学ぶことで、視野が広がり、脳も活性化します。
+- difficultyLevel: advanced
+- habitStackingTriggers: 週末, 休日
 
 #### シャドーイング
 - type: do
@@ -115,6 +137,8 @@
 - triggerTime: null
 - duration: 10
 - reason: シャドーイングはリスニングとスピーキングを同時に鍛えられます。
+- difficultyLevel: intermediate
+- habitStackingTriggers: 通勤中, 朝の準備中
 
 ### オンライン学習
 
@@ -126,6 +150,8 @@
 - triggerTime: null
 - duration: 60
 - reason: オンライン講座で体系的に学ぶことで、効率的にスキルアップできます。
+- difficultyLevel: intermediate
+- habitStackingTriggers: 週末, 仕事終わり
 
 #### YouTube学習動画を見る
 - type: do
@@ -135,6 +161,8 @@
 - triggerTime: null
 - duration: 20
 - reason: 無料で質の高い学習コンテンツにアクセスでき、隙間時間を活用できます。
+- difficultyLevel: beginner
+- habitStackingTriggers: 昼休み, 夕食後, 通勤中
 
 #### MOOCで学ぶ
 - type: do
@@ -144,6 +172,8 @@
 - triggerTime: null
 - duration: 60
 - reason: 世界トップクラスの大学の講義を無料で受講できます。
+- difficultyLevel: intermediate
+- habitStackingTriggers: 週末, 休日
 
 #### ウェビナーに参加
 - type: do
@@ -153,6 +183,8 @@
 - triggerTime: null
 - duration: 60
 - reason: 専門家から直接学び、最新のトレンドを把握できます。
+- difficultyLevel: intermediate
+- habitStackingTriggers: 仕事終わり, 昼休み
 
 ### 技術スキル
 
@@ -164,6 +196,8 @@
 - triggerTime: null
 - duration: 30
 - reason: 毎日コードを書くことで、プログラミングスキルが着実に向上します。
+- difficultyLevel: intermediate
+- habitStackingTriggers: 朝の時間, 仕事終わり
 
 #### 新しい技術を試す
 - type: do
@@ -173,6 +207,8 @@
 - triggerTime: null
 - duration: 60
 - reason: 新技術に触れることで、技術トレンドを把握し、スキルの幅が広がります。
+- difficultyLevel: intermediate
+- habitStackingTriggers: 週末, 休日
 
 #### 技術ブログを読む
 - type: do
@@ -182,6 +218,8 @@
 - triggerTime: null
 - duration: 15
 - reason: 技術ブログで最新の知見やベストプラクティスを学べます。
+- difficultyLevel: beginner
+- habitStackingTriggers: 朝食時, 昼休み, 通勤中
 
 #### ハンズオン学習
 - type: do
@@ -191,6 +229,8 @@
 - triggerTime: null
 - duration: 90
 - reason: 実際に手を動かすことで、知識が定着し、実践力が身につきます。
+- difficultyLevel: intermediate
+- habitStackingTriggers: 週末, 休日
 
 #### コードレビューを受ける
 - type: do
@@ -200,6 +240,8 @@
 - triggerTime: null
 - duration: null
 - reason: 他者からのフィードバックは、自分では気づかない改善点を発見できます。
+- difficultyLevel: intermediate
+- habitStackingTriggers: 仕事中, プルリクエスト後
 
 ### 資格・試験
 
@@ -211,6 +253,8 @@
 - triggerTime: 21:00
 - duration: 45
 - reason: 毎日の積み重ねが資格取得への近道です。決まった時間に勉強する習慣が大切です。
+- difficultyLevel: intermediate
+- habitStackingTriggers: 夕食後, 入浴後
 
 #### 過去問を解く
 - type: do
@@ -220,6 +264,8 @@
 - triggerTime: null
 - duration: 60
 - reason: 過去問は出題傾向を把握し、実践力を高める最も効果的な方法です。
+- difficultyLevel: intermediate
+- habitStackingTriggers: 週末, 休日
 
 #### 模擬試験を受ける
 - type: do
@@ -229,6 +275,8 @@
 - triggerTime: null
 - duration: 120
 - reason: 本番と同じ条件で練習することで、時間配分と実力を確認できます。
+- difficultyLevel: advanced
+- habitStackingTriggers: 週末, 休日
 
 ### アウトプット
 
@@ -240,6 +288,8 @@
 - triggerTime: null
 - duration: 10
 - reason: 学んだことをメモすることで、記憶の定着と後からの振り返りが容易になります。
+- difficultyLevel: beginner
+- habitStackingTriggers: 学習後, 読書後, 会議後
 
 #### アウトプット（ブログ・SNS）
 - type: do
@@ -249,6 +299,8 @@
 - triggerTime: null
 - duration: 60
 - reason: 学んだことをアウトプットすることで、理解が深まり、知識が定着します。
+- difficultyLevel: intermediate
+- habitStackingTriggers: 週末, 休日
 
 #### 人に教える
 - type: do
@@ -258,6 +310,8 @@
 - triggerTime: null
 - duration: null
 - reason: 人に教えることは最高の学習方法です。理解の浅い部分が明確になります。
+- difficultyLevel: intermediate
+- habitStackingTriggers: 勉強会, 仕事中
 
 #### 勉強会に参加する
 - type: do
@@ -267,6 +321,8 @@
 - triggerTime: null
 - duration: 120
 - reason: 勉強会は同じ興味を持つ人と交流し、モチベーションを高められます。
+- difficultyLevel: intermediate
+- habitStackingTriggers: 仕事終わり, 週末
 
 #### 発表・プレゼンをする
 - type: do
@@ -276,6 +332,8 @@
 - triggerTime: null
 - duration: null
 - reason: 発表の準備は知識を整理し、プレゼンスキルも向上させます。
+- difficultyLevel: advanced
+- habitStackingTriggers: 勉強会, 社内ミーティング
 
 ### 新しい挑戦
 
@@ -287,6 +345,8 @@
 - triggerTime: null
 - duration: null
 - reason: 新しい経験は脳を活性化し、創造性と柔軟性を高めます。
+- difficultyLevel: beginner
+- habitStackingTriggers: 週末, 休日
 
 #### コンフォートゾーンを出る
 - type: do
@@ -296,6 +356,8 @@
 - triggerTime: null
 - duration: null
 - reason: 慣れた領域を出ることで、成長の機会が生まれます。
+- difficultyLevel: intermediate
+- habitStackingTriggers: 新しい機会があった時
 
 ## Goals
 

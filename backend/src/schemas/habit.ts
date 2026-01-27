@@ -27,6 +27,11 @@ export const habitSchema = z.object({
   target_count: z.number().int().positive().default(1),
   workload_unit: z.string().nullable().optional(),
   workload_per_count: z.number().positive().default(1),
+  // THLI-24 Level System fields (Requirements: 1.1, 1.2, 1.3, 1.4, 1.6)
+  level: z.number().int().min(0).max(199).nullable().optional(),
+  level_tier: z.enum(['beginner', 'intermediate', 'advanced', 'expert']).nullable().optional(),
+  level_assessment_data: z.record(z.unknown()).nullable().optional(),
+  level_last_assessed_at: z.string().datetime().nullable().optional(),
   created_at: z.string().datetime(),
   updated_at: z.string().datetime().nullable().optional(),
 });
@@ -164,6 +169,10 @@ export const goalSchema = z.object({
   description: z.string().nullable().optional(),
   parent_id: z.string().uuid().nullable().optional(),
   status: z.enum(['active', 'completed', 'archived']).default('active'),
+  // THLI-24 Level System fields (Requirements: 1.6)
+  level: z.number().int().min(0).max(199).nullable().optional(),
+  level_tier: z.enum(['beginner', 'intermediate', 'advanced', 'expert']).nullable().optional(),
+  level_last_assessed_at: z.string().datetime().nullable().optional(),
   created_at: z.string().datetime(),
   updated_at: z.string().datetime().nullable().optional(),
 });

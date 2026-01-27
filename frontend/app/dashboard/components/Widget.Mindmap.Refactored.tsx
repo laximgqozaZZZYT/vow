@@ -484,6 +484,7 @@ function MindmapFlow({
         }}
         onCreate={handleGoalCreate}
         goals={goals}
+        habits={habits}
       />
 
       {/* Coach Mark */}

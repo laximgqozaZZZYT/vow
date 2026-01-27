@@ -320,6 +320,7 @@ export default function KanbanColumn({
                 onSubtaskComplete={onSubtaskComplete}
                 onSubtaskEdit={onSubtaskEdit}
                 showWarning={needsWarning?.(habit.id)}
+                level={habit.level}
               />
             ))}
             

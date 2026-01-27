@@ -421,3 +421,396 @@ export function resetSpecLoader(): void {
 export function getDefaultSpecs(): SpecContent {
   return { ...DEFAULT_SPECS };
 }
+
+// ============================================================================
+// THLI-24 Prompt Loader
+// ============================================================================
+
+/**
+ * THLI-24プロンプトの必須セクション
+ * Requirements: 11.3 - プロンプトテンプレートの検証
+ */
+export const THLI_REQUIRED_SECTIONS = [
+  'Role',
+  'Facts system',
+  'PASS 1',
+  'PASS 2',
+  'External Cross-Check Lens',
+  'Output format',
+] as const;
+
+/**
+ * THLI-24プロンプトの必須セクション（日本語版）
+ * Requirements: 15.1, 15.3 - 日本語ローカライズ版のセクション
+ */
+export const THLI_REQUIRED_SECTIONS_JA: Record<string, string[]> = {
+  'Role': ['役割', 'Role'],
+  'Facts system': ['Facts システム', 'Facts system', 'Factsシステム'],
+  'PASS 1': ['PASS 1', 'パス1', '監査'],
+  'PASS 2': ['PASS 2', 'パス2', 'スコアリング'],
+  'External Cross-Check Lens': ['外部クロスチェックレンズ', 'External Cross-Check Lens', '外部レンズ'],
+  'Output format': ['出力フォーマット', 'Output format', '出力形式'],
+};
+
+/**
+ * THLI-24プロンプトのコンテキスト注入用プレースホルダー
+ * Requirements: 11.7, 15.4, 15.5 - コンテキスト注入
+ */
+export const THLI_CONTEXT_PLACEHOLDERS = {
+  HABIT_NAME: '{{HABIT_NAME}}',
+  CURRENT_WORKLOAD: '{{CURRENT_WORKLOAD}}',
+  GOAL_CONTEXT: '{{GOAL_CONTEXT}}',
+  USER_LEVEL: '{{USER_LEVEL}}',
+} as const;
+
+/**
+ * THLI-24プロンプトの検証結果
+ */
+export interface THLIPromptValidationResult {
+  /** 検証が成功したかどうか */
+  isValid: boolean;
+  /** 見つかったセクション */
+  foundSections: string[];
+  /** 欠落しているセクション */
+  missingSections: string[];
+  /** プロンプトのバージョン */
+  version: string | null;
+  /** エラーメッセージ（検証失敗時） */
+  errorMessage?: string;
+}
+
+/**
+ * THLI-24プロンプトのコンテキスト
+ * Requirements: 15.5 - コンテキスト値の注入
+ */
+export interface THLIPromptContext {
+  /** 習慣名 */
+  habitName: string;
+  /** 現在のワークロード */
+  currentWorkload: string;
+  /** ゴールコンテキスト */
+  goalContext: string;
+  /** ユーザーレベル */
+  userLevel: string;
+}
+
+/**
+ * THLI-24プロンプトローダークラス
+ *
+ * THLI-24 v1.9プロンプトテンプレートを読み込み、検証し、
+ * コンテキストを注入するサービス。
+ *
+ * Requirements:
+ * - 11.1: THE System SHALL store the THLI-24 v1.9 prompt as a markdown file
+ * - 11.2: WHEN the THLI_Assessment_Service initializes, THE System SHALL load the prompt template
+ * - 11.3: WHEN the prompt template is loaded, THE System SHALL validate it contains all required sections
+ * - 11.4: THE System SHALL support prompt versioning with semantic version numbers
+ * - 11.6: THE SpecLoader SHALL cache loaded THLI-24 prompts in memory
+ * - 15.1: THE System SHALL store a Japanese-localized version of the THLI-24 v1.9 prompt
+ * - 15.2: WHEN building the assessment prompt, THE System SHALL detect the user's language preference
+ */
+export class THLIPromptLoader {
+  private cachedPrompts: Map<string, string> = new Map();
+  private specDir: string;
+
+  /**
+   * THLIPromptLoaderを初期化する
+   *
+   * @param specDir - 仕様ファイルのディレクトリパス（デフォルト: backend/specs/ai-coach）
+   */
+  constructor(specDir?: string) {
+    this.specDir = specDir || this.getDefaultSpecDir();
+  }
+
+  /**
+   * デフォルトの仕様ディレクトリパスを取得
+   */
+  private getDefaultSpecDir(): string {
+    if (process.env['AWS_LAMBDA_FUNCTION_NAME']) {
+      return '/var/task/lambda-package/specs/ai-coach';
+    }
+    return path.resolve(process.cwd(), 'specs/ai-coach');
+  }
+
+  /**
+   * THLI-24プロンプトを読み込む
+   *
+   * @param language - 言語コード ('en' | 'ja')
+   * @param version - プロンプトバージョン（デフォルト: 'v1.9'）
+   * @returns プロンプト内容
+   *
+   * Requirements: 11.2, 15.2
+   */
+  async loadTHLIPrompt(
+    language: 'en' | 'ja' = 'en',
+    version: string = 'v1.9'
+  ): Promise<string> {
+    const cacheKey = `thli-24-${version}-${language}`;
+
+    // キャッシュから取得
+    const cached = this.cachedPrompts.get(cacheKey);
+    if (cached) {
+      logger.debug('THLI prompt loaded from cache', { cacheKey });
+      return cached;
+    }
+
+    // ファイル名を構築
+    const fileName = language === 'ja'
+      ? `thli-24-${version}-prompt-ja.md`
+      : `thli-24-${version}-prompt.md`;
+
+    const filePath = path.join(this.specDir, fileName);
+
+    logger.info('Loading THLI-24 prompt', { filePath, language, version });
+
+    try {
+      const content = await fs.readFile(filePath, 'utf-8');
+
+      if (!content.trim()) {
+        throw new Error(`THLI prompt file is empty: ${filePath}`);
+      }
+
+      // キャッシュに保存
+      this.cachedPrompts.set(cacheKey, content);
+
+      logger.info('THLI-24 prompt loaded successfully', {
+        filePath,
+        language,
+        version,
+        contentLength: content.length,
+      });
+
+      return content;
+    } catch (error) {
+      const errorMessage = (error as Error).message;
+      logger.error('Failed to load THLI-24 prompt', error as Error, {
+        filePath,
+        language,
+        version,
+      });
+
+      // 英語版にフォールバック（日本語版が見つからない場合）
+      if (language === 'ja') {
+        logger.warning('Falling back to English THLI prompt');
+        return this.loadTHLIPrompt('en', version);
+      }
+
+      throw new Error(`Failed to load THLI-24 prompt: ${errorMessage}`);
+    }
+  }
+
+  /**
+   * THLI-24プロンプトを検証する
+   *
+   * @param content - プロンプト内容
+   * @returns 検証結果
+   *
+   * Requirements: 11.3, 15.1
+   */
+  validateTHLIPrompt(content: string): THLIPromptValidationResult {
+    const foundSections: string[] = [];
+    const missingSections: string[] = [];
+
+    // 必須セクションの存在確認
+    for (const section of THLI_REQUIRED_SECTIONS) {
+      // 英語と日本語の両方のセクション名を取得
+      const sectionVariants = THLI_REQUIRED_SECTIONS_JA[section] || [section];
+      
+      // 各バリアントに対してパターンを検索
+      let found = false;
+      for (const variant of sectionVariants) {
+        // セクションヘッダーのパターンを検索
+        // "## Role", "# A) Facts system", "# B) PASS 1", "## 役割" などのパターンに対応
+        const escapedVariant = variant.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const patterns = [
+          new RegExp(`^#+\\s*${escapedVariant}`, 'im'),
+          new RegExp(`^#+\\s*[A-Z]\\)\\s*${escapedVariant}`, 'im'),
+          new RegExp(`^#+\\s*\\d+\\)\\s*${escapedVariant}`, 'im'),
+        ];
+
+        if (patterns.some(pattern => pattern.test(content))) {
+          found = true;
+          break;
+        }
+      }
+
+      if (found) {
+        foundSections.push(section);
+      } else {
+        missingSections.push(section);
+      }
+    }
+
+    // バージョンの抽出
+    const versionMatch = content.match(/THLI-24\s+v(\d+\.\d+)/i);
+    const version = versionMatch ? `v${versionMatch[1]}` : null;
+
+    const isValid = missingSections.length === 0;
+
+    const result: THLIPromptValidationResult = {
+      isValid,
+      foundSections,
+      missingSections,
+      version,
+    };
+
+    if (!isValid) {
+      result.errorMessage = `Missing required sections: ${missingSections.join(', ')}`;
+      logger.warning('THLI prompt validation failed', {
+        missingSections,
+        foundSections,
+        version,
+      });
+    } else {
+      logger.debug('THLI prompt validation passed', {
+        foundSections,
+        version,
+      });
+    }
+
+    return result;
+  }
+
+  /**
+   * THLI-24プロンプトにコンテキストを注入する
+   *
+   * @param prompt - プロンプトテンプレート
+   * @param context - 注入するコンテキスト
+   * @returns コンテキストが注入されたプロンプト
+   *
+   * Requirements: 11.7, 15.5
+   */
+  injectContext(prompt: string, context: THLIPromptContext): string {
+    let result = prompt;
+
+    // プレースホルダーを実際の値に置換
+    result = result.replace(
+      new RegExp(THLI_CONTEXT_PLACEHOLDERS.HABIT_NAME, 'g'),
+      context.habitName
+    );
+    result = result.replace(
+      new RegExp(THLI_CONTEXT_PLACEHOLDERS.CURRENT_WORKLOAD, 'g'),
+      context.currentWorkload
+    );
+    result = result.replace(
+      new RegExp(THLI_CONTEXT_PLACEHOLDERS.GOAL_CONTEXT, 'g'),
+      context.goalContext
+    );
+    result = result.replace(
+      new RegExp(THLI_CONTEXT_PLACEHOLDERS.USER_LEVEL, 'g'),
+      context.userLevel
+    );
+
+    logger.debug('Context injected into THLI prompt', {
+      habitName: context.habitName,
+      hasWorkload: !!context.currentWorkload,
+      hasGoalContext: !!context.goalContext,
+      hasUserLevel: !!context.userLevel,
+    });
+
+    return result;
+  }
+
+  /**
+   * THLI-24プロンプトを読み込み、検証し、コンテキストを注入する
+   *
+   * @param language - 言語コード ('en' | 'ja')
+   * @param context - 注入するコンテキスト
+   * @param version - プロンプトバージョン（デフォルト: 'v1.9'）
+   * @returns 準備されたプロンプト
+   *
+   * Requirements: 11.2, 11.3, 11.7, 15.2, 15.5
+   */
+  async prepareTHLIPrompt(
+    language: 'en' | 'ja',
+    context: THLIPromptContext,
+    version: string = 'v1.9'
+  ): Promise<{ prompt: string; validation: THLIPromptValidationResult }> {
+    // プロンプトを読み込む
+    const rawPrompt = await this.loadTHLIPrompt(language, version);
+
+    // 検証
+    const validation = this.validateTHLIPrompt(rawPrompt);
+
+    if (!validation.isValid) {
+      logger.warning('Using THLI prompt despite validation failure', {
+        missingSections: validation.missingSections,
+      });
+    }
+
+    // コンテキストを注入
+    const prompt = this.injectContext(rawPrompt, context);
+
+    return { prompt, validation };
+  }
+
+  /**
+   * キャッシュされたプロンプトを取得する
+   *
+   * @param language - 言語コード
+   * @param version - バージョン
+   * @returns キャッシュされたプロンプト、またはnull
+   */
+  getCachedPrompt(language: 'en' | 'ja', version: string = 'v1.9'): string | null {
+    const cacheKey = `thli-24-${version}-${language}`;
+    return this.cachedPrompts.get(cacheKey) || null;
+  }
+
+  /**
+   * キャッシュをクリアする
+   *
+   * Requirements: 11.6 - ホットリロードサポート
+   */
+  clearCache(): void {
+    this.cachedPrompts.clear();
+    logger.debug('THLI prompt cache cleared');
+  }
+
+  /**
+   * 特定のプロンプトのキャッシュをクリアする
+   *
+   * @param language - 言語コード
+   * @param version - バージョン
+   */
+  clearCacheForPrompt(language: 'en' | 'ja', version: string = 'v1.9'): void {
+    const cacheKey = `thli-24-${version}-${language}`;
+    this.cachedPrompts.delete(cacheKey);
+    logger.debug('THLI prompt cache cleared for specific prompt', { cacheKey });
+  }
+
+  /**
+   * プロンプトからバージョンを抽出する
+   *
+   * @param content - プロンプト内容
+   * @returns バージョン文字列（例: "v1.9"）、見つからない場合はnull
+   *
+   * Requirements: 11.5
+   */
+  extractVersion(content: string): string | null {
+    const versionMatch = content.match(/THLI-24\s+v(\d+\.\d+)/i);
+    return versionMatch ? `v${versionMatch[1]}` : null;
+  }
+}
+
+// THLIPromptLoaderのシングルトンインスタンス
+let thliPromptLoaderInstance: THLIPromptLoader | null = null;
+
+/**
+ * THLIPromptLoaderのシングルトンインスタンスを取得する
+ *
+ * @param specDir - 仕様ファイルのディレクトリパス（オプション）
+ * @returns THLIPromptLoaderインスタンス
+ */
+export function getTHLIPromptLoader(specDir?: string): THLIPromptLoader {
+  if (!thliPromptLoaderInstance) {
+    thliPromptLoaderInstance = new THLIPromptLoader(specDir);
+  }
+  return thliPromptLoaderInstance;
+}
+
+/**
+ * THLIPromptLoaderインスタンスをリセットする（テスト用）
+ */
+export function resetTHLIPromptLoader(): void {
+  thliPromptLoaderInstance = null;
+}

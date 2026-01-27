@@ -18,6 +18,11 @@ import { getLogger } from '../utils/logger.js';
 const logger = getLogger('masterDataLoader');
 
 /**
+ * 難易度レベル
+ */
+export type DifficultyLevel = 'beginner' | 'intermediate' | 'advanced';
+
+/**
  * 習慣提案のインターフェース
  */
 export interface HabitSuggestion {
@@ -39,6 +44,10 @@ export interface HabitSuggestion {
   duration: number | null | undefined;
   /** サブカテゴリ */
   subcategory: string | undefined;
+  /** 難易度レベル */
+  difficultyLevel: DifficultyLevel;
+  /** 習慣スタッキングのトリガー（既存習慣との連携ポイント） */
+  habitStackingTriggers: string[];
 }
 
 /**
@@ -255,6 +264,88 @@ export class MasterDataLoader {
   }
 
   /**
+   * 難易度レベルで習慣をフィルタリング
+   *
+   * @param category - カテゴリID
+   * @param level - 難易度レベル
+   * @returns フィルタリングされた習慣提案の配列
+   */
+  async getHabitsByDifficulty(category: string, level: DifficultyLevel): Promise<HabitSuggestion[]> {
+    const habits = await this.getHabitsByCategory(category);
+    return habits.filter(habit => habit.difficultyLevel === level);
+  }
+
+  /**
+   * 指定された難易度以下の習慣を取得
+   *
+   * @param category - カテゴリID
+   * @param maxLevel - 最大難易度レベル
+   * @returns フィルタリングされた習慣提案の配列
+   */
+  async getHabitsByMaxDifficulty(category: string, maxLevel: DifficultyLevel): Promise<HabitSuggestion[]> {
+    const habits = await this.getHabitsByCategory(category);
+    const levelOrder: Record<DifficultyLevel, number> = {
+      beginner: 1,
+      intermediate: 2,
+      advanced: 3,
+    };
+    const maxLevelValue = levelOrder[maxLevel];
+    return habits.filter(habit => levelOrder[habit.difficultyLevel] <= maxLevelValue);
+  }
+
+  /**
+   * 習慣スタッキングトリガーで習慣を検索
+   *
+   * @param trigger - 検索するトリガー（例: "朝食後", "起床後"）
+   * @returns マッチした習慣提案の配列
+   */
+  async searchHabitsByTrigger(trigger: string): Promise<Array<HabitSuggestion & { category: string }>> {
+    const allCategories = await this.getAllCategories();
+    const results: Array<HabitSuggestion & { category: string }> = [];
+    const lowerTrigger = trigger.toLowerCase();
+
+    for (const categoryData of allCategories) {
+      for (const habit of categoryData.habits) {
+        const hasMatchingTrigger = habit.habitStackingTriggers.some(
+          t => t.toLowerCase().includes(lowerTrigger)
+        );
+        if (hasMatchingTrigger) {
+          results.push({ ...habit, category: categoryData.category });
+        }
+      }
+    }
+
+    return results;
+  }
+
+  /**
+   * アンカー習慣に基づいて習慣スタッキング候補を取得
+   *
+   * @param anchorHabitName - アンカー習慣の名前
+   * @returns スタッキング候補の習慣提案の配列
+   */
+  async getStackingCandidates(anchorHabitName: string): Promise<Array<HabitSuggestion & { category: string }>> {
+    const allCategories = await this.getAllCategories();
+    const results: Array<HabitSuggestion & { category: string }> = [];
+    const lowerAnchorName = anchorHabitName.toLowerCase();
+
+    for (const categoryData of allCategories) {
+      for (const habit of categoryData.habits) {
+        // アンカー習慣名がトリガーに含まれている習慣を検索
+        const hasMatchingTrigger = habit.habitStackingTriggers.some(
+          t => t.toLowerCase().includes(lowerAnchorName) || 
+               lowerAnchorName.includes(t.toLowerCase())
+        );
+        if (hasMatchingTrigger) {
+          results.push({ ...habit, category: categoryData.category });
+        }
+      }
+    }
+
+    return results;
+  }
+
+  /**
    * Markdownファイルをパースしてカテゴリデータを生成
    *
    * @param content - Markdownファイルの内容
@@ -399,6 +490,12 @@ export class MasterDataLoader {
         case 'duration':
           habit.duration = value === 'null' ? null : parseInt(value, 10);
           break;
+        case 'difficultyLevel':
+          habit.difficultyLevel = this.parseDifficultyLevel(value);
+          break;
+        case 'habitStackingTriggers':
+          habit.habitStackingTriggers = this.parseHabitStackingTriggers(value);
+          break;
       }
     } else if (itemType === 'goal') {
       const goal = item as Partial<GoalSuggestion>;
@@ -414,6 +511,33 @@ export class MasterDataLoader {
           break;
       }
     }
+  }
+
+  /**
+   * 難易度レベルをパースする
+   * 
+   * @param value - パースする値
+   * @returns 難易度レベル（デフォルト: beginner）
+   */
+  private parseDifficultyLevel(value: string): DifficultyLevel {
+    const normalized = value.toLowerCase().trim();
+    if (normalized === 'beginner' || normalized === 'intermediate' || normalized === 'advanced') {
+      return normalized;
+    }
+    return 'beginner'; // デフォルト値
+  }
+
+  /**
+   * 習慣スタッキングトリガーをパースする
+   * 
+   * @param value - カンマ区切りの文字列
+   * @returns トリガーの配列
+   */
+  private parseHabitStackingTriggers(value: string): string[] {
+    if (!value || value === 'null') {
+      return [];
+    }
+    return value.split(',').map(trigger => trigger.trim()).filter(trigger => trigger.length > 0);
   }
 
   /**
@@ -441,6 +565,8 @@ export class MasterDataLoader {
           triggerTime: habit.triggerTime,
           duration: habit.duration,
           subcategory: subcategory || undefined,
+          difficultyLevel: habit.difficultyLevel || 'beginner',
+          habitStackingTriggers: habit.habitStackingTriggers || [],
         });
       }
     } else if (itemType === 'goal') {

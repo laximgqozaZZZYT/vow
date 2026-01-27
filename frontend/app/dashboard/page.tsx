@@ -886,7 +886,16 @@ function DashboardLayout(props: any) {
         return (
           <CoachSection
             goals={goals}
+            habits={habits}
             onHabitCreated={async () => {
+              try {
+                const hs = await api.getHabits();
+                setHabits(hs || []);
+              } catch (e) {
+                console.error('Failed to reload habits', e);
+              }
+            }}
+            onHabitUpdated={async () => {
               try {
                 const hs = await api.getHabits();
                 setHabits(hs || []);
@@ -1008,6 +1017,7 @@ function DashboardLayout(props: any) {
         goals={goals}
         tags={tags}
         onTagsChange={handleGoalTagsChange}
+        habits={habits}
       />
 
       <EditLayoutModal
@@ -1037,12 +1047,23 @@ function DashboardLayout(props: any) {
         goals={goals}
         tags={tags}
         onTagsChange={handleGoalTagsChange}
+        habits={habits}
       />
 
       <HabitModal
         key={selectedHabit?.id ?? 'none'}
         open={openHabitModal}
-        onClose={() => { setOpenHabitModal(false); setSelectedHabitId(null); }}
+        onClose={async () => { 
+          setOpenHabitModal(false); 
+          setSelectedHabitId(null); 
+          // Reload habits to reflect any level changes
+          try {
+            const hs = await api.getHabits();
+            setHabits(hs || []);
+          } catch (e) {
+            console.error('Failed to reload habits:', e);
+          }
+        }}
         habit={selectedHabit as any}
         onUpdate={async (updated) => {
           try { 

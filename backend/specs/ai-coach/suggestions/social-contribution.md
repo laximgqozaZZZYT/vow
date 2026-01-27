@@ -14,6 +14,8 @@
 - triggerTime: null
 - duration: 180
 - reason: ボランティア活動は、社会貢献と自己成長の両方を実現します。
+- difficultyLevel: intermediate
+- habitStackingTriggers: 週末, 休日
 
 #### 地域清掃に参加する
 - type: do
@@ -23,6 +25,8 @@
 - triggerTime: null
 - duration: 60
 - reason: 地域清掃は、身近な社会貢献であり、地域との繋がりを深めます。
+- difficultyLevel: beginner
+- habitStackingTriggers: 週末, 地域イベント時
 
 #### 献血をする
 - type: do
@@ -32,6 +36,8 @@
 - triggerTime: null
 - duration: 60
 - reason: 献血は、誰かの命を救う直接的な社会貢献です。
+- difficultyLevel: beginner
+- habitStackingTriggers: 献血ルーム訪問時
 
 #### 災害ボランティアに登録する
 - type: do
@@ -41,6 +47,8 @@
 - triggerTime: null
 - duration: null
 - reason: 災害時に備えて登録しておくことで、いざという時に貢献できます。
+- difficultyLevel: beginner
+- habitStackingTriggers: 防災の日
 
 #### 子供の見守り活動に参加する
 - type: do
@@ -50,6 +58,8 @@
 - triggerTime: null
 - duration: 30
 - reason: 子供の安全を守る活動は、地域全体の安心につながります。
+- difficultyLevel: beginner
+- habitStackingTriggers: 登下校時間
 
 #### 高齢者の支援をする
 - type: do
@@ -59,6 +69,8 @@
 - triggerTime: null
 - duration: 60
 - reason: 高齢者への支援は、社会の支え合いの基本です。
+- difficultyLevel: intermediate
+- habitStackingTriggers: 週末, 休日
 
 ### 寄付・支援
 
@@ -70,6 +82,8 @@
 - triggerTime: null
 - duration: null
 - reason: 定期的な寄付は、継続的な社会貢献を可能にします。
+- difficultyLevel: beginner
+- habitStackingTriggers: 給料日
 
 #### 不用品を寄付する
 - type: do
@@ -79,6 +93,8 @@
 - triggerTime: null
 - duration: 30
 - reason: 不用品の寄付は、物を活かしながら社会貢献できます。
+- difficultyLevel: beginner
+- habitStackingTriggers: 断捨離時, 大掃除時
 
 #### クラウドファンディングで支援する
 - type: do
@@ -88,6 +104,8 @@
 - triggerTime: null
 - duration: 15
 - reason: クラウドファンディングは、共感するプロジェクトを直接支援できます。
+- difficultyLevel: beginner
+- habitStackingTriggers: 興味あるプロジェクトを見つけた時
 
 #### フェアトレード商品を選ぶ
 - type: do
@@ -97,6 +115,8 @@
 - triggerTime: null
 - duration: null
 - reason: フェアトレード商品の購入は、生産者を支援する消費行動です。
+- difficultyLevel: beginner
+- habitStackingTriggers: 買い物時
 
 #### 地元の店で買い物をする
 - type: do
@@ -106,6 +126,8 @@
 - triggerTime: null
 - duration: null
 - reason: 地元での買い物は、地域経済を支える貢献です。
+- difficultyLevel: beginner
+- habitStackingTriggers: 買い物時
 
 ### 環境保護
 
@@ -117,6 +139,8 @@
 - triggerTime: null
 - duration: null
 - reason: 正しいゴミ分別は、リサイクルと環境保護の基本です。
+- difficultyLevel: beginner
+- habitStackingTriggers: ゴミを捨てる時
 
 #### マイバッグを使う
 - type: do
@@ -126,6 +150,8 @@
 - triggerTime: null
 - duration: null
 - reason: マイバッグの使用は、プラスチック削減に貢献します。
+- difficultyLevel: beginner
+- habitStackingTriggers: 買い物時
 
 #### マイボトルを使う
 - type: do
@@ -135,6 +161,8 @@
 - triggerTime: null
 - duration: null
 - reason: マイボトルは、ペットボトルの削減と節約の両方に効果的です。
+- difficultyLevel: beginner
+- habitStackingTriggers: 外出時
 
 #### 節電を心がける
 - type: do
@@ -144,6 +172,8 @@
 - triggerTime: null
 - duration: null
 - reason: 節電は、環境保護と家計の両方に貢献します。
+- difficultyLevel: beginner
+- habitStackingTriggers: 外出時, 就寝前
 
 #### 節水を心がける
 - type: do
@@ -153,6 +183,8 @@
 - triggerTime: null
 - duration: null
 - reason: 水は貴重な資源です。節水は環境保護の基本です。
+- difficultyLevel: beginner
+- habitStackingTriggers: 水を使う時
 
 #### 食品ロスを減らす
 - type: do
@@ -162,6 +194,8 @@
 - triggerTime: null
 - duration: null
 - reason: 食品ロスの削減は、環境と家計の両方に良い影響を与えます。
+- difficultyLevel: beginner
+- habitStackingTriggers: 食事時, 買い物時
 
 #### 公共交通機関を使う
 - type: do
@@ -171,6 +205,8 @@
 - triggerTime: null
 - duration: null
 - reason: 公共交通機関の利用は、CO2削減に貢献します。
+- difficultyLevel: beginner
+- habitStackingTriggers: 通勤時, 外出時
 
 #### 植樹活動に参加する
 - type: do
@@ -180,6 +216,8 @@
 - triggerTime: null
 - duration: 120
 - reason: 植樹は、長期的な環境保護への直接的な貢献です。
+- difficultyLevel: intermediate
+- habitStackingTriggers: 週末, 休日
 
 ### 地域活動
 
@@ -191,6 +229,8 @@
 - triggerTime: null
 - duration: 60
 - reason: 地域活動への参加は、コミュニティの一員としての責任です。
+- difficultyLevel: intermediate
+- habitStackingTriggers: 会合の日
 
 #### 地域のイベントに参加する
 - type: do
@@ -200,6 +240,8 @@
 - triggerTime: null
 - duration: 120
 - reason: 地域イベントは、近隣との繋がりを深める機会です。
+- difficultyLevel: beginner
+- habitStackingTriggers: イベント開催時
 
 #### 近所の人に挨拶する
 - type: do
@@ -209,6 +251,8 @@
 - triggerTime: null
 - duration: null
 - reason: 挨拶は、地域の安全と繋がりの基本です。
+- difficultyLevel: beginner
+- habitStackingTriggers: 外出時, 帰宅時
 
 #### 地域の問題に関心を持つ
 - type: do
@@ -218,6 +262,8 @@
 - triggerTime: null
 - duration: 15
 - reason: 地域の問題を知ることは、より良い地域づくりの第一歩です。
+- difficultyLevel: beginner
+- habitStackingTriggers: ニュースを見る時
 
 ### 知識・スキルの共有
 
@@ -229,6 +275,8 @@
 - triggerTime: null
 - duration: 60
 - reason: 自分の知識を共有することは、社会への貢献です。
+- difficultyLevel: intermediate
+- habitStackingTriggers: 機会がある時
 
 #### メンターになる
 - type: do
@@ -238,6 +286,8 @@
 - triggerTime: null
 - duration: 60
 - reason: メンタリングは、次世代の成長を支援する重要な活動です。
+- difficultyLevel: advanced
+- habitStackingTriggers: 定期的なミーティング時
 
 #### オープンソースに貢献する
 - type: do
@@ -247,6 +297,8 @@
 - triggerTime: null
 - duration: 60
 - reason: オープンソースへの貢献は、技術コミュニティへの還元です。
+- difficultyLevel: advanced
+- habitStackingTriggers: 週末, 仕事終わり
 
 #### 情報を発信する
 - type: do
@@ -256,6 +308,8 @@
 - triggerTime: null
 - duration: 30
 - reason: 有益な情報の発信は、多くの人の役に立ちます。
+- difficultyLevel: intermediate
+- habitStackingTriggers: 週末, 学んだ後
 
 ## Goals
 

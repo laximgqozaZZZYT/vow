@@ -2,6 +2,7 @@
 
 import React from "react"
 import { supabaseDirectClient } from '../../../lib/supabase-direct'
+import { supabase } from '../../../lib/supabaseClient'
 import { debug } from '../../../lib/debug'
 import { Popover } from "@headlessui/react"
 import { DayPicker } from "react-day-picker"
@@ -10,6 +11,7 @@ import SmartSelector, { SmartSelectorItem } from './Widget.SmartSelector'
 import StickyFooter from './Widget.StickyFooter'
 import { useLocalStorage } from '../hooks/useLocalStorage'
 import { useLocale } from '@/contexts/LocaleContext'
+import LevelAssessmentSliders, { type LevelVariables } from './Widget.LevelAssessmentSliders'
 
 // Helper: format a Date to local YYYY-MM-DD (avoid toISOString which uses UTC)
 function formatLocalDate(d: Date) {
@@ -163,6 +165,10 @@ export function HabitModal({ open, onClose, habit, onUpdate, onDelete, onCreate,
     // Tags state
     const [selectedTagIds, setSelectedTagIds] = React.useState<string[]>([])
 
+    // Level assessment state
+    const [showLevelAssessment, setShowLevelAssessment] = React.useState(false)
+    const [levelAssessmentLoading, setLevelAssessmentLoading] = React.useState(false)
+
     // Toggle view mode
     const toggleViewMode = React.useCallback(() => {
         setViewMode(viewMode === 'normal' ? 'detail' : 'normal')
@@ -175,6 +181,114 @@ export function HabitModal({ open, onClose, habit, onUpdate, onDelete, onCreate,
             [section]: !prev[section]
         }))
     }, [])
+
+    // Level assessment handler
+    const handleLevelAssessmentSubmit = React.useCallback(async (habitId: string, variables: LevelVariables, level: number) => {
+        setLevelAssessmentLoading(true)
+        try {
+            if (!supabase) {
+                console.error('Supabase not initialized')
+                alert('Supabaseが初期化されていません')
+                return
+            }
+
+            const { data: { session } } = await supabase.auth.getSession()
+            const now = new Date().toISOString()
+            
+            // Calculate level tier
+            const levelTier = level < 50 ? 'beginner' : level < 100 ? 'intermediate' : level < 150 ? 'advanced' : 'expert'
+
+            debug.log('[HabitModal] Saving level:', { habitId, level, levelTier, variables, isGuest: !session?.user })
+
+            if (!session?.user) {
+                // Guest mode: update localStorage
+                debug.log('[HabitModal] Guest mode - updating localStorage')
+                const guestHabits = JSON.parse(localStorage.getItem('guest-habits') || '[]')
+                const habitIndex = guestHabits.findIndex((h: any) => h.id === habitId)
+                
+                if (habitIndex === -1) {
+                    alert('習慣が見つかりません')
+                    return
+                }
+                
+                guestHabits[habitIndex] = {
+                    ...guestHabits[habitIndex],
+                    level,
+                    levelTier,
+                    levelAssessedAt: now,
+                    levelAssessmentRaw: {
+                        assessmentType: 'manual_slider',
+                        variables,
+                        level,
+                        assessedAt: now,
+                    },
+                    updatedAt: now,
+                }
+                
+                localStorage.setItem('guest-habits', JSON.stringify(guestHabits))
+                debug.log('[HabitModal] Guest level saved successfully')
+                
+                // Close slider UI - the parent will reload habits data
+                setShowLevelAssessment(false)
+                
+                // Close modal and trigger data reload
+                onClose()
+                return
+            }
+
+            // Authenticated mode: update Supabase
+            const { data: updateData, error } = await supabase
+                .from('habits')
+                .update({
+                    level,
+                    level_tier: levelTier,
+                    level_assessed_at: now,
+                    level_assessment_raw: {
+                        assessmentType: 'manual_slider',
+                        variables,
+                        level,
+                        assessedAt: now,
+                    },
+                    updated_at: now,
+                })
+                .eq('id', habitId)
+                .eq('owner_id', session.user.id)
+                .select()
+
+            if (error) {
+                console.error('[HabitModal] Level save error:', error)
+                alert(`レベルの保存に失敗しました: ${error.message}`)
+                return
+            }
+
+            debug.log('[HabitModal] Level saved successfully:', updateData)
+
+            // Record in level_history (don't fail if this errors)
+            try {
+                await supabase.from('level_history').insert({
+                    habit_id: habitId,
+                    user_id: session.user.id,
+                    old_level: (habit as any)?.level ?? null,
+                    new_level: level,
+                    change_reason: 'manual_adjustment',
+                    workload_delta: variables,
+                })
+            } catch (historyErr) {
+                console.warn('[HabitModal] Failed to record level history:', historyErr)
+            }
+
+            // Close slider UI - the parent will reload habits data
+            setShowLevelAssessment(false)
+            
+            // Close modal and trigger data reload
+            onClose()
+        } catch (err) {
+            console.error('Failed to save level:', err)
+            alert(`エラーが発生しました: ${err instanceof Error ? err.message : String(err)}`)
+        } finally {
+            setLevelAssessmentLoading(false)
+        }
+    }, [habit, onClose])
 
     async function loadAllHabits() {
         try {
@@ -513,6 +627,44 @@ export function HabitModal({ open, onClose, habit, onUpdate, onDelete, onCreate,
                     <div className="flex-1">
                         <h3 className="text-base sm:text-lg font-medium mb-3 text-slate-100">{t('habit.name')}</h3>
                         <input value={name} onChange={(e) => setName(e.target.value)} placeholder={t('habit.name.placeholder')} className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:cursor-not-allowed disabled:opacity-50" />
+
+                        {/* Level display - only show for existing habits */}
+                        {habit && (
+                            <div className="mt-4">
+                                <h3 className="text-base sm:text-lg font-medium mb-2 text-slate-100">Level</h3>
+                                {showLevelAssessment ? (
+                                    <LevelAssessmentSliders
+                                        habitId={habit.id}
+                                        habitName={habit.name}
+                                        onSubmit={handleLevelAssessmentSubmit}
+                                        onCancel={() => setShowLevelAssessment(false)}
+                                        isLoading={levelAssessmentLoading}
+                                    />
+                                ) : (
+                                    <div className="flex items-center gap-2 px-3 py-2 rounded-md bg-muted border border-border">
+                                        <span className="text-sm font-medium text-foreground">
+                                            {(habit as any).level !== null && (habit as any).level !== undefined 
+                                                ? `Lv. ${(habit as any).level}` 
+                                                : 'Lv. ???'}
+                                        </span>
+                                        {(habit as any).levelTier && (
+                                            <span className="text-xs text-muted-foreground">
+                                                ({(habit as any).levelTier === 'beginner' ? '初級' : 
+                                                  (habit as any).levelTier === 'intermediate' ? '中級' : 
+                                                  (habit as any).levelTier === 'advanced' ? '上級' : 
+                                                  (habit as any).levelTier === 'expert' ? '達人' : ''})
+                                            </span>
+                                        )}
+                                        <button
+                                            onClick={() => setShowLevelAssessment(true)}
+                                            className="ml-auto text-xs text-primary hover:underline"
+                                        >
+                                            手動で設定
+                                        </button>
+                                    </div>
+                                )}
+                            </div>
+                        )}
 
                         <div className="mt-8">
                             {/* Workload section - hidden in Normal View unless expanded */}

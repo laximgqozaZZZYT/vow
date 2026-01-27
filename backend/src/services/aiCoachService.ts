@@ -20,6 +20,13 @@ import {
 } from '../utils/errorHandler.js';
 import type { SupabaseClient } from '@supabase/supabase-js';
 
+// THLI-24 related imports
+import { THLIAssessmentService } from './thliAssessmentService.js';
+import { BabyStepGeneratorService } from './babyStepGeneratorService.js';
+import { LevelManagerService } from './levelManagerService.js';
+import { UsageQuotaService } from './usageQuotaService.js';
+import type { LevelEstimate, BabyStepPlans, QuotaStatus } from '../types/thli.js';
+
 const logger = getLogger('aiCoachService');
 
 /**
@@ -31,7 +38,7 @@ const COACH_TOOLS: ChatCompletionTool[] = [
     type: 'function',
     function: {
       name: 'create_habit_suggestion',
-      description: 'ユーザーに習慣を提案する際に使用。このツールを呼ぶと、フロントエンドに編集可能なフォームが表示される。ユーザーが習慣を作りたい、または習慣を提案してほしいと言った場合は必ずこのツールを使う。',
+      description: 'ユーザーに習慣を提案する際に使用。このツールを呼ぶと、フロントエンドに候補カードが表示される（モーダルは開かない）。ユーザーがカードをクリックすると編集モーダルが開く。ユーザーが習慣を作りたい、または習慣を提案してほしいと言った場合は必ずこのツールを使う。',
       parameters: {
         type: 'object',
         properties: {
@@ -115,7 +122,7 @@ const COACH_TOOLS: ChatCompletionTool[] = [
     type: 'function',
     function: {
       name: 'create_goal_suggestion',
-      description: 'ユーザーにゴール（目標）を提案する際に使用。このツールを呼ぶと、フロントエンドにゴール作成用のモーダルが表示される。ユーザーがゴールを作りたい、または目標を提案してほしいと言った場合は必ずこのツールを使う。',
+      description: 'ユーザーにゴール（目標）を提案する際に使用。このツールを呼ぶと、フロントエンドに候補カードが表示される（モーダルは開かない）。ユーザーがカードをクリックすると編集モーダルが開く。ユーザーがゴールを作りたい、または目標を提案してほしいと言った場合は必ずこのツールを使う。',
       parameters: {
         type: 'object',
         properties: {
@@ -145,7 +152,7 @@ const COACH_TOOLS: ChatCompletionTool[] = [
     type: 'function',
     function: {
       name: 'create_multiple_goal_suggestions',
-      description: '複数のゴールを一度に提案する際に使用。ユーザーが「どんなゴールを設定すればいいか」と聞いた場合などに使う。必ずshow_choice_buttonsと組み合わせて、選択肢をボタン形式で表示する。',
+      description: '【必須】複数のゴールを提案する際に使用。ユーザーが「どんなゴールを設定すればいいか」「目標を決めたい」と聞いた場合は必ずこのツールを使う。テキストの番号リストでゴールを提案することは禁止。このツールを呼ぶと、フロントエンドに候補カードが表示される。',
       parameters: {
         type: 'object',
         properties: {
@@ -436,6 +443,107 @@ const COACH_TOOLS: ChatCompletionTool[] = [
       },
     },
   },
+  // === THLI-24 レベル評価ツール ===
+  {
+    type: 'function',
+    function: {
+      name: 'assess_habit_level',
+      description: '習慣のレベル（難易度）をTHLI-24フレームワークで評価する。ユーザーが「この習慣のレベルを知りたい」「習慣の難易度を評価して」と言った場合に使用。評価には複数の質問に答える必要がある。',
+      parameters: {
+        type: 'object',
+        properties: {
+          habit_id: {
+            type: 'string',
+            description: '評価する習慣のID',
+          },
+          habit_name: {
+            type: 'string',
+            description: '評価する習慣の名前（IDがない場合に名前で検索）',
+          },
+        },
+        required: [],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'suggest_baby_steps',
+      description: '習慣を簡略化するベビーステップを提案する。ユーザーが「習慣が難しすぎる」「もっと簡単にしたい」「続けられない」と言った場合に使用。Lv.50（半分の負荷）とLv.10（最小限の習慣）の2つのプランを提案する。',
+      parameters: {
+        type: 'object',
+        properties: {
+          habit_id: {
+            type: 'string',
+            description: '簡略化する習慣のID',
+          },
+          habit_name: {
+            type: 'string',
+            description: '簡略化する習慣の名前（IDがない場合に名前で検索）',
+          },
+          target_level: {
+            type: 'number',
+            description: '目標レベル（省略時はLv.50とLv.10の両方を提案）',
+          },
+        },
+        required: [],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'suggest_level_up',
+      description: '習慣のレベルアップを提案する。ユーザーが「習慣が簡単すぎる」「もっと挑戦したい」「レベルを上げたい」と言った場合に使用。達成率が高い習慣に対して、より高い負荷の習慣を提案する。',
+      parameters: {
+        type: 'object',
+        properties: {
+          habit_id: {
+            type: 'string',
+            description: 'レベルアップする習慣のID',
+          },
+          habit_name: {
+            type: 'string',
+            description: 'レベルアップする習慣の名前（IDがない場合に名前で検索）',
+          },
+        },
+        required: [],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'get_habit_level_details',
+      description: '習慣のレベル詳細情報を取得する。ユーザーが「習慣のレベルを見せて」「評価結果を確認したい」と言った場合に使用。',
+      parameters: {
+        type: 'object',
+        properties: {
+          habit_id: {
+            type: 'string',
+            description: '詳細を取得する習慣のID',
+          },
+          habit_name: {
+            type: 'string',
+            description: '詳細を取得する習慣の名前（IDがない場合に名前で検索）',
+          },
+        },
+        required: [],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'get_thli_quota_status',
+      description: 'ユーザーのTHLI-24評価クォータ（残り回数）を取得する。ユーザーが「あと何回評価できる？」「クォータを確認したい」と言った場合に使用。',
+      parameters: {
+        type: 'object',
+        properties: {},
+        required: [],
+      },
+    },
+  },
   // === UIコンポーネント表示ツール ===
   {
     type: 'function',
@@ -552,6 +660,18 @@ import { getSpecLoader, type SpecContent } from './specLoader.js';
 // Import MasterDataLoader for category-based suggestions
 import { getMasterDataLoader } from './masterDataLoader.js';
 
+// Import PersonalizationEngine for user context analysis
+import { PersonalizationEngine } from './personalizationEngine.js';
+
+// Import PromptBuilder for context-aware prompts
+import { getPromptBuilder } from './promptBuilder.js';
+
+// Import SimilarityChecker for duplicate detection
+import { getSimilarityChecker } from './similarityChecker.js';
+
+// Import UserContext type
+import type { UserContext } from '../types/personalization.js';
+
 /**
  * System prompt cache for the AI Coach
  * Loaded from external spec files on first use
@@ -633,6 +753,12 @@ export interface CoachResponse {
     parsedGoal?: Record<string, unknown>;
     goalSuggestions?: Array<Record<string, unknown>>;
     uiComponents?: Array<Record<string, unknown>>;
+    // THLI-24 related data
+    levelAssessment?: LevelEstimate;
+    babyStepPlans?: BabyStepPlans;
+    quotaStatus?: QuotaStatus;
+    levelDetails?: Record<string, unknown>;
+    levelUpSuggestion?: Record<string, unknown>;
   } | undefined;
 }
 
@@ -646,11 +772,20 @@ export class AICoachService {
   private activityRepo: ActivityRepository;
   private goalRepo: GoalRepository;
   private userId: string;
+  private personalizationEngine: PersonalizationEngine;
+  private userContext: UserContext | null = null;
+  private supabase: SupabaseClient;
+  // THLI-24 related services
+  private thliAssessmentService: THLIAssessmentService;
+  private babyStepGeneratorService: BabyStepGeneratorService;
+  private levelManagerService: LevelManagerService;
+  private usageQuotaService: UsageQuotaService;
 
   constructor(supabase: SupabaseClient, userId: string) {
     const settings = getSettings();
     this.model = settings.openaiModel || 'gpt-4o-mini';
     this.userId = userId;
+    this.supabase = supabase;
 
     if (settings.openaiApiKey) {
       this.openai = new OpenAI({ apiKey: settings.openaiApiKey });
@@ -659,6 +794,13 @@ export class AICoachService {
     this.habitRepo = new HabitRepository(supabase);
     this.activityRepo = new ActivityRepository(supabase);
     this.goalRepo = new GoalRepository(supabase);
+    this.personalizationEngine = new PersonalizationEngine(supabase);
+    
+    // Initialize THLI-24 services
+    this.thliAssessmentService = new THLIAssessmentService(supabase);
+    this.babyStepGeneratorService = new BabyStepGeneratorService(supabase);
+    this.levelManagerService = new LevelManagerService(supabase);
+    this.usageQuotaService = new UsageQuotaService(supabase);
   }
 
   /**
@@ -689,8 +831,22 @@ export class AICoachService {
     }
 
     try {
-      // Load system prompt from external spec files
-      const systemPrompt = await loadSystemPrompt();
+      // Load base system prompt from external spec files
+      const baseSystemPrompt = await loadSystemPrompt();
+
+      // Analyze user context for personalization (Requirements: 1.1, 6.1)
+      this.userContext = await this.personalizationEngine.analyzeUserContext(this.userId);
+      
+      // Build personalized system prompt using PromptBuilder (Requirements: 6.1, 6.2, 6.3)
+      const promptBuilder = getPromptBuilder();
+      const systemPrompt = promptBuilder.buildSystemPrompt(this.userContext, baseSystemPrompt);
+
+      logger.debug('Personalized system prompt built', {
+        userId: this.userId,
+        userLevel: this.userContext.userLevel,
+        activeHabitCount: this.userContext.activeHabitCount,
+        averageCompletionRate: Math.round(this.userContext.averageCompletionRate * 100),
+      });
 
       // Check if clarification is needed (unless user wants to proceed)
       const clarification = needsClarification(userMessage);
@@ -843,10 +999,10 @@ export class AICoachService {
 
       // Goal提案ツール
       case 'create_goal_suggestion':
-        return this.createGoalSuggestion(args);
+        return await this.createGoalSuggestion(args);
 
       case 'create_multiple_goal_suggestions':
-        return this.createMultipleGoalSuggestions(args['suggestions'] as Array<Record<string, unknown>>);
+        return await this.createMultipleGoalSuggestions(args['suggestions'] as Array<Record<string, unknown>>);
 
       // 既存ツール
       case 'analyze_habits':
@@ -944,6 +1100,35 @@ export class AICoachService {
       case 'show_workload_chart':
         return this.showWorkloadChart(args['chart_type'] as string | undefined);
 
+      // THLI-24 レベル評価ツール
+      case 'assess_habit_level':
+        return this.assessHabitLevel(
+          args['habit_id'] as string | undefined,
+          args['habit_name'] as string | undefined
+        );
+
+      case 'suggest_baby_steps':
+        return this.suggestBabySteps(
+          args['habit_id'] as string | undefined,
+          args['habit_name'] as string | undefined,
+          args['target_level'] as number | undefined
+        );
+
+      case 'suggest_level_up':
+        return this.suggestLevelUp(
+          args['habit_id'] as string | undefined,
+          args['habit_name'] as string | undefined
+        );
+
+      case 'get_habit_level_details':
+        return this.getHabitLevelDetails(
+          args['habit_id'] as string | undefined,
+          args['habit_name'] as string | undefined
+        );
+
+      case 'get_thli_quota_status':
+        return this.getTHLIQuotaStatus();
+
       default:
         return { error: `Unknown tool: ${toolName}` };
     }
@@ -1001,71 +1186,249 @@ export class AICoachService {
         }
         data.uiComponents.push(result as Record<string, unknown>);
         break;
+      // THLI-24 ツール結果の保存
+      case 'assess_habit_level':
+        data.levelAssessment = (result as { assessment: LevelEstimate }).assessment;
+        break;
+      case 'suggest_baby_steps':
+        data.babyStepPlans = (result as { plans: BabyStepPlans }).plans;
+        break;
+      case 'suggest_level_up':
+        data.levelUpSuggestion = result as Record<string, unknown>;
+        break;
+      case 'get_habit_level_details':
+        data.levelDetails = result as Record<string, unknown>;
+        break;
+      case 'get_thli_quota_status':
+        data.quotaStatus = result as QuotaStatus;
+        break;
     }
   }
 
   /**
    * Create a single habit suggestion (for UI display)
+   * Includes duplicate detection using SimilarityChecker (Requirements: 4.1, 4.2)
+   * Enhanced with user preferred time slots (Requirements: 3.5)
    */
   private createHabitSuggestion(args: Record<string, unknown>): Record<string, unknown> {
+    const habitName = args['name'] as string;
+    const frequency = args['frequency'] as string;
+    
+    // Check for duplicates using SimilarityChecker (Requirements: 4.1, 4.2)
+    const similarityChecker = getSimilarityChecker();
+    const existingHabitNames = this.userContext?.existingHabitNames || [];
+    const similarityResult = similarityChecker.checkSimilarity(habitName, existingHabitNames);
+
+    // Log duplicate detection (Requirements: 4.5)
+    if (!similarityResult.isUnique) {
+      logger.info('Duplicate habit suggestion detected', {
+        userId: this.userId,
+        suggestedHabit: habitName,
+        similarTo: similarityResult.mostSimilarHabit,
+        similarityScore: similarityResult.similarityScore,
+      });
+    }
+
+    // Enhance triggerTime with user's preferred time slots (Requirements: 3.5)
+    let triggerTime = args['triggerTime'] as string | null || null;
+    if (!triggerTime && frequency === 'daily' && this.userContext?.preferredTimeSlots?.length) {
+      // Use the most frequent time slot
+      const preferredSlot = this.userContext.preferredTimeSlots[0];
+      if (preferredSlot) {
+        triggerTime = `${preferredSlot.hour.toString().padStart(2, '0')}:00`;
+      }
+    }
+
+    // Generate personalized reason (Requirements: 3.4)
+    let reason = args['reason'] as string || '';
+    if (reason && this.userContext) {
+      reason = this.personalizeReason(reason, habitName);
+    }
+
     return {
-      name: args['name'] as string,
+      name: habitName,
       type: args['type'] as string,
-      frequency: args['frequency'] as string,
-      triggerTime: args['triggerTime'] as string | null || null,
+      frequency,
+      triggerTime,
       duration: args['duration'] as number | null || null,
       targetCount: args['targetCount'] as number | null || null,
       workloadUnit: args['workloadUnit'] as string | null || null,
-      reason: args['reason'] as string || '',
+      reason,
       confidence: args['confidence'] as number || 0.8,
       goalId: null,
+      // Include duplicate detection info
+      duplicateWarning: !similarityResult.isUnique ? {
+        similarTo: similarityResult.mostSimilarHabit,
+        similarityScore: similarityResult.similarityScore,
+        message: `「${similarityResult.mostSimilarHabit}」と類似しています`,
+      } : undefined,
     };
   }
 
   /**
+   * Personalize the reason based on user context (Requirements: 3.4)
+   */
+  private personalizeReason(reason: string, _habitName: string): string {
+    if (!this.userContext) return reason;
+
+    const { userLevel, averageCompletionRate, activeHabitCount } = this.userContext;
+
+    // Add level-specific encouragement
+    if (userLevel === 'beginner') {
+      if (!reason.includes('始め') && !reason.includes('最初')) {
+        reason += ' 小さく始めることが成功の鍵です。';
+      }
+    } else if (userLevel === 'intermediate') {
+      if (averageCompletionRate >= 0.7) {
+        reason += ' 現在の達成率を維持しながら挑戦してみましょう。';
+      }
+    } else if (userLevel === 'advanced') {
+      if (activeHabitCount >= 5) {
+        reason += ' 既存の習慣との相乗効果が期待できます。';
+      }
+    }
+
+    return reason;
+  }
+
+  /**
    * Create multiple habit suggestions (for UI display)
+   * Includes duplicate detection using SimilarityChecker (Requirements: 4.1, 4.2)
+   * Enhanced with user preferred time slots (Requirements: 3.5)
    */
   private createMultipleHabitSuggestions(suggestions: Array<Record<string, unknown>>): { suggestions: Array<Record<string, unknown>> } {
+    const similarityChecker = getSimilarityChecker();
+    const existingHabitNames = this.userContext?.existingHabitNames || [];
+
     return {
-      suggestions: suggestions.map(s => ({
-        name: s['name'] as string,
-        type: s['type'] as string,
-        frequency: s['frequency'] as string,
-        triggerTime: s['triggerTime'] as string | null || null,
-        duration: s['duration'] as number | null || null,
-        suggestedTargetCount: s['suggestedTargetCount'] as number || 1,
-        workloadUnit: s['workloadUnit'] as string | null || null,
-        reason: s['reason'] as string || '',
-        confidence: s['confidence'] as number || 0.8,
-      })),
+      suggestions: suggestions.map(s => {
+        const habitName = s['name'] as string;
+        const frequency = s['frequency'] as string;
+        const similarityResult = similarityChecker.checkSimilarity(habitName, existingHabitNames);
+
+        // Log duplicate detection (Requirements: 4.5)
+        if (!similarityResult.isUnique) {
+          logger.info('Duplicate habit suggestion detected in batch', {
+            userId: this.userId,
+            suggestedHabit: habitName,
+            similarTo: similarityResult.mostSimilarHabit,
+            similarityScore: similarityResult.similarityScore,
+          });
+        }
+
+        // Enhance triggerTime with user's preferred time slots (Requirements: 3.5)
+        let triggerTime = s['triggerTime'] as string | null || null;
+        if (!triggerTime && frequency === 'daily' && this.userContext?.preferredTimeSlots?.length) {
+          const preferredSlot = this.userContext.preferredTimeSlots[0];
+          if (preferredSlot) {
+            triggerTime = `${preferredSlot.hour.toString().padStart(2, '0')}:00`;
+          }
+        }
+
+        // Generate personalized reason (Requirements: 3.4)
+        let reason = s['reason'] as string || '';
+        if (reason && this.userContext) {
+          reason = this.personalizeReason(reason, habitName);
+        }
+
+        return {
+          name: habitName,
+          type: s['type'] as string,
+          frequency,
+          triggerTime,
+          duration: s['duration'] as number | null || null,
+          suggestedTargetCount: s['suggestedTargetCount'] as number || 1,
+          workloadUnit: s['workloadUnit'] as string | null || null,
+          reason,
+          confidence: s['confidence'] as number || 0.8,
+          // Include duplicate detection info
+          duplicateWarning: !similarityResult.isUnique ? {
+            similarTo: similarityResult.mostSimilarHabit,
+            similarityScore: similarityResult.similarityScore,
+            message: `「${similarityResult.mostSimilarHabit}」と類似しています`,
+          } : undefined,
+        };
+      }),
     };
   }
 
   /**
    * Create a single goal suggestion (for UI display)
+   * Enhanced with habit suggestions from master data (Requirements: 8.2, 8.3)
    */
-  private createGoalSuggestion(args: Record<string, unknown>): Record<string, unknown> {
+  private async createGoalSuggestion(args: Record<string, unknown>): Promise<Record<string, unknown>> {
+    const goalName = args['name'] as string;
+    const suggestedHabits = args['suggestedHabits'] as string[] || [];
+    
+    // Enhance with habits from master data if not enough suggestions
+    let enhancedHabits = [...suggestedHabits];
+    if (enhancedHabits.length < 2) {
+      const masterDataLoader = getMasterDataLoader();
+      const relatedHabits = await masterDataLoader.searchHabits(goalName);
+      
+      // Filter out duplicates with existing habits
+      const similarityChecker = getSimilarityChecker();
+      const existingHabitNames = this.userContext?.existingHabitNames || [];
+      
+      const uniqueRelatedHabits = relatedHabits.filter(h => {
+        const result = similarityChecker.checkSimilarity(h.name, existingHabitNames);
+        return result.isUnique && !enhancedHabits.includes(h.name);
+      });
+      
+      // Add up to 4 habits total
+      const habitsToAdd = uniqueRelatedHabits.slice(0, 4 - enhancedHabits.length);
+      enhancedHabits = [...enhancedHabits, ...habitsToAdd.map(h => h.name)];
+    }
+    
     return {
-      name: args['name'] as string,
+      name: goalName,
       description: args['description'] as string || '',
       reason: args['reason'] as string || '',
-      suggestedHabits: args['suggestedHabits'] as string[] || [],
+      suggestedHabits: enhancedHabits,
     };
   }
 
   /**
    * Create multiple goal suggestions (for UI display)
+   * Enhanced with habit suggestions from master data (Requirements: 8.2, 8.3)
    */
-  private createMultipleGoalSuggestions(suggestions: Array<Record<string, unknown>>): { suggestions: Array<Record<string, unknown>> } {
-    return {
-      suggestions: suggestions.map(s => ({
-        name: s['name'] as string,
-        description: s['description'] as string || '',
-        icon: s['icon'] as string || '🎯',
-        reason: s['reason'] as string || '',
-        suggestedHabits: s['suggestedHabits'] as string[] || [],
-      })),
-    };
+  private async createMultipleGoalSuggestions(suggestions: Array<Record<string, unknown>>): Promise<{ suggestions: Array<Record<string, unknown>> }> {
+    const masterDataLoader = getMasterDataLoader();
+    const similarityChecker = getSimilarityChecker();
+    const existingHabitNames = this.userContext?.existingHabitNames || [];
+    
+    const enhancedSuggestions = await Promise.all(
+      suggestions.map(async (s) => {
+        const goalName = s['name'] as string;
+        const suggestedHabits = s['suggestedHabits'] as string[] || [];
+        
+        // Enhance with habits from master data if not enough suggestions
+        let enhancedHabits = [...suggestedHabits];
+        if (enhancedHabits.length < 2) {
+          const relatedHabits = await masterDataLoader.searchHabits(goalName);
+          
+          // Filter out duplicates with existing habits
+          const uniqueRelatedHabits = relatedHabits.filter(h => {
+            const result = similarityChecker.checkSimilarity(h.name, existingHabitNames);
+            return result.isUnique && !enhancedHabits.includes(h.name);
+          });
+          
+          // Add up to 4 habits total
+          const habitsToAdd = uniqueRelatedHabits.slice(0, 4 - enhancedHabits.length);
+          enhancedHabits = [...enhancedHabits, ...habitsToAdd.map(h => h.name)];
+        }
+        
+        return {
+          name: goalName,
+          description: s['description'] as string || '',
+          icon: s['icon'] as string || '🎯',
+          reason: s['reason'] as string || '',
+          suggestedHabits: enhancedHabits,
+        };
+      })
+    );
+    
+    return { suggestions: enhancedSuggestions };
   }
 
   /**
@@ -1448,6 +1811,7 @@ export class AICoachService {
   /**
    * Get category suggestions from master data
    * This uses pre-defined master data instead of AI generation, saving tokens
+   * Includes user level filtering (Requirements: 2.4, 2.5, 2.6)
    */
   private async getCategorySuggestions(
     category: string,
@@ -1468,15 +1832,40 @@ export class AICoachService {
     const maxItems = limit || 5;
     const dataType = type || 'both';
 
+    // Get user level for filtering (Requirements: 2.4, 2.5, 2.6)
+    const userLevel = this.userContext?.userLevel || 'beginner';
+    
+    // Map user level to max difficulty level
+    const maxDifficultyByLevel: Record<string, 'beginner' | 'intermediate' | 'advanced'> = {
+      beginner: 'beginner',
+      intermediate: 'intermediate',
+      advanced: 'advanced',
+    };
+    const maxDifficulty = maxDifficultyByLevel[userLevel] || 'beginner';
+
     const result: Record<string, unknown> = {
       category: categoryData.category,
       categoryName: categoryData.categoryJa,
       subcategories: categoryData.subcategories,
+      userLevel,
     };
 
     if (dataType === 'habits' || dataType === 'both') {
-      // ランダムに選択して多様性を確保
-      const shuffledHabits = [...categoryData.habits].sort(() => Math.random() - 0.5);
+      // Filter habits by user level (Requirements: 2.4, 2.5, 2.6)
+      const filteredHabits = await masterDataLoader.getHabitsByMaxDifficulty(category, maxDifficulty);
+      
+      // Check for duplicates using SimilarityChecker
+      const similarityChecker = getSimilarityChecker();
+      const existingHabitNames = this.userContext?.existingHabitNames || [];
+      
+      // Filter out duplicates and shuffle for variety
+      const uniqueHabits = filteredHabits.filter(h => {
+        const similarityResult = similarityChecker.checkSimilarity(h.name, existingHabitNames);
+        return similarityResult.isUnique;
+      });
+      
+      const shuffledHabits = [...uniqueHabits].sort(() => Math.random() - 0.5);
+      
       result['habits'] = shuffledHabits.slice(0, maxItems).map(h => ({
         name: h.name,
         type: h.type,
@@ -1487,8 +1876,11 @@ export class AICoachService {
         triggerTime: h.triggerTime,
         duration: h.duration,
         subcategory: h.subcategory,
+        difficultyLevel: h.difficultyLevel,
+        habitStackingTriggers: h.habitStackingTriggers,
       }));
       result['totalHabitsInCategory'] = categoryData.habits.length;
+      result['filteredByLevel'] = userLevel !== 'advanced';
     }
 
     if (dataType === 'goals' || dataType === 'both') {
@@ -1503,7 +1895,11 @@ export class AICoachService {
       result['totalGoalsInCategory'] = categoryData.goals.length;
     }
 
-    result['tip'] = 'これらはマスターデータからの提案です。ユーザーの状況に合わせてカスタマイズしてください。';
+    result['tip'] = userLevel === 'beginner' 
+      ? '初心者向けの習慣を優先して表示しています。慣れてきたら難易度を上げていきましょう。'
+      : userLevel === 'intermediate'
+      ? '中級者向けの習慣も含めて表示しています。'
+      : 'すべての難易度の習慣を表示しています。';
 
     // Log token savings from using master data
     const estimatedTokensSaved = this.estimateTokenSavings(categoryData, dataType, maxItems);
@@ -1511,6 +1907,7 @@ export class AICoachService {
       userId: this.userId,
       category,
       dataType,
+      userLevel,
       itemsReturned: maxItems,
       estimatedTokensSaved,
       source: 'master_data',
@@ -1635,35 +2032,102 @@ export class AICoachService {
 
   /**
    * Suggest habit stacking opportunities
+   * Uses PersonalizationEngine for anchor habits and MasterData for stacking triggers
+   * Requirements: 7.1, 7.2, 7.3, 7.4
    */
   private async suggestHabitStacking(newHabitName: string): Promise<Record<string, unknown>> {
-    const analysis = await this.analyzeHabits(30);
+    // Use PersonalizationEngine's anchor habits if available (Requirements: 7.1)
+    const anchorHabits = this.userContext?.anchorHabits || [];
+    
+    // If no anchor habits from context, fall back to analysis
+    let effectiveAnchors = anchorHabits;
+    if (effectiveAnchors.length === 0) {
+      const analysis = await this.analyzeHabits(30);
+      effectiveAnchors = analysis
+        .filter(a => a.completionRate >= 0.8)
+        .slice(0, 5)
+        .map(a => ({
+          habitId: a.habitId,
+          habitName: a.habitName,
+          completionRate: a.completionRate,
+          triggerTime: null,
+        }));
+    }
 
-    // Find high-completion habits as anchors
-    const anchorHabits = analysis
-      .filter(a => a.completionRate >= 0.7)
-      .slice(0, 5);
+    // Search for matching habits in master data based on the new habit name
+    const masterDataLoader = getMasterDataLoader();
+    const matchingHabits = await masterDataLoader.searchHabits(newHabitName);
+    
+    // Get stacking triggers from master data
+    const stackingTriggers = matchingHabits.length > 0 
+      ? matchingHabits[0]?.habitStackingTriggers || []
+      : [];
 
-    if (anchorHabits.length === 0) {
+    // Also search for habits that can be stacked with the new habit
+    const stackingCandidates = await masterDataLoader.getStackingCandidates(newHabitName);
+
+    if (effectiveAnchors.length === 0 && stackingTriggers.length === 0) {
       return {
         message: 'まだ安定した習慣がないため、まずは1つの習慣を定着させることをお勧めします。',
         suggestions: [],
         tip: '新しい習慣は、既存の行動（歯磨き、コーヒーを入れるなど）に紐付けることもできます。',
+        commonTriggers: ['起床後', '朝食後', '歯磨き後', '仕事終わり', '夕食後', '就寝前'],
       };
     }
 
-    const suggestions = anchorHabits.map(anchor => ({
-      anchorHabit: anchor.habitName,
-      completionRate: `${Math.round(anchor.completionRate * 100)}%`,
-      stackingFormula: `「${anchor.habitName}」をした後に「${newHabitName}」をする`,
-      reason: `達成率${Math.round(anchor.completionRate * 100)}%の安定した習慣なので、良いアンカーになります`,
+    const suggestions: Array<{
+      anchorHabit: string;
+      completionRate: string;
+      stackingFormula: string;
+      reason: string;
+      triggerTime?: string | null;
+    }> = [];
+
+    // Add suggestions based on user's anchor habits (Requirements: 7.2, 7.3)
+    for (const anchor of effectiveAnchors.slice(0, 3)) {
+      suggestions.push({
+        anchorHabit: anchor.habitName,
+        completionRate: `${Math.round(anchor.completionRate * 100)}%`,
+        stackingFormula: `「${anchor.habitName}」をした後に、「${newHabitName}」をする`,
+        reason: `達成率${Math.round(anchor.completionRate * 100)}%の安定した習慣なので、良いアンカーになります`,
+        triggerTime: anchor.triggerTime,
+      });
+    }
+
+    // Add suggestions based on master data triggers (Requirements: 7.4)
+    if (stackingTriggers.length > 0) {
+      for (const trigger of stackingTriggers.slice(0, 2)) {
+        // Check if this trigger is not already covered by anchor habits
+        const alreadyCovered = suggestions.some(s => 
+          s.anchorHabit.includes(trigger) || trigger.includes(s.anchorHabit)
+        );
+        if (!alreadyCovered) {
+          suggestions.push({
+            anchorHabit: trigger,
+            completionRate: '推奨',
+            stackingFormula: `「${trigger}」に、「${newHabitName}」をする`,
+            reason: `マスターデータに基づく推奨トリガーです`,
+          });
+        }
+      }
+    }
+
+    // Add related habits from master data that could be stacked
+    const relatedHabits = stackingCandidates.slice(0, 3).map(h => ({
+      name: h.name,
+      category: h.category,
+      triggers: h.habitStackingTriggers,
     }));
 
     return {
       newHabit: newHabitName,
       suggestions,
+      relatedHabits: relatedHabits.length > 0 ? relatedHabits : undefined,
       principle: '習慣スタッキングは、既存の習慣を「きっかけ」として新しい習慣を紐付ける手法です。',
       formula: '「[現在の習慣]をした後に、[新しい習慣]をする」',
+      tip: effectiveAnchors.length > 0 
+        ? `あなたの安定した習慣（${effectiveAnchors.slice(0, 2).map(a => a.habitName).join('、')}）を起点にするのがおすすめです。`
+        : '毎日行う既存の行動（歯磨き、コーヒーを入れるなど）を起点にしましょう。',
     };
   }
 
@@ -2068,6 +2532,371 @@ export class AICoachService {
         chartType: chartType || 'bar',
       },
     };
+  }
+
+  // ============================================================================
+  // THLI-24 レベル評価ツール
+  // ============================================================================
+
+  /**
+   * Assess habit level using THLI-24 framework
+   * Requirements: 10.5, 10.6
+   */
+  private async assessHabitLevel(
+    habitId?: string,
+    habitName?: string
+  ): Promise<Record<string, unknown>> {
+    // Find habit by ID or name
+    let habit;
+    if (habitId) {
+      habit = await this.habitRepo.getById(habitId);
+    } else if (habitName) {
+      const habits = await this.habitRepo.searchByName('user', this.userId, habitName, 1);
+      habit = habits[0];
+    }
+
+    if (!habit) {
+      return {
+        error: true,
+        message: habitName 
+          ? `「${habitName}」という習慣が見つかりませんでした。`
+          : '習慣が見つかりませんでした。習慣名を指定してください。',
+      };
+    }
+
+    // Check quota first
+    const quotaStatus = await this.usageQuotaService.checkQuota(this.userId);
+    if (!quotaStatus.isUnlimited && quotaStatus.remaining <= 0) {
+      return {
+        error: true,
+        message: '今月のTHLI-24評価回数の上限に達しました。',
+        quotaStatus,
+        upgradeRequired: true,
+      };
+    }
+
+    try {
+      // Initiate assessment
+      const session = await this.thliAssessmentService.initiateAssessment(
+        habit.id,
+        this.userId
+      );
+
+      logger.info('THLI-24 assessment initiated', {
+        userId: this.userId,
+        habitId: habit.id,
+        habitName: habit.name,
+        sessionId: session.sessionId,
+      });
+
+      return {
+        success: true,
+        habitId: habit.id,
+        habitName: habit.name,
+        sessionId: session.sessionId,
+        status: session.status,
+        message: `「${habit.name}」のレベル評価を開始します。いくつかの質問に答えてください。`,
+        firstQuestion: session.status === 'in_progress' 
+          ? 'この習慣を実行するとき、具体的にどのような行動をしますか？（例：30分ジョギングする、10ページ読書する）'
+          : undefined,
+        quotaRemaining: quotaStatus.remaining - 1,
+      };
+    } catch (error) {
+      logger.error('Failed to initiate THLI-24 assessment', error instanceof Error ? error : new Error(String(error)), {
+        userId: this.userId,
+        habitId: habit.id,
+      });
+      return {
+        error: true,
+        message: 'レベル評価の開始に失敗しました。しばらくしてからもう一度お試しください。',
+      };
+    }
+  }
+
+  /**
+   * Suggest baby steps for a struggling habit
+   * Requirements: 10.5
+   */
+  private async suggestBabySteps(
+    habitId?: string,
+    habitName?: string,
+    targetLevel?: number
+  ): Promise<Record<string, unknown>> {
+    // Find habit by ID or name
+    let habit;
+    if (habitId) {
+      habit = await this.habitRepo.getById(habitId);
+    } else if (habitName) {
+      const habits = await this.habitRepo.searchByName('user', this.userId, habitName, 1);
+      habit = habits[0];
+    }
+
+    if (!habit) {
+      return {
+        error: true,
+        message: habitName 
+          ? `「${habitName}」という習慣が見つかりませんでした。`
+          : '習慣が見つかりませんでした。習慣名を指定してください。',
+      };
+    }
+
+    // Check if habit has level assessment
+    if (habit.level === null || habit.level === undefined) {
+      return {
+        error: true,
+        message: `「${habit.name}」はまだレベル評価されていません。先にレベル評価を行ってください。`,
+        suggestion: 'assess_habit_level ツールを使用してレベル評価を行ってください。',
+      };
+    }
+
+    try {
+      // Get current assessment data
+      const assessmentData = habit.level_assessment_data as LevelEstimate | null;
+      if (!assessmentData) {
+        return {
+          error: true,
+          message: '評価データが見つかりません。再度レベル評価を行ってください。',
+        };
+      }
+
+      // Generate baby step plans
+      const plans = await this.babyStepGeneratorService.generateBabySteps(
+        habit.id,
+        assessmentData
+      );
+
+      logger.info('Baby step plans generated', {
+        userId: this.userId,
+        habitId: habit.id,
+        habitName: habit.name,
+        currentLevel: habit.level,
+        lv50Target: plans.lv50.targetLevel,
+        lv10Target: plans.lv10.targetLevel,
+      });
+
+      return {
+        success: true,
+        habitId: habit.id,
+        habitName: habit.name,
+        currentLevel: habit.level,
+        plans,
+        message: `「${habit.name}」を簡略化するプランを2つ提案します。`,
+        explanation: {
+          lv50: `Lv.50プラン: 現在の約半分の負荷（レベル${plans.lv50.targetLevel}）に調整します。`,
+          lv10: `Lv.10プラン: 最小限の習慣（レベル${plans.lv10.targetLevel}）に調整します。2分以内で完了できる形です。`,
+        },
+      };
+    } catch (error) {
+      logger.error('Failed to generate baby step plans', error instanceof Error ? error : new Error(String(error)), {
+        userId: this.userId,
+        habitId: habit.id,
+      });
+      return {
+        error: true,
+        message: 'ベビーステッププランの生成に失敗しました。',
+      };
+    }
+  }
+
+  /**
+   * Suggest level up for a habit
+   * Requirements: 10.5
+   */
+  private async suggestLevelUp(
+    habitId?: string,
+    habitName?: string
+  ): Promise<Record<string, unknown>> {
+    // Find habit by ID or name
+    let habit;
+    if (habitId) {
+      habit = await this.habitRepo.getById(habitId);
+    } else if (habitName) {
+      const habits = await this.habitRepo.searchByName('user', this.userId, habitName, 1);
+      habit = habits[0];
+    }
+
+    if (!habit) {
+      return {
+        error: true,
+        message: habitName 
+          ? `「${habitName}」という習慣が見つかりませんでした。`
+          : '習慣が見つかりませんでした。習慣名を指定してください。',
+      };
+    }
+
+    // Check if habit has level assessment
+    if (habit.level === null || habit.level === undefined) {
+      return {
+        error: true,
+        message: `「${habit.name}」はまだレベル評価されていません。先にレベル評価を行ってください。`,
+      };
+    }
+
+    try {
+      // Analyze completion rate
+      const analysis = await this.analyzeHabits(30, [habit.id]);
+      const habitAnalysis = analysis[0];
+
+      if (!habitAnalysis) {
+        return {
+          error: true,
+          message: '習慣の分析データが取得できませんでした。',
+        };
+      }
+
+      // Check if eligible for level up
+      if (habitAnalysis.completionRate < 0.9) {
+        return {
+          success: false,
+          habitId: habit.id,
+          habitName: habit.name,
+          currentLevel: habit.level,
+          completionRate: habitAnalysis.completionRate,
+          message: `「${habit.name}」の達成率は${Math.round(habitAnalysis.completionRate * 100)}%です。レベルアップには90%以上の達成率が必要です。`,
+          suggestion: '現在のレベルでもう少し継続してから、レベルアップを検討しましょう。',
+        };
+      }
+
+      // Calculate target level (10-20% increase)
+      const currentLevel = habit.level;
+      const increasePercent = 0.15; // 15% increase
+      const targetLevel = Math.min(199, Math.round(currentLevel * (1 + increasePercent)));
+
+      // Generate workload changes
+      const workloadChanges = {
+        workloadPerCount: {
+          old: habit.workload_per_count,
+          new: Math.round(habit.workload_per_count * (1 + increasePercent)),
+          changePercent: Math.round(increasePercent * 100),
+        },
+        targetCount: habit.target_count ? {
+          old: habit.target_count,
+          new: Math.round(habit.target_count * (1 + increasePercent * 0.5)),
+          changePercent: Math.round(increasePercent * 50),
+        } : undefined,
+      };
+
+      logger.info('Level up suggestion generated', {
+        userId: this.userId,
+        habitId: habit.id,
+        habitName: habit.name,
+        currentLevel,
+        targetLevel,
+        completionRate: habitAnalysis.completionRate,
+      });
+
+      return {
+        success: true,
+        habitId: habit.id,
+        habitName: habit.name,
+        currentLevel,
+        targetLevel,
+        completionRate: habitAnalysis.completionRate,
+        workloadChanges,
+        message: `「${habit.name}」は達成率${Math.round(habitAnalysis.completionRate * 100)}%で順調です！レベル${currentLevel}からレベル${targetLevel}へのレベルアップを提案します。`,
+        explanation: `負荷を約${Math.round(increasePercent * 100)}%増やして、より挑戦的な習慣にします。`,
+      };
+    } catch (error) {
+      logger.error('Failed to suggest level up', error instanceof Error ? error : new Error(String(error)), {
+        userId: this.userId,
+        habitId: habit?.id,
+      });
+      return {
+        error: true,
+        message: 'レベルアップ提案の生成に失敗しました。',
+      };
+    }
+  }
+
+  /**
+   * Get habit level details
+   * Requirements: 13.6
+   */
+  private async getHabitLevelDetails(
+    habitId?: string,
+    habitName?: string
+  ): Promise<Record<string, unknown>> {
+    // Find habit by ID or name
+    let habit;
+    if (habitId) {
+      habit = await this.habitRepo.getById(habitId);
+    } else if (habitName) {
+      const habits = await this.habitRepo.searchByName('user', this.userId, habitName, 1);
+      habit = habits[0];
+    }
+
+    if (!habit) {
+      return {
+        error: true,
+        message: habitName 
+          ? `「${habitName}」という習慣が見つかりませんでした。`
+          : '習慣が見つかりませんでした。習慣名を指定してください。',
+      };
+    }
+
+    // Check if habit has level assessment
+    if (habit.level === null || habit.level === undefined) {
+      return {
+        habitId: habit.id,
+        habitName: habit.name,
+        level: null,
+        levelTier: null,
+        message: `「${habit.name}」はまだレベル評価されていません。`,
+        suggestion: 'レベル評価を行うと、習慣の難易度を把握できます。',
+      };
+    }
+
+    // Get level history
+    const levelHistory = await this.levelManagerService.getLevelHistory(habit.id);
+
+    return {
+      habitId: habit.id,
+      habitName: habit.name,
+      level: habit.level,
+      levelTier: habit.level_tier,
+      assessmentData: habit.level_assessment_data,
+      lastAssessedAt: habit.level_last_assessed_at,
+      levelHistory: levelHistory.slice(0, 5), // Last 5 changes
+      message: `「${habit.name}」のレベルは${habit.level}（${this.getTierNameJa(habit.level_tier)}）です。`,
+    };
+  }
+
+  /**
+   * Get tier name in Japanese
+   */
+  private getTierNameJa(tier: string | null): string {
+    const tierNames: Record<string, string> = {
+      beginner: '初級',
+      intermediate: '中級',
+      advanced: '上級',
+      expert: 'エキスパート',
+    };
+    return tier ? tierNames[tier] || tier : '未評価';
+  }
+
+  /**
+   * Get THLI-24 quota status
+   * Requirements: 13.5
+   */
+  private async getTHLIQuotaStatus(): Promise<Record<string, unknown>> {
+    try {
+      const quotaStatus = await this.usageQuotaService.checkQuota(this.userId);
+
+      return {
+        ...quotaStatus,
+        message: quotaStatus.isUnlimited
+          ? 'プレミアムプランのため、THLI-24評価は無制限です。'
+          : `今月の残り評価回数: ${quotaStatus.remaining}/${quotaStatus.quotaLimit}回`,
+      };
+    } catch (error) {
+      logger.error('Failed to get THLI quota status', error instanceof Error ? error : new Error(String(error)), {
+        userId: this.userId,
+      });
+      return {
+        error: true,
+        message: 'クォータ情報の取得に失敗しました。',
+      };
+    }
   }
 }
 

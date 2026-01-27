@@ -8,13 +8,13 @@ CREATE TABLE IF NOT EXISTS ai_suggestion_history (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
   suggestion_type TEXT NOT NULL CHECK (suggestion_type IN ('habit', 'goal')),
-  goal_id UUID REFERENCES goals(id) ON DELETE SET NULL,
+  goal_id TEXT REFERENCES goals(id) ON DELETE SET NULL,
   suggestion_data JSONB NOT NULL,
   -- suggestion_data structure:
   -- For habits: { name, type, frequency, suggestedTargetCount, workloadUnit, reason, confidence }
   -- For goals: { name, description, icon, reason, suggestedHabits }
   status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'accepted', 'dismissed')),
-  accepted_entity_id UUID, -- ID of created habit/goal if accepted
+  accepted_entity_id TEXT, -- ID of created habit/goal if accepted
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
@@ -37,11 +37,6 @@ CREATE POLICY "Users can update own suggestion history" ON ai_suggestion_history
 
 CREATE POLICY "Service can manage suggestion history" ON ai_suggestion_history
   FOR ALL USING (auth.role() = 'service_role');
-
--- Trigger for updated_at
-CREATE TRIGGER update_ai_suggestion_history_updated_at
-  BEFORE UPDATE ON ai_suggestion_history
-  FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
 -- Comment
 COMMENT ON TABLE ai_suggestion_history IS 'Stores AI-generated habit and goal suggestions for user reference';

@@ -14,6 +14,8 @@
 - triggerTime: 22:00
 - duration: 2
 - reason: スクリーンタイムを把握することで、デジタル習慣を改善できます。
+- difficultyLevel: beginner
+- habitStackingTriggers: 就寝前
 
 #### SNSの使用時間を制限する
 - type: do
@@ -23,6 +25,8 @@
 - triggerTime: null
 - duration: null
 - reason: SNSの過度な使用は、時間と精神的な健康を損ないます。
+- difficultyLevel: intermediate
+- habitStackingTriggers: SNSを開く前
 
 #### 通知を整理する
 - type: do
@@ -32,6 +36,8 @@
 - triggerTime: null
 - duration: 10
 - reason: 不要な通知を減らすことで、集中力と心の平穏を保てます。
+- difficultyLevel: beginner
+- habitStackingTriggers: 週末, 設定を見直す時
 
 #### 寝る前のスマホを控える
 - type: avoid
@@ -41,6 +47,8 @@
 - triggerTime: null
 - duration: null
 - reason: ブルーライトは睡眠の質を下げます。寝る1時間前は控えましょう。
+- difficultyLevel: intermediate
+- habitStackingTriggers: 就寝1時間前
 
 #### デジタルデトックスをする
 - type: do
@@ -50,6 +58,8 @@
 - triggerTime: null
 - duration: 120
 - reason: デジタル機器から離れる時間は、心身のリフレッシュに効果的です。
+- difficultyLevel: intermediate
+- habitStackingTriggers: 週末, 休日
 
 #### アプリを整理する
 - type: do
@@ -59,6 +69,8 @@
 - triggerTime: null
 - duration: 15
 - reason: 不要なアプリを削除することで、スマホの使い方が改善します。
+- difficultyLevel: beginner
+- habitStackingTriggers: 月初め
 
 #### ブルーライトカットを使う
 - type: do
@@ -68,6 +80,8 @@
 - triggerTime: 20:00
 - duration: null
 - reason: ブルーライトカットは、目の疲れと睡眠の質を改善します。
+- difficultyLevel: beginner
+- habitStackingTriggers: 夜間
 
 ### セキュリティ
 
@@ -79,6 +93,8 @@
 - triggerTime: null
 - duration: 15
 - reason: 定期的なパスワード更新は、セキュリティの基本です。
+- difficultyLevel: intermediate
+- habitStackingTriggers: 月初め
 
 #### 二段階認証を設定する
 - type: do
@@ -88,6 +104,8 @@
 - triggerTime: null
 - duration: 10
 - reason: 二段階認証は、アカウントを守る最も効果的な方法です。
+- difficultyLevel: intermediate
+- habitStackingTriggers: 新しいサービス登録時
 
 #### ソフトウェアを更新する
 - type: do
@@ -97,6 +115,8 @@
 - triggerTime: null
 - duration: 10
 - reason: ソフトウェアの更新は、セキュリティホールを塞ぎます。
+- difficultyLevel: beginner
+- habitStackingTriggers: 週末, 更新通知時
 
 #### バックアップを取る
 - type: do
@@ -106,6 +126,8 @@
 - triggerTime: null
 - duration: 10
 - reason: 定期的なバックアップは、データ損失から守ります。
+- difficultyLevel: beginner
+- habitStackingTriggers: 週末
 
 #### 不審なメールに注意する
 - type: do
@@ -115,6 +137,8 @@
 - triggerTime: null
 - duration: null
 - reason: フィッシング詐欺への警戒は、セキュリティの基本です。
+- difficultyLevel: beginner
+- habitStackingTriggers: メール確認時
 
 #### プライバシー設定を確認する
 - type: do
@@ -124,6 +148,8 @@
 - triggerTime: null
 - duration: 15
 - reason: プライバシー設定の確認は、個人情報を守るために重要です。
+- difficultyLevel: intermediate
+- habitStackingTriggers: 月初め, 新しいアプリ導入時
 
 ### デジタル整理
 
@@ -135,6 +161,8 @@
 - triggerTime: 18:00
 - duration: 10
 - reason: メールの整理は、重要な情報を見逃さないために必要です。
+- difficultyLevel: beginner
+- habitStackingTriggers: 仕事終わり, 朝
 
 #### ファイルを整理する
 - type: do
@@ -144,6 +172,8 @@
 - triggerTime: null
 - duration: 15
 - reason: デジタルファイルの整理は、必要な情報へのアクセスを速くします。
+- difficultyLevel: beginner
+- habitStackingTriggers: 週末
 
 #### 写真を整理する
 - type: do
@@ -153,6 +183,8 @@
 - triggerTime: null
 - duration: 15
 - reason: 写真の整理は、思い出を見つけやすくし、ストレージを節約します。
+- difficultyLevel: beginner
+- habitStackingTriggers: 週末, 写真を撮った後
 
 #### クラウドストレージを整理する
 - type: do
@@ -162,6 +194,8 @@
 - triggerTime: null
 - duration: 20
 - reason: クラウドの整理は、コストとアクセス効率の両方を改善します。
+- difficultyLevel: intermediate
+- habitStackingTriggers: 月初め
 
 #### ブックマークを整理する
 - type: do
@@ -171,6 +205,8 @@
 - triggerTime: null
 - duration: 15
 - reason: ブックマークの整理は、必要な情報にすぐアクセスできるようにします。
+- difficultyLevel: beginner
+- habitStackingTriggers: 月初め
 
 #### 不要なアカウントを削除する
 - type: do
@@ -180,6 +216,8 @@
 - triggerTime: null
 - duration: 15
 - reason: 使わないアカウントは、セキュリティリスクになります。
+- difficultyLevel: intermediate
+- habitStackingTriggers: 月初め, セキュリティ確認時
 
 ### テクノロジー活用
 
@@ -191,6 +229,8 @@
 - triggerTime: null
 - duration: 30
 - reason: 新しいツールを試すことで、生産性を向上させる機会が見つかります。
+- difficultyLevel: intermediate
+- habitStackingTriggers: 週末, 仕事終わり
 
 #### ショートカットを覚える
 - type: do
@@ -200,6 +240,8 @@
 - triggerTime: null
 - duration: 10
 - reason: ショートカットは、作業効率を大幅に向上させます。
+- difficultyLevel: beginner
+- habitStackingTriggers: 作業中
 
 #### 自動化を設定する
 - type: do
@@ -209,6 +251,8 @@
 - triggerTime: null
 - duration: 30
 - reason: 自動化は、繰り返し作業から解放し、時間を節約します。
+- difficultyLevel: advanced
+- habitStackingTriggers: 繰り返し作業に気づいた時
 
 #### AIツールを活用する
 - type: do
@@ -218,6 +262,8 @@
 - triggerTime: null
 - duration: null
 - reason: AIツールは、様々なタスクを効率化できます。
+- difficultyLevel: intermediate
+- habitStackingTriggers: 作業中, 調べ物時
 
 #### テック系ニュースを読む
 - type: do
@@ -227,6 +273,8 @@
 - triggerTime: null
 - duration: 10
 - reason: テクノロジーの動向を把握することで、新しい機会を見つけられます。
+- difficultyLevel: beginner
+- habitStackingTriggers: 朝食時, 通勤中
 
 ### オンラインコミュニケーション
 
@@ -238,6 +286,8 @@
 - triggerTime: null
 - duration: 5
 - reason: 事前準備は、オンライン会議の効率と印象を向上させます。
+- difficultyLevel: beginner
+- habitStackingTriggers: 会議前
 
 #### ビデオ通話で顔を見せる
 - type: do
@@ -247,6 +297,8 @@
 - triggerTime: null
 - duration: null
 - reason: 顔を見せることで、コミュニケーションの質が向上します。
+- difficultyLevel: beginner
+- habitStackingTriggers: ビデオ会議時
 
 #### オンラインでの礼儀を守る
 - type: do
@@ -256,6 +308,8 @@
 - triggerTime: null
 - duration: null
 - reason: オンラインでも礼儀正しさは、良好な関係構築に重要です。
+- difficultyLevel: beginner
+- habitStackingTriggers: オンラインコミュニケーション時
 
 #### リモートワークの環境を整える
 - type: do
@@ -265,6 +319,8 @@
 - triggerTime: null
 - duration: 15
 - reason: 良い作業環境は、リモートワークの生産性を高めます。
+- difficultyLevel: beginner
+- habitStackingTriggers: 週初め, 週末
 
 ## Goals
 

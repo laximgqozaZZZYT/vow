@@ -28,6 +28,7 @@ import { useHandedness } from '../contexts/HandednessContext';
 import { ExpandButton } from './Board.ExpandButton';
 import { WarningIndicator } from './Board.WarningIndicator';
 import SubtaskList from './Board.SubtaskList';
+import { LevelBadgePositioned } from './LevelBadge';
 import './HabitNameScroll.css';
 
 export interface HabitCardProps {
@@ -51,6 +52,12 @@ export interface HabitCardProps {
   onSubtaskEdit?: (stickyId: string) => void;
   /** Whether to show warning indicator (all subtasks incomplete) - Validates: Requirements 5.1, 5.2, 5.3 */
   showWarning?: boolean;
+  /** Habit level (0-199) for THLI-24 display - Validates: Requirements 8.1, 8.7 */
+  level?: number | null;
+  /** Level delta for recent changes (within 7 days) - Validates: Requirements 8.7 */
+  levelDelta?: number;
+  /** Callback when level badge is clicked - Validates: Requirements 8.7 */
+  onLevelClick?: () => void;
 }
 
 /**
@@ -167,7 +174,10 @@ export default function HabitCard({
   onToggleExpand,
   onSubtaskComplete,
   onSubtaskEdit,
-  showWarning
+  showWarning,
+  level,
+  levelDelta,
+  onLevelClick
 }: HabitCardProps) {
   const [inputValue, setInputValue] = useState<string>(
     String(habit.workloadPerCount ?? 1)
@@ -265,6 +275,7 @@ export default function HabitCard({
       onDragEnd={handleDragEnd}
       onClick={handleCardClick}
       className={`
+        relative
         p-3 
         bg-card 
         border border-border 
@@ -283,6 +294,14 @@ export default function HabitCard({
         touchAction: 'pan-y'
       }}
     >
+      {/* Level Badge - positioned in top-right corner - Validates: Requirements 8.7 */}
+      {(level !== undefined || onLevelClick) && (
+        <LevelBadgePositioned
+          level={level ?? null}
+          delta={levelDelta}
+          onClick={onLevelClick}
+        />
+      )}
       {/* Header: Habit name and time with background progress bar */}
       <div className={`flex items-start gap-2 mb-2 ${isLeftHanded ? 'flex-row-reverse' : ''}`}>
         {/* Drag handle indicator */}
