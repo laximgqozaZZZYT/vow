@@ -7,6 +7,9 @@ import { TIME_OPTIONS } from '@/lib/types/slack';
 import { useNotificationPreferences } from '../hooks/useNotificationPreferences';
 import { usePushNotifications } from '../hooks/usePushNotifications';
 
+// Hide subscription section in production
+const IS_DEV_ENV = process.env.NEXT_PUBLIC_ENV === 'development';
+
 type SettingsSection = 'profile' | 'notifications' | 'integrations' | 'api-keys';
 
 export default function SettingsPage() {
@@ -200,7 +203,8 @@ export default function SettingsPage() {
                   </div>
                 </div>
                 
-                {/* Subscription Management */}
+                {/* Subscription Management - Only show in development */}
+                {IS_DEV_ENV && (
                 <div>
                   <h2 className="text-xl font-semibold mb-4">Subscription</h2>
                   <div className="bg-card border border-border rounded-lg p-6">
@@ -223,6 +227,7 @@ export default function SettingsPage() {
                     </div>
                   </div>
                 </div>
+                )}
               </div>
             )}
 
