@@ -2,6 +2,9 @@
  * Tab configuration for dashboard navigation
  */
 
+// Check if we're in development environment
+const IS_DEV_ENV = process.env.NEXT_PUBLIC_ENV === 'development';
+
 export interface TabConfig {
   id: string;
   label: string;
@@ -12,7 +15,8 @@ export interface TabConfig {
   aliases?: string[];
 }
 
-export const TAB_CONFIGS: TabConfig[] = [
+// Base tabs available in all environments
+const BASE_TABS: TabConfig[] = [
   { id: 'board', label: 'Board', labelJa: 'ボード', iconType: 'board', aliases: ['next'] },
   { id: 'activity', label: 'Activity', labelJa: '活動', iconType: 'activity' },
   { id: 'calendar', label: 'Calendar', labelJa: '予定', iconType: 'calendar', supportsFullView: true },
@@ -21,9 +25,14 @@ export const TAB_CONFIGS: TabConfig[] = [
   { id: 'stickies', label: 'Notes', labelJa: 'メモ', iconType: 'stickies' },
   { id: 'mindmap', label: 'Map', labelJa: 'マップ', iconType: 'mindmap', supportsFullView: true },
   { id: 'notices', label: 'Alerts', labelJa: '通知', iconType: 'notices' },
-  // Coach tab is disabled in production - uncomment for development
-  // { id: 'coach', label: 'Coach', labelJa: 'コーチ', iconType: 'coach' },
 ];
+
+// Coach tab only available in development
+const COACH_TAB: TabConfig = { id: 'coach', label: 'Coach', labelJa: 'コーチ', iconType: 'coach' };
+
+export const TAB_CONFIGS: TabConfig[] = IS_DEV_ENV 
+  ? [...BASE_TABS, COACH_TAB]
+  : BASE_TABS;
 
 export const DEFAULT_TAB = 'board';
 
