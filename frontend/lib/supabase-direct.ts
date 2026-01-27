@@ -429,7 +429,8 @@ export class SupabaseDirectClient {
       // THLI-24 level fields - Validates: Requirements 8.1
       level: h.level,
       levelTier: h.level_tier,
-      levelAssessedAt: h.level_assessed_at
+      levelAssessedAt: h.level_assessed_at,
+      levelAssessmentRaw: h.level_assessment_raw
     }));
     
     debug.log('[getHabits] Converted habits data with tags:', habits);

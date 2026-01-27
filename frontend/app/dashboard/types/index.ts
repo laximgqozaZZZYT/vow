@@ -58,6 +58,19 @@ export interface Habit {
   levelTier?: 'beginner' | 'intermediate' | 'advanced' | 'expert' | null;
   /** Timestamp of last level assessment */
   levelAssessedAt?: string | null;
+  /** Raw assessment data including slider variables */
+  levelAssessmentRaw?: {
+    assessmentType: 'manual_slider' | 'ai_assessment';
+    variables?: {
+      frequency: number;
+      duration: number;
+      intensity: number;
+      complexity: number;
+      consistency: number;
+    };
+    level: number;
+    assessedAt: string;
+  } | null;
   createdAt: string;
   updatedAt: string;
 }

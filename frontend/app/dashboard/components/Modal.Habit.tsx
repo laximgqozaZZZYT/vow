@@ -636,6 +636,7 @@ export function HabitModal({ open, onClose, habit, onUpdate, onDelete, onCreate,
                                     <LevelAssessmentSliders
                                         habitId={habit.id}
                                         habitName={habit.name}
+                                        initialValues={(habit as any).levelAssessmentRaw?.variables}
                                         onSubmit={handleLevelAssessmentSubmit}
                                         onCancel={() => setShowLevelAssessment(false)}
                                         isLoading={levelAssessmentLoading}

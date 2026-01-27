@@ -809,6 +809,7 @@ export function CoachSection({ goals, habits, onHabitCreated, onGoalCreated, onH
                     <LevelAssessmentSliders
                       habitId={levelAssessmentHabit.id}
                       habitName={levelAssessmentHabit.name}
+                      initialValues={(levelAssessmentHabit as any).levelAssessmentRaw?.variables}
                       onSubmit={handleLevelAssessmentSubmit}
                       onCancel={handleLevelAssessmentCancel}
                       isLoading={levelAssessmentLoading}
