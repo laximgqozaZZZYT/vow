@@ -21,6 +21,11 @@ export declare const habitSchema: z.ZodObject<{
     target_count: z.ZodDefault<z.ZodNumber>;
     workload_unit: z.ZodOptional<z.ZodNullable<z.ZodString>>;
     workload_per_count: z.ZodDefault<z.ZodNumber>;
+    level: z.ZodOptional<z.ZodNullable<z.ZodNumber>>;
+    level_tier: z.ZodOptional<z.ZodNullable<z.ZodEnum<["beginner", "intermediate", "advanced", "expert"]>>>;
+    level_assessment_data: z.ZodOptional<z.ZodNullable<z.ZodRecord<z.ZodString, z.ZodUnknown>>>;
+    level_last_assessed_at: z.ZodOptional<z.ZodNullable<z.ZodString>>;
+    domain_codes: z.ZodDefault<z.ZodArray<z.ZodString, "many">>;
     created_at: z.ZodString;
     updated_at: z.ZodOptional<z.ZodNullable<z.ZodString>>;
 }, "strip", z.ZodTypeAny, {
@@ -33,9 +38,14 @@ export declare const habitSchema: z.ZodObject<{
     frequency: "daily" | "weekly" | "monthly";
     target_count: number;
     workload_per_count: number;
+    domain_codes: string[];
     description?: string | null | undefined;
     goal_id?: string | null | undefined;
     workload_unit?: string | null | undefined;
+    level?: number | null | undefined;
+    level_tier?: "beginner" | "intermediate" | "advanced" | "expert" | null | undefined;
+    level_assessment_data?: Record<string, unknown> | null | undefined;
+    level_last_assessed_at?: string | null | undefined;
     updated_at?: string | null | undefined;
 }, {
     created_at: string;
@@ -50,6 +60,11 @@ export declare const habitSchema: z.ZodObject<{
     target_count?: number | undefined;
     workload_unit?: string | null | undefined;
     workload_per_count?: number | undefined;
+    level?: number | null | undefined;
+    level_tier?: "beginner" | "intermediate" | "advanced" | "expert" | null | undefined;
+    level_assessment_data?: Record<string, unknown> | null | undefined;
+    level_last_assessed_at?: string | null | undefined;
+    domain_codes?: string[] | undefined;
     updated_at?: string | null | undefined;
 }>;
 export type Habit = z.infer<typeof habitSchema>;
@@ -64,6 +79,7 @@ export declare const habitCreateSchema: z.ZodObject<{
     target_count: z.ZodDefault<z.ZodNumber>;
     workload_unit: z.ZodOptional<z.ZodString>;
     workload_per_count: z.ZodDefault<z.ZodNumber>;
+    domain_codes: z.ZodOptional<z.ZodDefault<z.ZodArray<z.ZodString, "many">>>;
 }, "strip", z.ZodTypeAny, {
     name: string;
     frequency: "daily" | "weekly" | "monthly";
@@ -72,6 +88,7 @@ export declare const habitCreateSchema: z.ZodObject<{
     description?: string | undefined;
     goal_id?: string | undefined;
     workload_unit?: string | undefined;
+    domain_codes?: string[] | undefined;
 }, {
     name: string;
     description?: string | undefined;
@@ -80,6 +97,7 @@ export declare const habitCreateSchema: z.ZodObject<{
     target_count?: number | undefined;
     workload_unit?: string | undefined;
     workload_per_count?: number | undefined;
+    domain_codes?: string[] | undefined;
 }>;
 export type HabitCreate = z.infer<typeof habitCreateSchema>;
 /**
@@ -94,6 +112,7 @@ export declare const habitUpdateSchema: z.ZodObject<{
     target_count: z.ZodOptional<z.ZodNumber>;
     workload_unit: z.ZodOptional<z.ZodNullable<z.ZodString>>;
     workload_per_count: z.ZodOptional<z.ZodNumber>;
+    domain_codes: z.ZodOptional<z.ZodArray<z.ZodString, "many">>;
 }, "strip", z.ZodTypeAny, {
     name?: string | undefined;
     description?: string | null | undefined;
@@ -103,6 +122,7 @@ export declare const habitUpdateSchema: z.ZodObject<{
     target_count?: number | undefined;
     workload_unit?: string | null | undefined;
     workload_per_count?: number | undefined;
+    domain_codes?: string[] | undefined;
 }, {
     name?: string | undefined;
     description?: string | null | undefined;
@@ -112,6 +132,7 @@ export declare const habitUpdateSchema: z.ZodObject<{
     target_count?: number | undefined;
     workload_unit?: string | null | undefined;
     workload_per_count?: number | undefined;
+    domain_codes?: string[] | undefined;
 }>;
 export type HabitUpdate = z.infer<typeof habitUpdateSchema>;
 /**
@@ -341,6 +362,10 @@ export declare const goalSchema: z.ZodObject<{
     description: z.ZodOptional<z.ZodNullable<z.ZodString>>;
     parent_id: z.ZodOptional<z.ZodNullable<z.ZodString>>;
     status: z.ZodDefault<z.ZodEnum<["active", "completed", "archived"]>>;
+    level: z.ZodOptional<z.ZodNullable<z.ZodNumber>>;
+    level_tier: z.ZodOptional<z.ZodNullable<z.ZodEnum<["beginner", "intermediate", "advanced", "expert"]>>>;
+    level_last_assessed_at: z.ZodOptional<z.ZodNullable<z.ZodString>>;
+    domain_codes: z.ZodDefault<z.ZodArray<z.ZodString, "many">>;
     created_at: z.ZodString;
     updated_at: z.ZodOptional<z.ZodNullable<z.ZodString>>;
 }, "strip", z.ZodTypeAny, {
@@ -350,7 +375,11 @@ export declare const goalSchema: z.ZodObject<{
     name: string;
     owner_type: string;
     owner_id: string;
+    domain_codes: string[];
     description?: string | null | undefined;
+    level?: number | null | undefined;
+    level_tier?: "beginner" | "intermediate" | "advanced" | "expert" | null | undefined;
+    level_last_assessed_at?: string | null | undefined;
     updated_at?: string | null | undefined;
     parent_id?: string | null | undefined;
 }, {
@@ -361,6 +390,10 @@ export declare const goalSchema: z.ZodObject<{
     status?: "active" | "completed" | "archived" | undefined;
     owner_type?: string | undefined;
     description?: string | null | undefined;
+    level?: number | null | undefined;
+    level_tier?: "beginner" | "intermediate" | "advanced" | "expert" | null | undefined;
+    level_last_assessed_at?: string | null | undefined;
+    domain_codes?: string[] | undefined;
     updated_at?: string | null | undefined;
     parent_id?: string | null | undefined;
 }>;
@@ -372,13 +405,16 @@ export declare const goalCreateSchema: z.ZodObject<{
     name: z.ZodString;
     description: z.ZodOptional<z.ZodString>;
     parent_id: z.ZodOptional<z.ZodString>;
+    domain_codes: z.ZodOptional<z.ZodDefault<z.ZodArray<z.ZodString, "many">>>;
 }, "strip", z.ZodTypeAny, {
     name: string;
     description?: string | undefined;
+    domain_codes?: string[] | undefined;
     parent_id?: string | undefined;
 }, {
     name: string;
     description?: string | undefined;
+    domain_codes?: string[] | undefined;
     parent_id?: string | undefined;
 }>;
 export type GoalCreate = z.infer<typeof goalCreateSchema>;
@@ -390,15 +426,18 @@ export declare const goalUpdateSchema: z.ZodObject<{
     description: z.ZodOptional<z.ZodNullable<z.ZodString>>;
     parent_id: z.ZodOptional<z.ZodNullable<z.ZodString>>;
     status: z.ZodOptional<z.ZodEnum<["active", "completed", "archived"]>>;
+    domain_codes: z.ZodOptional<z.ZodArray<z.ZodString, "many">>;
 }, "strip", z.ZodTypeAny, {
     status?: "active" | "completed" | "archived" | undefined;
     name?: string | undefined;
     description?: string | null | undefined;
+    domain_codes?: string[] | undefined;
     parent_id?: string | null | undefined;
 }, {
     status?: "active" | "completed" | "archived" | undefined;
     name?: string | undefined;
     description?: string | null | undefined;
+    domain_codes?: string[] | undefined;
     parent_id?: string | null | undefined;
 }>;
 export type GoalUpdate = z.infer<typeof goalUpdateSchema>;

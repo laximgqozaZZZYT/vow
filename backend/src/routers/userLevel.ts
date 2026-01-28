@@ -50,7 +50,7 @@ function getAuthContext(c: Context): AuthContext {
   const supabase = c.get('supabase') as SupabaseClient | undefined;
 
   if (!userId || !supabase) {
-    throw new AppError('UNAUTHORIZED', 'Authentication required', 401);
+    throw new AppError('Authentication required', 401, 'UNAUTHORIZED');
   }
 
   return { userId, supabase };
@@ -61,7 +61,7 @@ function getAuthContext(c: Context): AuthContext {
  */
 function validateUserAccess(requestedUserId: string, authenticatedUserId: string): void {
   if (requestedUserId !== authenticatedUserId) {
-    throw new AppError('FORBIDDEN', 'You can only access your own data', 403);
+    throw new AppError('You can only access your own data', 403, 'FORBIDDEN');
   }
 }
 
@@ -76,11 +76,11 @@ async function validateHabitOwnership(
   const habit = await habitRepo.getById(habitId);
 
   if (!habit) {
-    throw new AppError('NOT_FOUND', 'Habit not found', 404);
+    throw new AppError('Habit not found', 404, 'NOT_FOUND');
   }
 
   if (habit.owner_id !== userId) {
-    throw new AppError('FORBIDDEN', 'You do not have access to this habit', 403);
+    throw new AppError('You do not have access to this habit', 403, 'FORBIDDEN');
   }
 }
 
@@ -104,7 +104,7 @@ export function createUserLevelRouter(): Hono {
     const requestedUserId = c.req.param('id');
 
     if (!requestedUserId) {
-      throw new AppError('BAD_REQUEST', 'User ID is required', 400);
+      throw new AppError('User ID is required', 400, 'BAD_REQUEST');
     }
 
     // Users can only access their own level data
@@ -149,7 +149,7 @@ export function createUserLevelRouter(): Hono {
     const requestedUserId = c.req.param('id');
 
     if (!requestedUserId) {
-      throw new AppError('BAD_REQUEST', 'User ID is required', 400);
+      throw new AppError('User ID is required', 400, 'BAD_REQUEST');
     }
 
     // Users can only access their own expertise data
@@ -196,11 +196,11 @@ export function createUserLevelRouter(): Hono {
     const domainCode = c.req.param('domain_code');
 
     if (!requestedUserId) {
-      throw new AppError('BAD_REQUEST', 'User ID is required', 400);
+      throw new AppError('User ID is required', 400, 'BAD_REQUEST');
     }
 
     if (!domainCode) {
-      throw new AppError('BAD_REQUEST', 'Domain code is required', 400);
+      throw new AppError('Domain code is required', 400, 'BAD_REQUEST');
     }
 
     // Users can only access their own expertise data
@@ -215,7 +215,7 @@ export function createUserLevelRouter(): Hono {
     const expertise = await expertiseRepo.getByDomain(requestedUserId, domainCode);
 
     if (!expertise) {
-      throw new AppError('NOT_FOUND', 'Expertise record not found for this domain', 404);
+      throw new AppError('Expertise record not found for this domain', 404, 'NOT_FOUND');
     }
 
     // Get domain details
@@ -267,7 +267,7 @@ export function createUserLevelRouter(): Hono {
     const requestedUserId = c.req.param('id');
 
     if (!requestedUserId) {
-      throw new AppError('BAD_REQUEST', 'User ID is required', 400);
+      throw new AppError('User ID is required', 400, 'BAD_REQUEST');
     }
 
     // Users can only access their own history
@@ -335,13 +335,11 @@ export function createUserLevelRouter(): Hono {
     // Get query parameters
     const page = parseInt(c.req.query('page') ?? '1', 10);
     const pageSize = parseInt(c.req.query('pageSize') ?? '50', 10);
-    const majorCode = c.req.query('majorCode');
 
     const domainService = new DomainMappingService(supabase);
     const result = await domainService.getAllDomains({
       page,
       pageSize,
-      majorCode,
     });
 
     return c.json({
@@ -375,7 +373,7 @@ export function createUserLevelRouter(): Hono {
     const query = c.req.query('q');
 
     if (!query || query.trim().length === 0) {
-      throw new AppError('BAD_REQUEST', 'Search query is required', 400);
+      throw new AppError('Search query is required', 400, 'BAD_REQUEST');
     }
 
     logger.info('Searching domains', { query });
@@ -409,7 +407,7 @@ export function createUserLevelRouter(): Hono {
     const habitId = c.req.param('id');
 
     if (!habitId) {
-      throw new AppError('BAD_REQUEST', 'Habit ID is required', 400);
+      throw new AppError('Habit ID is required', 400, 'BAD_REQUEST');
     }
 
     logger.info('Getting domain suggestions for habit', { userId, habitId });
@@ -421,14 +419,14 @@ export function createUserLevelRouter(): Hono {
     // Get habit details
     const habit = await habitRepo.getById(habitId);
     if (!habit) {
-      throw new AppError('NOT_FOUND', 'Habit not found', 404);
+      throw new AppError('Habit not found', 404, 'NOT_FOUND');
     }
 
     // Get domain suggestions
     const domainService = new DomainMappingService(supabase);
     const suggestions = await domainService.suggestDomains(
       habit.name,
-      habit.notes ?? null
+      (habit as Record<string, unknown>)['notes'] as string | null ?? null
     );
 
     return c.json({
@@ -455,19 +453,19 @@ export function createUserLevelRouter(): Hono {
     const habitId = c.req.param('id');
 
     if (!habitId) {
-      throw new AppError('BAD_REQUEST', 'Habit ID is required', 400);
+      throw new AppError('Habit ID is required', 400, 'BAD_REQUEST');
     }
 
     // Parse request body
     const body = await c.req.json<{ domainCodes: string[] }>();
 
     if (!body.domainCodes || !Array.isArray(body.domainCodes)) {
-      throw new AppError('BAD_REQUEST', 'domainCodes array is required', 400);
+      throw new AppError('domainCodes array is required', 400, 'BAD_REQUEST');
     }
 
     // Validate max 3 domains
     if (body.domainCodes.length > 3) {
-      throw new AppError('BAD_REQUEST', 'Maximum 3 domains allowed per habit', 400);
+      throw new AppError('Maximum 3 domains allowed per habit', 400, 'BAD_REQUEST');
     }
 
     logger.info('Updating habit domains', {
@@ -488,7 +486,7 @@ export function createUserLevelRouter(): Hono {
           // Skip validation for General domain
           const domain = await domainService.getDomainByCode(code);
           if (!domain) {
-            throw new AppError('BAD_REQUEST', `Invalid domain code: ${code}`, 400);
+            throw new AppError(`Invalid domain code: ${code}`, 400, 'BAD_REQUEST');
           }
         }
       }
@@ -504,7 +502,7 @@ export function createUserLevelRouter(): Hono {
       .eq('id', habitId);
 
     if (error) {
-      throw new AppError('INTERNAL_ERROR', `Failed to update habit: ${error.message}`, 500);
+      throw new AppError(`Failed to update habit: ${error.message}`, 500, 'INTERNAL_ERROR');
     }
 
     // Get updated habit
