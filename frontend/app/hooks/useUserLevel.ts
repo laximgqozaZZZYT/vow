@@ -62,9 +62,9 @@ export function useUserLevel(userId: string | null): UseUserLevelResult {
     } catch (err: any) {
       console.error('[useUserLevel] Error fetching user level:', err);
       
-      // Check if it's a 404 error (user level not set yet)
-      if (err?.status === 404) {
-        // ユーザーレベルが未設定の場合はデフォルト値を設定
+      // Check if it's a 404 error (user level not set yet) or 401 (not authenticated)
+      if (err?.status === 404 || err?.status === 401) {
+        // ユーザーレベルが未設定または認証エラーの場合はデフォルト値を設定
         setUserLevel({
           userId,
           overallLevel: 0,
