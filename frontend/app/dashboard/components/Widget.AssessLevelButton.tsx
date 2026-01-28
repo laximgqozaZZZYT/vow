@@ -64,7 +64,7 @@ export default function AssessLevelButton({
 }: AssessLevelButtonProps) {
   // Check if quota is exhausted
   const isQuotaExhausted = quota && !quota.isUnlimited && quota.remaining <= 0;
-  const isDisabled = disabled || isQuotaExhausted;
+  const isDisabled = disabled || !!isQuotaExhausted;
 
   // Variant styles
   const variantStyles = {
@@ -248,7 +248,7 @@ export function AssessLevelPrompt({
           <div className="flex items-center gap-2">
             <button
               onClick={onAssess}
-              disabled={isQuotaExhausted}
+              disabled={!!isQuotaExhausted}
               className={`
                 px-4 py-2 text-sm rounded-md font-medium transition-all min-h-[44px]
                 ${isQuotaExhausted 

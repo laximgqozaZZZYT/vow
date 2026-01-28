@@ -1,11 +1,13 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useSlackIntegration } from '@/hooks/useSlackIntegration';
 import { TIME_OPTIONS } from '@/lib/types/slack';
 import { useNotificationPreferences } from '../hooks/useNotificationPreferences';
 import { usePushNotifications } from '../hooks/usePushNotifications';
+import { useUserLevel, getUserLevelTierColors } from '../hooks/useUserLevel';
+import { supabase } from '@/lib/supabaseClient';
 
 // Feature flags from environment variables
 // Default to false if not set (safer for production)
@@ -14,7 +16,8 @@ const ENABLE_SUBSCRIPTION = process.env.NEXT_PUBLIC_ENABLE_SUBSCRIPTION === 'tru
 type SettingsSection = 'profile' | 'notifications' | 'integrations' | 'api-keys';
 
 export default function SettingsPage() {
-  const [activeSection, setActiveSection] = useState<SettingsSection>('integrations');
+  const [activeSection, setActiveSection] = useState<SettingsSection>('profile');
+  const [userId, setUserId] = useState<string | null>(null);
   const {
     status: slackStatus,
     loading: slackLoading,
@@ -46,9 +49,23 @@ export default function SettingsPage() {
     unsubscribe: unsubscribePush,
   } = usePushNotifications();
   
+  // User level
+  const { userLevel, isLoading: userLevelLoading } = useUserLevel(userId);
+  
   const [testingConnection, setTestingConnection] = useState(false);
   const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null);
   const [disconnecting, setDisconnecting] = useState(false);
+  
+  // Get user ID from Supabase session
+  useEffect(() => {
+    const getUserId = async () => {
+      if (supabase) {
+        const { data: { session } } = await supabase.auth.getSession();
+        setUserId(session?.user?.id || null);
+      }
+    };
+    getUserId();
+  }, []);
 
   const handleTestConnection = async () => {
     setTestingConnection(true);
@@ -197,6 +214,70 @@ export default function SettingsPage() {
           <div className="max-w-2xl mx-auto">
             {activeSection === 'profile' && (
               <div className="space-y-6">
+                {/* User Level Section */}
+                <div>
+                  <h2 className="text-xl font-semibold mb-4">ユーザーレベル</h2>
+                  <div className="bg-card border border-border rounded-lg p-6">
+                    {userLevelLoading ? (
+                      <div className="flex items-center gap-2 text-muted-foreground">
+                        <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                        Loading...
+                      </div>
+                    ) : userLevel ? (
+                      <div className="space-y-4">
+                        {/* Level Badge */}
+                        <div className="flex items-center gap-4">
+                          {(() => {
+                            const colors = getUserLevelTierColors(userLevel.overallTier);
+                            return (
+                              <div className={`inline-flex items-center gap-2 px-4 py-2 ${colors.bg} ${colors.text} border ${colors.border} rounded-lg text-lg font-medium`}>
+                                <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 24 24">
+                                  <path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z" />
+                                </svg>
+                                <span className="font-bold text-xl">Lv. {userLevel.overallLevel}</span>
+                                <span className="text-sm opacity-80">{colors.labelJa}</span>
+                              </div>
+                            );
+                          })()}
+                        </div>
+                        
+                        {/* Stats Grid */}
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mt-4">
+                          <div className="bg-muted/50 rounded-lg p-4">
+                            <div className="text-sm text-muted-foreground">総経験値</div>
+                            <div className="text-2xl font-bold mt-1">
+                              {userLevel.totalExperiencePoints.toLocaleString()}
+                              <span className="text-sm font-normal text-muted-foreground ml-1">XP</span>
+                            </div>
+                          </div>
+                          <div className="bg-muted/50 rounded-lg p-4">
+                            <div className="text-sm text-muted-foreground">習慣継続力</div>
+                            <div className="text-2xl font-bold mt-1">
+                              {userLevel.habitContinuityPower}
+                              <span className="text-sm font-normal text-muted-foreground ml-1">pt</span>
+                            </div>
+                          </div>
+                          <div className="bg-muted/50 rounded-lg p-4">
+                            <div className="text-sm text-muted-foreground">レジリエンス</div>
+                            <div className="text-2xl font-bold mt-1">
+                              {userLevel.resilienceScore}
+                              <span className="text-sm font-normal text-muted-foreground ml-1">%</span>
+                            </div>
+                          </div>
+                        </div>
+                        
+                        {userLevel.lastCalculatedAt && (
+                          <div className="text-xs text-muted-foreground mt-2">
+                            最終更新: {new Date(userLevel.lastCalculatedAt).toLocaleString('ja-JP')}
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      <p className="text-muted-foreground">ユーザーレベル情報を取得できませんでした。</p>
+                    )}
+                  </div>
+                </div>
+                
                 <div>
                   <h2 className="text-xl font-semibold mb-4">Profile Settings</h2>
                   <div className="bg-card border border-border rounded-lg p-6">

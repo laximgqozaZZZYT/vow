@@ -18,6 +18,7 @@ export function useAuth(): AuthContext {
   const [actorLabel, setActorLabel] = useState<string>('');
   const [authError, setAuthError] = useState<string | null>(null);
   const [isGuest, setIsGuest] = useState<boolean>(false);
+  const [userId, setUserId] = useState<string | null>(null);
   const previousIsGuestRef = useRef<boolean>(false);
   const migrationInProgressRef = useRef<boolean>(false);
   
@@ -134,6 +135,7 @@ export function useAuth(): AuthContext {
             setActorLabel(`user:${a.id}`);
             setIsAuthed(true);
             setIsGuest(false);
+            setUserId(sessionUserId);
             
             // Check for guest data migration immediately after detecting authenticated user
             if (sessionUserId && GuestDataMigration.hasGuestData() && migrationStatus === 'idle') {
@@ -143,6 +145,7 @@ export function useAuth(): AuthContext {
           } else if (a?.type === 'guest') {
             debug.log('[auth] Guest actor detected');
             setActorLabel(`guest:${a.id}`);
+            setUserId(null);
             // ゲストユーザーも認証済みとして扱い、ローカル機能を有効化
             debug.log('[auth] Guest user detected, enabling local features');
             debug.log('[auth] Setting isAuthed to true for guest user');
@@ -326,6 +329,7 @@ export function useAuth(): AuthContext {
     authError,
     handleLogout,
     isGuest,
+    userId,
     // Migration state
     migrationStatus,
     migrationResult,

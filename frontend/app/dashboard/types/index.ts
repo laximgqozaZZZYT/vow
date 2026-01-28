@@ -165,6 +165,7 @@ export interface AuthContext {
   authError: string | null;
   handleLogout: () => Promise<void>;
   isGuest: boolean; // ゲストユーザーかどうかを示すフラグ
+  userId: string | null; // ユーザーID
   migrationStatus: 'idle' | 'checking' | 'migrating' | 'success' | 'error';
   migrationResult: GuestDataMigrationResult | null;
   migrationError: string | null;

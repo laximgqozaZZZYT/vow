@@ -5,6 +5,7 @@ import api from '../../../lib/api';
 import type { DashboardHeaderProps } from '../types';
 import { useHandedness } from '../contexts/HandednessContext';
 import { useLocale } from '@/contexts/LocaleContext';
+import { useUserLevel, getUserLevelTierColors } from '../../hooks/useUserLevel';
 
 export default function DashboardHeader({ 
   onToggleSidebar, 
@@ -20,13 +21,19 @@ export default function DashboardHeader({
     migrationStatus,
     migrationResult,
     migrationError,
-    retryMigration
+    retryMigration,
+    userId
   } = useAuth();
   const { handedness, setHandedness, isLeftHanded } = useHandedness();
   const { locale, setLocale } = useLocale();
   const [hasGuestData, setHasGuestData] = useState(false);
   const [showAccountMenu, setShowAccountMenu] = useState(false);
   const accountMenuRef = useRef<HTMLDivElement>(null);
+  
+  // Fetch user level
+  const { userLevel, isLoading: userLevelLoading } = useUserLevel(
+    isAuthed && !isGuest && userId ? userId : null
+  );
 
   // Close account menu when clicking outside
   useEffect(() => {
@@ -166,10 +173,40 @@ export default function DashboardHeader({
               </button>
               
               {showAccountMenu && (
-                <div className="absolute right-0 mt-2 w-48 rounded-md bg-card border border-border shadow-lg py-1 z-50">
+                <div className="absolute right-0 mt-2 w-56 rounded-md bg-card border border-border shadow-lg py-1 z-50">
                   {actorLabel && (
                     <div className="px-4 py-2 text-xs text-muted-foreground border-b border-border truncate">
                       {actorLabel}
+                    </div>
+                  )}
+                  {/* User Level Display */}
+                  {userLevel && (
+                    <div className="px-4 py-2 border-b border-border">
+                      <div className="flex items-center gap-2">
+                        {(() => {
+                          const colors = getUserLevelTierColors(userLevel.overallTier);
+                          return (
+                            <div className={`inline-flex items-center gap-1.5 px-2 py-1 ${colors.bg} ${colors.text} border ${colors.border} rounded-md text-sm font-medium`}>
+                              <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
+                                <path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z" />
+                              </svg>
+                              <span className="font-semibold">Lv. {userLevel.overallLevel}</span>
+                              <span className="text-xs opacity-80">{colors.labelJa}</span>
+                            </div>
+                          );
+                        })()}
+                      </div>
+                      <div className="mt-1 text-xs text-muted-foreground">
+                        経験値: {userLevel.totalExperiencePoints.toLocaleString()} XP
+                      </div>
+                    </div>
+                  )}
+                  {userLevelLoading && (
+                    <div className="px-4 py-2 border-b border-border">
+                      <div className="flex items-center gap-2 text-muted-foreground text-sm">
+                        <div className="w-3 h-3 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                        Loading level...
+                      </div>
                     </div>
                   )}
                   <Link
