@@ -32,6 +32,8 @@ export const habitSchema = z.object({
   level_tier: z.enum(['beginner', 'intermediate', 'advanced', 'expert']).nullable().optional(),
   level_assessment_data: z.record(z.unknown()).nullable().optional(),
   level_last_assessed_at: z.string().datetime().nullable().optional(),
+  // User Level System fields (Requirements: 1.6)
+  domain_codes: z.array(z.string()).default([]),
   created_at: z.string().datetime(),
   updated_at: z.string().datetime().nullable().optional(),
 });
@@ -49,6 +51,8 @@ export const habitCreateSchema = z.object({
   target_count: z.number().int().positive().default(1),
   workload_unit: z.string().max(50).optional(),
   workload_per_count: z.number().positive().default(1),
+  // User Level System fields (Requirements: 1.6)
+  domain_codes: z.array(z.string()).default([]).optional(),
 });
 
 export type HabitCreate = z.infer<typeof habitCreateSchema>;
@@ -65,6 +69,8 @@ export const habitUpdateSchema = z.object({
   target_count: z.number().int().positive().optional(),
   workload_unit: z.string().max(50).nullable().optional(),
   workload_per_count: z.number().positive().optional(),
+  // User Level System fields (Requirements: 1.6)
+  domain_codes: z.array(z.string()).optional(),
 });
 
 export type HabitUpdate = z.infer<typeof habitUpdateSchema>;
@@ -173,6 +179,8 @@ export const goalSchema = z.object({
   level: z.number().int().min(0).max(199).nullable().optional(),
   level_tier: z.enum(['beginner', 'intermediate', 'advanced', 'expert']).nullable().optional(),
   level_last_assessed_at: z.string().datetime().nullable().optional(),
+  // User Level System fields (Requirements: 1.7)
+  domain_codes: z.array(z.string()).default([]),
   created_at: z.string().datetime(),
   updated_at: z.string().datetime().nullable().optional(),
 });
@@ -186,6 +194,8 @@ export const goalCreateSchema = z.object({
   name: z.string().min(1).max(100),
   description: z.string().max(500).optional(),
   parent_id: z.string().uuid().optional(),
+  // User Level System fields (Requirements: 1.7)
+  domain_codes: z.array(z.string()).default([]).optional(),
 });
 
 export type GoalCreate = z.infer<typeof goalCreateSchema>;
@@ -198,6 +208,8 @@ export const goalUpdateSchema = z.object({
   description: z.string().max(500).nullable().optional(),
   parent_id: z.string().uuid().nullable().optional(),
   status: z.enum(['active', 'completed', 'archived']).optional(),
+  // User Level System fields (Requirements: 1.7)
+  domain_codes: z.array(z.string()).optional(),
 });
 
 export type GoalUpdate = z.infer<typeof goalUpdateSchema>;

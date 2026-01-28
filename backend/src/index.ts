@@ -32,6 +32,7 @@ import { noticesRouter } from './routers/notices.js';
 import { notificationsRouter } from './routers/notifications.js';
 import { levelRouter } from './routers/level.js';
 import { jobsRouter } from './routers/jobs.js';
+import { userLevelRouter } from './routers/userLevel.js';
 
 // Error handling imports
 import { AppError, getUserFriendlyMessage } from './errors/index.js';
@@ -260,6 +261,15 @@ export function createApp(): Hono {
   // Note: Scheduled job execution endpoints (service role only)
   // Requirements: 17.1, 17.7, 7.5
   app.route('/api/jobs', jobsRouter);
+
+  // User Level router - mounted at /api
+  // Endpoints: /api/users/:id/level, /api/users/:id/expertise,
+  //            /api/users/:id/expertise/:domain_code, /api/users/:id/level-history,
+  //            /api/domains, /api/domains/search, /api/habits/:id/suggest-domains,
+  //            /api/habits/:id/domains
+  // Note: User level system for tracking growth through habit completions
+  // Requirements: 12.1, 12.2, 12.3, 12.4, 2.4, 2.5, 3.7, 3.3, 3.4
+  app.route('/api', userLevelRouter);
 
   logger.info('Application initialized', {
     version: settings.appVersion,

@@ -11,6 +11,7 @@ CREATE TABLE IF NOT EXISTS goals (
     parent_id TEXT REFERENCES goals(id),
     owner_type TEXT,
     owner_id TEXT,
+    domain_codes TEXT[] DEFAULT '{}', -- 関連する職業分類ドメインコードの配列
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
@@ -41,9 +42,13 @@ CREATE TABLE IF NOT EXISTS habits (
     last_completed_at TIMESTAMPTZ,
     owner_type TEXT,
     owner_id TEXT,
+    domain_codes TEXT[] DEFAULT '{}', -- 関連する職業分類ドメインコードの配列
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+-- Index for habits domain_codes
+CREATE INDEX IF NOT EXISTS idx_habits_domains ON habits USING GIN(domain_codes);
 
 -- Activity table
 CREATE TABLE IF NOT EXISTS activities (
@@ -167,6 +172,7 @@ CREATE TABLE IF NOT EXISTS sessions (
 -- インデックス作成
 CREATE INDEX IF NOT EXISTS idx_goals_parent_id ON goals(parent_id);
 CREATE INDEX IF NOT EXISTS idx_goals_owner ON goals(owner_type, owner_id);
+CREATE INDEX IF NOT EXISTS idx_goals_domains ON goals USING GIN(domain_codes);
 CREATE INDEX IF NOT EXISTS idx_habits_goal_id ON habits(goal_id);
 CREATE INDEX IF NOT EXISTS idx_habits_owner ON habits(owner_type, owner_id);
 CREATE INDEX IF NOT EXISTS idx_activities_owner ON activities(owner_type, owner_id);

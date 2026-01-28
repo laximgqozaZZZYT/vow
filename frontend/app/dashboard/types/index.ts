@@ -21,6 +21,8 @@ export interface Goal {
   parentId?: string | null;
   isCompleted?: boolean;
   tags?: Tag[];
+  /** Associated occupation domain codes for experience point distribution - Validates: Requirements 1.7 */
+  domainCodes?: string[];
   createdAt: string;
   updatedAt: string;
 }
@@ -71,6 +73,8 @@ export interface Habit {
     level: number;
     assessedAt: string;
   } | null;
+  /** Associated occupation domain codes for experience point distribution - Validates: Requirements 1.6 */
+  domainCodes?: string[];
   createdAt: string;
   updatedAt: string;
 }
