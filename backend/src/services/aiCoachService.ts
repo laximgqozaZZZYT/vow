@@ -25,7 +25,7 @@ import { THLIAssessmentService } from './thliAssessmentService.js';
 import { BabyStepGeneratorService } from './babyStepGeneratorService.js';
 import { LevelManagerService } from './levelManagerService.js';
 import { UsageQuotaService } from './usageQuotaService.js';
-import type { LevelEstimate, BabyStepPlans, QuotaStatus } from '../types/thli.js';
+import type { LevelEstimate, BabyStepPlans, BabyStepPlan, QuotaStatus } from '../types/thli.js';
 
 const logger = getLogger('aiCoachService');
 
@@ -781,6 +781,7 @@ export interface CoachResponse {
     quotaStatus?: QuotaStatus;
     levelDetails?: Record<string, unknown>;
     levelUpSuggestion?: Record<string, unknown>;
+    levelCompatibility?: Record<string, unknown>;
   } | undefined;
 }
 
@@ -2648,11 +2649,11 @@ export class AICoachService {
 
     // Check quota first
     const quotaStatus = await this.usageQuotaService.checkQuota(this.userId);
-    if (!quotaStatus.isUnlimited && quotaStatus.remaining <= 0) {
+    if (!quotaStatus.status.isUnlimited && quotaStatus.status.remaining <= 0) {
       return {
         error: true,
         message: '今月のTHLI-24評価回数の上限に達しました。',
-        quotaStatus,
+        quotaStatus: quotaStatus.status,
         upgradeRequired: true,
       };
     }
@@ -2681,7 +2682,7 @@ export class AICoachService {
         firstQuestion: session.status === 'in_progress' 
           ? 'この習慣を実行するとき、具体的にどのような行動をしますか？（例：30分ジョギングする、10ページ読書する）'
           : undefined,
-        quotaRemaining: quotaStatus.remaining - 1,
+        quotaRemaining: quotaStatus.status.remaining - 1,
       };
     } catch (error) {
       logger.error('Failed to initiate THLI-24 assessment', error instanceof Error ? error : new Error(String(error)), {
@@ -2702,7 +2703,7 @@ export class AICoachService {
   private async suggestBabySteps(
     habitId?: string,
     habitName?: string,
-    targetLevel?: number
+    _targetLevel?: number
   ): Promise<Record<string, unknown>> {
     // Find habit by ID or name
     let habit;
@@ -2863,7 +2864,7 @@ export class AICoachService {
     habitName: string,
     estimatedLevel: number,
     mismatch: { userLevel: number; levelGap: number; severity: string },
-    babyStepPlans?: { lv50: Record<string, unknown>; lv10: Record<string, unknown> }
+    babyStepPlans?: { lv50: BabyStepPlan; lv10: BabyStepPlan }
   ): Promise<void> {
     try {
       await this.supabase
@@ -3071,7 +3072,7 @@ export class AICoachService {
       assessmentData: habit.level_assessment_data,
       lastAssessedAt: habit.level_last_assessed_at,
       levelHistory: levelHistory.slice(0, 5), // Last 5 changes
-      message: `「${habit.name}」のレベルは${habit.level}（${this.getTierNameJa(habit.level_tier)}）です。`,
+      message: `「${habit.name}」のレベルは${habit.level}（${this.getTierNameJa(habit.level_tier ?? null)}）です。`,
     };
   }
 
@@ -3094,13 +3095,13 @@ export class AICoachService {
    */
   private async getTHLIQuotaStatus(): Promise<Record<string, unknown>> {
     try {
-      const quotaStatus = await this.usageQuotaService.checkQuota(this.userId);
+      const quotaResult = await this.usageQuotaService.checkQuota(this.userId);
 
       return {
-        ...quotaStatus,
-        message: quotaStatus.isUnlimited
+        ...quotaResult.status,
+        message: quotaResult.status.isUnlimited
           ? 'プレミアムプランのため、THLI-24評価は無制限です。'
-          : `今月の残り評価回数: ${quotaStatus.remaining}/${quotaStatus.quotaLimit}回`,
+          : `今月の残り評価回数: ${quotaResult.status.remaining}/${quotaResult.status.quotaLimit}回`,
       };
     } catch (error) {
       logger.error('Failed to get THLI quota status', error instanceof Error ? error : new Error(String(error)), {

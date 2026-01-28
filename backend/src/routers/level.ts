@@ -76,7 +76,7 @@ function getAuthContext(c: Context): AuthContext {
   const supabase = c.get('supabase') as SupabaseClient | undefined;
 
   if (!userId || !supabase) {
-    throw new AppError('UNAUTHORIZED', 'Authentication required', 401);
+    throw new AppError('Authentication required', 401, 'UNAUTHORIZED');
   }
 
   return { userId, supabase };
@@ -93,11 +93,11 @@ async function validateHabitOwnership(
   const habit = await habitRepo.getById(habitId);
   
   if (!habit) {
-    throw new AppError('NOT_FOUND', 'Habit not found', 404);
+    throw new AppError('Habit not found', 404, 'NOT_FOUND');
   }
 
   if (habit.owner_id !== userId) {
-    throw new AppError('FORBIDDEN', 'You do not have access to this habit', 403);
+    throw new AppError('You do not have access to this habit', 403, 'FORBIDDEN');
   }
 }
 
@@ -110,7 +110,7 @@ async function validateHabitOwnership(
 function estimateLevelFromWorkload(habit: {
   frequency?: string;
   workload_per_count?: number;
-  workload_unit?: string | null;
+  workload_unit?: string | null | undefined;
   target_count?: number;
 }): number {
   let baseLevel = 50; // Start at intermediate
@@ -157,8 +157,8 @@ async function performQuickAssessment(
     name: string;
     frequency?: string;
     workload_per_count?: number;
-    workload_unit?: string | null;
-    goal_id?: string | null;
+    workload_unit?: string | null | undefined;
+    goal_id?: string | null | undefined;
   },
   supabase: SupabaseClient
 ): Promise<{
@@ -255,7 +255,7 @@ export function createLevelRouter(): Hono {
     const habitId = c.req.param('id');
 
     if (!habitId) {
-      throw new AppError('BAD_REQUEST', 'Habit ID is required', 400);
+      throw new AppError('Habit ID is required', 400, 'BAD_REQUEST');
     }
 
     logger.info('Initiating THLI-24 assessment', { userId, habitId });
@@ -278,7 +278,7 @@ export function createLevelRouter(): Hono {
     }
 
     // Parse request body
-    const body = await c.req.json<AssessLevelBody>().catch(() => ({}));
+    const body = await c.req.json<AssessLevelBody>().catch(() => ({} as Partial<AssessLevelBody>));
 
     // Detect language from request
     // Priority: 1. Body language param, 2. Headers, 3. Default (ja)
@@ -286,7 +286,7 @@ export function createLevelRouter(): Hono {
     const headers = Object.fromEntries(
       [...c.req.raw.headers.entries()].map(([k, v]) => [k.toLowerCase(), v])
     );
-    const language: SupportedLanguage = body.language || detectLanguageFromHeaders(headers);
+    const language: SupportedLanguage = body.language ?? detectLanguageFromHeaders(headers);
 
     logger.debug('Language detected for assessment', { language, habitId });
 
@@ -325,7 +325,7 @@ export function createLevelRouter(): Hono {
     const habitId = c.req.param('id');
 
     if (!habitId) {
-      throw new AppError('BAD_REQUEST', 'Habit ID is required', 400);
+      throw new AppError('Habit ID is required', 400, 'BAD_REQUEST');
     }
 
     // Validate habit ownership
@@ -382,18 +382,18 @@ export function createLevelRouter(): Hono {
     const habitId = c.req.param('id');
 
     if (!habitId) {
-      throw new AppError('BAD_REQUEST', 'Habit ID is required', 400);
+      throw new AppError('Habit ID is required', 400, 'BAD_REQUEST');
     }
 
     // Parse request body
     const body = await c.req.json<AcceptBabyStepBody>();
 
     if (!body.planType || !body.proposedChanges) {
-      throw new AppError('BAD_REQUEST', 'planType and proposedChanges are required', 400);
+      throw new AppError('planType and proposedChanges are required', 400, 'BAD_REQUEST');
     }
 
     if (body.planType !== 'lv50' && body.planType !== 'lv10') {
-      throw new AppError('BAD_REQUEST', 'planType must be "lv50" or "lv10"', 400);
+      throw new AppError('planType must be "lv50" or "lv10"', 400, 'BAD_REQUEST');
     }
 
     logger.info('Accepting baby step plan', { userId, habitId, planType: body.planType });
@@ -435,18 +435,18 @@ export function createLevelRouter(): Hono {
     const habitId = c.req.param('id');
 
     if (!habitId) {
-      throw new AppError('BAD_REQUEST', 'Habit ID is required', 400);
+      throw new AppError('Habit ID is required', 400, 'BAD_REQUEST');
     }
 
     // Parse request body
     const body = await c.req.json<AcceptLevelUpBody>();
 
     if (body.targetLevel === undefined || !body.workloadChanges) {
-      throw new AppError('BAD_REQUEST', 'targetLevel and workloadChanges are required', 400);
+      throw new AppError('targetLevel and workloadChanges are required', 400, 'BAD_REQUEST');
     }
 
     if (body.targetLevel < 0 || body.targetLevel > 199) {
-      throw new AppError('BAD_REQUEST', 'targetLevel must be between 0 and 199', 400);
+      throw new AppError('targetLevel must be between 0 and 199', 400, 'BAD_REQUEST');
     }
 
     logger.info('Accepting level-up', { userId, habitId, targetLevel: body.targetLevel });
@@ -492,7 +492,7 @@ export function createLevelRouter(): Hono {
 
     // Users can only check their own quota
     if (requestedUserId !== userId) {
-      throw new AppError('FORBIDDEN', 'You can only check your own quota', 403);
+      throw new AppError('You can only check your own quota', 403, 'FORBIDDEN');
     }
 
     const quotaService = new UsageQuotaService(supabase);
@@ -518,7 +518,7 @@ export function createLevelRouter(): Hono {
     const habitId = c.req.param('id');
 
     if (!habitId) {
-      throw new AppError('BAD_REQUEST', 'Habit ID is required', 400);
+      throw new AppError('Habit ID is required', 400, 'BAD_REQUEST');
     }
 
     // Validate habit ownership
@@ -529,7 +529,7 @@ export function createLevelRouter(): Hono {
     const habit = await habitRepo.getById(habitId);
 
     if (!habit) {
-      throw new AppError('NOT_FOUND', 'Habit not found', 404);
+      throw new AppError('Habit not found', 404, 'NOT_FOUND');
     }
 
     // Get level history
@@ -544,7 +544,7 @@ export function createLevelRouter(): Hono {
       assessmentData: habit.level_assessment_data,
       lastAssessedAt: habit.level_last_assessed_at,
       crossFrameworkScores: habit.level_assessment_data 
-        ? (habit.level_assessment_data as Record<string, unknown>).crossFramework 
+        ? (habit.level_assessment_data as Record<string, unknown>)['crossFramework'] 
         : null,
       recentHistory: history.slice(0, 5),
     });
@@ -681,7 +681,7 @@ export function createLevelRouter(): Hono {
     const habitId = c.req.param('id');
 
     if (!habitId) {
-      throw new AppError('BAD_REQUEST', 'Habit ID is required', 400);
+      throw new AppError('Habit ID is required', 400, 'BAD_REQUEST');
     }
 
     logger.info('Checking level compatibility for habit', { userId, habitId });
@@ -693,7 +693,7 @@ export function createLevelRouter(): Hono {
     // Get habit details
     const habit = await habitRepo.getById(habitId);
     if (!habit) {
-      throw new AppError('NOT_FOUND', 'Habit not found', 404);
+      throw new AppError('Habit not found', 404, 'NOT_FOUND');
     }
 
     const levelManager = new LevelManagerService(supabase);
@@ -743,18 +743,18 @@ export function createLevelRouter(): Hono {
 
     // Users can only check their own compatibility
     if (requestedUserId !== userId) {
-      throw new AppError('FORBIDDEN', 'You can only check your own compatibility', 403);
+      throw new AppError('You can only check your own compatibility', 403, 'FORBIDDEN');
     }
 
     // Parse request body
     const body = await c.req.json<CheckHabitCompatibilityBody>();
 
     if (body.proposedLevel === undefined || body.proposedLevel === null) {
-      throw new AppError('BAD_REQUEST', 'proposedLevel is required', 400);
+      throw new AppError('proposedLevel is required', 400, 'BAD_REQUEST');
     }
 
     if (body.proposedLevel < 0 || body.proposedLevel > 199) {
-      throw new AppError('BAD_REQUEST', 'proposedLevel must be between 0 and 199', 400);
+      throw new AppError('proposedLevel must be between 0 and 199', 400, 'BAD_REQUEST');
     }
 
     logger.info('Checking habit compatibility for user', {
@@ -786,7 +786,7 @@ export function createLevelRouter(): Hono {
     const habitId = c.req.param('id');
 
     if (!habitId) {
-      throw new AppError('BAD_REQUEST', 'Habit ID is required', 400);
+      throw new AppError('Habit ID is required', 400, 'BAD_REQUEST');
     }
 
     logger.info('Checking workload-level consistency', { userId, habitId });
@@ -798,7 +798,7 @@ export function createLevelRouter(): Hono {
     // Get habit details
     const habit = await habitRepo.getById(habitId);
     if (!habit) {
-      throw new AppError('NOT_FOUND', 'Habit not found', 404);
+      throw new AppError('Habit not found', 404, 'NOT_FOUND');
     }
 
     // Estimate level from workload
@@ -859,7 +859,7 @@ export function createLevelRouter(): Hono {
       .order('created_at', { ascending: true });
 
     if (error) {
-      throw new AppError('INTERNAL_ERROR', `Failed to get unassessed habits: ${error.message}`, 500);
+      throw new AppError(`Failed to get unassessed habits: ${error.message}`, 500, 'INTERNAL_ERROR');
     }
 
     // Get quota status
@@ -889,7 +889,7 @@ export function createLevelRouter(): Hono {
     logger.info('Starting habit inventory', { userId });
 
     // Parse request body
-    const body = await c.req.json<{ habitIds?: string[] }>().catch(() => ({}));
+    const body = await c.req.json<{ habitIds?: string[] }>().catch(() => ({} as { habitIds?: string[] }));
 
     // Get quota status
     const quotaService = new UsageQuotaService(supabase);
@@ -912,7 +912,7 @@ export function createLevelRouter(): Hono {
     const { data: habits, error } = await query.order('created_at', { ascending: true });
 
     if (error) {
-      throw new AppError('INTERNAL_ERROR', `Failed to get habits: ${error.message}`, 500);
+      throw new AppError(`Failed to get habits: ${error.message}`, 500, 'INTERNAL_ERROR');
     }
 
     const unassessedCount = habits?.length ?? 0;
@@ -961,14 +961,14 @@ export function createLevelRouter(): Hono {
     const inventoryId = c.req.param('id');
 
     if (!inventoryId) {
-      throw new AppError('BAD_REQUEST', 'Inventory ID is required', 400);
+      throw new AppError('Inventory ID is required', 400, 'BAD_REQUEST');
     }
 
     // Parse request body
     const body = await c.req.json<{ habitId: string }>().catch(() => ({ habitId: '' }));
 
     if (!body.habitId) {
-      throw new AppError('BAD_REQUEST', 'habitId is required', 400);
+      throw new AppError('habitId is required', 400, 'BAD_REQUEST');
     }
 
     logger.info('Assessing next habit in inventory', { userId, inventoryId, habitId: body.habitId });
@@ -993,7 +993,7 @@ export function createLevelRouter(): Hono {
       // Get habit details
       const habit = await habitRepo.getById(body.habitId);
       if (!habit) {
-        throw new AppError('NOT_FOUND', 'Habit not found', 404);
+        throw new AppError('Habit not found', 404, 'NOT_FOUND');
       }
 
       // Perform quick assessment based on habit metadata

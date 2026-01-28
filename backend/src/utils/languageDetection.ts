@@ -99,7 +99,7 @@ export function parseAcceptLanguage(header: string): SupportedLanguage | null {
       const [lang, qValue] = part.trim().split(';q=');
       const quality = qValue ? parseFloat(qValue) : 1.0;
       // 言語コードの最初の部分のみを使用（例: "en-US" -> "en"）
-      const langCode = lang.split('-')[0].toLowerCase();
+      const langCode = lang ? lang.split('-')[0]?.toLowerCase() ?? '' : '';
       return { lang: langCode, quality };
     })
     .sort((a, b) => b.quality - a.quality);

@@ -313,7 +313,7 @@ export class PersonalizationEngine implements IPersonalizationEngine {
    * Requirements: 10.1 (AI Coach Integration - level context)
    */
   private analyzeLevelContext(
-    habits: Array<{ id: string; name: string; level?: number | null; level_tier?: string | null }>
+    habits: Array<{ id: string; name: string; level?: number | null | undefined; level_tier?: string | null | undefined }>
   ): Partial<UserContext> {
     // レベル分布を計算
     const levelDistribution = {
@@ -382,9 +382,9 @@ export class PersonalizationEngine implements IPersonalizationEngine {
     return {
       levelDistribution,
       averageHabitLevel,
-      highestLevelHabit,
-      lowestLevelHabit,
-    };
+      highestLevelHabit: highestLevelHabit ?? undefined,
+      lowestLevelHabit: lowestLevelHabit ?? undefined,
+    } as Partial<UserContext>;
   }
 
   /**

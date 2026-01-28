@@ -1322,6 +1322,7 @@ export class LevelManagerService {
     return {
       name: simplifiedName,
       targetLevel,
+      changes: [],
       workloadChanges: {
         workloadPerCount: {
           old: 100, // Placeholder, actual value should come from habit
@@ -1329,9 +1330,10 @@ export class LevelManagerService {
           changePercent: Math.round((reductionRatio - 1) * 100),
         },
       },
-      rationale: targetLevel === 10
+      explanation: targetLevel === 10
         ? '2分ルール: 最小限の行動から始めて習慣化を促進'
         : '負荷半減: 達成可能な目標で自信をつける',
+      estimatedDifficulty: targetLevel === 10 ? '最小限' : '半分の負荷',
     };
   }
 
