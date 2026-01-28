@@ -10,6 +10,14 @@
  * - Total XP: base_xp + streak_bonus
  * - Expertise Level: min(199, floor(10 * log2(experience_points / 100 + 1)))
  *
+ * XP Multiplier System (behavioral science-based):
+ * - 0-49% completion: 0.3x (minimal effort)
+ * - 50-79% completion: 0.6x (partial reinforcement)
+ * - 80-99% completion: 0.8x (near completion)
+ * - 100-120% completion: 1.0x (plan adherence - maximum reward)
+ * - 121-150% completion: 0.9x (mild over-achievement)
+ * - 151%+ completion: 0.7x (burnout prevention)
+ *
  * Requirements: 6.1, 6.2, 6.3, 6.5
  */
 
@@ -22,6 +30,11 @@ import {
   type MetricsSnapshot,
 } from '../repositories/userLevelRepository.js';
 import { calculateTier, clampLevel } from './userLevelService.js';
+import {
+  calculateXPMultiplier,
+  type XPMultiplierResult,
+  type XPMultiplierTier,
+} from './xpMultiplierService.js';
 
 const logger = getLogger('experienceCalculatorService');
 
@@ -112,6 +125,26 @@ export interface ExperienceLogEntry {
   habitLevel: number | null;
   qualityMultiplier: number;
   frequencyBonus: number;
+  /** Completion rate (0-500%) - new field for XP multiplier system */
+  completionRate?: number;
+  /** Applied XP multiplier (0.3-1.0) - new field for XP multiplier system */
+  appliedMultiplier?: number;
+  /** Multiplier tier - new field for XP multiplier system */
+  multiplierTier?: XPMultiplierTier;
+  /** Multiplier reason key - new field for XP multiplier system */
+  multiplierReason?: string;
+}
+
+/**
+ * Extended experience award result with XP multiplier info
+ */
+export interface ExtendedExperienceAwardResult extends ExperienceAwardResult {
+  /** XP multiplier result if completion-based calculation was used */
+  xpMultiplierResult?: XPMultiplierResult;
+  /** Base XP before multiplier */
+  baseXP?: number;
+  /** Final XP after multiplier */
+  finalXP?: number;
 }
 
 // =============================================================================
@@ -353,7 +386,8 @@ export class ExperienceCalculatorService {
    * Log experience award for audit purposes.
    *
    * Property 16: Experience Log Completeness
-   * Validates: Requirements 13.5
+   * Property 7: Experience Log Field Completeness (XP Multiplier)
+   * Validates: Requirements 13.5, 6.4
    *
    * @param entry - Experience log entry to record
    */
@@ -363,6 +397,9 @@ export class ExperienceCalculatorService {
       habitId: entry.habitId,
       domainCode: entry.domainCode,
       pointsAwarded: entry.pointsAwarded,
+      completionRate: entry.completionRate,
+      appliedMultiplier: entry.appliedMultiplier,
+      multiplierTier: entry.multiplierTier,
     });
 
     try {
@@ -375,6 +412,11 @@ export class ExperienceCalculatorService {
         habit_level: entry.habitLevel,
         quality_multiplier: entry.qualityMultiplier,
         frequency_bonus: entry.frequencyBonus,
+        // New XP multiplier fields
+        completion_rate: entry.completionRate ?? null,
+        applied_multiplier: entry.appliedMultiplier ?? null,
+        multiplier_tier: entry.multiplierTier ?? null,
+        multiplier_reason: entry.multiplierReason ?? null,
       });
 
       if (error) {
@@ -395,6 +437,66 @@ export class ExperienceCalculatorService {
       });
       // Don't throw - logging failure shouldn't block the main operation
     }
+  }
+
+  /**
+   * Award experience points with XP multiplier based on completion rate.
+   *
+   * This method extends the standard awardExperiencePoints by applying
+   * a behavioral science-based multiplier based on completion rate.
+   *
+   * Requirements: 1.1-1.9, 6.4
+   *
+   * @param userId - The user ID
+   * @param habitId - The habit ID
+   * @param domainCodes - Array of domain codes mapped to the habit
+   * @param baseXP - Base experience points before multiplier
+   * @param actualValue - Actual completed value (count or duration)
+   * @param targetValue - Target value (count or duration)
+   * @returns Extended experience award result with multiplier info
+   */
+  async awardExperiencePointsWithMultiplier(
+    userId: string,
+    habitId: string,
+    domainCodes: string[],
+    baseXP: number,
+    actualValue: number,
+    targetValue: number
+  ): Promise<ExtendedExperienceAwardResult> {
+    logger.info('Awarding experience points with multiplier', {
+      userId,
+      habitId,
+      domainCodes,
+      baseXP,
+      actualValue,
+      targetValue,
+    });
+
+    // Calculate XP multiplier based on completion rate
+    const xpMultiplierResult = calculateXPMultiplier(actualValue, targetValue);
+
+    // Apply multiplier to base XP
+    const finalXP = Math.floor(baseXP * xpMultiplierResult.multiplier);
+
+    logger.info('XP multiplier applied', {
+      userId,
+      habitId,
+      baseXP,
+      finalXP,
+      completionRate: xpMultiplierResult.completionRate,
+      multiplier: xpMultiplierResult.multiplier,
+      tier: xpMultiplierResult.tier,
+    });
+
+    // Award the final XP using the standard method
+    const result = await this.awardExperiencePoints(userId, habitId, domainCodes, finalXP);
+
+    return {
+      ...result,
+      xpMultiplierResult,
+      baseXP,
+      finalXP,
+    };
   }
 
   // ===========================================================================
@@ -584,5 +686,262 @@ export class ExperienceCalculatorService {
    */
   get historyRepository(): UserLevelHistoryRepository {
     return this.historyRepo;
+  }
+
+  /**
+   * Revoke experience points that were previously awarded for a habit completion.
+   *
+   * This method:
+   * 1. Queries experience_log to find the exact points awarded for the activity/habit
+   * 2. Subtracts those points from user_expertise for each domain
+   * 3. Subtracts from user_levels.total_experience_points
+   * 4. Recalculates expertise levels if needed
+   * 5. Logs the revocation in experience_log with negative points
+   *
+   * Requirements: XP deduction when habit is reverted to incomplete
+   *
+   * @param userId - The user ID
+   * @param habitId - The habit ID
+   * @param activityId - Optional activity ID to find specific XP award
+   * @returns Revocation result with points deducted and level changes
+   */
+  async revokeExperiencePoints(
+    userId: string,
+    habitId: string,
+    activityId?: string
+  ): Promise<ExperienceAwardResult> {
+    logger.info('Revoking experience points', {
+      userId,
+      habitId,
+      activityId,
+    });
+
+    try {
+      // Find the experience log entries for this habit/activity
+      const logEntries = await this.findExperienceLogEntries(userId, habitId, activityId);
+
+      if (logEntries.length === 0) {
+        logger.info('No experience log entries found to revoke', {
+          userId,
+          habitId,
+          activityId,
+        });
+        return {
+          totalPointsAwarded: 0,
+          domainUpdates: [],
+          levelChanges: [],
+        };
+      }
+
+      const domainUpdates: DomainUpdate[] = [];
+      const levelChanges: LevelChange[] = [];
+      let totalPointsRevoked = 0;
+
+      // Process each log entry and revoke points
+      for (const entry of logEntries) {
+        const update = await this.revokeDomainExpertise(
+          userId,
+          entry.domain_code,
+          entry.points_awarded
+        );
+
+        if (update) {
+          domainUpdates.push(update);
+          totalPointsRevoked += entry.points_awarded;
+
+          // Track level changes for notifications
+          if (update.levelChanged) {
+            levelChanges.push({
+              type: 'expertise',
+              domainCode: update.domainCode,
+              domainName: update.domainName,
+              oldLevel: update.oldExpertiseLevel,
+              newLevel: update.newExpertiseLevel,
+            });
+
+            // Record expertise level change in history
+            await this.recordExpertiseLevelChange(
+              userId,
+              update.domainCode,
+              update.oldExpertiseLevel,
+              update.newExpertiseLevel
+            );
+          }
+
+          // Log the revocation with negative points
+          await this.logExperienceRevocation(userId, habitId, activityId, entry);
+        }
+      }
+
+      // Update total experience points in user_levels (subtract)
+      if (totalPointsRevoked > 0) {
+        await this.updateTotalExperiencePoints(userId, -totalPointsRevoked);
+      }
+
+      // Delete the original log entries
+      await this.deleteExperienceLogEntries(logEntries.map(e => e.id));
+
+      logger.info('Experience points revoked successfully', {
+        userId,
+        habitId,
+        totalPointsRevoked,
+        domainsUpdated: domainUpdates.length,
+        levelChanges: levelChanges.length,
+      });
+
+      return {
+        totalPointsAwarded: -totalPointsRevoked,
+        domainUpdates,
+        levelChanges,
+      };
+    } catch (error) {
+      logger.error('Failed to revoke experience points', error as Error, {
+        userId,
+        habitId,
+        activityId,
+      });
+      throw error;
+    }
+  }
+
+  /**
+   * Find experience log entries for a habit/activity.
+   */
+  private async findExperienceLogEntries(
+    userId: string,
+    habitId: string,
+    activityId?: string
+  ): Promise<Array<{ id: string; domain_code: string; points_awarded: number }>> {
+    let query = this.supabase
+      .from('experience_log')
+      .select('id, domain_code, points_awarded')
+      .eq('user_id', userId)
+      .eq('habit_id', habitId)
+      .gt('points_awarded', 0); // Only find positive awards (not revocations)
+
+    if (activityId) {
+      query = query.eq('activity_id', activityId);
+    }
+
+    const { data, error } = await query;
+
+    if (error) {
+      logger.warning('Failed to find experience log entries', {
+        error: error.message,
+        userId,
+        habitId,
+        activityId,
+      });
+      return [];
+    }
+
+    return data ?? [];
+  }
+
+  /**
+   * Revoke expertise for a single domain.
+   */
+  private async revokeDomainExpertise(
+    userId: string,
+    domainCode: string,
+    pointsToRevoke: number
+  ): Promise<DomainUpdate | null> {
+    // Get current expertise record
+    const currentExpertise = await this.expertiseRepo.getByDomain(userId, domainCode);
+
+    if (!currentExpertise) {
+      logger.warning('No expertise record found for domain', {
+        userId,
+        domainCode,
+      });
+      return null;
+    }
+
+    const oldExperiencePoints = currentExpertise.experience_points;
+    const oldExpertiseLevel = currentExpertise.expertise_level;
+
+    // Calculate new values (ensure points don't go below 0)
+    const newExperiencePoints = Math.max(0, oldExperiencePoints - pointsToRevoke);
+    const newExpertiseLevel = calculateExpertiseLevel(newExperiencePoints);
+    const newTier = calculateTier(newExpertiseLevel);
+
+    // Update expertise record
+    await this.expertiseRepo.upsert(userId, domainCode, {
+      domain_name: currentExpertise.domain_name,
+      expertise_level: newExpertiseLevel,
+      expertise_tier: newTier,
+      experience_points: newExperiencePoints,
+      habit_count: Math.max(0, (currentExpertise.habit_count ?? 1) - 1),
+      last_activity_at: new Date().toISOString(),
+    });
+
+    return {
+      domainCode,
+      domainName: currentExpertise.domain_name,
+      oldExpertiseLevel,
+      newExpertiseLevel,
+      oldExperiencePoints,
+      newExperiencePoints,
+      levelChanged: newExpertiseLevel !== oldExpertiseLevel,
+    };
+  }
+
+  /**
+   * Log experience revocation for audit purposes.
+   */
+  private async logExperienceRevocation(
+    userId: string,
+    habitId: string,
+    activityId: string | undefined,
+    originalEntry: { domain_code: string; points_awarded: number }
+  ): Promise<void> {
+    try {
+      await this.supabase.from('experience_log').insert({
+        user_id: userId,
+        habit_id: habitId,
+        activity_id: activityId ?? null,
+        domain_code: originalEntry.domain_code,
+        points_awarded: -originalEntry.points_awarded, // Negative to indicate revocation
+        habit_level: null,
+        quality_multiplier: 1.0,
+        frequency_bonus: 0,
+        completion_rate: null,
+        applied_multiplier: null,
+        multiplier_tier: null,
+        multiplier_reason: 'revocation',
+      });
+    } catch (error) {
+      logger.warning('Failed to log experience revocation', {
+        error: String(error),
+        userId,
+        habitId,
+      });
+    }
+  }
+
+  /**
+   * Delete experience log entries after revocation.
+   */
+  private async deleteExperienceLogEntries(entryIds: string[]): Promise<void> {
+    if (entryIds.length === 0) return;
+
+    try {
+      const { error } = await this.supabase
+        .from('experience_log')
+        .delete()
+        .in('id', entryIds);
+
+      if (error) {
+        logger.warning('Failed to delete experience log entries', {
+          error: error.message,
+          entryIds,
+        });
+      }
+    } catch (error) {
+      logger.warning('Exception deleting experience log entries', {
+        error: String(error),
+        entryIds,
+      });
+    }
   }
 }

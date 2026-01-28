@@ -490,6 +490,28 @@ const COACH_TOOLS: ChatCompletionTool[] = [
       },
     },
   },
+  // === レベル互換性チェックツール (gamification-xp-balance) ===
+  {
+    type: 'function',
+    function: {
+      name: 'check_habit_level_compatibility',
+      description: '習慣のレベルがユーザーのレベルに適しているかチェックする。習慣を提案する前に使用して、必要に応じてベビーステップを提案する。ユーザーレベルと習慣レベルの差が50以上の場合、ミスマッチとして検出される。',
+      parameters: {
+        type: 'object',
+        properties: {
+          habit_name: {
+            type: 'string',
+            description: '習慣の名前',
+          },
+          estimated_level: {
+            type: 'number',
+            description: '習慣の推定レベル（THLI-24スケール: 0-199）',
+          },
+        },
+        required: ['habit_name', 'estimated_level'],
+      },
+    },
+  },
   {
     type: 'function',
     function: {
@@ -1114,6 +1136,12 @@ export class AICoachService {
           args['target_level'] as number | undefined
         );
 
+      case 'check_habit_level_compatibility':
+        return this.checkHabitLevelCompatibility(
+          args['habit_name'] as string,
+          args['estimated_level'] as number
+        );
+
       case 'suggest_level_up':
         return this.suggestLevelUp(
           args['habit_id'] as string | undefined,
@@ -1193,6 +1221,9 @@ export class AICoachService {
       case 'suggest_baby_steps':
         data.babyStepPlans = (result as { plans: BabyStepPlans }).plans;
         break;
+      case 'check_habit_level_compatibility':
+        data.levelCompatibility = result as Record<string, unknown>;
+        break;
       case 'suggest_level_up':
         data.levelUpSuggestion = result as Record<string, unknown>;
         break;
@@ -1209,6 +1240,7 @@ export class AICoachService {
    * Create a single habit suggestion (for UI display)
    * Includes duplicate detection using SimilarityChecker (Requirements: 4.1, 4.2)
    * Enhanced with user preferred time slots (Requirements: 3.5)
+   * Enhanced with level estimation for compatibility check (Requirements: 4.1, 4.2 gamification-xp-balance)
    */
   private createHabitSuggestion(args: Record<string, unknown>): Record<string, unknown> {
     const habitName = args['name'] as string;
@@ -1245,17 +1277,24 @@ export class AICoachService {
       reason = this.personalizeReason(reason, habitName);
     }
 
+    // Estimate habit level from workload (Requirements: gamification-xp-balance 4.1, 4.2)
+    const duration = args['duration'] as number | null || null;
+    const targetCount = args['targetCount'] as number | null || null;
+    const estimatedLevel = this.estimateHabitLevel(frequency, duration, targetCount);
+
     return {
       name: habitName,
       type: args['type'] as string,
       frequency,
       triggerTime,
-      duration: args['duration'] as number | null || null,
-      targetCount: args['targetCount'] as number | null || null,
+      duration,
+      targetCount,
       workloadUnit: args['workloadUnit'] as string | null || null,
       reason,
       confidence: args['confidence'] as number || 0.8,
       goalId: null,
+      // Include estimated level for frontend compatibility check
+      estimatedLevel,
       // Include duplicate detection info
       duplicateWarning: !similarityResult.isUnique ? {
         similarTo: similarityResult.mostSimilarHabit,
@@ -1263,6 +1302,49 @@ export class AICoachService {
         message: `「${similarityResult.mostSimilarHabit}」と類似しています`,
       } : undefined,
     };
+  }
+
+  /**
+   * Estimate habit level from workload settings
+   * Used for level compatibility check before habit creation
+   * Requirements: gamification-xp-balance 4.1, 4.2
+   */
+  private estimateHabitLevel(
+    frequency: string,
+    duration: number | null,
+    targetCount: number | null
+  ): number {
+    let baseLevel = 50; // Start at intermediate
+
+    // Adjust based on frequency
+    if (frequency === 'daily') {
+      baseLevel += 30;
+    } else if (frequency === 'weekly') {
+      baseLevel += 15;
+    } else if (frequency === 'monthly') {
+      baseLevel += 5;
+    }
+
+    // Adjust based on duration
+    if (duration) {
+      if (duration >= 60) {
+        baseLevel += 40; // Long duration (60+ minutes)
+      } else if (duration >= 30) {
+        baseLevel += 25; // Medium duration (30-59 minutes)
+      } else if (duration >= 15) {
+        baseLevel += 10; // Short duration (15-29 minutes)
+      } else if (duration >= 5) {
+        baseLevel += 5; // Very short (5-14 minutes)
+      }
+    }
+
+    // Adjust based on target count
+    if (targetCount && targetCount > 1) {
+      baseLevel += Math.min(20, targetCount * 5);
+    }
+
+    // Clamp to valid range (0-199)
+    return Math.min(199, Math.max(0, baseLevel));
   }
 
   /**
@@ -2695,6 +2777,138 @@ export class AICoachService {
         error: true,
         message: 'ベビーステッププランの生成に失敗しました。',
       };
+    }
+  }
+
+  /**
+   * Check habit level compatibility with user level
+   * Requirements: 4.4 (gamification-xp-balance)
+   * 
+   * Detects level mismatch when habitLevel - userLevel > 50
+   * Returns baby step suggestions if mismatch is detected
+   */
+  private async checkHabitLevelCompatibility(
+    habitName: string,
+    estimatedLevel: number
+  ): Promise<Record<string, unknown>> {
+    try {
+      const levelManager = new LevelManagerService(this.supabase);
+      const result = await levelManager.checkHabitLevelCompatibility(
+        this.userId,
+        estimatedLevel,
+        habitName
+      );
+
+      const { mismatch, babyStepPlans } = result;
+
+      if (mismatch.isMismatch) {
+        logger.info('Level mismatch detected for habit suggestion', {
+          userId: this.userId,
+          habitName,
+          estimatedLevel,
+          userLevel: mismatch.userLevel,
+          levelGap: mismatch.levelGap,
+          severity: mismatch.severity,
+        });
+
+        // Record mismatch suggestion in ai_suggestion_history (Requirements: 4.6)
+        await this.recordMismatchSuggestion(habitName, estimatedLevel, mismatch, babyStepPlans);
+
+        return {
+          success: true,
+          isMismatch: true,
+          habitName,
+          estimatedLevel,
+          userLevel: mismatch.userLevel,
+          levelGap: mismatch.levelGap,
+          severity: mismatch.severity,
+          recommendation: mismatch.recommendation,
+          babyStepPlans,
+          message: this.getMismatchMessage(mismatch.severity, habitName, mismatch.levelGap),
+          suggestion: mismatch.recommendation === 'strongly_suggest_baby_steps'
+            ? 'ベビーステップから始めることを強くお勧めします。'
+            : 'ベビーステップから始めることをお勧めします。',
+        };
+      }
+
+      return {
+        success: true,
+        isMismatch: false,
+        habitName,
+        estimatedLevel,
+        userLevel: mismatch.userLevel,
+        levelGap: mismatch.levelGap,
+        severity: 'none',
+        recommendation: 'proceed',
+        message: `「${habitName}」はあなたのレベルに適しています。`,
+      };
+    } catch (error) {
+      logger.error('Failed to check habit level compatibility', error instanceof Error ? error : new Error(String(error)), {
+        userId: this.userId,
+        habitName,
+        estimatedLevel,
+      });
+      return {
+        error: true,
+        message: 'レベル互換性チェックに失敗しました。',
+      };
+    }
+  }
+
+  /**
+   * Record level mismatch suggestion in ai_suggestion_history
+   * Requirements: 4.6 (gamification-xp-balance)
+   */
+  private async recordMismatchSuggestion(
+    habitName: string,
+    estimatedLevel: number,
+    mismatch: { userLevel: number; levelGap: number; severity: string },
+    babyStepPlans?: { lv50: Record<string, unknown>; lv10: Record<string, unknown> }
+  ): Promise<void> {
+    try {
+      await this.supabase
+        .from('ai_suggestion_history')
+        .insert({
+          user_id: this.userId,
+          suggestion_type: 'level_mismatch_baby_step',
+          suggestion_data: {
+            habitName,
+            estimatedLevel,
+            userLevel: mismatch.userLevel,
+            levelGap: mismatch.levelGap,
+            severity: mismatch.severity,
+            babyStepPlans,
+          },
+          status: 'pending',
+        });
+
+      logger.info('Level mismatch suggestion recorded', {
+        userId: this.userId,
+        habitName,
+        severity: mismatch.severity,
+      });
+    } catch (error) {
+      logger.warning('Failed to record mismatch suggestion', {
+        error: String(error),
+        userId: this.userId,
+        habitName,
+      });
+    }
+  }
+
+  /**
+   * Get localized mismatch message based on severity
+   */
+  private getMismatchMessage(severity: string, habitName: string, levelGap: number): string {
+    switch (severity) {
+      case 'mild':
+        return `「${habitName}」はあなたの現在のレベルより${levelGap}ポイント高いです。少し挑戦的かもしれません。`;
+      case 'moderate':
+        return `「${habitName}」はあなたの現在のレベルより${levelGap}ポイント高いです。継続が難しい可能性があります。`;
+      case 'severe':
+        return `「${habitName}」はあなたの現在のレベルより${levelGap}ポイント高いです。まずはベビーステップから始めることを強くお勧めします。`;
+      default:
+        return `「${habitName}」のレベル互換性をチェックしました。`;
     }
   }
 

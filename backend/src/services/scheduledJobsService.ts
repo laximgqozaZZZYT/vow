@@ -42,7 +42,8 @@ type JobName =
   | 'level_up_detection'
   | 'level_down_detection'
   | 'monthly_quota_reset'
-  | 'combined_level_detection';
+  | 'combined_level_detection'
+  | 'level_mismatch_detection';
 
 
 /** Job execution status */
@@ -535,6 +536,242 @@ export class ScheduledJobsService {
   // ===========================================================================
   // Job Execution Logging - Requirement 17.7
   // ===========================================================================
+
+  // ===========================================================================
+  // Level Mismatch Detection Job
+  // Requirements: 7.1, 7.2, 7.3, 7.5
+  // ===========================================================================
+
+  /**
+   * Run the level mismatch detection job.
+   *
+   * - Runs daily at 4 AM JST (cron: 0 4 * * *)
+   * - Detects habits where user level has changed relative to habit level
+   * - Creates notifications for new mismatches
+   * - Updates habit metadata when mismatches are resolved
+   * - Logs execution to job_execution_log
+   *
+   * Property 10: Scheduled Job Mismatch State Transitions
+   * For any habit that transitions from compatible to mismatched (due to user level decrease),
+   * the system shall create a notification.
+   * For any habit that transitions from mismatched to compatible (due to user level increase),
+   * the system shall update the habit metadata.
+   *
+   * @returns Job execution result
+   */
+  async runLevelMismatchDetectionJob(): Promise<JobExecutionResult> {
+    const jobName: JobName = 'level_mismatch_detection';
+    const startTime = Date.now();
+    const errors: string[] = [];
+    let habitsProcessed = 0;
+    let suggestionsCreated = 0;
+
+    // Start job execution log
+    const logId = await this.startJobLog(jobName);
+
+    logger.info('Starting level mismatch detection job', { logId });
+
+    try {
+      // Get all users with active habits
+      const users = await this.getActiveUsers();
+
+      // Process each user
+      for (const userId of users) {
+        if (habitsProcessed >= MAX_HABITS_PER_RUN) {
+          logger.info('Rate limit reached, stopping job', {
+            habitsProcessed,
+            maxHabits: MAX_HABITS_PER_RUN,
+          });
+          break;
+        }
+
+        try {
+          // Get user's habits with level
+          const habits = await this.getUserHabitsWithLevel(userId);
+
+          for (const habit of habits) {
+            if (habitsProcessed >= MAX_HABITS_PER_RUN) break;
+
+            try {
+              // Detect mismatch for this habit
+              const mismatch = await this.levelManager.detectLevelMismatch(userId, habit.level);
+
+              // Check previous mismatch state
+              const wasAcknowledged = habit.mismatch_acknowledged ?? false;
+              const previousGap = habit.original_level_gap ?? 0;
+
+              // Handle state transitions
+              if (mismatch.isMismatch && !wasAcknowledged) {
+                // New mismatch detected - create notification
+                await this.createMismatchNotification(userId, habit.id, mismatch);
+                suggestionsCreated++;
+                
+                logger.info('New mismatch detected', {
+                  userId,
+                  habitId: habit.id,
+                  levelGap: mismatch.levelGap,
+                  severity: mismatch.severity,
+                });
+              } else if (!mismatch.isMismatch && wasAcknowledged && previousGap > 0) {
+                // Mismatch resolved - update habit metadata
+                await this.resolveMismatch(habit.id);
+                
+                logger.info('Mismatch resolved', {
+                  userId,
+                  habitId: habit.id,
+                  previousGap,
+                });
+              }
+
+              habitsProcessed++;
+
+              // Rate limiting delay
+              await this.delay(DELAY_BETWEEN_ASSESSMENTS_MS);
+            } catch (habitError) {
+              errors.push(`Failed to check habit ${habit.id}: ${(habitError as Error).message}`);
+              logger.error('Error checking habit mismatch', habitError as Error, { habitId: habit.id });
+            }
+          }
+        } catch (userError) {
+          errors.push(`Failed to process user ${userId}: ${(userError as Error).message}`);
+          logger.error('Error processing user for mismatch detection', userError as Error, { userId });
+        }
+      }
+
+      // Complete job log
+      await this.completeJobLog(logId, 'completed', habitsProcessed, suggestionsCreated, 0, errors);
+
+      const duration = Date.now() - startTime;
+      logger.info('Level mismatch detection job completed', {
+        logId,
+        habitsProcessed,
+        suggestionsCreated,
+        duration,
+        errors: errors.length,
+      });
+
+      return {
+        success: errors.length === 0,
+        jobName,
+        habitsProcessed,
+        suggestionsCreated,
+        quotasReset: 0,
+        errors,
+        duration,
+      };
+    } catch (error) {
+      const errorMsg = `Job failed: ${(error as Error).message}`;
+      errors.push(errorMsg);
+      await this.completeJobLog(logId, 'failed', habitsProcessed, suggestionsCreated, 0, errors);
+      logger.error('Level mismatch detection job failed', error as Error, { logId });
+
+      return {
+        success: false,
+        jobName,
+        habitsProcessed,
+        suggestionsCreated,
+        quotasReset: 0,
+        errors,
+        duration: Date.now() - startTime,
+      };
+    }
+  }
+
+  /**
+   * Get user's habits with level for mismatch detection.
+   *
+   * @param userId - User ID
+   * @returns Array of habits with level and mismatch metadata
+   */
+  private async getUserHabitsWithLevel(userId: string): Promise<Array<{
+    id: string;
+    level: number;
+    mismatch_acknowledged: boolean | null;
+    original_level_gap: number | null;
+  }>> {
+    const { data, error } = await this.supabase
+      .from('habits')
+      .select('id, level, mismatch_acknowledged, original_level_gap')
+      .eq('owner_type', 'user')
+      .eq('owner_id', userId)
+      .eq('active', true)
+      .not('level', 'is', null);
+
+    if (error || !data) {
+      return [];
+    }
+
+    return data;
+  }
+
+  /**
+   * Create a notification for a new mismatch.
+   *
+   * @param userId - User ID
+   * @param habitId - Habit ID
+   * @param mismatch - Mismatch result
+   */
+  private async createMismatchNotification(
+    userId: string,
+    habitId: string,
+    mismatch: { levelGap: number; severity: string; userLevel: number; habitLevel: number }
+  ): Promise<void> {
+    // Log the mismatch
+    await this.levelManager.logLevelMismatch(
+      userId,
+      habitId,
+      {
+        isMismatch: true,
+        userLevel: mismatch.userLevel,
+        habitLevel: mismatch.habitLevel,
+        levelGap: mismatch.levelGap,
+        severity: mismatch.severity as 'none' | 'mild' | 'moderate' | 'severe',
+        recommendation: mismatch.severity === 'severe' ? 'strongly_suggest_baby_steps' : 'suggest_baby_steps',
+      },
+      'ai_suggested_baby_step'
+    );
+
+    // Create notification record (if notifications table exists)
+    try {
+      await this.supabase
+        .from('notifications')
+        .insert({
+          user_id: userId,
+          type: 'level_mismatch',
+          title: 'レベルミスマッチ検出',
+          message: `習慣のレベルがあなたの現在のレベルより${mismatch.levelGap}ポイント高いです。ベビーステップを検討してください。`,
+          metadata: {
+            habitId,
+            levelGap: mismatch.levelGap,
+            severity: mismatch.severity,
+          },
+          read: false,
+        });
+    } catch {
+      // Notifications table may not exist, log warning
+      logger.warning('Could not create notification', { userId, habitId });
+    }
+  }
+
+  /**
+   * Resolve a mismatch by updating habit metadata.
+   *
+   * @param habitId - Habit ID
+   */
+  private async resolveMismatch(habitId: string): Promise<void> {
+    const { error } = await this.supabase
+      .from('habits')
+      .update({
+        mismatch_acknowledged: false,
+        mismatch_acknowledged_at: null,
+        original_level_gap: null,
+      })
+      .eq('id', habitId);
+
+    if (error) {
+      logger.error('Failed to resolve mismatch', new Error(error.message), { habitId });
+    }
+  }
 
   /**
    * Start a job execution log entry.

@@ -26,6 +26,7 @@ import {
   type LevelHistoryFilters,
 } from '../repositories/userLevelRepository.js';
 import { HabitRepository } from '../repositories/habitRepository.js';
+import { ExperienceCalculatorService } from '../services/experienceCalculatorService.js';
 
 const logger = getLogger('userLevelRouter');
 
@@ -513,6 +514,149 @@ export function createUserLevelRouter(): Hono {
       habitId,
       domainCodes: updatedHabit?.domain_codes ?? [],
       message: 'ドメインを更新しました。',
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // POST /habits/:id/award-xp
+  // Award experience points for habit completion
+  // Requirements: gamification-xp-balance 6.4
+  // ---------------------------------------------------------------------------
+  router.post('/habits/:id/award-xp', async (c: Context) => {
+    const { userId, supabase } = getAuthContext(c);
+    const habitId = c.req.param('id');
+
+    if (!habitId) {
+      throw new AppError('Habit ID is required', 400, 'BAD_REQUEST');
+    }
+
+    // Parse request body
+    const body = await c.req.json<{
+      actualValue: number;
+      targetValue: number;
+      activityId?: string;
+    }>();
+
+    if (body.actualValue === undefined || body.targetValue === undefined) {
+      throw new AppError('actualValue and targetValue are required', 400, 'BAD_REQUEST');
+    }
+
+    logger.info('Awarding XP for habit completion', {
+      userId,
+      habitId,
+      actualValue: body.actualValue,
+      targetValue: body.targetValue,
+    });
+
+    // Validate habit ownership
+    const habitRepo = new HabitRepository(supabase);
+    await validateHabitOwnership(habitRepo, habitId, userId);
+
+    // Get habit details
+    const habit = await habitRepo.getById(habitId);
+    if (!habit) {
+      throw new AppError('Habit not found', 404, 'NOT_FOUND');
+    }
+
+    // Get domain codes from habit (default to '000' if none)
+    const domainCodes = habit.domain_codes && habit.domain_codes.length > 0
+      ? habit.domain_codes
+      : ['000'];
+
+    // Calculate base XP from habit level (default to 50 if no level)
+    const habitLevel = habit.level ?? 50;
+    const baseXP = Math.floor(habitLevel / 10) + 5; // Simple formula: level/10 + 5
+
+    // Award experience points with multiplier
+    const experienceService = new ExperienceCalculatorService(supabase);
+    const result = await experienceService.awardExperiencePointsWithMultiplier(
+      userId,
+      habitId,
+      domainCodes,
+      baseXP,
+      body.actualValue,
+      body.targetValue
+    );
+
+    logger.info('XP awarded successfully', {
+      userId,
+      habitId,
+      baseXP: result.baseXP,
+      finalXP: result.finalXP,
+      multiplier: result.xpMultiplierResult?.multiplier,
+      tier: result.xpMultiplierResult?.tier,
+    });
+
+    return c.json({
+      success: true,
+      habitId,
+      baseXP: result.baseXP,
+      finalXP: result.finalXP,
+      multiplier: result.xpMultiplierResult?.multiplier ?? 1.0,
+      tier: result.xpMultiplierResult?.tier ?? 'optimal',
+      completionRate: result.xpMultiplierResult?.completionRate ?? 100,
+      rationale: result.xpMultiplierResult?.rationale ?? '',
+      rationaleKey: result.xpMultiplierResult?.rationaleKey ?? 'plan_adherence',
+      domainUpdates: result.domainUpdates,
+      levelChanges: result.levelChanges,
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // POST /habits/:id/revoke-xp
+  // Revoke experience points when habit is reverted to incomplete
+  // Requirements: XP deduction when habit completion is undone
+  // ---------------------------------------------------------------------------
+  router.post('/habits/:id/revoke-xp', async (c: Context) => {
+    const { userId, supabase } = getAuthContext(c);
+    const habitId = c.req.param('id');
+
+    if (!habitId) {
+      throw new AppError('Habit ID is required', 400, 'BAD_REQUEST');
+    }
+
+    // Parse request body (optional activityId)
+    let activityId: string | undefined;
+    try {
+      const body = await c.req.json<{ activityId?: string }>();
+      activityId = body?.activityId;
+    } catch {
+      // Body is optional, ignore parse errors
+    }
+
+    logger.info('Revoking XP for habit completion reversal', {
+      userId,
+      habitId,
+      activityId,
+    });
+
+    // Validate habit ownership
+    const habitRepo = new HabitRepository(supabase);
+    await validateHabitOwnership(habitRepo, habitId, userId);
+
+    // Revoke experience points
+    const experienceService = new ExperienceCalculatorService(supabase);
+    const result = await experienceService.revokeExperiencePoints(
+      userId,
+      habitId,
+      activityId
+    );
+
+    logger.info('XP revoked successfully', {
+      userId,
+      habitId,
+      totalPointsRevoked: -result.totalPointsAwarded,
+      domainsUpdated: result.domainUpdates.length,
+      levelChanges: result.levelChanges.length,
+    });
+
+    return c.json({
+      success: true,
+      habitId,
+      pointsRevoked: -result.totalPointsAwarded,
+      domainUpdates: result.domainUpdates,
+      levelChanges: result.levelChanges,
+      message: '経験値を取り消しました。',
     });
   });
 

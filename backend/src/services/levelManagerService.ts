@@ -52,6 +52,61 @@ const LEVEL_DOWN_MAX_COMPLETION_RATE = 0.5;
 /** Minimum days active for level-down (Requirement 6.1) */
 const LEVEL_DOWN_MIN_DAYS_ACTIVE = 14;
 
+/** Default mismatch threshold (habit level - user level) */
+const MISMATCH_THRESHOLD = 50;
+
+/** Mild mismatch upper bound */
+const MILD_MISMATCH_UPPER = 75;
+
+/** Moderate mismatch upper bound */
+const MODERATE_MISMATCH_UPPER = 100;
+
+
+// =============================================================================
+// Level Mismatch Types
+// =============================================================================
+
+/**
+ * Level mismatch severity classification
+ */
+export type MismatchSeverity = 'none' | 'mild' | 'moderate' | 'severe';
+
+/**
+ * Level mismatch detection result
+ */
+export interface LevelMismatchResult {
+  /** Whether a mismatch was detected */
+  isMismatch: boolean;
+  /** User's current level */
+  userLevel: number;
+  /** Habit's THLI-24 level */
+  habitLevel: number;
+  /** Level gap (habitLevel - userLevel) */
+  levelGap: number;
+  /** Severity classification */
+  severity: MismatchSeverity;
+  /** Recommendation for the user */
+  recommendation: 'proceed' | 'suggest_baby_steps' | 'strongly_suggest_baby_steps';
+}
+
+/**
+ * Workload-Level consistency result
+ */
+export interface WorkloadLevelConsistencyResult {
+  /** Habit ID */
+  habitId: string;
+  /** Whether workload and level are consistent */
+  isConsistent: boolean;
+  /** Assessed level from THLI-24 (null if not assessed) */
+  assessedLevel: number | null;
+  /** Estimated level from workload settings */
+  estimatedLevelFromWorkload: number;
+  /** Absolute difference between assessed and estimated levels */
+  levelDifference: number;
+  /** Recommendation for the user */
+  recommendation: 'consistent' | 'reassess_level' | 'adjust_workload';
+}
+
 
 // =============================================================================
 // Database Row Types
@@ -1003,6 +1058,468 @@ export class LevelManagerService {
     }
 
     return count;
+  }
+
+
+  // ===========================================================================
+  // Level Mismatch Detection
+  // Requirements: 2.1, 2.2, 2.3, 2.4, 2.5, 2.6
+  // ===========================================================================
+
+  /**
+   * Detect level mismatch between user and habit.
+   *
+   * Property 3: Level Mismatch Detection Threshold
+   * For any user level and habit level combination, if habitLevel - userLevel > 50,
+   * then isMismatch shall be true; otherwise isMismatch shall be false.
+   *
+   * Property 4: Mismatch Severity Classification
+   * - If gap is in [50, 75], severity shall be 'mild'
+   * - If gap is in [76, 100], severity shall be 'moderate'
+   * - If gap > 100, severity shall be 'severe'
+   * - If gap < 50, severity shall be 'none'
+   *
+   * Property 5: Mismatch Result Structure Completeness
+   * The returned object shall contain all required fields.
+   *
+   * Requirements: 2.1, 2.2, 2.3, 2.4, 2.5, 2.6
+   *
+   * @param userId - User ID to check
+   * @param habitLevel - Habit's THLI-24 level
+   * @returns Level mismatch analysis result
+   */
+  async detectLevelMismatch(
+    userId: string,
+    habitLevel: number
+  ): Promise<LevelMismatchResult> {
+    logger.info('Detecting level mismatch', { userId, habitLevel });
+
+    try {
+      // Get user's current level
+      const userLevel = await this.getUserLevel(userId);
+
+      // Calculate level gap
+      const levelGap = habitLevel - userLevel;
+
+      // Determine if mismatch exists (Property 3)
+      const isMismatch = levelGap > MISMATCH_THRESHOLD;
+
+      // Classify severity (Property 4)
+      const severity = this.classifyMismatchSeverity(levelGap);
+
+      // Determine recommendation
+      const recommendation = this.getMismatchRecommendation(severity);
+
+      const result: LevelMismatchResult = {
+        isMismatch,
+        userLevel,
+        habitLevel,
+        levelGap,
+        severity,
+        recommendation,
+      };
+
+      logger.info('Level mismatch detection complete', {
+        userId,
+        habitLevel,
+        userLevel,
+        levelGap,
+        isMismatch,
+        severity,
+      });
+
+      return result;
+    } catch (error) {
+      logger.error('Failed to detect level mismatch', error as Error, { userId, habitLevel });
+
+      // Return safe default (no mismatch detected)
+      return {
+        isMismatch: false,
+        userLevel: 0,
+        habitLevel,
+        levelGap: habitLevel,
+        severity: 'none',
+        recommendation: 'proceed',
+      };
+    }
+  }
+
+  /**
+   * Check level compatibility for habit creation.
+   * Returns mismatch result with baby step suggestions if needed.
+   *
+   * Requirements: 3.1, 3.4
+   *
+   * @param userId - User ID
+   * @param habitLevel - Proposed habit level
+   * @param habitName - Habit name (for baby step generation)
+   * @returns Mismatch result with optional baby step plans
+   */
+  async checkHabitLevelCompatibility(
+    userId: string,
+    habitLevel: number,
+    habitName: string
+  ): Promise<{
+    mismatch: LevelMismatchResult;
+    babyStepPlans?: {
+      lv50: BabyStepPlan;
+      lv10: BabyStepPlan;
+    };
+  }> {
+    logger.info('Checking habit level compatibility', { userId, habitLevel, habitName });
+
+    // Detect mismatch
+    const mismatch = await this.detectLevelMismatch(userId, habitLevel);
+
+    // If mismatch detected, generate baby step plans
+    if (mismatch.isMismatch) {
+      const babyStepPlans = {
+        lv50: this.generateBabyStepPlan(habitName, habitLevel, 50),
+        lv10: this.generateBabyStepPlan(habitName, habitLevel, 10),
+      };
+
+      return { mismatch, babyStepPlans };
+    }
+
+    return { mismatch };
+  }
+
+  /**
+   * Log a level mismatch detection event.
+   *
+   * Requirements: 7.5
+   *
+   * @param userId - User ID
+   * @param habitId - Habit ID
+   * @param mismatch - Mismatch result
+   * @param actionTaken - Action taken by user
+   */
+  async logLevelMismatch(
+    userId: string,
+    habitId: string,
+    mismatch: LevelMismatchResult,
+    actionTaken: 'proceeded' | 'baby_step_lv50' | 'baby_step_lv10' | 'cancelled' | 'ai_suggested_baby_step'
+  ): Promise<void> {
+    logger.info('Logging level mismatch', { userId, habitId, actionTaken });
+
+    try {
+      const { error } = await this.supabase
+        .from('level_mismatch_log')
+        .insert({
+          user_id: userId,
+          habit_id: habitId,
+          user_level: mismatch.userLevel,
+          habit_level: mismatch.habitLevel,
+          level_gap: mismatch.levelGap,
+          severity: mismatch.severity,
+          action_taken: actionTaken,
+        });
+
+      if (error) {
+        logger.warning('Failed to log level mismatch', {
+          error: error.message,
+          userId,
+          habitId,
+        });
+      }
+    } catch (error) {
+      logger.warning('Exception logging level mismatch', {
+        error: String(error),
+        userId,
+        habitId,
+      });
+    }
+  }
+
+  /**
+   * Get user's current overall level.
+   *
+   * @param userId - User ID
+   * @returns User's overall level (0 if not found)
+   */
+  private async getUserLevel(userId: string): Promise<number> {
+    try {
+      const { data, error } = await this.supabase
+        .from('user_levels')
+        .select('overall_level')
+        .eq('user_id', userId)
+        .single();
+
+      if (error || !data) {
+        // User has no level record, assume level 0 (new user)
+        return 0;
+      }
+
+      return data.overall_level ?? 0;
+    } catch {
+      return 0;
+    }
+  }
+
+  /**
+   * Classify mismatch severity based on level gap.
+   *
+   * Property 4: Mismatch Severity Classification
+   *
+   * @param levelGap - Level gap (habitLevel - userLevel)
+   * @returns Severity classification
+   */
+  private classifyMismatchSeverity(levelGap: number): MismatchSeverity {
+    if (levelGap < MISMATCH_THRESHOLD) {
+      return 'none';
+    }
+    if (levelGap <= MILD_MISMATCH_UPPER) {
+      return 'mild';
+    }
+    if (levelGap <= MODERATE_MISMATCH_UPPER) {
+      return 'moderate';
+    }
+    return 'severe';
+  }
+
+  /**
+   * Get recommendation based on mismatch severity.
+   *
+   * @param severity - Mismatch severity
+   * @returns Recommendation
+   */
+  private getMismatchRecommendation(
+    severity: MismatchSeverity
+  ): 'proceed' | 'suggest_baby_steps' | 'strongly_suggest_baby_steps' {
+    switch (severity) {
+      case 'none':
+        return 'proceed';
+      case 'mild':
+        return 'suggest_baby_steps';
+      case 'moderate':
+      case 'severe':
+        return 'strongly_suggest_baby_steps';
+      default:
+        return 'proceed';
+    }
+  }
+
+  /**
+   * Generate a baby step plan for a habit.
+   *
+   * @param habitName - Original habit name
+   * @param currentLevel - Current habit level
+   * @param targetLevel - Target level (50 or 10)
+   * @returns Baby step plan
+   */
+  private generateBabyStepPlan(
+    habitName: string,
+    currentLevel: number,
+    targetLevel: number
+  ): BabyStepPlan {
+    const reductionRatio = targetLevel / currentLevel;
+
+    // Generate simplified name
+    const simplifiedName = targetLevel === 10
+      ? `${habitName}（2分だけ）`
+      : `${habitName}（半分の負荷）`;
+
+    return {
+      name: simplifiedName,
+      targetLevel,
+      workloadChanges: {
+        workloadPerCount: {
+          old: 100, // Placeholder, actual value should come from habit
+          new: Math.max(1, Math.round(100 * reductionRatio)),
+          changePercent: Math.round((reductionRatio - 1) * 100),
+        },
+      },
+      rationale: targetLevel === 10
+        ? '2分ルール: 最小限の行動から始めて習慣化を促進'
+        : '負荷半減: 達成可能な目標で自信をつける',
+    };
+  }
+
+
+  // ===========================================================================
+  // Workload-Level Consistency Validation
+  // Requirements: 5.2, 5.3, 5.5, 5.6
+  // ===========================================================================
+
+  /**
+   * Workload-Level consistency result
+   */
+
+
+  /**
+   * Validate workload and level consistency for a habit.
+   *
+   * Property 9: Workload-Level Consistency Detection
+   * For any habit where the estimated level from workload differs from the
+   * assessed level by more than 20 points, the system shall flag isConsistent = false.
+   *
+   * Requirements: 5.2, 5.3
+   *
+   * @param habitId - Habit ID to check
+   * @returns Workload-level consistency result
+   */
+  async validateWorkloadLevelConsistency(habitId: string): Promise<WorkloadLevelConsistencyResult> {
+    logger.info('Validating workload-level consistency', { habitId });
+
+    try {
+      // Get habit data
+      const habit = await this.habitRepo.getById(habitId);
+      if (!habit) {
+        throw new Error(`Habit not found: ${habitId}`);
+      }
+
+      const assessedLevel = habit.level ?? null;
+
+      // Estimate level from workload settings
+      const estimatedLevelFromWorkload = this.estimateLevelFromWorkload(habit);
+
+      // Calculate difference
+      const levelDifference = assessedLevel !== null
+        ? Math.abs(assessedLevel - estimatedLevelFromWorkload)
+        : 0;
+
+      // Check consistency (threshold: 20 points)
+      const CONSISTENCY_THRESHOLD = 20;
+      const isConsistent = assessedLevel === null || levelDifference <= CONSISTENCY_THRESHOLD;
+
+      // Determine recommendation
+      let recommendation: 'consistent' | 'reassess_level' | 'adjust_workload';
+      if (isConsistent) {
+        recommendation = 'consistent';
+      } else if (assessedLevel !== null && estimatedLevelFromWorkload > assessedLevel) {
+        // Workload suggests higher level than assessed
+        recommendation = 'reassess_level';
+      } else {
+        // Workload suggests lower level than assessed
+        recommendation = 'adjust_workload';
+      }
+
+      const result: WorkloadLevelConsistencyResult = {
+        habitId,
+        isConsistent,
+        assessedLevel,
+        estimatedLevelFromWorkload,
+        levelDifference,
+        recommendation,
+      };
+
+      logger.info('Workload-level consistency validation complete', {
+        habitId,
+        isConsistent,
+        assessedLevel,
+        estimatedLevelFromWorkload,
+        levelDifference,
+        recommendation,
+      });
+
+      return result;
+    } catch (error) {
+      logger.error('Failed to validate workload-level consistency', error as Error, { habitId });
+
+      // Return safe default
+      return {
+        habitId,
+        isConsistent: true,
+        assessedLevel: null,
+        estimatedLevelFromWorkload: 0,
+        levelDifference: 0,
+        recommendation: 'consistent',
+      };
+    }
+  }
+
+  /**
+   * Estimate habit level from workload settings.
+   *
+   * This is a simplified THLI-24 estimation based on:
+   * - Frequency (⑱ variable)
+   * - Duration/workload per count (⑲ variable)
+   * - Target count (⑳ variable)
+   *
+   * @param habit - Habit to estimate level for
+   * @returns Estimated level (0-199)
+   */
+  private estimateLevelFromWorkload(habit: Habit): number {
+    let level = 0;
+
+    // Frequency contribution (⑱ variable)
+    switch (habit.frequency) {
+      case 'daily':
+        level += 30;
+        break;
+      case 'weekly':
+        level += 15;
+        break;
+      case 'monthly':
+        level += 5;
+        break;
+      default:
+        level += 20;
+    }
+
+    // Duration/workload contribution (⑲ variable)
+    const workloadPerCount = habit.workload_per_count ?? 1;
+    if (workloadPerCount <= 5) {
+      level += 5;
+    } else if (workloadPerCount <= 15) {
+      level += 15;
+    } else if (workloadPerCount <= 30) {
+      level += 25;
+    } else if (workloadPerCount <= 60) {
+      level += 40;
+    } else {
+      level += 60;
+    }
+
+    // Target count contribution (⑳ variable)
+    const targetCount = habit.target_count ?? 1;
+    if (targetCount <= 1) {
+      level += 5;
+    } else if (targetCount <= 3) {
+      level += 15;
+    } else if (targetCount <= 5) {
+      level += 25;
+    } else if (targetCount <= 10) {
+      level += 40;
+    } else {
+      level += 60;
+    }
+
+    // Clamp to valid range
+    return Math.min(199, Math.max(0, level));
+  }
+
+  /**
+   * Batch validate workload-level consistency for all habits of a user.
+   *
+   * @param userId - User ID
+   * @returns Array of consistency results for inconsistent habits
+   */
+  async validateAllHabitsConsistency(userId: string): Promise<WorkloadLevelConsistencyResult[]> {
+    logger.info('Validating workload-level consistency for all habits', { userId });
+
+    try {
+      const habits = await this.getActiveHabitsWithLevel(userId);
+      const inconsistentResults: WorkloadLevelConsistencyResult[] = [];
+
+      for (const habit of habits) {
+        const result = await this.validateWorkloadLevelConsistency(habit.id);
+        if (!result.isConsistent) {
+          inconsistentResults.push(result);
+        }
+      }
+
+      logger.info('Batch consistency validation complete', {
+        userId,
+        totalHabits: habits.length,
+        inconsistentCount: inconsistentResults.length,
+      });
+
+      return inconsistentResults;
+    } catch (error) {
+      logger.error('Failed to validate all habits consistency', error as Error, { userId });
+      return [];
+    }
   }
 }
 

@@ -51,6 +51,19 @@ interface AcceptLevelUpBody {
   workloadChanges: WorkloadChanges;
 }
 
+interface CheckHabitCompatibilityBody {
+  proposedLevel: number;
+  habitName?: string;
+}
+
+interface WorkloadLevelConsistencyResult {
+  isConsistent: boolean;
+  assessedLevel: number | null;
+  estimatedLevelFromWorkload: number;
+  levelDifference: number;
+  recommendation: 'consistent' | 'reassess_level' | 'adjust_workload';
+}
+
 // =============================================================================
 // Helper Functions
 // =============================================================================
@@ -86,6 +99,52 @@ async function validateHabitOwnership(
   if (habit.owner_id !== userId) {
     throw new AppError('FORBIDDEN', 'You do not have access to this habit', 403);
   }
+}
+
+/**
+ * Estimate habit level from workload settings.
+ * Used for workload-level consistency check.
+ * 
+ * Requirements: 5.5 (gamification-xp-balance)
+ */
+function estimateLevelFromWorkload(habit: {
+  frequency?: string;
+  workload_per_count?: number;
+  workload_unit?: string | null;
+  target_count?: number;
+}): number {
+  let baseLevel = 50; // Start at intermediate
+
+  // Adjust based on frequency
+  if (habit.frequency === 'daily') {
+    baseLevel += 30;
+  } else if (habit.frequency === 'weekly') {
+    baseLevel += 15;
+  } else if (habit.frequency === 'monthly') {
+    baseLevel += 5;
+  }
+
+  // Adjust based on workload duration/count
+  if (habit.workload_per_count) {
+    if (habit.workload_per_count >= 60) {
+      baseLevel += 40; // Long duration (60+ minutes)
+    } else if (habit.workload_per_count >= 30) {
+      baseLevel += 25; // Medium duration (30-59 minutes)
+    } else if (habit.workload_per_count >= 15) {
+      baseLevel += 10; // Short duration (15-29 minutes)
+    } else if (habit.workload_per_count >= 5) {
+      baseLevel += 5; // Very short (5-14 minutes)
+    }
+    // Under 5 minutes: no additional level
+  }
+
+  // Adjust based on target count
+  if (habit.target_count && habit.target_count > 1) {
+    baseLevel += Math.min(20, habit.target_count * 5);
+  }
+
+  // Clamp to valid range (0-199)
+  return Math.min(199, Math.max(0, baseLevel));
 }
 
 /**
@@ -609,6 +668,173 @@ export function createLevelRouter(): Hono {
     return c.json({
       success: true,
       message: '提案を却下しました。',
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // GET /habits/:id/level-compatibility
+  // Check level compatibility for an existing habit
+  // Requirements: 2.7 (gamification-xp-balance)
+  // ---------------------------------------------------------------------------
+  router.get('/habits/:id/level-compatibility', async (c: Context) => {
+    const { userId, supabase } = getAuthContext(c);
+    const habitId = c.req.param('id');
+
+    if (!habitId) {
+      throw new AppError('BAD_REQUEST', 'Habit ID is required', 400);
+    }
+
+    logger.info('Checking level compatibility for habit', { userId, habitId });
+
+    // Validate habit ownership
+    const habitRepo = new HabitRepository(supabase);
+    await validateHabitOwnership(habitRepo, habitId, userId);
+
+    // Get habit details
+    const habit = await habitRepo.getById(habitId);
+    if (!habit) {
+      throw new AppError('NOT_FOUND', 'Habit not found', 404);
+    }
+
+    const levelManager = new LevelManagerService(supabase);
+
+    // If habit has no level, return early
+    if (habit.level === null || habit.level === undefined) {
+      return c.json({
+        habitId,
+        habitLevel: null,
+        userLevel: 0,
+        mismatch: {
+          isMismatch: false,
+          userLevel: 0,
+          habitLevel: 0,
+          levelGap: 0,
+          severity: 'none',
+          recommendation: 'proceed',
+        },
+        message: '習慣のレベルが未評価です。',
+      });
+    }
+
+    // Check level compatibility
+    const result = await levelManager.checkHabitLevelCompatibility(
+      userId,
+      habit.level,
+      habit.name
+    );
+
+    return c.json({
+      habitId,
+      habitLevel: habit.level,
+      userLevel: result.mismatch.userLevel,
+      mismatch: result.mismatch,
+      babyStepPlans: result.babyStepPlans,
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // POST /users/:id/check-habit-compatibility
+  // Check compatibility for a proposed habit level
+  // Requirements: 2.8 (gamification-xp-balance)
+  // ---------------------------------------------------------------------------
+  router.post('/users/:id/check-habit-compatibility', async (c: Context) => {
+    const { userId, supabase } = getAuthContext(c);
+    const requestedUserId = c.req.param('id');
+
+    // Users can only check their own compatibility
+    if (requestedUserId !== userId) {
+      throw new AppError('FORBIDDEN', 'You can only check your own compatibility', 403);
+    }
+
+    // Parse request body
+    const body = await c.req.json<CheckHabitCompatibilityBody>();
+
+    if (body.proposedLevel === undefined || body.proposedLevel === null) {
+      throw new AppError('BAD_REQUEST', 'proposedLevel is required', 400);
+    }
+
+    if (body.proposedLevel < 0 || body.proposedLevel > 199) {
+      throw new AppError('BAD_REQUEST', 'proposedLevel must be between 0 and 199', 400);
+    }
+
+    logger.info('Checking habit compatibility for user', {
+      userId,
+      proposedLevel: body.proposedLevel,
+      habitName: body.habitName,
+    });
+
+    const levelManager = new LevelManagerService(supabase);
+    const result = await levelManager.checkHabitLevelCompatibility(
+      userId,
+      body.proposedLevel,
+      body.habitName ?? '新しい習慣'
+    );
+
+    return c.json({
+      mismatch: result.mismatch,
+      babyStepPlans: result.babyStepPlans,
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // GET /habits/:id/workload-level-consistency
+  // Check workload and level consistency
+  // Requirements: 5.5 (gamification-xp-balance)
+  // ---------------------------------------------------------------------------
+  router.get('/habits/:id/workload-level-consistency', async (c: Context) => {
+    const { userId, supabase } = getAuthContext(c);
+    const habitId = c.req.param('id');
+
+    if (!habitId) {
+      throw new AppError('BAD_REQUEST', 'Habit ID is required', 400);
+    }
+
+    logger.info('Checking workload-level consistency', { userId, habitId });
+
+    // Validate habit ownership
+    const habitRepo = new HabitRepository(supabase);
+    await validateHabitOwnership(habitRepo, habitId, userId);
+
+    // Get habit details
+    const habit = await habitRepo.getById(habitId);
+    if (!habit) {
+      throw new AppError('NOT_FOUND', 'Habit not found', 404);
+    }
+
+    // Estimate level from workload
+    const estimatedLevel = estimateLevelFromWorkload(habit);
+
+    // Calculate consistency
+    const assessedLevel = habit.level ?? null;
+    const levelDifference = assessedLevel !== null
+      ? Math.abs(assessedLevel - estimatedLevel)
+      : 0;
+
+    // Determine consistency (threshold: 20 points)
+    const isConsistent = assessedLevel === null || levelDifference <= 20;
+
+    // Determine recommendation
+    let recommendation: 'consistent' | 'reassess_level' | 'adjust_workload';
+    if (isConsistent) {
+      recommendation = 'consistent';
+    } else if (estimatedLevel > (assessedLevel ?? 0)) {
+      recommendation = 'reassess_level';
+    } else {
+      recommendation = 'adjust_workload';
+    }
+
+    const result: WorkloadLevelConsistencyResult = {
+      isConsistent,
+      assessedLevel,
+      estimatedLevelFromWorkload: estimatedLevel,
+      levelDifference,
+      recommendation,
+    };
+
+    return c.json({
+      habitId,
+      habitName: habit.name,
+      ...result,
     });
   });
 

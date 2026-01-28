@@ -374,6 +374,115 @@ export async function createActivity(payload: any) {
   return await request('/activities', { method: 'POST', body: JSON.stringify(payload) });
 }
 
+// Experience Points API (Backend)
+const BACKEND_API_URL = process.env.NEXT_PUBLIC_BACKEND_API_URL || '';
+
+/**
+ * Award experience points for habit completion
+ * Calls the backend API to calculate and award XP with multiplier
+ */
+export async function awardHabitXP(habitId: string, actualValue: number, targetValue: number, activityId?: string) {
+  if (!BACKEND_API_URL) {
+    debug.log('[awardHabitXP] Backend API URL not configured, skipping XP award');
+    return null;
+  }
+
+  try {
+    const { supabase } = await import('./supabaseClient');
+    if (!supabase) {
+      debug.log('[awardHabitXP] Supabase not available');
+      return null;
+    }
+
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session?.access_token) {
+      debug.log('[awardHabitXP] No session, skipping XP award');
+      return null;
+    }
+
+    const url = `${BACKEND_API_URL}/api/habits/${habitId}/award-xp`;
+    debug.log('[awardHabitXP] Calling backend API:', url);
+
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${session.access_token}`,
+      },
+      body: JSON.stringify({
+        actualValue,
+        targetValue,
+        activityId,
+      }),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      debug.log('[awardHabitXP] Backend API error:', response.status, errorText);
+      return null;
+    }
+
+    const result = await response.json();
+    debug.log('[awardHabitXP] XP awarded:', result);
+    return result;
+  } catch (error) {
+    debug.log('[awardHabitXP] Error:', error);
+    return null;
+  }
+}
+
+/**
+ * Revoke experience points when habit is reverted to incomplete
+ * Calls the backend API to deduct the exact XP that was previously awarded
+ */
+export async function revokeHabitXP(habitId: string, activityId?: string) {
+  if (!BACKEND_API_URL) {
+    debug.log('[revokeHabitXP] Backend API URL not configured, skipping XP revoke');
+    return null;
+  }
+
+  try {
+    const { supabase } = await import('./supabaseClient');
+    if (!supabase) {
+      debug.log('[revokeHabitXP] Supabase not available');
+      return null;
+    }
+
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session?.access_token) {
+      debug.log('[revokeHabitXP] No session, skipping XP revoke');
+      return null;
+    }
+
+    const url = `${BACKEND_API_URL}/api/habits/${habitId}/revoke-xp`;
+    debug.log('[revokeHabitXP] Calling backend API:', url);
+
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${session.access_token}`,
+      },
+      body: JSON.stringify({
+        activityId,
+      }),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      debug.log('[revokeHabitXP] Backend API error:', response.status, errorText);
+      return null;
+    }
+
+    const result = await response.json();
+    debug.log('[revokeHabitXP] XP revoked:', result);
+    return result;
+  } catch (error) {
+    debug.log('[revokeHabitXP] Error:', error);
+    return null;
+  }
+}
+
 export async function updateActivity(id: string, payload: any) { 
   return await request(`/activities/${id}`, { method: 'PATCH', body: JSON.stringify(payload) });
 }
@@ -696,6 +805,8 @@ const api = {
   deleteHabit,
   getActivities,
   createActivity,
+  awardHabitXP,
+  revokeHabitXP,
   updateActivity,
   deleteActivity,
   getLayout,

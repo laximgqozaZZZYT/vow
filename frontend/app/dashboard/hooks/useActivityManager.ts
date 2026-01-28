@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import api from '../../../lib/api';
+import api, { awardHabitXP, revokeHabitXP } from '../../../lib/api';
 import { debug } from '../../../lib/debug';
 import type { Activity, Habit } from '../types';
 
@@ -171,13 +171,34 @@ export function useActivityManager({
         if (old.id && !isTemporaryActivityId(old.id)) {
           const u = await api.updateActivity(old.id, updatedAct);
           setActivities(acts => { const copy = [...acts]; const i = copy.findIndex(x => x.id === old.id); if (i !== -1) { copy[i] = u } return copy });
+          
+          // Award XP for habit completion
+          const targetValue = (habit as any).workloadTotal ?? habit.must ?? 1;
+          const xpResult = await awardHabitXP(habitId, newCount, targetValue, old.id);
+          if (xpResult) {
+            debug.log('[persistStartToComplete] XP awarded:', xpResult);
+          }
         } else {
           const created = await api.createActivity({ kind: 'complete', habitId, habitName: habit.name, timestamp: now, amount: increment, prevCount: prev, newCount, durationSeconds });
           setActivities(acts => acts.filter(a => !(a.habitId === habitId && a.kind === 'start' && a.timestamp === start.ts)).concat([created]));
+          
+          // Award XP for habit completion
+          const targetValue = (habit as any).workloadTotal ?? habit.must ?? 1;
+          const xpResult = await awardHabitXP(habitId, newCount, targetValue, created.id);
+          if (xpResult) {
+            debug.log('[persistStartToComplete] XP awarded:', xpResult);
+          }
         }
       } else {
         const created = await api.createActivity({ kind: 'complete', habitId, habitName: habit.name, timestamp: now, amount: increment, prevCount: prev, newCount, durationSeconds });
         setActivities(acts => [created, ...acts]);
+        
+        // Award XP for habit completion
+        const targetValue = (habit as any).workloadTotal ?? habit.must ?? 1;
+        const xpResult = await awardHabitXP(habitId, newCount, targetValue, created.id);
+        if (xpResult) {
+          debug.log('[persistStartToComplete] XP awarded:', xpResult);
+        }
       }
     } catch (e) {
       console.error(e);
@@ -223,6 +244,13 @@ export function useActivityManager({
     try {
       const created = await api.createActivity({ kind: 'complete', habitId, habitName: habit.name, timestamp: now, amount: increment, prevCount: prev, newCount });
       setActivities(a => [created, ...a]);
+
+      // Award XP for habit completion
+      const targetValue = (habit as any).workloadTotal ?? habit.must ?? 1;
+      const xpResult = await awardHabitXP(habitId, newCount, targetValue, created.id);
+      if (xpResult) {
+        debug.log('[persistStandaloneComplete] XP awarded:', xpResult);
+      }
     } catch (e) {
       console.error(e);
       setActivities(a => [{ id: `a${Date.now()}`, kind: 'complete', habitId, habitName: habit.name, timestamp: now, amount: increment, prevCount: prev, newCount }, ...a]);
@@ -432,11 +460,23 @@ export function useActivityManager({
       const firstActivity = sortedActivities[0];
       const countBeforeToday = firstActivity?.prevCount ?? 0;
       
-      // Delete activities from backend
+      // Delete activities from backend and revoke XP for complete activities
       for (const activity of todayActivities) {
         if (!isTemporaryActivityId(activity.id)) {
           try {
             await api.deleteActivity(activity.id);
+            
+            // Revoke XP if this was a complete activity
+            if (activity.kind === 'complete') {
+              debug.log('[deleteTodayActivities] Revoking XP for deleted complete activity:', {
+                activityId: activity.id,
+                habitId,
+              });
+              const revokeResult = await revokeHabitXP(habitId, activity.id);
+              if (revokeResult) {
+                debug.log('[deleteTodayActivities] XP revoked:', revokeResult);
+              }
+            }
           } catch (e) {
             console.error('[handleReset] Failed to delete activity:', activity.id, e);
           }
@@ -630,9 +670,9 @@ export function useActivityManager({
     // remove activity from local state
     setActivities(s => s.filter(a => a.id !== activityId));
     
-    // delete on backend
+    // delete on backend and revoke XP if it was a complete activity
     if (!isTemporaryActivityId(activityId)) {
-      deleteActivityFromBackend(activityId);
+      deleteActivityFromBackend(activityId, act);
     }
   }
 
@@ -646,10 +686,22 @@ export function useActivityManager({
     }));
   }
 
-  /** Delete activity from backend */
-  async function deleteActivityFromBackend(activityId: string) {
+  /** Delete activity from backend and revoke XP if applicable */
+  async function deleteActivityFromBackend(activityId: string, activity: Activity) {
     try {
       await api.deleteActivity(activityId);
+      
+      // Revoke XP if this was a complete activity
+      if (activity.kind === 'complete' && activity.habitId) {
+        debug.log('[deleteActivityFromBackend] Revoking XP for deleted complete activity:', {
+          activityId,
+          habitId: activity.habitId,
+        });
+        const revokeResult = await revokeHabitXP(activity.habitId, activityId);
+        if (revokeResult) {
+          debug.log('[deleteActivityFromBackend] XP revoked:', revokeResult);
+        }
+      }
     } catch (e) {
       console.error('[handleDeleteActivity] Failed to delete from backend:', e);
     }
