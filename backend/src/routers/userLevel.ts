@@ -27,6 +27,8 @@ import {
 } from '../repositories/userLevelRepository.js';
 import { HabitRepository } from '../repositories/habitRepository.js';
 import { ExperienceCalculatorService } from '../services/experienceCalculatorService.js';
+import { TagRepository } from '../repositories/tagRepository.js';
+import { ActivityRepository } from '../repositories/activityRepository.js';
 
 const logger = getLogger('userLevelRouter');
 
@@ -137,6 +139,103 @@ export function createUserLevelRouter(): Hono {
       resilienceScore: userLevel.resilience_score,
       totalExperiencePoints: userLevel.total_experience_points,
       lastCalculatedAt: userLevel.last_calculated_at,
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // GET /users/:id/skill-levels
+  // Get user's tag-based skill levels
+  // ---------------------------------------------------------------------------
+  router.get('/users/:id/skill-levels', async (c: Context) => {
+    const { userId, supabase } = getAuthContext(c);
+    const requestedUserId = c.req.param('id');
+
+    if (!requestedUserId) {
+      throw new AppError('User ID is required', 400, 'BAD_REQUEST');
+    }
+
+    // Users can only access their own skill data
+    validateUserAccess(requestedUserId, userId);
+
+    logger.info('Getting user skill levels', { userId: requestedUserId });
+
+    const tagRepo = new TagRepository(supabase);
+    const activityRepo = new ActivityRepository(supabase);
+
+    // Get all completed activities for the user
+    const activities = await activityRepo.getCompletedActivities(requestedUserId);
+
+    // Get habit-tag associations
+    const habitTagMap = await tagRepo.getHabitTagsForUser(requestedUserId);
+
+    if (habitTagMap.size === 0) {
+      return c.json({
+        userId: requestedUserId,
+        skillLevels: [],
+      });
+    }
+
+    // Calculate XP per tag
+    const tagXPMap = new Map<string, { totalXP: number; activityCount: number }>();
+    const DEFAULT_HABIT_LEVEL = 50;
+    const XP_PER_LEVEL = 10;
+
+    for (const activity of activities) {
+      const tagIds = habitTagMap.get(activity.habitId);
+      if (!tagIds || tagIds.length === 0) {
+        continue;
+      }
+
+      const habitLevel = activity.habit?.thliLevel ?? DEFAULT_HABIT_LEVEL;
+      const xp = habitLevel * XP_PER_LEVEL;
+
+      for (const tagId of tagIds) {
+        const current = tagXPMap.get(tagId) ?? { totalXP: 0, activityCount: 0 };
+        current.totalXP += xp;
+        current.activityCount += 1;
+        tagXPMap.set(tagId, current);
+      }
+    }
+
+    if (tagXPMap.size === 0) {
+      return c.json({
+        userId: requestedUserId,
+        skillLevels: [],
+      });
+    }
+
+    // Get tag details
+    const tagIds = Array.from(tagXPMap.keys());
+    const tagDetails = await tagRepo.getTagsByIds(tagIds);
+
+    // Calculate level from XP: min(199, floor(10 * log2(xp / 100 + 1)))
+    const calculateLevel = (xp: number): number => {
+      if (xp <= 0) return 0;
+      return Math.min(199, Math.floor(10 * Math.log2(xp / 100 + 1)));
+    };
+
+    // Build result
+    const skillLevels = [];
+    for (const [tagId, xpData] of tagXPMap) {
+      const tag = tagDetails.get(tagId);
+      if (!tag) continue;
+
+      skillLevels.push({
+        tagId,
+        tagName: tag.name,
+        tagColor: tag.color,
+        totalXP: xpData.totalXP,
+        activityCount: xpData.activityCount,
+        level: calculateLevel(xpData.totalXP),
+      });
+    }
+
+    // Sort by XP descending
+    skillLevels.sort((a, b) => b.totalXP - a.totalXP);
+
+    return c.json({
+      userId: requestedUserId,
+      skillLevels,
     });
   });
 

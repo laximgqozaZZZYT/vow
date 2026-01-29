@@ -8,6 +8,9 @@ import { useNotificationPreferences } from '../hooks/useNotificationPreferences'
 import { usePushNotifications } from '../hooks/usePushNotifications';
 import { useUserLevel, getUserLevelTierColors } from '../hooks/useUserLevel';
 import { supabase } from '@/lib/supabaseClient';
+import XPRecoveryConfirmModal from '../dashboard/components/Modal.XPRecoveryConfirm';
+import { useXPRecovery, XPRecoveryResult } from '@/hooks/useXPRecovery';
+import { useSkillLevels } from '@/hooks/useSkillLevels';
 
 // Feature flags from environment variables
 // Default to false if not set (safer for production)
@@ -52,9 +55,25 @@ export default function SettingsPage() {
   // User level
   const { userLevel, isLoading: userLevelLoading } = useUserLevel(userId);
   
+  // Skill levels
+  const { skillLevels, isLoading: skillLevelsLoading, refetch: refetchSkillLevels } = useSkillLevels(userId);
+  
   const [testingConnection, setTestingConnection] = useState(false);
   const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null);
   const [disconnecting, setDisconnecting] = useState(false);
+  
+  // XP Recovery state
+  const [showXPRecoveryConfirm, setShowXPRecoveryConfirm] = useState(false);
+  const [xpRecoveryResult, setXPRecoveryResult] = useState<XPRecoveryResult | null>(null);
+  const [showXPRecoveryResult, setShowXPRecoveryResult] = useState(false);
+  
+  // XP Recovery hook
+  const { 
+    recalculateXP, 
+    isLoading: xpRecoveryLoading, 
+    error: xpRecoveryError,
+    reset: resetXPRecovery,
+  } = useXPRecovery();
   
   // Get user ID from Supabase session
   useEffect(() => {
@@ -66,6 +85,36 @@ export default function SettingsPage() {
     };
     getUserId();
   }, []);
+
+  /**
+   * Handle XP recovery confirmation
+   * Calls the API and shows the result
+   * Validates: Requirements 5.3, 5.5, 5.6
+   */
+  const handleXPRecoveryConfirm = async () => {
+    if (!userId) {
+      return;
+    }
+    
+    const result = await recalculateXP(userId);
+    setShowXPRecoveryConfirm(false);
+    
+    if (result) {
+      setXPRecoveryResult(result);
+      setShowXPRecoveryResult(true);
+      // Refetch skill levels after XP recovery
+      refetchSkillLevels();
+    }
+  };
+
+  /**
+   * Close the XP recovery result display
+   */
+  const handleCloseXPRecoveryResult = () => {
+    setShowXPRecoveryResult(false);
+    setXPRecoveryResult(null);
+    resetXPRecovery();
+  };
 
   const handleTestConnection = async () => {
     setTestingConnection(true);
@@ -275,6 +324,208 @@ export default function SettingsPage() {
                     ) : (
                       <p className="text-muted-foreground">ユーザーレベル情報を取得できませんでした。</p>
                     )}
+                  </div>
+                </div>
+                
+                {/* Skill Levels Section */}
+                <div>
+                  <h2 className="text-xl font-semibold mb-4">スキルレベル</h2>
+                  <div className="bg-card border border-border rounded-lg p-6">
+                    {skillLevelsLoading ? (
+                      <div className="flex items-center gap-2 text-muted-foreground">
+                        <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                        Loading...
+                      </div>
+                    ) : skillLevels.length > 0 ? (
+                      <div className="space-y-4">
+                        <p className="text-sm text-muted-foreground">
+                          習慣に付けたタグごとのスキルレベルです。習慣を完了するとタグに紐づくスキルが上がります。
+                        </p>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                          {skillLevels.map((skill) => (
+                            <div
+                              key={skill.tagId}
+                              className="flex items-center justify-between p-3 rounded-lg border"
+                              style={{
+                                backgroundColor: `${skill.tagColor}10`,
+                                borderColor: `${skill.tagColor}30`,
+                              }}
+                            >
+                              <div className="flex items-center gap-2">
+                                <div
+                                  className="w-3 h-3 rounded-full"
+                                  style={{ backgroundColor: skill.tagColor }}
+                                />
+                                <span className="font-medium">{skill.tagName}</span>
+                              </div>
+                              <div className="flex items-center gap-3">
+                                <span className="text-sm text-muted-foreground">
+                                  {skill.totalXP.toLocaleString()} XP
+                                </span>
+                                <span
+                                  className="font-bold px-2 py-0.5 rounded text-sm"
+                                  style={{
+                                    backgroundColor: `${skill.tagColor}20`,
+                                    color: skill.tagColor,
+                                  }}
+                                >
+                                  Lv.{skill.level}
+                                </span>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ) : (
+                      <p className="text-muted-foreground">
+                        スキルレベルがありません。習慣にタグを付けて完了すると、タグごとのスキルレベルが表示されます。
+                      </p>
+                    )}
+                  </div>
+                </div>
+                
+                {/* XP Recovery Section */}
+                <div>
+                  <h2 className="text-xl font-semibold mb-4">経験値の再計算</h2>
+                  <div className="bg-card border border-border rounded-lg p-6">
+                    {/* Error display - Requirement 5.6 */}
+                    {xpRecoveryError && !showXPRecoveryResult && (
+                      <div className="mb-4 p-3 bg-destructive/10 border border-destructive/20 rounded-md text-destructive text-sm flex items-start gap-2">
+                        <svg className="w-4 h-4 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                        <span>{xpRecoveryError}</span>
+                      </div>
+                    )}
+                    
+                    {/* Success result display - Requirement 5.5 */}
+                    {showXPRecoveryResult && xpRecoveryResult && xpRecoveryResult.success && (
+                      <div className="mb-4 p-4 bg-success/10 border border-success/20 rounded-lg">
+                        <div className="flex items-start gap-3">
+                          <div className="w-8 h-8 bg-success/20 rounded-full flex items-center justify-center flex-shrink-0">
+                            <svg className="w-4 h-4 text-success" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                            </svg>
+                          </div>
+                          <div className="flex-1">
+                            <h4 className="font-medium text-success mb-2">再計算が完了しました</h4>
+                            <div className="space-y-2 text-sm">
+                              <div className="flex items-center justify-between">
+                                <span className="text-muted-foreground">付与された経験値</span>
+                                <span className="font-semibold text-foreground">
+                                  +{xpRecoveryResult.totalXPAwarded.toLocaleString()} XP
+                                </span>
+                              </div>
+                              <div className="flex items-center justify-between">
+                                <span className="text-muted-foreground">処理したアクティビティ</span>
+                                <span className="font-medium text-foreground">
+                                  {xpRecoveryResult.activitiesProcessed.toLocaleString()} 件
+                                </span>
+                              </div>
+                              {xpRecoveryResult.skipped > 0 && (
+                                <div className="flex items-center justify-between">
+                                  <span className="text-muted-foreground">スキップ（付与済み）</span>
+                                  <span className="text-muted-foreground">
+                                    {xpRecoveryResult.skipped.toLocaleString()} 件
+                                  </span>
+                                </div>
+                              )}
+                              {xpRecoveryResult.levelChange && (
+                                <div className="flex items-center justify-between pt-2 border-t border-success/20">
+                                  <span className="text-muted-foreground">レベル変更</span>
+                                  <span className="font-semibold text-success">
+                                    Lv.{xpRecoveryResult.levelChange.oldLevel} → Lv.{xpRecoveryResult.levelChange.newLevel}
+                                  </span>
+                                </div>
+                              )}
+                              {xpRecoveryResult.newLevel && !xpRecoveryResult.levelChange && (
+                                <div className="flex items-center justify-between pt-2 border-t border-success/20">
+                                  <span className="text-muted-foreground">現在のレベル</span>
+                                  <span className="font-semibold text-foreground">
+                                    Lv.{xpRecoveryResult.newLevel}
+                                  </span>
+                                </div>
+                              )}
+                              {/* Skill Levels Display */}
+                              {xpRecoveryResult.skillLevels && xpRecoveryResult.skillLevels.length > 0 && (
+                                <div className="pt-3 mt-3 border-t border-success/20">
+                                  <div className="text-sm text-muted-foreground mb-2">スキルレベル</div>
+                                  <div className="flex flex-wrap gap-2">
+                                    {xpRecoveryResult.skillLevels.slice(0, 10).map((skill) => (
+                                      <div
+                                        key={skill.tagId}
+                                        className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md text-xs font-medium"
+                                        style={{
+                                          backgroundColor: `${skill.tagColor}20`,
+                                          color: skill.tagColor,
+                                          border: `1px solid ${skill.tagColor}40`,
+                                        }}
+                                      >
+                                        <span>{skill.tagName}</span>
+                                        <span className="opacity-80">Lv.{skill.level}</span>
+                                      </div>
+                                    ))}
+                                    {xpRecoveryResult.skillLevels.length > 10 && (
+                                      <span className="text-xs text-muted-foreground">
+                                        +{xpRecoveryResult.skillLevels.length - 10} more
+                                      </span>
+                                    )}
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                            <button
+                              onClick={handleCloseXPRecoveryResult}
+                              className="mt-3 text-sm text-success hover:underline"
+                            >
+                              閉じる
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                    
+                    <div className="flex items-start gap-4">
+                      <div className="w-10 h-10 bg-primary/10 rounded-lg flex items-center justify-center flex-shrink-0">
+                        <svg className="w-5 h-5 text-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                        </svg>
+                      </div>
+                      <div className="flex-1">
+                        <h3 className="font-medium">過去の習慣履歴から経験値を再計算</h3>
+                        <p className="text-sm text-muted-foreground mt-1">
+                          過去に完了した習慣の履歴から経験値を再計算し、レベルを更新します。
+                          既に付与済みの経験値は重複して付与されません。
+                        </p>
+                        <button
+                          onClick={() => setShowXPRecoveryConfirm(true)}
+                          disabled={xpRecoveryLoading || !userId}
+                          className="
+                            mt-4 px-4 py-2 
+                            bg-primary text-primary-foreground 
+                            rounded-md shadow-sm
+                            hover:opacity-90 
+                            focus-visible:outline-2 focus-visible:outline-primary
+                            transition-opacity
+                            text-sm font-medium
+                            disabled:opacity-50 disabled:cursor-not-allowed
+                            flex items-center gap-2
+                          "
+                        >
+                          {xpRecoveryLoading ? (
+                            <>
+                              <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                              </svg>
+                              <span>処理中...</span>
+                            </>
+                          ) : (
+                            '経験値を再計算'
+                          )}
+                        </button>
+                      </div>
+                    </div>
                   </div>
                 </div>
                 
@@ -644,6 +895,14 @@ export default function SettingsPage() {
           </div>
         </main>
       </div>
+      
+      {/* XP Recovery Confirmation Modal */}
+      <XPRecoveryConfirmModal
+        isOpen={showXPRecoveryConfirm}
+        onClose={() => setShowXPRecoveryConfirm(false)}
+        onConfirm={handleXPRecoveryConfirm}
+        loading={xpRecoveryLoading}
+      />
     </div>
   );
 }
