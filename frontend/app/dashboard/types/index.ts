@@ -79,15 +79,29 @@ export interface Habit {
   updatedAt: string;
 }
 
+/**
+ * Activity record from database.
+ * 
+ * Column definitions:
+ * - amount: workload increment (増分)
+ * - prevCount: daily count before this activity (増分前の日次累計Workload)
+ * - newCount: daily count after this activity (増分後の日次累計Workload)
+ * - cumulativeWorkload: total workload from habit creation to this activity (累計Workload)
+ */
 export interface Activity {
   id: string;
   kind: ActivityKind;
   habitId: string;
   habitName: string;
   timestamp: string;
+  /** Workload increment (増分) */
   amount?: number;
+  /** Daily count before this activity (増分前の日次累計Workload) */
   prevCount?: number;
+  /** Daily count after this activity (増分後の日次累計Workload) */
   newCount?: number;
+  /** Total workload from habit creation to this activity (累計Workload) */
+  cumulativeWorkload?: number;
   durationSeconds?: number;
 }
 

@@ -1059,12 +1059,35 @@ export class SupabaseDirectClient {
       amount: a.amount,
       prevCount: a.prev_count,
       newCount: a.new_count,
+      cumulativeWorkload: a.cumulative_workload,
       durationSeconds: a.duration_seconds,
       memo: a.memo
     }));
     
     debug.log('[getActivities] Converted activities:', activities);
     return activities;
+  }
+
+  /**
+   * Calculate cumulative workload for a habit by summing all complete activities
+   * @param habitId - The habit ID
+   * @param userId - The user ID
+   * @returns The cumulative workload (total from habit creation)
+   */
+  async calculateCumulativeWorkload(habitId: string, userId: string): Promise<number> {
+    if (!supabase) return 0;
+    
+    const { data, error } = await supabase
+      .from('activities')
+      .select('amount')
+      .eq('habit_id', habitId)
+      .eq('owner_type', 'user')
+      .eq('owner_id', userId)
+      .eq('kind', 'complete');
+    
+    if (error || !data) return 0;
+    
+    return data.reduce((sum: number, a: any) => sum + (a.amount ?? 1), 0);
   }
 
   async createActivity(payload: any) {
@@ -1074,6 +1097,18 @@ export class SupabaseDirectClient {
     
     // ゲストユーザーの場合はローカルストレージに保存
     if (!session?.session?.user) {
+      // Calculate cumulative workload for guest user from localStorage
+      let cumulativeWorkload = 0;
+      if (payload.kind === 'complete' && payload.habitId) {
+        const existingActivities = JSON.parse(localStorage.getItem('guest-activities') || '[]');
+        const habitCompleteActivities = existingActivities.filter(
+          (a: any) => a.habitId === payload.habitId && a.kind === 'complete'
+        );
+        cumulativeWorkload = habitCompleteActivities.reduce(
+          (sum: number, a: any) => sum + (a.amount ?? 1), 0
+        ) + (payload.amount ?? 1);
+      }
+      
       const activity = {
         id: 'activity-' + Date.now(),
         kind: payload.kind,
@@ -1083,6 +1118,7 @@ export class SupabaseDirectClient {
         amount: payload.amount,
         prevCount: payload.prevCount,
         newCount: payload.newCount,
+        cumulativeWorkload: payload.kind === 'complete' ? cumulativeWorkload : undefined,
         durationSeconds: payload.durationSeconds
       };
       
@@ -1091,6 +1127,17 @@ export class SupabaseDirectClient {
       localStorage.setItem('guest-activities', JSON.stringify(existingActivities));
       
       return activity;
+    }
+    
+    // Calculate cumulative workload for authenticated user
+    // This is the total workload from habit creation to this activity (inclusive)
+    let cumulativeWorkload: number | undefined;
+    if (payload.kind === 'complete' && payload.habitId) {
+      const previousCumulative = await this.calculateCumulativeWorkload(
+        payload.habitId, 
+        session.session.user.id
+      );
+      cumulativeWorkload = previousCumulative + (payload.amount ?? 1);
     }
     
     const { data, error } = await supabase
@@ -1103,6 +1150,7 @@ export class SupabaseDirectClient {
         amount: payload.amount,
         prev_count: payload.prevCount,
         new_count: payload.newCount,
+        cumulative_workload: cumulativeWorkload,
         duration_seconds: payload.durationSeconds,
         owner_type: 'user',
         owner_id: session.session.user.id
@@ -1121,6 +1169,7 @@ export class SupabaseDirectClient {
       amount: data.amount,
       prevCount: data.prev_count,
       newCount: data.new_count,
+      cumulativeWorkload: data.cumulative_workload,
       durationSeconds: data.duration_seconds
     };
   }
@@ -1151,6 +1200,7 @@ export class SupabaseDirectClient {
       if (payload.amount !== undefined) updatedActivity.amount = payload.amount;
       if (payload.prevCount !== undefined) updatedActivity.prevCount = payload.prevCount;
       if (payload.newCount !== undefined) updatedActivity.newCount = payload.newCount;
+      if (payload.cumulativeWorkload !== undefined) updatedActivity.cumulativeWorkload = payload.cumulativeWorkload;
       if (payload.durationSeconds !== undefined) updatedActivity.durationSeconds = payload.durationSeconds;
       if (payload.memo !== undefined) updatedActivity.memo = payload.memo;
       
@@ -1173,6 +1223,7 @@ export class SupabaseDirectClient {
     if (payload.amount !== undefined) updateData.amount = payload.amount;
     if (payload.prevCount !== undefined) updateData.prev_count = payload.prevCount;
     if (payload.newCount !== undefined) updateData.new_count = payload.newCount;
+    if (payload.cumulativeWorkload !== undefined) updateData.cumulative_workload = payload.cumulativeWorkload;
     if (payload.durationSeconds !== undefined) updateData.duration_seconds = payload.durationSeconds;
     if (payload.memo !== undefined) updateData.memo = payload.memo;
     
@@ -1196,6 +1247,7 @@ export class SupabaseDirectClient {
       amount: data.amount,
       prevCount: data.prev_count,
       newCount: data.new_count,
+      cumulativeWorkload: data.cumulative_workload,
       durationSeconds: data.duration_seconds,
       memo: data.memo
     };
