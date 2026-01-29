@@ -1131,15 +1131,13 @@ export class SupabaseDirectClient {
     if (error) throw error;
     
     // Update habit_daily_workloads table for 'complete' activities
-    // Note: This is optional - cumulative workloads are calculated from activities directly
-    // If the table doesn't exist or RLS fails, we silently skip this
     if (payload.kind === 'complete' && payload.habitId) {
       try {
         const activityDate = (payload.timestamp || new Date().toISOString()).split('T')[0];
         await this.updateHabitDailyWorkload(payload.habitId, activityDate, payload.amount ?? 1);
       } catch (workloadError) {
-        // Silently ignore - workloads are calculated from activities anyway
-        debug.log('[createActivity] Skipped daily workload update (optional):', workloadError);
+        // Log but don't fail the activity creation
+        console.error('[createActivity] Failed to update daily workload:', workloadError);
       }
     }
     
@@ -3626,8 +3624,7 @@ export class SupabaseDirectClient {
         .maybeSingle();
       
       if (fetchError) {
-        // Table might not exist or RLS issue - silently skip
-        debug.log('[updateHabitDailyWorkload] Fetch skipped:', fetchError.message);
+        console.error('[updateHabitDailyWorkload] Fetch error:', JSON.stringify(fetchError, null, 2));
         return;
       }
       
@@ -3645,7 +3642,7 @@ export class SupabaseDirectClient {
           .eq('date', date);
         
         if (deleteError) {
-          debug.log('[updateHabitDailyWorkload] Delete skipped:', deleteError.message);
+          console.error('[updateHabitDailyWorkload] Delete error:', JSON.stringify(deleteError, null, 2));
         } else {
           debug.log('[updateHabitDailyWorkload] Deleted row for:', { habitId, date });
         }
@@ -3661,7 +3658,7 @@ export class SupabaseDirectClient {
             .eq('id', existing.id);
           
           if (updateError) {
-            debug.log('[updateHabitDailyWorkload] Update skipped:', updateError.message);
+            console.error('[updateHabitDailyWorkload] Update error:', JSON.stringify(updateError, null, 2));
           } else {
             debug.log('[updateHabitDailyWorkload] Updated row:', { id: existing.id, newWorkload });
           }
@@ -3678,14 +3675,14 @@ export class SupabaseDirectClient {
             });
           
           if (insertError) {
-            debug.log('[updateHabitDailyWorkload] Insert skipped:', insertError.message);
+            console.error('[updateHabitDailyWorkload] Insert error:', JSON.stringify(insertError, null, 2));
           } else {
             debug.log('[updateHabitDailyWorkload] Inserted new row:', { habitId, date, newWorkload });
           }
         }
       }
     } catch (err) {
-      debug.log('[updateHabitDailyWorkload] Skipped due to error:', err);
+      console.error('[updateHabitDailyWorkload] Unexpected error:', err);
     }
   }
 
