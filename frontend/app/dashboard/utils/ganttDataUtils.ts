@@ -294,27 +294,31 @@ function calculateCumulativeWorkload(habitId: string, activities: Activity[]): n
     .filter(a => a.habitId === habitId && a.kind === 'complete')
     .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
   
+  // Always log for debugging
+  console.log(`[Gantt Debug] Habit ${habitId}: Found ${completeActivities.length} complete activities out of ${activities.filter(a => a.habitId === habitId).length} total for this habit`);
+  
   if (completeActivities.length === 0) {
     return 0;
   }
   
   // Try to use cumulativeWorkload from the latest activity
   const latestActivity = completeActivities[0];
+  console.log(`[Gantt Debug] Habit ${habitId}: Latest activity:`, {
+    id: latestActivity.id,
+    kind: latestActivity.kind,
+    amount: latestActivity.amount,
+    cumulativeWorkload: latestActivity.cumulativeWorkload
+  });
+  
   if (latestActivity.cumulativeWorkload !== undefined && latestActivity.cumulativeWorkload !== null) {
-    // Debug log
-    if (typeof window !== 'undefined' && (window as any).__DEBUG_GANTT__) {
-      console.log(`[Gantt] Habit ${habitId}: Using cumulativeWorkload from latest activity: ${latestActivity.cumulativeWorkload}`);
-    }
+    console.log(`[Gantt Debug] Habit ${habitId}: Using cumulativeWorkload from latest activity: ${latestActivity.cumulativeWorkload}`);
     return normalizeNonNegative(latestActivity.cumulativeWorkload);
   }
   
   // Fallback: sum amounts from all complete activities
   const total = completeActivities.reduce((sum, a) => sum + (a.amount || 1), 0);
   
-  // Debug log
-  if (typeof window !== 'undefined' && (window as any).__DEBUG_GANTT__) {
-    console.log(`[Gantt] Habit ${habitId}: Summed ${completeActivities.length} activities, total workload: ${total}`);
-  }
+  console.log(`[Gantt Debug] Habit ${habitId}: Summed ${completeActivities.length} activities, total workload: ${total}`);
   
   return normalizeNonNegative(total);
 }
@@ -351,40 +355,54 @@ export function calculateHabitProgress(
   activities: Activity[],
   allGoals: Goal[] = []
 ): number {
+  // Always log for debugging
+  console.log(`[Gantt Debug] calculateHabitProgress for "${habit.name}" (${habit.id}):`, {
+    completed: habit.completed,
+    workloadTotal: habit.workloadTotal,
+    workloadTotalEnd: habit.workloadTotalEnd,
+    workloadPerCount: habit.workloadPerCount,
+    createdAt: habit.createdAt,
+    totalActivities: activities.length,
+    activitiesForHabit: activities.filter(a => a.habitId === habit.id).length
+  });
+  
   // Step 1: 完了済みなら100%
-  if (habit.completed) return 100;
+  if (habit.completed) {
+    console.log(`[Gantt Debug] Habit "${habit.name}": completed=true, returning 100%`);
+    return 100;
+  }
   
   // Step 2: Activityから累計Workloadを集計（必須）
   const cumulativeWorkload = calculateCumulativeWorkload(habit.id, activities);
+  console.log(`[Gantt Debug] Habit "${habit.name}": cumulativeWorkload=${cumulativeWorkload}`);
   
   // Step 3: 登録日を取得
   const createdAt = parseDate(habit.createdAt);
+  console.log(`[Gantt Debug] Habit "${habit.name}": createdAt=${createdAt}`);
   
   // Step 4: エッジケース - 登録日が実効期限より後の場合は0%
   const effectiveDeadline = getHabitEffectiveDeadline(habit, allGoals);
   if (createdAt && effectiveDeadline && createdAt.getTime() > effectiveDeadline.getTime()) {
+    console.log(`[Gantt Debug] Habit "${habit.name}": createdAt > effectiveDeadline, returning 0%`);
     return 0;
   }
   
   // Step 5: Workload Total(End) が設定されている場合
   // habit.workloadTotal または habit.workloadTotalEnd を使用
   const workloadTotalEnd = normalizeNonNegative(habit.workloadTotal || habit.workloadTotalEnd || 0);
+  console.log(`[Gantt Debug] Habit "${habit.name}": workloadTotalEnd=${workloadTotalEnd}`);
   
   if (workloadTotalEnd > 0) {
     // 進捗率 = 累計Workload / Workload Total(End) * 100
     const progress = Math.min(100, (cumulativeWorkload / workloadTotalEnd) * 100);
-    
-    // Debug log
-    if (typeof window !== 'undefined' && (window as any).__DEBUG_GANTT__) {
-      console.log(`[Gantt] Habit "${habit.name}": cumulative=${cumulativeWorkload}, totalEnd=${workloadTotalEnd}, progress=${progress}%`);
-    }
-    
+    console.log(`[Gantt Debug] Habit "${habit.name}": Using workloadTotalEnd, progress=${progress}%`);
     return progress;
   }
   
   // Step 6: Workload Total(End)が未設定だがWorkload Total(Day)が設定されている場合
   // habit.workloadPerCount を使用（デフォルト値は1）
   const workloadPerDay = normalizeNonNegative(habit.workloadPerCount || 1);
+  console.log(`[Gantt Debug] Habit "${habit.name}": workloadPerDay=${workloadPerDay}`);
   
   if (workloadPerDay > 0 && createdAt) {
     // 登録日からの日数を計算
@@ -395,30 +413,19 @@ export function calculateHabitProgress(
     if (expectedWorkload > 0) {
       // 進捗率 = 累計Workload / 期待される累計Workload * 100
       const progress = Math.min(100, (cumulativeWorkload / expectedWorkload) * 100);
-      
-      // Debug log
-      if (typeof window !== 'undefined' && (window as any).__DEBUG_GANTT__) {
-        console.log(`[Gantt] Habit "${habit.name}": cumulative=${cumulativeWorkload}, perDay=${workloadPerDay}, days=${daysSinceCreation}, expected=${expectedWorkload}, progress=${progress}%`);
-      }
-      
+      console.log(`[Gantt Debug] Habit "${habit.name}": cumulative=${cumulativeWorkload}, perDay=${workloadPerDay}, days=${daysSinceCreation}, expected=${expectedWorkload}, progress=${progress}%`);
       return progress;
     }
   }
   
   // Step 7: createdAtがない場合のフォールバック - 累計Workloadがあれば進捗として表示
   if (cumulativeWorkload > 0) {
-    // Debug log
-    if (typeof window !== 'undefined' && (window as any).__DEBUG_GANTT__) {
-      console.log(`[Gantt] Habit "${habit.name}": Fallback - has cumulative workload ${cumulativeWorkload}, but no createdAt. Showing as partial progress.`);
-    }
+    console.log(`[Gantt Debug] Habit "${habit.name}": Fallback - has cumulative workload ${cumulativeWorkload}, but no createdAt. Showing as partial progress.`);
     // 累計Workloadがあるが計算できない場合、少なくとも1%以上を表示
     return Math.min(100, cumulativeWorkload);
   }
   
-  // Debug log
-  if (typeof window !== 'undefined' && (window as any).__DEBUG_GANTT__) {
-    console.log(`[Gantt] Habit "${habit.name}": No workload settings or activities, returning 0%. workloadTotal=${habit.workloadTotal}, workloadTotalEnd=${habit.workloadTotalEnd}, workloadPerCount=${habit.workloadPerCount}, cumulative=${cumulativeWorkload}`);
-  }
+  console.log(`[Gantt Debug] Habit "${habit.name}": No workload settings or activities, returning 0%`);
   
   // Step 8: 累計Workloadもない場合は0%
   return 0;
