@@ -383,8 +383,8 @@ export function calculateHabitProgress(
   }
   
   // Step 6: Workload Total(End)が未設定だがWorkload Total(Day)が設定されている場合
-  // habit.workloadPerCount を使用
-  const workloadPerDay = normalizeNonNegative(habit.workloadPerCount || 0);
+  // habit.workloadPerCount を使用（デフォルト値は1）
+  const workloadPerDay = normalizeNonNegative(habit.workloadPerCount || 1);
   
   if (workloadPerDay > 0 && createdAt) {
     // 登録日からの日数を計算
@@ -405,12 +405,22 @@ export function calculateHabitProgress(
     }
   }
   
-  // Debug log
-  if (typeof window !== 'undefined' && (window as any).__DEBUG_GANTT__) {
-    console.log(`[Gantt] Habit "${habit.name}": No workload settings, returning 0%. workloadTotal=${habit.workloadTotal}, workloadTotalEnd=${habit.workloadTotalEnd}, workloadPerCount=${habit.workloadPerCount}`);
+  // Step 7: createdAtがない場合のフォールバック - 累計Workloadがあれば進捗として表示
+  if (cumulativeWorkload > 0) {
+    // Debug log
+    if (typeof window !== 'undefined' && (window as any).__DEBUG_GANTT__) {
+      console.log(`[Gantt] Habit "${habit.name}": Fallback - has cumulative workload ${cumulativeWorkload}, but no createdAt. Showing as partial progress.`);
+    }
+    // 累計Workloadがあるが計算できない場合、少なくとも1%以上を表示
+    return Math.min(100, cumulativeWorkload);
   }
   
-  // Step 7: どちらも設定されていない場合は0%
+  // Debug log
+  if (typeof window !== 'undefined' && (window as any).__DEBUG_GANTT__) {
+    console.log(`[Gantt] Habit "${habit.name}": No workload settings or activities, returning 0%. workloadTotal=${habit.workloadTotal}, workloadTotalEnd=${habit.workloadTotalEnd}, workloadPerCount=${habit.workloadPerCount}, cumulative=${cumulativeWorkload}`);
+  }
+  
+  // Step 8: 累計Workloadもない場合は0%
   return 0;
 }
 
