@@ -3663,10 +3663,12 @@ export class SupabaseDirectClient {
             debug.log('[updateHabitDailyWorkload] Updated row:', { id: existing.id, newWorkload });
           }
         } else {
-          // Insert new row
+          // Insert new row with explicit id generation
+          const newId = crypto.randomUUID();
           const { error: insertError } = await supabase
             .from('habit_daily_workloads')
             .insert({
+              id: newId,
               habit_id: habitId,
               date: date,
               workload: newWorkload,
