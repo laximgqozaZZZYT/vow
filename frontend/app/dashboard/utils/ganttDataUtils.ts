@@ -9,7 +9,7 @@
  * Validates: Requirements 2.1-2.6, 4.1, 4.2, 4.5, 6.1
  */
 
-import type { Goal, Habit, Activity } from '../types';
+import type { Goal, Habit } from '../types';
 import type { HabitRelation } from '../types/shared';
 
 // ============================================================================
@@ -103,9 +103,12 @@ export function getGoalEffectiveDeadline(
  * Calculate the effective deadline for a Habit
  * 
  * The effective deadline is determined by the following priority:
- * 1. The Habit's own dueDate if set
- * 2. If no dueDate: the SHORTER of Goal's effective deadline OR Habit's createdAt + 1 year
+ * 1. The Habit's own dueDate if set AND in the future
+ * 2. If no valid dueDate: the linked Goal's effective deadline (if exists)
  * 3. If no linked Goal: Habit's createdAt + 1 year as fallback
+ * 
+ * Note: Unlike the original logic, we no longer take the "shorter" of Goal deadline
+ * and createdAt+1year, as this caused unexpected short bars.
  * 
  * @param habit - The Habit to calculate effective deadline for
  * @param allGoals - All Goals (for Goal lookup and effective deadline calculation)
@@ -117,34 +120,35 @@ export function getHabitEffectiveDeadline(
   habit: Habit,
   allGoals: Goal[]
 ): Date {
-  // Step 1: If the Habit has its own dueDate, use it
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  
+  // Step 1: If the Habit has its own dueDate AND it's in the future, use it
   const ownDueDate = parseDate(habit.dueDate);
-  if (ownDueDate) {
+  if (ownDueDate && ownDueDate.getTime() > today.getTime()) {
     return ownDueDate;
   }
   
-  // Calculate Habit's createdAt + 1 year as one candidate
-  const createdAt = parseDate(habit.createdAt);
-  const createdAtPlusOneYear = createdAt 
-    ? addYears(createdAt, 1) 
-    : addYears(new Date(), 1);
-  
-  // Step 2: If the Habit has a linked Goal, use the SHORTER of:
-  // - Goal's effective deadline
-  // - Habit's createdAt + 1 year
+  // Step 2: If the Habit has a linked Goal, use Goal's effective deadline
   if (habit.goalId) {
     const linkedGoal = allGoals.find(g => g.id === habit.goalId);
     if (linkedGoal) {
       const goalDeadline = getGoalEffectiveDeadline(linkedGoal, allGoals);
-      // Return the earlier (shorter) deadline
-      return goalDeadline.getTime() < createdAtPlusOneYear.getTime()
-        ? goalDeadline
-        : createdAtPlusOneYear;
+      // Only use goal deadline if it's in the future
+      if (goalDeadline.getTime() > today.getTime()) {
+        return goalDeadline;
+      }
     }
   }
   
-  // Step 3: No dueDate and no linked Goal - use createdAt + 1 year
-  return createdAtPlusOneYear;
+  // Step 3: Fallback to createdAt + 1 year
+  const createdAt = parseDate(habit.createdAt);
+  if (createdAt) {
+    return addYears(createdAt, 1);
+  }
+  
+  // Final fallback: use current date + 1 year if createdAt is invalid
+  return addYears(new Date(), 1);
 }
 
 // ============================================================================
@@ -279,155 +283,81 @@ function calculateDaysSince(startDate: Date, endDate: Date = new Date()): number
 }
 
 /**
- * Calculate cumulative workload from activities
- * 
- * Uses the cumulativeWorkload field if available (from the latest activity),
- * otherwise falls back to summing amounts from all complete activities.
- * 
- * @param habitId - The Habit ID
- * @param activities - All activities
- * @returns Cumulative workload (total workload from habit creation)
+ * View mode type for progress calculation
  */
-function calculateCumulativeWorkload(habitId: string, activities: Activity[]): number {
-  // Filter activities for this habit with 'complete' kind
-  const completeActivities = activities
-    .filter(a => a.habitId === habitId && a.kind === 'complete')
-    .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
-  
-  // Always log for debugging
-  console.log(`[Gantt Debug] Habit ${habitId}: Found ${completeActivities.length} complete activities out of ${activities.filter(a => a.habitId === habitId).length} total for this habit`);
-  
-  if (completeActivities.length === 0) {
-    return 0;
-  }
-  
-  // Try to use cumulativeWorkload from the latest activity
-  const latestActivity = completeActivities[0];
-  console.log(`[Gantt Debug] Habit ${habitId}: Latest activity:`, {
-    id: latestActivity.id,
-    kind: latestActivity.kind,
-    amount: latestActivity.amount,
-    cumulativeWorkload: latestActivity.cumulativeWorkload
-  });
-  
-  if (latestActivity.cumulativeWorkload !== undefined && latestActivity.cumulativeWorkload !== null) {
-    console.log(`[Gantt Debug] Habit ${habitId}: Using cumulativeWorkload from latest activity: ${latestActivity.cumulativeWorkload}`);
-    return normalizeNonNegative(latestActivity.cumulativeWorkload);
-  }
-  
-  // Fallback: sum amounts from all complete activities
-  const total = completeActivities.reduce((sum, a) => sum + (a.amount || 1), 0);
-  
-  console.log(`[Gantt Debug] Habit ${habitId}: Summed ${completeActivities.length} activities, total workload: ${total}`);
-  
-  return normalizeNonNegative(total);
+export type ProgressViewMode = 'day' | 'week' | 'month';
+
+/**
+ * Workload summary for a habit (from habit_daily_workloads table)
+ */
+export interface HabitWorkloadSummary {
+  daily: number;
+  weekly: number;
+  monthly: number;
 }
 
 /**
- * Calculate progress for a single Habit based on activities
+ * Calculate CUMULATIVE progress for a single Habit
  * 
- * Required inputs:
- * - Habit登録日: habit.createdAt
- * - Workload Total(Day): habit.workloadPerCount (1日あたりの目標)
- * - Workload Total(End): habit.workloadTotal or habit.workloadTotalEnd (最終目標)
- * - Habit期限: habit.dueDate
- * - 累計Workload: Activityから集計
+ * This function always calculates cumulative progress regardless of viewMode.
+ * The viewMode parameter is kept for API compatibility but is ignored.
  * 
  * Algorithm:
  * 1. If completed, return 100%
- * 2. Calculate cumulative workload from activities
- * 3. If workloadTotal (End) is set:
- *    - Return min(100, (cumulativeWorkload / workloadTotal) * 100)
- * 4. If workloadTotal is NOT set but workloadPerCount (Day) is set:
- *    - Calculate expected workload = workloadPerCount * days since registration
- *    - Return min(100, (cumulativeWorkload / expectedWorkload) * 100)
- * 5. If neither is set, return 0%
+ * 2. If workloadTotalEnd is set:
+ *    - Return min(100, (cumulativeWorkload / workloadTotalEnd) * 100)
+ * 3. If workloadTotalEnd is NOT set but workloadTotal (Day) is set:
+ *    - Return min(100, (cumulativeWorkload / (workloadTotal * daysSinceCreation)) * 100)
+ * 4. For daily display (count/must):
+ *    - Return min(100, (count / must) * 100)
+ * 5. Otherwise return 0%
  * 
  * @param habit - The Habit to calculate progress for
- * @param activities - All activities (REQUIRED for cumulative workload calculation)
+ * @param cumulativeWorkload - Total cumulative workload from all activities
  * @param allGoals - All Goals (for effective deadline calculation)
+ * @param viewMode - View mode (ignored - always uses cumulative)
  * @returns Progress percentage (0-100)
- * 
- * Validates: Requirements 3.3, 3.4, 3.5, 6.1, 6.4, 6.5
  */
 export function calculateHabitProgress(
   habit: Habit,
-  activities: Activity[],
-  allGoals: Goal[] = []
+  cumulativeWorkload: number,
+  allGoals: Goal[] = [],
+  viewMode: ProgressViewMode = 'month'
 ): number {
-  // Always log for debugging
-  console.log(`[Gantt Debug] calculateHabitProgress for "${habit.name}" (${habit.id}):`, {
-    completed: habit.completed,
-    workloadTotal: habit.workloadTotal,
-    workloadTotalEnd: habit.workloadTotalEnd,
-    workloadPerCount: habit.workloadPerCount,
-    createdAt: habit.createdAt,
-    totalActivities: activities.length,
-    activitiesForHabit: activities.filter(a => a.habitId === habit.id).length
-  });
-  
   // Step 1: 完了済みなら100%
   if (habit.completed) {
-    console.log(`[Gantt Debug] Habit "${habit.name}": completed=true, returning 100%`);
     return 100;
   }
   
-  // Step 2: Activityから累計Workloadを集計（必須）
-  const cumulativeWorkload = calculateCumulativeWorkload(habit.id, activities);
-  console.log(`[Gantt Debug] Habit "${habit.name}": cumulativeWorkload=${cumulativeWorkload}`);
+  const cumulative = normalizeNonNegative(cumulativeWorkload || 0);
   
-  // Step 3: 登録日を取得
-  const createdAt = parseDate(habit.createdAt);
-  console.log(`[Gantt Debug] Habit "${habit.name}": createdAt=${createdAt}`);
-  
-  // Step 4: エッジケース - 登録日が実効期限より後の場合は0%
-  const effectiveDeadline = getHabitEffectiveDeadline(habit, allGoals);
-  if (createdAt && effectiveDeadline && createdAt.getTime() > effectiveDeadline.getTime()) {
-    console.log(`[Gantt Debug] Habit "${habit.name}": createdAt > effectiveDeadline, returning 0%`);
-    return 0;
-  }
-  
-  // Step 5: Workload Total(End) が設定されている場合
-  // habit.workloadTotal または habit.workloadTotalEnd を使用
-  const workloadTotalEnd = normalizeNonNegative(habit.workloadTotal || habit.workloadTotalEnd || 0);
-  console.log(`[Gantt Debug] Habit "${habit.name}": workloadTotalEnd=${workloadTotalEnd}`);
-  
+  // Step 2: workloadTotalEnd が設定されている場合（累計目標）
+  const workloadTotalEnd = normalizeNonNegative(habit.workloadTotalEnd || 0);
   if (workloadTotalEnd > 0) {
-    // 進捗率 = 累計Workload / Workload Total(End) * 100
-    const progress = Math.min(100, (cumulativeWorkload / workloadTotalEnd) * 100);
-    console.log(`[Gantt Debug] Habit "${habit.name}": Using workloadTotalEnd, progress=${progress}%`);
-    return progress;
+    return Math.min(100, (cumulative / workloadTotalEnd) * 100);
   }
   
-  // Step 6: Workload Total(End)が未設定だがWorkload Total(Day)が設定されている場合
-  // habit.workloadPerCount を使用（デフォルト値は1）
-  const workloadPerDay = normalizeNonNegative(habit.workloadPerCount || 1);
-  console.log(`[Gantt Debug] Habit "${habit.name}": workloadPerDay=${workloadPerDay}`);
+  // Step 3: workloadTotalEndが未設定だがworkloadTotal (Day)が設定されている場合
+  const workloadPerDay = normalizeNonNegative(habit.workloadTotal || 0);
+  const createdAt = parseDate(habit.createdAt);
   
   if (workloadPerDay > 0 && createdAt) {
-    // 登録日からの日数を計算
     const daysSinceCreation = calculateDaysSince(createdAt);
-    // 期待される累計Workload = Workload Total(Day) * 登録日からの日数
     const expectedWorkload = workloadPerDay * daysSinceCreation;
     
     if (expectedWorkload > 0) {
-      // 進捗率 = 累計Workload / 期待される累計Workload * 100
-      const progress = Math.min(100, (cumulativeWorkload / expectedWorkload) * 100);
-      console.log(`[Gantt Debug] Habit "${habit.name}": cumulative=${cumulativeWorkload}, perDay=${workloadPerDay}, days=${daysSinceCreation}, expected=${expectedWorkload}, progress=${progress}%`);
-      return progress;
+      return Math.min(100, (cumulative / expectedWorkload) * 100);
     }
   }
   
-  // Step 7: createdAtがない場合のフォールバック - 累計Workloadがあれば進捗として表示
-  if (cumulativeWorkload > 0) {
-    console.log(`[Gantt Debug] Habit "${habit.name}": Fallback - has cumulative workload ${cumulativeWorkload}, but no createdAt. Showing as partial progress.`);
-    // 累計Workloadがあるが計算できない場合、少なくとも1%以上を表示
-    return Math.min(100, cumulativeWorkload);
+  // Step 4: 日次表示 (count/must) - これは日次の達成状況
+  const count = habit.count || 0;
+  const must = habit.must || 0;
+  if (must > 0) {
+    return Math.min(100, (count / must) * 100);
   }
   
-  console.log(`[Gantt Debug] Habit "${habit.name}": No workload settings or activities, returning 0%`);
-  
-  // Step 8: 累計Workloadもない場合は0%
+  // Step 5: 上記すべてに該当しない場合
   return 0;
 }
 
@@ -441,8 +371,9 @@ export function calculateHabitProgress(
  * 
  * @param goalId - The Goal ID
  * @param habits - All Habits
- * @param activities - All activities
+ * @param cumulativeWorkloads - Map of habit ID to cumulative workload
  * @param allGoals - All Goals (for effective deadline calculation and Goal lookup)
+ * @param viewMode - View mode for progress calculation (ignored - always cumulative)
  * @returns Progress percentage (0-100)
  * 
  * Validates: Requirements 4.1, 4.2, 4.3
@@ -450,8 +381,9 @@ export function calculateHabitProgress(
 export function calculateGoalProgress(
   goalId: string,
   habits: Habit[],
-  activities: Activity[],
-  allGoals: Goal[] = []
+  cumulativeWorkloads: Map<string, number>,
+  allGoals: Goal[] = [],
+  viewMode: ProgressViewMode = 'month'
 ): number {
   // Step 1: 完了済みなら100%
   // Validates: Requirement 4.3
@@ -470,7 +402,7 @@ export function calculateGoalProgress(
   // Step 3: 子Habitの進捗率の平均を計算
   // Validates: Requirement 4.1
   const totalProgress = childHabits.reduce(
-    (sum, h) => sum + calculateHabitProgress(h, activities, allGoals),
+    (sum, h) => sum + calculateHabitProgress(h, cumulativeWorkloads.get(h.id) || 0, allGoals, viewMode),
     0
   );
   
@@ -495,10 +427,11 @@ function addHabitRow(
   habit: Habit,
   depth: number,
   rows: GanttRowData[],
-  activities: Activity[],
-  allGoals: Goal[] = []
+  cumulativeWorkloads: Map<string, number>,
+  allGoals: Goal[] = [],
+  viewMode: ProgressViewMode = 'month'
 ): void {
-  const progress = calculateHabitProgress(habit, activities, allGoals);
+  const progress = calculateHabitProgress(habit, cumulativeWorkloads.get(habit.id) || 0, allGoals, viewMode);
   
   // Use createdAt as start date, or today if not available
   const startDate = habit.createdAt ? new Date(habit.createdAt) : new Date();
@@ -538,8 +471,9 @@ function addGoalRow(
   rows: GanttRowData[],
   allGoals: Goal[],
   allHabits: Habit[],
-  activities: Activity[],
-  expandedIds: Set<string>
+  cumulativeWorkloads: Map<string, number>,
+  expandedIds: Set<string>,
+  viewMode: ProgressViewMode = 'month'
 ): void {
   const childGoals = allGoals.filter(g => g.parentId === goal.id);
   const childHabits = allHabits.filter(h => h.goalId === goal.id);
@@ -547,7 +481,7 @@ function addGoalRow(
   const isExpanded = expandedIds.has(goal.id);
   
   // Calculate Goal progress from child Habits
-  const progress = calculateGoalProgress(goal.id, allHabits, activities, allGoals);
+  const progress = calculateGoalProgress(goal.id, allHabits, cumulativeWorkloads, allGoals, viewMode);
   
   // Use createdAt as start date, or today if not available
   const startDate = goal.createdAt ? new Date(goal.createdAt) : new Date();
@@ -573,11 +507,11 @@ function addGoalRow(
   if (isExpanded) {
     // Add child Goals first
     for (const childGoal of childGoals) {
-      addGoalRow(childGoal, depth + 1, rows, allGoals, allHabits, activities, expandedIds);
+      addGoalRow(childGoal, depth + 1, rows, allGoals, allHabits, cumulativeWorkloads, expandedIds, viewMode);
     }
     // Then add child Habits
     for (const habit of childHabits) {
-      addHabitRow(habit, depth + 1, rows, activities, allGoals);
+      addHabitRow(habit, depth + 1, rows, cumulativeWorkloads, allGoals, viewMode);
     }
   }
 }
@@ -587,8 +521,9 @@ function addGoalRow(
  * 
  * @param goals - All Goals
  * @param habits - All Habits
- * @param activities - All activities
+ * @param cumulativeWorkloads - Map of habit ID to cumulative workload
  * @param expandedIds - Set of expanded row IDs
+ * @param viewMode - View mode for progress calculation (ignored - always cumulative)
  * @returns Array of GanttRowData in display order
  * 
  * Validates: Requirements 2.1, 2.2, 2.3, 2.4, 2.5, 2.6
@@ -596,8 +531,9 @@ function addGoalRow(
 export function buildGanttRows(
   goals: Goal[],
   habits: Habit[],
-  activities: Activity[],
-  expandedIds: Set<string>
+  cumulativeWorkloads: Map<string, number>,
+  expandedIds: Set<string>,
+  viewMode: ProgressViewMode = 'month'
 ): GanttRowData[] {
   const rows: GanttRowData[] = [];
   
@@ -606,13 +542,14 @@ export function buildGanttRows(
   
   // Process each root Goal recursively
   for (const goal of rootGoals) {
-    addGoalRow(goal, 0, rows, goals, habits, activities, expandedIds);
+    addGoalRow(goal, 0, rows, goals, habits, cumulativeWorkloads, expandedIds, viewMode);
   }
   
   // Add orphan Habits (not belonging to any Goal)
   const orphanHabits = habits.filter(h => !h.goalId || !goals.some(g => g.id === h.goalId));
+  
   for (const habit of orphanHabits) {
-    addHabitRow(habit, 0, rows, activities, goals);
+    addHabitRow(habit, 0, rows, cumulativeWorkloads, goals, viewMode);
   }
   
   return rows;

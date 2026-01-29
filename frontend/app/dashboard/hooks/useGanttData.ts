@@ -9,7 +9,7 @@
  * Validates: Requirements 2.4, 2.5, 2.6
  */
 
-import { useState, useCallback, useMemo } from 'react';
+import { useState, useCallback, useMemo, useEffect } from 'react';
 import type { Goal, Habit, Activity } from '../types';
 import type { HabitRelation } from '../types/shared';
 import {
@@ -17,7 +17,8 @@ import {
   buildDependencies,
   getDescendantIds,
   type GanttRowData,
-  type DependencyData
+  type DependencyData,
+  type ProgressViewMode
 } from '../utils/ganttDataUtils';
 
 // ============================================================================
@@ -33,6 +34,8 @@ export interface UseGanttDataProps {
   activities: Activity[];
   /** All HabitRelations */
   habitRelations: HabitRelation[];
+  /** View mode for progress calculation (ignored - always cumulative) */
+  viewMode?: ProgressViewMode;
 }
 
 export interface UseGanttDataReturn {
@@ -54,6 +57,24 @@ export interface UseGanttDataReturn {
   expandedIds: Set<string>;
   /** Check if a row is expanded */
   isExpanded: (id: string) => boolean;
+  /** Refresh workload data */
+  refreshWorkloads: () => void;
+}
+
+// ============================================================================
+// Helper Functions
+// ============================================================================
+
+/**
+ * Calculate cumulative workload for a habit from activities
+ * @param habitId - The habit ID
+ * @param activities - All activities
+ * @returns Total cumulative workload
+ */
+function calculateCumulativeWorkload(habitId: string, activities: Activity[]): number {
+  return activities
+    .filter(a => a.habitId === habitId && a.kind === 'complete')
+    .reduce((sum, a) => sum + (a.amount ?? 1), 0);
 }
 
 // ============================================================================
@@ -70,7 +91,8 @@ export function useGanttData({
   goals,
   habits,
   activities,
-  habitRelations
+  habitRelations,
+  viewMode = 'month'
 }: UseGanttDataProps): UseGanttDataReturn {
   // Track which rows are expanded
   // By default, expand all root-level Goals
@@ -78,6 +100,25 @@ export function useGanttData({
     const rootGoalIds = goals.filter(g => !g.parentId).map(g => g.id);
     return new Set(rootGoalIds);
   });
+
+  // Track cumulative workloads for all habits (calculated from activities)
+  const cumulativeWorkloads = useMemo(() => {
+    const workloads = new Map<string, number>();
+    
+    for (const habit of habits) {
+      const cumulative = calculateCumulativeWorkload(habit.id, activities);
+      workloads.set(habit.id, cumulative);
+    }
+    
+    return workloads;
+  }, [habits, activities]);
+
+  /**
+   * Refresh workload data (no-op since we calculate from activities)
+   */
+  const refreshWorkloads = useCallback(() => {
+    // Workloads are calculated from activities in useMemo, so this is a no-op
+  }, []);
 
   /**
    * Toggle expand/collapse for a row
@@ -157,8 +198,8 @@ export function useGanttData({
    * Validates: Requirements 2.1, 2.2, 2.3, 2.6
    */
   const rows = useMemo(() => {
-    return buildGanttRows(goals, habits, activities, expandedIds);
-  }, [goals, habits, activities, expandedIds]);
+    return buildGanttRows(goals, habits, cumulativeWorkloads, expandedIds, viewMode);
+  }, [goals, habits, cumulativeWorkloads, expandedIds, viewMode]);
 
   /**
    * Build dependencies from HabitRelations
@@ -177,7 +218,8 @@ export function useGanttData({
     expandAll,
     collapseAll,
     expandedIds,
-    isExpanded
+    isExpanded,
+    refreshWorkloads
   };
 }
 

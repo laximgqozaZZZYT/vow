@@ -643,55 +643,75 @@ export default function StaticsSection({ habits, activities, goals }: { habits: 
       !isHabitCumulativelyCompleted(h, activities)
     )
 
-    // progress ratio is based on planned-total denominator (same logic as chart)
-    // 累積完了Habitは除外
+    /**
+     * 日次進捗率の計算（新ロジック）
+     * - 今日のActivityのamount合計 / workloadTotal
+     * - workloadTotalが未設定の場合は count/must を使用
+     */
     const progressByHabit = activeRecurringHabits
       .map((h) => {
-        const series = buildPlannedSeriesForHabit(h as any, todayStartTs, todayEndTs)
-        const total = series.length ? series[series.length - 1].v : 0
-        const todayActivities = activities
-          .filter(a => (a.kind === 'pause' || a.kind === 'complete'))
-          .filter(a => a.habitId === h.id)
-          .map(a => safeTs(a.timestamp))
-          .filter(ts => ts >= todayStartTs && ts <= todayEndTs)
+        // 今日のActivityのamount合計を計算
+        const todayWorkload = activities
+          .filter(a => a.habitId === h.id && a.kind === 'complete')
+          .filter(a => {
+            const ts = safeTs(a.timestamp)
+            return ts >= todayStartTs && ts <= todayEndTs
+          })
+          .reduce((sum, a) => sum + (a.amount ?? 0), 0)
 
-        let done = 0
-        for (const ts of todayActivities) {
-          done = Math.max(done, plannedCumulativeAtTs(h, todayStartTs, ts))
-        }
-        const ratio = safePct(done, total)
-        return { habit: h, ratio, total, done }
+        // 日次目標: workloadTotal > 0 ならそれを使用、なければ must を使用
+        const dailyTarget = (h.workloadTotal && h.workloadTotal > 0) 
+          ? h.workloadTotal 
+          : (h.must && h.must > 0 ? h.must : 0)
+
+        const ratio = dailyTarget > 0 ? safePct(todayWorkload, dailyTarget) : 0
+        return { habit: h, ratio, total: dailyTarget, done: todayWorkload }
       })
       .sort((a, b) => b.ratio - a.ratio)
 
     const top3 = progressByHabit.slice(0, 3)
     const worst3 = [...progressByHabit].sort((a, b) => a.ratio - b.ratio).slice(0, 3)
 
-    // Habit achievement rate
-    // Today: ratio >= 1 at end of day window based on recorded progress
-    // 累積完了Habitは除外済みなので、単純にratio >= 1のものをカウント
+    // Habit achievement rate (Today)
+    // 日次目標を達成したHabitの数
     const todayAchieved = progressByHabit.filter(x => x.ratio >= 1).length
     const todayTotal = progressByHabit.length
 
-    // Cumulative: approximate using the selected window (custom if valid else based on range)
-    const windowStartTs = activeWindow?.fromTs ?? getRangeStartTs(range)
-    const windowEndTs = activeWindow?.untilTs ?? now
-
+    /**
+     * 累計進捗率の計算（新ロジック）
+     * - 全Activityのamount合計 / 累計目標
+     * - 累計目標: workloadTotalEnd が設定されていればそれを使用
+     *            なければ workloadTotal × 作成日からの日数
+     */
     const cumulativeProgressByHabit = recurringVisibleHabits.map((h) => {
-      const series = buildPlannedSeriesForHabit(h as any, windowStartTs, windowEndTs)
-      const total = series.length ? series[series.length - 1].v : 0
-      const habitActs = activities
-        .filter(a => (a.kind === 'pause' || a.kind === 'complete'))
-        .filter(a => a.habitId === h.id)
-        .map(a => safeTs(a.timestamp))
-        .filter(ts => ts >= windowStartTs && ts <= windowEndTs)
+      // 全Activityのamount合計（累積workload）
+      const cumulativeWorkload = activities
+        .filter(a => a.habitId === h.id && a.kind === 'complete')
+        .reduce((sum, a) => sum + (a.amount ?? 0), 0)
 
-      let done = 0
-      for (const ts of habitActs) {
-        done = Math.max(done, plannedCumulativeAtTs(h, windowStartTs, ts))
+      // 累計目標の計算
+      let cumulativeTarget = 0
+      if (h.workloadTotalEnd && h.workloadTotalEnd > 0) {
+        // workloadTotalEndが設定されている場合はそれを使用
+        cumulativeTarget = h.workloadTotalEnd
+      } else if (h.workloadTotal && h.workloadTotal > 0 && h.createdAt) {
+        // workloadTotal × 作成日からの日数
+        const createdAtTs = safeTs(h.createdAt)
+        if (createdAtTs > 0) {
+          const daysSinceCreation = Math.max(1, Math.floor((now - createdAtTs) / (24 * 60 * 60 * 1000)))
+          cumulativeTarget = h.workloadTotal * daysSinceCreation
+        }
+      } else if (h.must && h.must > 0 && h.createdAt) {
+        // フォールバック: must × 作成日からの日数
+        const createdAtTs = safeTs(h.createdAt)
+        if (createdAtTs > 0) {
+          const daysSinceCreation = Math.max(1, Math.floor((now - createdAtTs) / (24 * 60 * 60 * 1000)))
+          cumulativeTarget = h.must * daysSinceCreation
+        }
       }
-      const ratio = safePct(done, total)
-      return { habit: h, ratio, total, done }
+
+      const ratio = cumulativeTarget > 0 ? safePct(cumulativeWorkload, cumulativeTarget) : 0
+      return { habit: h, ratio, total: cumulativeTarget, done: cumulativeWorkload }
     })
 
     const cumulativeAchieved = cumulativeProgressByHabit.filter(x => x.ratio >= 1).length
@@ -746,7 +766,7 @@ export default function StaticsSection({ habits, activities, goals }: { habits: 
       cumulativelyCompletedCount,
       cumulativelyCompletedDetails,
     }
-  }, [habits, activities, visibleHabitIds, range, activeWindow, goals])
+  }, [habits, activities, visibleHabitIds, goals])
 
   return (
     <section className="relative rounded-lg bg-white p-6 shadow-sm border border-zinc-200/50 dark:bg-[#0b0b0b] dark:border-slate-800/50 transition-colors">
