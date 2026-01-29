@@ -1057,9 +1057,6 @@ export class SupabaseDirectClient {
       habitName: a.habit_name,
       timestamp: a.timestamp,
       amount: a.amount,
-      prevCount: a.prev_count,
-      newCount: a.new_count,
-      cumulativeWorkload: a.cumulative_workload,
       durationSeconds: a.duration_seconds,
       memo: a.memo
     }));
@@ -1097,18 +1094,6 @@ export class SupabaseDirectClient {
     
     // ゲストユーザーの場合はローカルストレージに保存
     if (!session?.session?.user) {
-      // Calculate cumulative workload for guest user from localStorage
-      let cumulativeWorkload = 0;
-      if (payload.kind === 'complete' && payload.habitId) {
-        const existingActivities = JSON.parse(localStorage.getItem('guest-activities') || '[]');
-        const habitCompleteActivities = existingActivities.filter(
-          (a: any) => a.habitId === payload.habitId && a.kind === 'complete'
-        );
-        cumulativeWorkload = habitCompleteActivities.reduce(
-          (sum: number, a: any) => sum + (a.amount ?? 1), 0
-        ) + (payload.amount ?? 1);
-      }
-      
       const activity = {
         id: 'activity-' + Date.now(),
         kind: payload.kind,
@@ -1116,10 +1101,8 @@ export class SupabaseDirectClient {
         habitName: payload.habitName,
         timestamp: payload.timestamp || new Date().toISOString(),
         amount: payload.amount,
-        prevCount: payload.prevCount,
-        newCount: payload.newCount,
-        cumulativeWorkload: payload.kind === 'complete' ? cumulativeWorkload : undefined,
-        durationSeconds: payload.durationSeconds
+        durationSeconds: payload.durationSeconds,
+        memo: payload.memo
       };
       
       const existingActivities = JSON.parse(localStorage.getItem('guest-activities') || '[]');
@@ -1127,17 +1110,6 @@ export class SupabaseDirectClient {
       localStorage.setItem('guest-activities', JSON.stringify(existingActivities));
       
       return activity;
-    }
-    
-    // Calculate cumulative workload for authenticated user
-    // This is the total workload from habit creation to this activity (inclusive)
-    let cumulativeWorkload: number | undefined;
-    if (payload.kind === 'complete' && payload.habitId) {
-      const previousCumulative = await this.calculateCumulativeWorkload(
-        payload.habitId, 
-        session.session.user.id
-      );
-      cumulativeWorkload = previousCumulative + (payload.amount ?? 1);
     }
     
     const { data, error } = await supabase
@@ -1148,10 +1120,8 @@ export class SupabaseDirectClient {
         habit_name: payload.habitName,
         timestamp: payload.timestamp || new Date().toISOString(),
         amount: payload.amount,
-        prev_count: payload.prevCount,
-        new_count: payload.newCount,
-        cumulative_workload: cumulativeWorkload,
         duration_seconds: payload.durationSeconds,
+        memo: payload.memo,
         owner_type: 'user',
         owner_id: session.session.user.id
       })
@@ -1160,6 +1130,19 @@ export class SupabaseDirectClient {
     
     if (error) throw error;
     
+    // Update habit_daily_workloads table for 'complete' activities
+    // Note: This is optional - cumulative workloads are calculated from activities directly
+    // If the table doesn't exist or RLS fails, we silently skip this
+    if (payload.kind === 'complete' && payload.habitId) {
+      try {
+        const activityDate = (payload.timestamp || new Date().toISOString()).split('T')[0];
+        await this.updateHabitDailyWorkload(payload.habitId, activityDate, payload.amount ?? 1);
+      } catch (workloadError) {
+        // Silently ignore - workloads are calculated from activities anyway
+        debug.log('[createActivity] Skipped daily workload update (optional):', workloadError);
+      }
+    }
+    
     return {
       id: data.id,
       kind: data.kind,
@@ -1167,10 +1150,8 @@ export class SupabaseDirectClient {
       habitName: data.habit_name,
       timestamp: data.timestamp,
       amount: data.amount,
-      prevCount: data.prev_count,
-      newCount: data.new_count,
-      cumulativeWorkload: data.cumulative_workload,
-      durationSeconds: data.duration_seconds
+      durationSeconds: data.duration_seconds,
+      memo: data.memo
     };
   }
 
@@ -1198,9 +1179,6 @@ export class SupabaseDirectClient {
       if (payload.habitName !== undefined) updatedActivity.habitName = payload.habitName;
       if (payload.timestamp !== undefined) updatedActivity.timestamp = payload.timestamp;
       if (payload.amount !== undefined) updatedActivity.amount = payload.amount;
-      if (payload.prevCount !== undefined) updatedActivity.prevCount = payload.prevCount;
-      if (payload.newCount !== undefined) updatedActivity.newCount = payload.newCount;
-      if (payload.cumulativeWorkload !== undefined) updatedActivity.cumulativeWorkload = payload.cumulativeWorkload;
       if (payload.durationSeconds !== undefined) updatedActivity.durationSeconds = payload.durationSeconds;
       if (payload.memo !== undefined) updatedActivity.memo = payload.memo;
       
@@ -1212,6 +1190,17 @@ export class SupabaseDirectClient {
       return updatedActivity;
     }
     
+    // First, get the original activity to track changes for workload recalculation
+    const { data: originalActivity, error: fetchError } = await supabase
+      .from('activities')
+      .select('*')
+      .eq('id', id)
+      .eq('owner_type', 'user')
+      .eq('owner_id', session.session.user.id)
+      .single();
+    
+    if (fetchError) throw fetchError;
+    
     // ログインユーザーの場合はSupabaseを更新
     const updateData: any = {};
     
@@ -1221,9 +1210,6 @@ export class SupabaseDirectClient {
     if (payload.habitName !== undefined) updateData.habit_name = payload.habitName;
     if (payload.timestamp !== undefined) updateData.timestamp = payload.timestamp;
     if (payload.amount !== undefined) updateData.amount = payload.amount;
-    if (payload.prevCount !== undefined) updateData.prev_count = payload.prevCount;
-    if (payload.newCount !== undefined) updateData.new_count = payload.newCount;
-    if (payload.cumulativeWorkload !== undefined) updateData.cumulative_workload = payload.cumulativeWorkload;
     if (payload.durationSeconds !== undefined) updateData.duration_seconds = payload.durationSeconds;
     if (payload.memo !== undefined) updateData.memo = payload.memo;
     
@@ -1238,6 +1224,23 @@ export class SupabaseDirectClient {
     
     if (error) throw error;
     
+    // Recalculate habit_daily_workloads if amount, timestamp, or habitId changed
+    if (originalActivity && originalActivity.kind === 'complete') {
+      const oldDate = originalActivity.timestamp?.split('T')[0];
+      const newDate = (data.timestamp || originalActivity.timestamp)?.split('T')[0];
+      const oldHabitId = originalActivity.habit_id;
+      const newHabitId = data.habit_id || oldHabitId;
+      
+      // If date or habit changed, recalculate both old and new
+      if (oldDate !== newDate || oldHabitId !== newHabitId) {
+        await this.recalculateHabitDailyWorkload(oldHabitId, oldDate);
+        await this.recalculateHabitDailyWorkload(newHabitId, newDate);
+      } else if (payload.amount !== undefined) {
+        // Only amount changed, recalculate for the same date
+        await this.recalculateHabitDailyWorkload(newHabitId, newDate);
+      }
+    }
+    
     return {
       id: data.id,
       kind: data.kind,
@@ -1245,9 +1248,6 @@ export class SupabaseDirectClient {
       habitName: data.habit_name,
       timestamp: data.timestamp,
       amount: data.amount,
-      prevCount: data.prev_count,
-      newCount: data.new_count,
-      cumulativeWorkload: data.cumulative_workload,
       durationSeconds: data.duration_seconds,
       memo: data.memo
     };
@@ -1284,6 +1284,20 @@ export class SupabaseDirectClient {
     }
     
     debug.log('[deleteActivity] Authenticated user - deleting from Supabase');
+    
+    // First, get the activity to know which habit/date to recalculate
+    const { data: activityToDelete, error: fetchError } = await supabase
+      .from('activities')
+      .select('*')
+      .eq('id', id)
+      .eq('owner_type', 'user')
+      .eq('owner_id', session.session.user.id)
+      .single();
+    
+    if (fetchError) {
+      console.error('[deleteActivity] Error fetching activity:', fetchError);
+    }
+    
     // ログインユーザーの場合はSupabaseから削除
     const { error } = await supabase
       .from('activities')
@@ -1295,6 +1309,14 @@ export class SupabaseDirectClient {
     if (error) {
       console.error('[deleteActivity] Supabase deletion error:', error);
       throw error;
+    }
+    
+    // Recalculate habit_daily_workloads after deletion
+    if (activityToDelete && activityToDelete.kind === 'complete' && activityToDelete.habit_id) {
+      const activityDate = activityToDelete.timestamp?.split('T')[0];
+      if (activityDate) {
+        await this.recalculateHabitDailyWorkload(activityToDelete.habit_id, activityDate);
+      }
     }
     
     debug.log('[deleteActivity] Successfully deleted from Supabase:', id);
@@ -3436,6 +3458,331 @@ export class SupabaseDirectClient {
     
     if (error) throw error;
     return { success: true };
+  }
+
+  // ============================================================================
+  // Habit Daily Workloads - 日次ワークロード管理
+  // ============================================================================
+
+  /**
+   * Get daily workload for a habit on a specific date
+   */
+  async getHabitDailyWorkload(habitId: string, date: string): Promise<number> {
+    if (!supabase) return 0;
+    
+    const { data: session } = await supabase.auth.getSession();
+    
+    if (!session?.session?.user) {
+      // Guest user: calculate from localStorage activities
+      const guestActivities = JSON.parse(localStorage.getItem('guest-activities') || '[]');
+      const dayActivities = guestActivities.filter((a: any) => 
+        a.habitId === habitId && 
+        a.kind === 'complete' &&
+        a.timestamp?.startsWith(date)
+      );
+      return dayActivities.reduce((sum: number, a: any) => sum + (a.amount ?? 1), 0);
+    }
+    
+    const { data, error } = await supabase
+      .from('habit_daily_workloads')
+      .select('workload')
+      .eq('habit_id', habitId)
+      .eq('date', date)
+      .single();
+    
+    if (error || !data) return 0;
+    return data.workload || 0;
+  }
+
+  /**
+   * Get workloads for a habit within a date range
+   */
+  async getHabitWorkloadsInRange(habitId: string, startDate: string, endDate: string): Promise<{ date: string; workload: number }[]> {
+    if (!supabase) return [];
+    
+    const { data: session } = await supabase.auth.getSession();
+    
+    if (!session?.session?.user) {
+      // Guest user: calculate from localStorage activities
+      const guestActivities = JSON.parse(localStorage.getItem('guest-activities') || '[]');
+      const rangeActivities = guestActivities.filter((a: any) => {
+        if (a.habitId !== habitId || a.kind !== 'complete') return false;
+        const actDate = a.timestamp?.split('T')[0];
+        return actDate >= startDate && actDate <= endDate;
+      });
+      
+      // Group by date
+      const byDate: Record<string, number> = {};
+      rangeActivities.forEach((a: any) => {
+        const actDate = a.timestamp?.split('T')[0];
+        byDate[actDate] = (byDate[actDate] || 0) + (a.amount ?? 1);
+      });
+      
+      return Object.entries(byDate).map(([date, workload]) => ({ date, workload }));
+    }
+    
+    const { data, error } = await supabase
+      .from('habit_daily_workloads')
+      .select('date, workload')
+      .eq('habit_id', habitId)
+      .gte('date', startDate)
+      .lte('date', endDate)
+      .order('date', { ascending: true });
+    
+    if (error || !data) return [];
+    return data.map((d: any) => ({ date: d.date, workload: d.workload || 0 }));
+  }
+
+  /**
+   * Get aggregated workloads for progress calculation
+   * Returns daily, weekly, and monthly totals for a habit
+   */
+  async getHabitWorkloadSummary(habitId: string): Promise<{
+    daily: number;
+    weekly: number;
+    monthly: number;
+  }> {
+    if (!supabase) return { daily: 0, weekly: 0, monthly: 0 };
+    
+    const today = new Date();
+    const todayStr = today.toISOString().split('T')[0];
+    
+    // Calculate week start (Monday)
+    const dayOfWeek = today.getDay();
+    const mondayOffset = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
+    const weekStart = new Date(today);
+    weekStart.setDate(today.getDate() + mondayOffset);
+    const weekStartStr = weekStart.toISOString().split('T')[0];
+    
+    // Calculate month start
+    const monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
+    const monthStartStr = monthStart.toISOString().split('T')[0];
+    
+    const { data: session } = await supabase.auth.getSession();
+    
+    if (!session?.session?.user) {
+      // Guest user: calculate from localStorage activities
+      const guestActivities = JSON.parse(localStorage.getItem('guest-activities') || '[]');
+      const habitActivities = guestActivities.filter((a: any) => 
+        a.habitId === habitId && a.kind === 'complete'
+      );
+      
+      let daily = 0, weekly = 0, monthly = 0;
+      habitActivities.forEach((a: any) => {
+        const actDate = a.timestamp?.split('T')[0];
+        const amount = a.amount ?? 1;
+        
+        if (actDate === todayStr) daily += amount;
+        if (actDate >= weekStartStr && actDate <= todayStr) weekly += amount;
+        if (actDate >= monthStartStr && actDate <= todayStr) monthly += amount;
+      });
+      
+      return { daily, weekly, monthly };
+    }
+    
+    // Get all workloads for this month (covers daily, weekly, monthly)
+    const { data, error } = await supabase
+      .from('habit_daily_workloads')
+      .select('date, workload')
+      .eq('habit_id', habitId)
+      .gte('date', monthStartStr)
+      .lte('date', todayStr);
+    
+    if (error || !data) return { daily: 0, weekly: 0, monthly: 0 };
+    
+    let daily = 0, weekly = 0, monthly = 0;
+    data.forEach((d: any) => {
+      const workload = d.workload || 0;
+      if (d.date === todayStr) daily += workload;
+      if (d.date >= weekStartStr && d.date <= todayStr) weekly += workload;
+      monthly += workload;
+    });
+    
+    return { daily, weekly, monthly };
+  }
+
+  /**
+   * Update daily workload for a habit (upsert)
+   * Called when activity is created/updated/deleted
+   */
+  async updateHabitDailyWorkload(habitId: string, date: string, workloadDelta: number): Promise<void> {
+    if (!supabase) return;
+    
+    const { data: session } = await supabase.auth.getSession();
+    if (!session?.session?.user) {
+      // Guest user: workloads are calculated on-the-fly from activities
+      return;
+    }
+    
+    debug.log('[updateHabitDailyWorkload] Starting:', { habitId, date, workloadDelta });
+    
+    try {
+      // Get current workload for this date
+      const { data: existing, error: fetchError } = await supabase
+        .from('habit_daily_workloads')
+        .select('id, workload')
+        .eq('habit_id', habitId)
+        .eq('date', date)
+        .maybeSingle();
+      
+      if (fetchError) {
+        // Table might not exist or RLS issue - silently skip
+        debug.log('[updateHabitDailyWorkload] Fetch skipped:', fetchError.message);
+        return;
+      }
+      
+      const currentWorkload = existing?.workload || 0;
+      const newWorkload = Math.max(0, currentWorkload + workloadDelta);
+      
+      debug.log('[updateHabitDailyWorkload] Calculated:', { currentWorkload, newWorkload, existing: !!existing });
+      
+      if (newWorkload === 0 && existing) {
+        // Delete the row if workload becomes 0
+        const { error: deleteError } = await supabase
+          .from('habit_daily_workloads')
+          .delete()
+          .eq('habit_id', habitId)
+          .eq('date', date);
+        
+        if (deleteError) {
+          debug.log('[updateHabitDailyWorkload] Delete skipped:', deleteError.message);
+        } else {
+          debug.log('[updateHabitDailyWorkload] Deleted row for:', { habitId, date });
+        }
+      } else if (newWorkload > 0) {
+        if (existing) {
+          // Update existing row
+          const { error: updateError } = await supabase
+            .from('habit_daily_workloads')
+            .update({
+              workload: newWorkload,
+              updated_at: new Date().toISOString()
+            })
+            .eq('id', existing.id);
+          
+          if (updateError) {
+            debug.log('[updateHabitDailyWorkload] Update skipped:', updateError.message);
+          } else {
+            debug.log('[updateHabitDailyWorkload] Updated row:', { id: existing.id, newWorkload });
+          }
+        } else {
+          // Insert new row
+          const { error: insertError } = await supabase
+            .from('habit_daily_workloads')
+            .insert({
+              habit_id: habitId,
+              date: date,
+              workload: newWorkload,
+              owner_type: 'user',
+              owner_id: session.session.user.id
+            });
+          
+          if (insertError) {
+            debug.log('[updateHabitDailyWorkload] Insert skipped:', insertError.message);
+          } else {
+            debug.log('[updateHabitDailyWorkload] Inserted new row:', { habitId, date, newWorkload });
+          }
+        }
+      }
+    } catch (err) {
+      debug.log('[updateHabitDailyWorkload] Skipped due to error:', err);
+    }
+  }
+
+  /**
+   * Recalculate daily workload for a habit on a specific date
+   * Used after activity updates/deletes to ensure consistency
+   */
+  async recalculateHabitDailyWorkload(habitId: string, date: string): Promise<void> {
+    if (!supabase) return;
+    
+    const { data: session } = await supabase.auth.getSession();
+    if (!session?.session?.user) return;
+    
+    debug.log('[recalculateHabitDailyWorkload] Starting:', { habitId, date });
+    
+    // Calculate total workload from activities for this date
+    const { data: activities, error: actError } = await supabase
+      .from('activities')
+      .select('amount')
+      .eq('habit_id', habitId)
+      .eq('kind', 'complete')
+      .eq('owner_type', 'user')
+      .eq('owner_id', session.session.user.id)
+      .gte('timestamp', `${date}T00:00:00`)
+      .lt('timestamp', `${date}T23:59:59.999`);
+    
+    if (actError) {
+      console.error('[recalculateHabitDailyWorkload] Error fetching activities:', JSON.stringify(actError, null, 2));
+      return;
+    }
+    
+    const totalWorkload = (activities || []).reduce((sum: number, a: any) => sum + (a.amount ?? 1), 0);
+    
+    debug.log('[recalculateHabitDailyWorkload] Calculated totalWorkload:', totalWorkload);
+    
+    // Get existing row
+    const { data: existing, error: fetchError } = await supabase
+      .from('habit_daily_workloads')
+      .select('id')
+      .eq('habit_id', habitId)
+      .eq('date', date)
+      .maybeSingle();
+    
+    if (fetchError) {
+      console.error('[recalculateHabitDailyWorkload] Fetch error:', JSON.stringify(fetchError, null, 2));
+      return;
+    }
+    
+    if (totalWorkload === 0) {
+      // Delete the row if no workload
+      if (existing) {
+        const { error: deleteError } = await supabase
+          .from('habit_daily_workloads')
+          .delete()
+          .eq('id', existing.id);
+        
+        if (deleteError) {
+          console.error('[recalculateHabitDailyWorkload] Delete error:', JSON.stringify(deleteError, null, 2));
+        } else {
+          debug.log('[recalculateHabitDailyWorkload] Deleted row:', { habitId, date });
+        }
+      }
+    } else {
+      if (existing) {
+        // Update existing row
+        const { error: updateError } = await supabase
+          .from('habit_daily_workloads')
+          .update({
+            workload: totalWorkload,
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', existing.id);
+        
+        if (updateError) {
+          console.error('[recalculateHabitDailyWorkload] Update error:', JSON.stringify(updateError, null, 2));
+        } else {
+          debug.log('[recalculateHabitDailyWorkload] Updated row:', { habitId, date, totalWorkload });
+        }
+      } else {
+        // Insert new row
+        const { error: insertError } = await supabase
+          .from('habit_daily_workloads')
+          .insert({
+            habit_id: habitId,
+            date: date,
+            workload: totalWorkload,
+            owner_type: 'user',
+            owner_id: session.session.user.id
+          });
+        
+        if (insertError) {
+          console.error('[recalculateHabitDailyWorkload] Insert error:', JSON.stringify(insertError, null, 2));
+        } else {
+          debug.log('[recalculateHabitDailyWorkload] Inserted row:', { habitId, date, totalWorkload });
+        }
+      }
+    }
   }
 }
 
