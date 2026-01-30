@@ -47,7 +47,7 @@ function CollapsibleSection({
   const sectionId = `section-${title.toLowerCase().replace(/\s+/g, '-')}`;
   
   return (
-    <div className="border border-border rounded-lg overflow-hidden">
+    <div className="border border-border rounded-lg">
       <button
         onClick={onToggle}
         className="

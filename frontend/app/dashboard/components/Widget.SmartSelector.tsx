@@ -273,7 +273,7 @@ export function SmartSelector<T extends SmartSelectorItem>({
           <div
             ref={dropdownRef}
             id={dropdownId}
-            className="absolute z-50 w-full mt-1 rounded-lg border border-border bg-card shadow-lg max-h-60 overflow-hidden"
+            className="absolute z-[60] w-full mt-1 rounded-lg border border-border bg-card shadow-lg max-h-60 overflow-hidden"
             role="listbox"
           >
             {filteredItems.length > 0 ? (
