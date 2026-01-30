@@ -1,0 +1,180 @@
+name: Agent Sync - Coordination
+
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: 'Action to perform'
+        required: true
+        type: choice
+        options:
+          - status
+          - list-tasks
+          - generate-context
+      spec_name:
+        description: 'Spec name (for generate-context)'
+        required: false
+        type: string
+      role:
+        description: 'Agent role (for generate-context)'
+        required: false
+        type: choice
+        options:
+          - all
+          - frontend
+          - backend
+          - test
+          - infra
+
+  issue_comment:
+    types: [created]
+
+jobs:
+  # Security check: Only allow repository members to trigger via issue comments
+  check-permission:
+    name: Check Permission
+    runs-on: ubuntu-latest
+    outputs:
+      is-member: ${{ steps.check.outputs.is-member }}
+    steps:
+      - name: Check if user is a repository member
+        id: check
+        uses: actions/github-script@v7
+        with:
+          script: |
+            // For workflow_dispatch, always allow (requires repo access to trigger)
+            if (context.eventName === 'workflow_dispatch') {
+              core.setOutput('is-member', 'true');
+              return;
+            }
+
+            // For issue_comment, check if user has write access
+            if (context.eventName === 'issue_comment') {
+              try {
+                const { data: permission } = await github.rest.repos.getCollaboratorPermissionLevel({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  username: context.payload.comment.user.login
+                });
+                const isMember = ['admin', 'write', 'maintain'].includes(permission.permission);
+                core.setOutput('is-member', isMember ? 'true' : 'false');
+                if (!isMember) {
+                  core.warning(`User ${context.payload.comment.user.login} does not have write access`);
+                }
+              } catch (error) {
+                core.setOutput('is-member', 'false');
+                core.warning(`Failed to check permissions: ${error.message}`);
+              }
+            } else {
+              core.setOutput('is-member', 'false');
+            }
+
+  agent-status:
+    name: Check Agent Status
+    runs-on: ubuntu-latest
+    needs: [check-permission]
+    if: |
+      (github.event.inputs.action == 'status' && needs.check-permission.outputs.is-member == 'true') ||
+      (github.event_name == 'issue_comment' &&
+       contains(github.event.comment.body, '/agent-status') &&
+       needs.check-permission.outputs.is-member == 'true')
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Generate status report
+        run: |
+          echo "## VOW Agent Status Report" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Generated**: $(date -Iseconds)" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          echo "### Open Agent Tasks" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          echo "### Feature Branches" >> $GITHUB_STEP_SUMMARY
+          git branch -r --list 'origin/feat/*' | head -20 >> $GITHUB_STEP_SUMMARY || echo "No feature branches" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          echo "### Recent Commits (develop)" >> $GITHUB_STEP_SUMMARY
+          git log origin/develop --oneline -10 >> $GITHUB_STEP_SUMMARY || echo "No commits" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          echo "### Spec Status Summary" >> $GITHUB_STEP_SUMMARY
+          TOTAL=0
+          COMPLETED=0
+          for spec_dir in .kiro/specs/*/; do
+            if [ -f "${spec_dir}/tasks.md" ]; then
+              ((TOTAL++)) || true
+              SPEC_TOTAL=$(grep -c '^\- \[' "${spec_dir}/tasks.md" 2>/dev/null || echo 0)
+              SPEC_DONE=$(grep -c '^\- \[x\]' "${spec_dir}/tasks.md" 2>/dev/null || echo 0)
+              if [ "$SPEC_TOTAL" -gt 0 ] && [ "$SPEC_DONE" -eq "$SPEC_TOTAL" ]; then
+                ((COMPLETED++)) || true
+              fi
+            fi
+          done
+          echo "- Total specs: $TOTAL" >> $GITHUB_STEP_SUMMARY
+          echo "- Completed: $COMPLETED" >> $GITHUB_STEP_SUMMARY
+
+  list-tasks:
+    name: List Open Tasks
+    runs-on: ubuntu-latest
+    needs: [check-permission]
+    if: |
+      (github.event.inputs.action == 'list-tasks' && needs.check-permission.outputs.is-member == 'true') ||
+      (github.event_name == 'issue_comment' &&
+       contains(github.event.comment.body, '/list-tasks') &&
+       needs.check-permission.outputs.is-member == 'true')
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: List incomplete tasks
+        run: |
+          echo "## Open Tasks by Spec" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          for spec_dir in .kiro/specs/*/; do
+            spec_name=$(basename "$spec_dir")
+            if [ -f "${spec_dir}/tasks.md" ]; then
+              INCOMPLETE=$(grep '^\- \[ \]' "${spec_dir}/tasks.md" 2>/dev/null | wc -l || echo 0)
+              if [ "$INCOMPLETE" -gt 0 ]; then
+                echo "### ${spec_name} ($INCOMPLETE open)" >> $GITHUB_STEP_SUMMARY
+                grep '^\- \[ \]' "${spec_dir}/tasks.md" | head -5 >> $GITHUB_STEP_SUMMARY
+                if [ "$INCOMPLETE" -gt 5 ]; then
+                  echo "... and $((INCOMPLETE - 5)) more tasks" >> $GITHUB_STEP_SUMMARY
+                fi
+                echo "" >> $GITHUB_STEP_SUMMARY
+              fi
+            fi
+          done
+
+  generate-context:
+    name: Generate Delegation Context
+    runs-on: ubuntu-latest
+    needs: [check-permission]
+    if: github.event.inputs.action == 'generate-context' && needs.check-permission.outputs.is-member == 'true'
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Generate context
+        run: |
+          SPEC_NAME="${{ github.event.inputs.spec_name }}"
+          ROLE="${{ github.event.inputs.role }}"
+
+          if [ -z "$SPEC_NAME" ]; then
+            echo "Error: spec_name is required for generate-context"
+            exit 1
+          fi
+
+          ./scripts/agents/generate-context.sh "$SPEC_NAME" "$ROLE"
+
+      - name: Upload context
+        uses: actions/upload-artifact@v4
+        with:
+          name: delegation-context-${{ github.event.inputs.spec_name }}-${{ github.event.inputs.role }}
+          path: .kiro/specs/${{ github.event.inputs.spec_name }}/delegation-*.md

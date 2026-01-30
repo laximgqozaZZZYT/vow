@@ -1,0 +1,94 @@
+name: Agent Task Assignment
+description: Assign a task to a Claude AI agent
+title: "[AGENT] "
+labels: ["agent-task"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        ## Agent Task Assignment
+        Use this template to assign work to Claude AI agents across machines.
+
+  - type: input
+    id: spec_name
+    attributes:
+      label: Spec Name
+      description: Which specification does this task belong to?
+      placeholder: e.g., habit-goal-level-system
+    validations:
+      required: true
+
+  - type: dropdown
+    id: role
+    attributes:
+      label: Agent Role
+      description: What type of work is this?
+      options:
+        - frontend
+        - backend
+        - test
+        - infra
+        - spec
+    validations:
+      required: true
+
+  - type: dropdown
+    id: priority
+    attributes:
+      label: Priority
+      options:
+        - high
+        - medium
+        - low
+    validations:
+      required: true
+
+  - type: textarea
+    id: tasks
+    attributes:
+      label: Tasks to Complete
+      description: List the specific tasks from tasks.md
+      placeholder: |
+        - [ ] Task 1 description
+        - [ ] Task 2 description
+    validations:
+      required: true
+
+  - type: textarea
+    id: files
+    attributes:
+      label: Files to Modify
+      description: List the files that will be changed
+      placeholder: |
+        - frontend/app/dashboard/components/Widget.Example.tsx
+        - backend/src/services/exampleService.ts
+    validations:
+      required: true
+
+  - type: textarea
+    id: dependencies
+    attributes:
+      label: Dependencies
+      description: Other issues or tasks that must complete first
+      placeholder: "Depends on #123, #124"
+
+  - type: textarea
+    id: acceptance_criteria
+    attributes:
+      label: Acceptance Criteria
+      description: How do we know when this is done?
+      placeholder: |
+        - [ ] All tests pass
+        - [ ] Feature works as specified
+        - [ ] No linting errors
+    validations:
+      required: true
+
+  - type: input
+    id: branch_name
+    attributes:
+      label: Branch Name
+      description: Suggested branch name for this work
+      placeholder: feat/spec-name-role
+    validations:
+      required: true

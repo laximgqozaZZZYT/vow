@@ -1,0 +1,146 @@
+name: Agent CI - Validate Changes
+
+on:
+  pull_request:
+    branches: [develop, main]
+  push:
+    branches: [develop]
+
+jobs:
+  validate-frontend:
+    name: Validate Frontend
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run linting
+        run: npm run lint
+
+      - name: Run type check
+        run: npx tsc --noEmit
+
+      - name: Run tests
+        run: npm test -- --coverage --watchAll=false
+        env:
+          CI: true
+
+      - name: Upload coverage
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-coverage
+          path: frontend/coverage/
+
+  validate-backend:
+    name: Validate Backend
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run build
+        run: npm run build
+
+      - name: Run tests
+        run: npm test
+        env:
+          CI: true
+
+  check-conflicts:
+    name: Check for Conflicts
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check merge conflicts
+        run: |
+          git fetch origin develop
+          git merge-tree $(git merge-base HEAD origin/develop) HEAD origin/develop > /dev/null 2>&1 || echo "::warning::Potential merge conflicts detected"
+
+      - name: List changed files
+        run: |
+          echo "## Changed Files" >> $GITHUB_STEP_SUMMARY
+          git diff --name-only origin/develop...HEAD >> $GITHUB_STEP_SUMMARY
+
+  agent-report:
+    name: Generate Agent Report
+    runs-on: ubuntu-latest
+    needs: [validate-frontend, validate-backend]
+    if: always()
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Generate summary
+        run: |
+          echo "## Agent CI Report" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Job | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "|-----|--------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Frontend | ${{ needs.validate-frontend.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Backend | ${{ needs.validate-backend.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Branch Info" >> $GITHUB_STEP_SUMMARY
+          echo "- **Branch**: ${{ github.head_ref || github.ref_name }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Commit**: ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Actor**: ${{ github.actor }}" >> $GITHUB_STEP_SUMMARY
+
+      - name: Comment on PR
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const frontendStatus = '${{ needs.validate-frontend.result }}';
+            const backendStatus = '${{ needs.validate-backend.result }}';
+            const allPassed = frontendStatus === 'success' && backendStatus === 'success';
+
+            const body = `## Agent CI Results
+
+            | Component | Status |
+            |-----------|--------|
+            | Frontend | ${frontendStatus === 'success' ? '✅' : '❌'} ${frontendStatus} |
+            | Backend | ${backendStatus === 'success' ? '✅' : '❌'} ${backendStatus} |
+
+            ${allPassed ? '✅ All checks passed! Ready for review.' : '❌ Some checks failed. Please fix before merging.'}
+            `;
+
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: body
+            });

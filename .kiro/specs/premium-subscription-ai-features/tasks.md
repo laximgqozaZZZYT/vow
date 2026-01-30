@@ -1,0 +1,352 @@
+# Implementation Plan: Premium Subscription & AI Features
+
+## Overview
+
+有料サブスクリプション機能とAI機能の実装計画です。Stripe決済連携、自然言語によるHabit/Goal操作、トークン使用量管理、Slack/ChatGPTコネクタを段階的に実装します。
+
+## Tasks
+
+- [x] 1. データベーススキーマとマイグレーション
+  - [x] 1.1 subscriptionsテーブルの作成
+    - id, user_id, stripe_customer_id, stripe_subscription_id, plan_type, status, current_period_start, current_period_end, cancel_at, created_at, updated_at
+    - RLSポリシー設定
+    - _Requirements: 8.1, 8.5, 8.6_
+  - [x] 1.2 token_usageテーブルの作成
+    - id, user_id, feature, tokens_used, created_at
+    - インデックス作成（user_id, created_at）
+    - _Requirements: 8.2, 8.4_
+  - [x] 1.3 token_quotasテーブルの作成
+    - id, user_id, monthly_quota, used_quota, reset_at, created_at, updated_at
+    - UNIQUE制約（user_id）
+    - _Requirements: 8.3, 8.4_
+  - [x] 1.4 noticesテーブルの作成
+    - id, user_id, type, title, message, action_type, action_payload, read, created_at
+    - インデックス作成（user_id, read）、（user_id, created_at DESC）
+    - _Requirements: 12.1, 12.2_
+  - [x] 1.5 notification_preferencesテーブルの作成
+    - in_app_*, slack_*, web_push_* 設定カラム
+    - UNIQUE制約（user_id）
+    - _Requirements: 12.4_
+  - [x] 1.6 push_subscriptionsテーブルの作成
+    - id, user_id, endpoint, p256dh, auth, user_agent, created_at
+    - UNIQUE制約（endpoint）
+    - _Requirements: 12.3_
+  - [x] 1.7 admin_usersテーブルの作成
+    - id, user_id, email, granted_at, expires_at, granted_by, notes, created_at
+    - UNIQUE制約（user_id）
+    - RLSポリシー（service_roleのみ）
+    - _Requirements: 13.1, 13.2_
+  - [x] 1.8 admin_audit_logsテーブルの作成
+    - id, user_id, action, details, ip_address, user_agent, created_at
+    - インデックス作成（user_id, created_at）
+    - _Requirements: 13.3_
+
+- [x] 2. Subscription Service実装
+  - [x] 2.1 SubscriptionRepositoryの作成
+    - CRUD操作、Stripe ID検索
+    - _Requirements: 2.6_
+  - [x] 2.2 SubscriptionServiceの作成
+    - createCheckoutSession, handleWebhookEvents, getStatus, cancelSubscription
+    - _Requirements: 2.1, 2.2, 2.3, 2.4, 2.5_
+  - [ ]* 2.3 Property Test: Webhook Event Processing
+    - **Property 2: Webhook Event Processing Integrity**
+    - **Validates: Requirements 2.2, 2.3, 2.4**
+  - [ ]* 2.4 Property Test: Subscription Data Persistence
+    - **Property 4: Subscription Data Persistence**
+    - **Validates: Requirements 2.6**
+
+- [x] 3. Stripe Webhook Handler実装
+  - [x] 3.1 Stripe署名検証ミドルウェアの作成
+    - HMAC-SHA256検証、タイムスタンプ検証（5分以内）
+    - _Requirements: 2.7, 10.2_
+  - [x] 3.2 Webhook Routerの作成
+    - checkout.session.completed, invoice.paid, invoice.payment_failed, customer.subscription.deleted
+    - _Requirements: 2.2, 2.3, 2.4, 2.5_
+  - [ ]* 3.3 Property Test: Stripe Signature Verification
+    - **Property 3: Stripe Signature Verification**
+    - **Validates: Requirements 2.7**
+
+- [x] 4. Checkpoint - Subscription基盤確認
+  - Ensure all tests pass, ask the user if questions arise.
+
+- [x] 5. Token Manager実装
+  - [x] 5.1 TokenQuotaRepositoryの作成
+    - クォータ取得、更新、リセット
+    - _Requirements: 5.1, 5.10_
+  - [x] 5.2 TokenUsageRepositoryの作成
+    - 使用量記録、履歴取得
+    - _Requirements: 5.4, 5.11_
+  - [x] 5.3 TokenManagerServiceの作成
+    - checkQuota, recordUsage, getUsage, resetQuota, sendWarningNotification
+    - _Requirements: 5.3, 5.4, 5.6, 5.7, 5.8_
+  - [ ]* 5.4 Property Test: Quota Enforcement
+    - **Property 7: Quota Enforcement**
+    - **Validates: Requirements 3.7, 5.3**
+  - [ ]* 5.5 Property Test: Token Usage Recording
+    - **Property 6: Token Usage Recording**
+    - **Validates: Requirements 3.6, 5.4, 6.6**
+  - [ ]* 5.6 Property Test: Token Threshold Notifications
+    - **Property 10: Token Threshold Notifications**
+    - **Validates: Requirements 5.6, 5.7, 5.8**
+  - [ ]* 5.7 Property Test: Quota Reset
+    - **Property 11: Quota Reset on Billing Cycle**
+    - **Validates: Requirements 5.10**
+
+- [x] 6. AI Service実装
+  - [x] 6.1 AIServiceインターフェースの作成
+    - parseHabitFromText, parseEditCommand, getProvider
+    - _Requirements: 9.1, 9.2_
+  - [x] 6.2 OpenAI GPT-4o mini Providerの実装
+    - GPT-4o mini API呼び出し、プロンプトテンプレート
+    - Model: gpt-4o-mini, Temperature: 0.7
+    - _Requirements: 9.1, 9.3_
+  - [ ]* 6.3 Amazon Bedrock Providerの実装（将来対応用、オプション）
+    - Claude 3 Haiku API呼び出し
+    - _Requirements: 9.1_
+  - [x] 6.4 エラーハンドリングとリトライロジック
+    - 指数バックオフ、サーキットブレーカー
+    - _Requirements: 9.4, 9.5_
+  - [ ]* 6.5 Unit Test: AI Service
+    - プロンプト生成、レスポンスパース
+    - _Requirements: 9.2, 9.3_
+
+- [x] 7. NL Habit Parser実装
+  - [x] 7.1 NLHabitParserServiceの作成
+    - parse, extractFrequency, extractTime, matchExistingHabit
+    - _Requirements: 3.1, 3.2, 4.1, 4.2_
+  - [ ]* 7.2 Property Test: NL Habit Parse Structure
+    - **Property 5: NL Habit Parse Structure**
+    - **Validates: Requirements 3.1, 3.2**
+  - [ ]* 7.3 Property Test: Edit Command Parsing
+    - **Property 8: Edit Command Parsing**
+    - **Validates: Requirements 4.1, 4.2**
+
+- [x] 8. Checkpoint - AI基盤確認
+  - Ensure all tests pass, ask the user if questions arise.
+
+- [x] 9. Backend API Routers実装
+  - [x] 9.1 Subscription Routerの作成
+    - POST /api/subscription/checkout, GET /api/subscription/status, POST /api/subscription/portal, POST /api/subscription/cancel
+    - _Requirements: 1.4, 2.1, 2.8, 2.9, 2.10_
+  - [x] 9.2 AI Routerの作成
+    - POST /api/ai/parse-habit, POST /api/ai/edit-habit
+    - Premium認証ミドルウェア
+    - _Requirements: 3.1, 3.6, 4.1_
+  - [ ]* 9.3 Property Test: Premium Access Control
+    - **Property 12: Premium Access Control**
+    - **Validates: Requirements 6.5, 7.7**
+
+- [x] 10. Frontend - Plan Selector Page実装
+  - [x] 10.1 /settings/subscription ページの作成
+    - プラン一覧表示、現在のプラン表示
+    - _Requirements: 1.1, 1.2, 1.3_
+  - [x] 10.2 useSubscription hookの作成
+    - サブスクリプション状態取得、Checkout開始
+    - _Requirements: 1.4, 1.5, 1.6_
+  - [x] 10.3 Settings > Profileへのリンク追加
+    - 「プランを管理」ボタン
+    - _Requirements: 1.1_
+  - [ ]* 10.4 Property Test: Subscription Info Display
+    - **Property 1: Subscription Info Display Consistency**
+    - **Validates: Requirements 1.3**
+
+- [x] 11. Frontend - Token Usage Widget実装
+  - [x] 11.1 Widget.TokenUsage.tsxの作成
+    - プログレスバー、残量表示、推定操作回数
+    - _Requirements: 5.5_
+  - [x] 11.2 useTokenUsage hookの作成
+    - トークン使用量取得
+    - _Requirements: 5.5, 5.11_
+  - [ ]* 11.3 Unit Test: Token Usage Widget
+    - 表示内容の検証
+    - _Requirements: 5.5_
+
+- [x] 12. Frontend - NL Habit Form実装
+  - [x] 12.1 Form.NLHabit.tsxの作成
+    - 自然言語入力フィールド、プレビュー表示、確認ボタン
+    - _Requirements: 3.1, 3.3, 3.4_
+  - [x] 12.2 useNLHabitParser hookの作成
+    - AI API呼び出し、結果表示
+    - _Requirements: 3.1, 3.5_
+  - [x] 12.3 既存Habit Modalへの統合
+    - NL入力モード切り替え
+    - _Requirements: 3.1_
+  - [ ]* 12.4 Unit Test: NL Habit Form
+    - 入力・プレビュー・確認フロー
+    - _Requirements: 3.3, 3.4, 3.5_
+
+- [x] 13. Checkpoint - Frontend基盤確認
+  - Ensure all tests pass, ask the user if questions arise.
+
+- [x] 14. Slack Connector実装
+  - [x] 14.1 ConnectorServiceの作成
+    - handleSlackNLCommand, validatePremiumAccess
+    - _Requirements: 6.1, 6.2, 6.3, 6.5_
+  - [x] 14.2 既存Slack Interaction Handlerの拡張
+    - 自然言語コマンド検出、NL_Habit_Parser呼び出し
+    - _Requirements: 6.4, 6.6_
+  - [ ]* 14.3 Unit Test: Slack Connector
+    - NLコマンド処理、Premium検証
+    - _Requirements: 6.1, 6.5_
+
+- [ ] 15. ChatGPT Connector実装（オプション）
+  - [ ] 15.1 GPT Actions APIエンドポイントの作成
+    - OAuth 2.0認証、習慣CRUD操作
+    - _Requirements: 7.1, 7.2, 7.3, 7.4, 7.5_
+  - [ ] 15.2 OpenAPI仕様書の作成
+    - GPT Actions用スキーマ定義
+    - _Requirements: 7.6_
+  - [ ]* 15.3 Unit Test: ChatGPT Connector
+    - API呼び出し、認証フロー
+    - _Requirements: 7.2, 7.7_
+
+- [x] 16. Terraform/インフラ更新
+  - [x] 16.1 Lambda環境変数の追加
+    - STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET, OPENAI_API_KEY
+    - _Requirements: 9.6, 12.1_
+  - [x] 16.2 Secrets Manager設定
+    - APIキーの安全な保存
+    - _Requirements: 12.1, 12.6_
+
+- [x] 17. Workload Coaching Service実装（ゲーミフィケーション）
+  - [x] 17.1 coaching_proposalsテーブルの作成
+    - id, user_id, habit_id, type, current_target_count, proposed_target_count, original_target_count, workload_unit, reason, message, status, dismiss_count, dismissed_until, snoozed_until, created_at, updated_at
+    - _Requirements: 10.1, 10.2_
+  - [x] 17.2 workload_coaching_historyテーブルの作成
+    - id, user_id, habit_id, action, previous_target_count, new_target_count, created_at
+    - _Requirements: 10.3_
+  - [x] 17.3 WorkloadCoachingServiceの作成
+    - checkForCoachingCandidates: 3日連続未達成、7日間無活動の検知
+    - generateWorkloadAdjustment: target_count × 0.5（切り上げ、最小1）
+    - generateBabyStep: 時間ベース×0.1、数量ベース×0.2、回数ベース=1
+    - _Requirements: 10.1, 10.2_
+  - [x] 17.4 Recovery機能の実装
+    - checkForRecoveryOpportunity: 3日連続達成で75%回復提案、5日連続達成で完全回復提案
+    - _Requirements: 10.5_
+  - [x] 17.5 Coaching Proposal APIの作成
+    - GET /api/coaching/proposals - 提案一覧取得
+    - POST /api/coaching/apply/:id - 提案承認
+    - POST /api/coaching/dismiss/:id - 提案拒否（7日間クールダウン）
+    - POST /api/coaching/snooze/:id - スヌーズ（24時間後に再表示）
+    - _Requirements: 10.3, 10.4_
+  - [x] 17.6 Frontend - Coaching Notification Widget
+    - ダッシュボードにコーチング提案バッジ表示
+    - 提案カード（承認/拒否/スヌーズボタン）
+    - _Requirements: 10.4_
+  - [ ]* 17.7 Property Test: Workload Adjustment Calculation
+    - **Property 13: Workload Coaching Detection - Workload Adjustment**
+    - **Validates: Requirements 10.1**
+  - [ ]* 17.8 Property Test: Baby Step Calculation
+    - **Property 14: Baby Step Generation**
+    - **Validates: Requirements 10.2**
+  - [ ]* 17.9 Property Test: Dismissal Cooldown
+    - **Property 15: Proposal Dismissal Cooldown**
+    - **Validates: Requirements 10.3**
+  - [ ]* 17.10 Property Test: Recovery Proposal
+    - **Property 16: Recovery Proposal Generation**
+    - **Validates: Requirements 10.5**
+
+- [x] 18. AI Habit Suggester実装（Premium機能）
+  - [x] 18.1 AIHabitSuggesterServiceの作成
+    - suggestHabitsForGoal, validateSuggestion
+    - GPT-4o miniを使用したGoal分析
+    - _Requirements: 11.1, 11.2, 11.6_
+  - [x] 18.2 Habit Suggestion APIの作成
+    - POST /api/ai/suggest-habits (Premium認証必須)
+    - _Requirements: 11.1, 11.4, 11.5_
+  - [x] 18.3 Frontend - Goal詳細画面にHabit提案ボタン追加
+    - 提案リスト表示、選択・作成フロー
+    - _Requirements: 11.1, 11.3_
+  - [ ]* 18.4 Property Test: Suggestion Uniqueness
+    - **Property 17: AI Habit Suggestion Uniqueness**
+    - **Validates: Requirements 11.6**
+
+- [x] 19. Notice Section実装
+  - [x] 19.1 NoticeServiceの作成
+    - createNotice, getNotices, markAsRead, markAllAsRead, getUnreadCount
+    - _Requirements: 12.1, 12.2_
+  - [x] 19.2 Notice APIの作成
+    - GET /api/notices, PATCH /api/notices/:id/read, POST /api/notices/read-all
+    - _Requirements: 12.1_
+  - [x] 19.3 Frontend - Section.Notice.tsxの作成
+    - 通知リスト表示、未読バッジ、既読処理
+    - ダッシュボードレイアウトへの統合
+    - _Requirements: 12.1, 12.2_
+  - [ ]* 19.4 Property Test: Notice Creation
+    - **Property 18: Notice Creation on Coaching Proposal**
+    - **Validates: Requirements 12.1, 12.2**
+
+- [x] 20. Notification Service実装
+  - [x] 20.1 NotificationServiceの作成
+    - sendNotification, getUserNotificationPreferences, updateNotificationPreferences
+    - マルチチャネル配信ロジック
+    - _Requirements: 12.2, 12.3, 12.4_
+  - [x] 20.2 Slack通知拡張
+    - Workloadコーチング提案のインタラクティブ通知
+    - 通知時刻スケジューリング
+    - _Requirements: 12.2_
+  - [x] 20.3 Web Push通知実装
+    - Service Worker登録、Push Subscription管理
+    - web-push ライブラリ統合
+    - _Requirements: 12.3_
+  - [x] 20.4 Notification Preferences APIの作成
+    - GET /api/notifications/preferences, PUT /api/notifications/preferences
+    - POST /api/notifications/push-subscription
+    - _Requirements: 12.4_
+  - [ ]* 20.5 Property Test: Multi-Channel Delivery
+    - **Property 19: Multi-Channel Notification Delivery**
+    - **Validates: Requirements 12.2, 12.3**
+
+- [x] 21. Frontend - Settings > Notifications実装
+  - [x] 21.1 /settings/notifications ページの作成
+    - アプリ内通知設定セクション
+    - Slack通知設定セクション（連携時のみ表示）
+    - Web Push通知設定セクション
+    - _Requirements: 12.4_
+  - [x] 21.2 useNotificationPreferences hookの作成
+    - 設定取得・更新、Web Push登録
+    - _Requirements: 12.4_
+  - [x] 21.3 Web Push許可フロー実装
+    - ブラウザ許可リクエスト、Service Worker登録
+    - _Requirements: 12.3_
+  - [ ]* 21.4 Property Test: Push Subscription
+    - **Property 20: Web Push Subscription Persistence**
+    - **Validates: Requirements 12.3**
+
+- [ ] 22. Final Checkpoint - 全体統合確認
+  - Ensure all tests pass, ask the user if questions arise.
+
+- [x] 23. Admin Service実装
+  - [x] 23.1 AdminServiceの作成
+    - isAdmin, getAdminByEmail, logAdminAction, getAdminUsageStats
+    - 環境変数ADMIN_EMAILSからの管理者判定
+    - _Requirements: 13.1, 13.2_
+  - [x] 23.2 Premium認証ミドルウェアの拡張
+    - 管理者チェックをSubscriptionチェックの前に実行
+    - 管理者の場合はトークンクォータをバイパス
+    - _Requirements: 13.2, 13.3_
+  - [x] 23.3 監査ログ記録の実装
+    - AI機能使用時にadmin_audit_logsに記録
+    - IPアドレス、User-Agent、操作詳細を保存
+    - _Requirements: 13.3_
+  - [ ]* 23.4 管理者使用量ダッシュボード（オプション）
+    - 管理者専用の使用量統計表示
+    - _Requirements: 13.3_
+  - [ ]* 23.5 Property Test: Admin Access Bypass
+    - **Property 21: Admin Access Bypass**
+    - **Validates: Requirements 13.2, 13.3**
+  - [ ]* 23.6 Property Test: Admin Self-Elevation Prevention
+    - **Property 22: Admin Self-Elevation Prevention**
+    - **Validates: Requirements 13.2**
+
+- [ ] 24. Final Checkpoint - 管理者機能確認
+  - Ensure all tests pass, ask the user if questions arise.
+
+## Notes
+
+- Tasks marked with `*` are optional and can be skipped for faster MVP
+- Each task references specific requirements for traceability
+- Checkpoints ensure incremental validation
+- Property tests validate universal correctness properties
+- Unit tests validate specific examples and edge cases
+- ChatGPT Connector (Task 15) is optional and can be implemented in a later phase

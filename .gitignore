@@ -44,8 +44,14 @@ Thumbs.db
 serviceAccountKey.json
 cookies.txt
 
-# Kiro
-.kiro/
+# Kiro - track specs for multi-agent collaboration
+.kiro/hooks/
+.kiro/steering/
+# Track specs for agent collaboration
+!.kiro/specs/
+
+# Claude Code - ignore all Claude-related files
+.claude/
 
 # Frontend (Next.js)
 frontend/.next/
