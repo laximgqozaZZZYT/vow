@@ -205,15 +205,32 @@ export function useGanttTimeline({
   const dayWidth = DAY_WIDTH[viewMode];
 
   /**
-   * Calculate the date range based on view mode (centered on today)
+   * Calculate the date range based on view mode and row data
+   * Extends the range to include all row start/end dates
    */
   const { startDate, endDate } = useMemo(() => {
     const today = startOfDay(new Date());
     const range = VISIBLE_RANGE[viewMode];
     
-    // Calculate range centered on today
-    const paddedStart = addDays(today, -range.before);
-    const paddedEnd = addDays(today, range.after);
+    // Calculate base range centered on today
+    let paddedStart = addDays(today, -range.before);
+    let paddedEnd = addDays(today, range.after);
+    
+    // Extend range to include all row dates
+    for (const row of rows) {
+      if (row.startDate) {
+        const rowStart = startOfDay(row.startDate);
+        if (rowStart < paddedStart) {
+          paddedStart = rowStart;
+        }
+      }
+      if (row.endDate) {
+        const rowEnd = startOfDay(row.endDate);
+        if (rowEnd > paddedEnd) {
+          paddedEnd = rowEnd;
+        }
+      }
+    }
 
     // Align to view mode boundaries
     let alignedStart: Date;
@@ -235,7 +252,7 @@ export function useGanttTimeline({
     }
 
     return { startDate: alignedStart, endDate: alignedEnd };
-  }, [viewMode]);
+  }, [viewMode, rows]);
 
   /**
    * Generate timeline cells

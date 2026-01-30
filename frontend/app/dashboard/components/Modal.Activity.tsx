@@ -4,7 +4,7 @@ import React, { useState, useEffect } from 'react';
 import type { ReactNode } from 'react';
 
 type ActivityKind = 'start' | 'complete' | 'skip' | 'pause';
-export type Activity = { id: string; kind: ActivityKind; habitId: string; habitName: string; timestamp: string; amount?: number; prevCount?: number; newCount?: number; durationSeconds?: number; memo?: string }
+export type Activity = { id: string; kind: ActivityKind; habitId: string; habitName: string; timestamp: string; amount?: number; durationSeconds?: number; memo?: string }
 
 export default function ActivityModal({ open, onClose, initial, onSave }: { open: boolean; onClose: () => void; initial?: Activity | null; onSave: (updated: Activity) => void }) {
   const [amount, setAmount] = useState<string>(String(initial?.amount ?? 0));
@@ -66,8 +66,6 @@ export default function ActivityModal({ open, onClose, initial, onSave }: { open
       habitName: initial?.habitName ?? '',
       timestamp: initial?.timestamp ?? new Date().toISOString(),
       amount: amountNum,
-      prevCount: initial?.prevCount,
-      newCount: initial?.newCount,
       durationSeconds,
       memo
     };

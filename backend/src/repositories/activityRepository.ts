@@ -3,12 +3,39 @@
  *
  * Database operations for activities table using the repository pattern.
  *
- * Requirements: 3.5
+ * Requirements: 3.5, XP Recovery 1.1
  */
 
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { BaseRepository } from './base.js';
 import type { Activity } from '../schemas/habit.js';
+
+/**
+ * Activity with associated habit information.
+ * Used for XP recovery calculation to access habit's THLI level and domain codes.
+ */
+export interface ActivityWithHabit {
+  id: string;
+  habitId: string;
+  habitName: string;
+  timestamp: Date;
+  amount: number | null;
+  habit: {
+    id: string;
+    name: string;
+    thliLevel: number | null;
+    domainCodes: string[];
+  };
+}
+
+/**
+ * Options for retrieving completed activities.
+ */
+export interface GetCompletedActivitiesOptions {
+  limit?: number;
+  offset?: number;
+  excludeActivityIds?: string[];
+}
 
 /**
  * Repository for activity database operations.
@@ -280,5 +307,133 @@ export class ActivityRepository extends BaseRepository<Activity> {
     }
 
     return data.reduce((sum, activity) => sum + (activity.amount ?? 1), 0);
+  }
+
+  // ============================================================================
+  // XP Recovery Methods (Requirements: XP Recovery 1.1)
+  // ============================================================================
+
+  /**
+   * Get completed activities for a user with associated habit information.
+   *
+   * Retrieves all activities with kind='complete' for the specified user,
+   * including the associated habit's THLI level and domain codes.
+   * This is used for XP recovery calculation.
+   *
+   * Note: Since there's no foreign key constraint between activities and habits,
+   * we query them separately and join in application code.
+   *
+   * @param userId - The unique identifier of the user.
+   * @param options - Optional parameters for pagination and filtering.
+   * @param options.limit - Maximum number of activities to return.
+   * @param options.offset - Number of activities to skip for pagination.
+   * @param options.excludeActivityIds - Activity IDs to exclude from results.
+   * @returns List of activities with habit information. Returns an empty list if no activities are found.
+   *
+   * Requirements: XP Recovery 1.1 - activitiesテーブルからkind='complete'のレコードを全て取得する
+   */
+  async getCompletedActivities(
+    userId: string,
+    options?: GetCompletedActivitiesOptions
+  ): Promise<ActivityWithHabit[]> {
+    const { limit, offset, excludeActivityIds } = options ?? {};
+
+    // Step 1: Query activities (without join since no FK constraint exists)
+    let query = this.supabase
+      .from(this.tableName)
+      .select('id, habit_id, habit_name, timestamp, amount')
+      .eq('owner_type', 'user')
+      .eq('owner_id', userId)
+      .eq('kind', 'complete')
+      .order('timestamp', { ascending: true });
+
+    // Apply exclusion filter if provided
+    if (excludeActivityIds && excludeActivityIds.length > 0) {
+      query = query.not('id', 'in', `(${excludeActivityIds.join(',')})`);
+    }
+
+    // Apply pagination
+    if (offset !== undefined) {
+      query = query.range(offset, offset + (limit ?? 100) - 1);
+    } else if (limit !== undefined) {
+      query = query.limit(limit);
+    }
+
+    const { data: activities, error: activitiesError } = await query;
+
+    if (activitiesError || !activities || activities.length === 0) {
+      return [];
+    }
+
+    // Step 2: Get unique habit IDs and fetch habit data
+    const habitIds = [...new Set(activities.map((a) => a.habit_id as string))];
+    
+    const { data: habits, error: habitsError } = await this.supabase
+      .from('habits')
+      .select('id, name, level, domain_codes')
+      .in('id', habitIds);
+
+    if (habitsError) {
+      // Log error but continue - we can still process activities with default values
+      console.error('Failed to fetch habits for XP recovery:', habitsError);
+    }
+
+    // Create a map of habit ID to habit data for quick lookup
+    const habitMap = new Map<string, { id: string; name: string; level: number | null; domain_codes: string[] }>();
+    if (habits) {
+      for (const habit of habits) {
+        habitMap.set(habit.id as string, {
+          id: habit.id as string,
+          name: habit.name as string,
+          level: habit.level as number | null,
+          domain_codes: (habit.domain_codes as string[]) ?? [],
+        });
+      }
+    }
+
+    // Step 3: Transform and join data in application code
+    return activities.map((row) => {
+      const habitId = row.habit_id as string;
+      const habit = habitMap.get(habitId);
+
+      return {
+        id: row.id as string,
+        habitId,
+        habitName: (row.habit_name as string) ?? habit?.name ?? 'Unknown Habit',
+        timestamp: new Date(row.timestamp as string),
+        amount: row.amount as number | null,
+        habit: {
+          id: habit?.id ?? habitId,
+          name: habit?.name ?? (row.habit_name as string) ?? 'Unknown Habit',
+          thliLevel: habit?.level ?? null,
+          domainCodes: habit?.domain_codes ?? [],
+        },
+      };
+    });
+  }
+
+  /**
+   * Count completed activities for a user.
+   *
+   * Counts the total number of activities with kind='complete' for the specified user.
+   * This is used to determine batch processing requirements for XP recovery.
+   *
+   * @param userId - The unique identifier of the user.
+   * @returns The count of completed activities.
+   *
+   * Requirements: XP Recovery 1.1
+   */
+  async countCompletedActivities(userId: string): Promise<number> {
+    const { count, error } = await this.supabase
+      .from(this.tableName)
+      .select('id', { count: 'exact', head: true })
+      .eq('owner_type', 'user')
+      .eq('owner_id', userId)
+      .eq('kind', 'complete');
+
+    if (error || count === null) {
+      return 0;
+    }
+    return count;
   }
 }

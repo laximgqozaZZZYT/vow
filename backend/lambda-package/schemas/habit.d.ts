@@ -137,6 +137,12 @@ export declare const habitUpdateSchema: z.ZodObject<{
 export type HabitUpdate = z.infer<typeof habitUpdateSchema>;
 /**
  * Schema for activity data from database.
+ *
+ * Column definitions:
+ * - amount: workload increment (増分)
+ * - prev_count: daily count before this activity (増分前の日次累計Workload)
+ * - new_count: daily count after this activity (増分後の日次累計Workload)
+ * - cumulative_workload: total workload from habit creation to this activity (累計Workload)
  */
 export declare const activitySchema: z.ZodObject<{
     id: z.ZodString;
@@ -147,6 +153,9 @@ export declare const activitySchema: z.ZodObject<{
     kind: z.ZodDefault<z.ZodEnum<["complete", "skip", "partial"]>>;
     timestamp: z.ZodString;
     amount: z.ZodDefault<z.ZodNumber>;
+    prev_count: z.ZodOptional<z.ZodNullable<z.ZodNumber>>;
+    new_count: z.ZodOptional<z.ZodNullable<z.ZodNumber>>;
+    cumulative_workload: z.ZodOptional<z.ZodNullable<z.ZodNumber>>;
     memo: z.ZodOptional<z.ZodNullable<z.ZodString>>;
     created_at: z.ZodOptional<z.ZodString>;
 }, "strip", z.ZodTypeAny, {
@@ -159,6 +168,9 @@ export declare const activitySchema: z.ZodObject<{
     amount: number;
     created_at?: string | undefined;
     habit_name?: string | null | undefined;
+    prev_count?: number | null | undefined;
+    new_count?: number | null | undefined;
+    cumulative_workload?: number | null | undefined;
     memo?: string | null | undefined;
 }, {
     id: string;
@@ -170,6 +182,9 @@ export declare const activitySchema: z.ZodObject<{
     habit_name?: string | null | undefined;
     kind?: "complete" | "skip" | "partial" | undefined;
     amount?: number | undefined;
+    prev_count?: number | null | undefined;
+    new_count?: number | null | undefined;
+    cumulative_workload?: number | null | undefined;
     memo?: string | null | undefined;
 }>;
 export type Activity = z.infer<typeof activitySchema>;

@@ -1,5 +1,5 @@
--- Fix RLS policies for habit_daily_workloads table
 -- Run this in Supabase SQL Editor
+-- Fix RLS policies for habit_daily_workloads table
 
 -- First, check if the table exists
 SELECT EXISTS (

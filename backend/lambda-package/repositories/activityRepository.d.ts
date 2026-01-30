@@ -3,11 +3,36 @@
  *
  * Database operations for activities table using the repository pattern.
  *
- * Requirements: 3.5
+ * Requirements: 3.5, XP Recovery 1.1
  */
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { BaseRepository } from './base.js';
 import type { Activity } from '../schemas/habit.js';
+/**
+ * Activity with associated habit information.
+ * Used for XP recovery calculation to access habit's THLI level and domain codes.
+ */
+export interface ActivityWithHabit {
+    id: string;
+    habitId: string;
+    habitName: string;
+    timestamp: Date;
+    amount: number | null;
+    habit: {
+        id: string;
+        name: string;
+        thliLevel: number | null;
+        domainCodes: string[];
+    };
+}
+/**
+ * Options for retrieving completed activities.
+ */
+export interface GetCompletedActivitiesOptions {
+    limit?: number;
+    offset?: number;
+    excludeActivityIds?: string[];
+}
 /**
  * Repository for activity database operations.
  *
@@ -125,5 +150,37 @@ export declare class ActivityRepository extends BaseRepository<Activity> {
      * @returns The sum of amounts for activities matching the criteria.
      */
     sumAmountInRange(habitId: string, start: Date, end: Date, kind?: 'complete' | 'skip' | 'partial'): Promise<number>;
+    /**
+     * Get completed activities for a user with associated habit information.
+     *
+     * Retrieves all activities with kind='complete' for the specified user,
+     * including the associated habit's THLI level and domain codes.
+     * This is used for XP recovery calculation.
+     *
+     * Note: Since there's no foreign key constraint between activities and habits,
+     * we query them separately and join in application code.
+     *
+     * @param userId - The unique identifier of the user.
+     * @param options - Optional parameters for pagination and filtering.
+     * @param options.limit - Maximum number of activities to return.
+     * @param options.offset - Number of activities to skip for pagination.
+     * @param options.excludeActivityIds - Activity IDs to exclude from results.
+     * @returns List of activities with habit information. Returns an empty list if no activities are found.
+     *
+     * Requirements: XP Recovery 1.1 - activitiesテーブルからkind='complete'のレコードを全て取得する
+     */
+    getCompletedActivities(userId: string, options?: GetCompletedActivitiesOptions): Promise<ActivityWithHabit[]>;
+    /**
+     * Count completed activities for a user.
+     *
+     * Counts the total number of activities with kind='complete' for the specified user.
+     * This is used to determine batch processing requirements for XP recovery.
+     *
+     * @param userId - The unique identifier of the user.
+     * @returns The count of completed activities.
+     *
+     * Requirements: XP Recovery 1.1
+     */
+    countCompletedActivities(userId: string): Promise<number>;
 }
 //# sourceMappingURL=activityRepository.d.ts.map

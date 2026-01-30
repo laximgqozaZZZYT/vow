@@ -5,17 +5,19 @@
  * 
  * Displays a habit or goal's THLI-24 level with tier-specific colors.
  * 
- * Level Tiers:
+ * Level Tiers (v2.0 - Rebalanced):
  * - Beginner (0-49): Green (bg-success)
  * - Intermediate (50-99): Blue (bg-primary)
- * - Advanced (100-149): Orange (bg-warning)
- * - Expert (150-199): Red (bg-destructive)
+ * - Advanced (100-499): Orange (bg-warning)
+ * - Expert (500-9999): Red (bg-destructive) with glow effect
  * 
  * Features:
  * - Responsive design (compact on mobile, full on desktop)
  * - "Not Assessed" state for NULL levels
  * - Delta indicator for recent level changes
  * - Click handler support for opening details modal
+ * - Support for levels up to 9999 (v2.0)
+ * - Expert tier glow effect for high achievers
  * 
  * @module LevelBadge
  * 
@@ -27,7 +29,7 @@ import React from 'react';
 export type LevelTier = 'beginner' | 'intermediate' | 'advanced' | 'expert';
 
 export interface LevelBadgeProps {
-  /** The level value (0-199), or null/undefined for unassessed */
+  /** The level value (0-9999), or null/undefined for unassessed */
   level: number | null | undefined;
   /** Optional tier override (calculated from level if not provided) */
   tier?: LevelTier;
@@ -43,12 +45,36 @@ export interface LevelBadgeProps {
   isGoal?: boolean;
   /** Size variant */
   size?: 'sm' | 'md' | 'lg';
+  /** Whether to show glow effect for expert tier */
+  showGlow?: boolean;
 }
 
 /**
- * Calculate the tier from a level value
+ * Calculate the tier from a level value (v2.0 boundaries)
+ * 
+ * Tier boundaries:
+ * - beginner: 0-49
+ * - intermediate: 50-99
+ * - advanced: 100-499
+ * - expert: 500-9999
  */
 export function calculateTier(level: number): LevelTier {
+  if (level < 50) return 'beginner';
+  if (level < 100) return 'intermediate';
+  if (level < 500) return 'advanced';
+  return 'expert';
+}
+
+/**
+ * Calculate the tier from a level value (v1.0 boundaries - legacy)
+ * 
+ * Tier boundaries:
+ * - beginner: 0-49
+ * - intermediate: 50-99
+ * - advanced: 100-149
+ * - expert: 150-199
+ */
+export function calculateTierV1(level: number): LevelTier {
   if (level < 50) return 'beginner';
   if (level < 100) return 'intermediate';
   if (level < 150) return 'advanced';
@@ -57,6 +83,8 @@ export function calculateTier(level: number): LevelTier {
 
 /**
  * Get tier-specific colors for Tailwind CSS
+ * 
+ * Expert tier includes glow effect for high achievers (v2.0)
  */
 export function getTierColors(tier: LevelTier): {
   bg: string;
@@ -64,6 +92,7 @@ export function getTierColors(tier: LevelTier): {
   border: string;
   label: string;
   labelJa: string;
+  glow?: string;
 } {
   switch (tier) {
     case 'beginner':
@@ -97,6 +126,7 @@ export function getTierColors(tier: LevelTier): {
         border: 'border-red-500/30',
         label: 'Expert',
         labelJa: '達人',
+        glow: 'shadow-[0_0_10px_rgba(239,68,68,0.5)]',
       };
   }
 }
@@ -113,6 +143,7 @@ export default function LevelBadge({
   className = '',
   isGoal = false,
   size = 'md',
+  showGlow = true,
 }: LevelBadgeProps) {
   // Handle unassessed state
   if (level === null || level === undefined) {
@@ -149,6 +180,9 @@ export default function LevelBadge({
     lg: 'px-3 py-1.5 text-base gap-2',
   };
 
+  // Apply glow effect for expert tier
+  const glowClass = showGlow && tier === 'expert' && colors.glow ? colors.glow : '';
+
   return (
     <button
       onClick={onClick}
@@ -160,6 +194,7 @@ export default function LevelBadge({
         border ${colors.border}
         rounded-md
         font-medium
+        ${glowClass}
         ${onClick ? 'cursor-pointer hover:opacity-80 transition-opacity' : 'cursor-default'}
         focus-visible:outline-2 focus-visible:outline-primary
         ${className}
@@ -169,7 +204,7 @@ export default function LevelBadge({
     >
       {/* Level number */}
       <span className={`font-semibold ${size === 'lg' ? 'text-lg' : ''}`}>
-        Lv. {level}
+        Lv. {level.toLocaleString()}
       </span>
 
       {/* Tier label (hidden on compact/mobile) */}

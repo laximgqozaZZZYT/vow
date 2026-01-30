@@ -383,6 +383,28 @@ export function jwtAuthMiddleware(): MiddlewareHandler {
 
       // Store user in context variables
       c.set('user', payload);
+      
+      // Also set userId for convenience (used by many routers)
+      if (payload.sub) {
+        c.set('userId', payload.sub);
+      }
+      
+      // Create and set Supabase client with service role key (bypasses RLS)
+      // This is needed for operations that require access to all tables
+      if (settings.supabaseUrl && settings.supabaseServiceRoleKey) {
+        const { createClient } = await import('@supabase/supabase-js');
+        const supabase = createClient(
+          settings.supabaseUrl,
+          settings.supabaseServiceRoleKey,
+          {
+            auth: {
+              autoRefreshToken: false,
+              persistSession: false,
+            },
+          }
+        );
+        c.set('supabase', supabase);
+      }
     } catch (error) {
       if (error instanceof TokenExpiredError) {
         throw error;

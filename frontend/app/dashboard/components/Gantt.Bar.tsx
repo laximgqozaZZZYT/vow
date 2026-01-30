@@ -47,10 +47,14 @@ function GanttBarComponent({
   onMouseEnter,
   onMouseLeave
 }: GanttBarProps) {
-  // Don't render if width is too small
-  if (width < 2) return null;
+  // Ensure minimum width for visibility (at least 4px)
+  const minWidth = 4;
+  const effectiveWidth = Math.max(width, minWidth);
+  
+  // Don't render if original width is negative (invalid date range)
+  if (width < 0) return null;
 
-  const progressWidth = (progress / 100) * width;
+  const progressWidth = (progress / 100) * effectiveWidth;
   const cornerRadius = Math.min(4, height / 2);
 
   return (
@@ -63,7 +67,7 @@ function GanttBarComponent({
       <rect
         x={x}
         y={y}
-        width={width}
+        width={effectiveWidth}
         height={height}
         rx={cornerRadius}
         ry={cornerRadius}
@@ -76,7 +80,7 @@ function GanttBarComponent({
         <rect
           x={x}
           y={y}
-          width={Math.min(progressWidth, width)}
+          width={Math.min(progressWidth, effectiveWidth)}
           height={height}
           rx={cornerRadius}
           ry={cornerRadius}
@@ -89,7 +93,7 @@ function GanttBarComponent({
       <rect
         x={x}
         y={y}
-        width={width}
+        width={effectiveWidth}
         height={height}
         rx={cornerRadius}
         ry={cornerRadius}

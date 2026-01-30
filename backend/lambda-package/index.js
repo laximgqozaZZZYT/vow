@@ -29,6 +29,8 @@ import { notificationsRouter } from './routers/notifications.js';
 import { levelRouter } from './routers/level.js';
 import { jobsRouter } from './routers/jobs.js';
 import { userLevelRouter } from './routers/userLevel.js';
+import { createXPRecoveryRouter } from './routers/xpRecoveryRoutes.js';
+import { createLevelConfigRouter } from './routers/levelConfig.js';
 // Error handling imports
 import { AppError, getUserFriendlyMessage } from './errors/index.js';
 import { getLogger } from './utils/logger.js';
@@ -218,6 +220,19 @@ export function createApp() {
     // Note: User level system for tracking growth through habit completions
     // Requirements: 12.1, 12.2, 12.3, 12.4, 2.4, 2.5, 3.7, 3.3, 3.4
     app.route('/api', userLevelRouter);
+    // XP Recovery router - mounted at /api
+    // Endpoints: /api/users/:id/recalculate-xp, /api/admin/recalculate-xp
+    // Note: XP recovery (recalculation) from past habit completions
+    // Requirements: 4.1, 4.2
+    const xpRecoveryRouter = createXPRecoveryRouter();
+    app.route('/api', xpRecoveryRouter);
+    // Level Config router - mounted at /api
+    // Endpoints: /api/level-config, /api/level-simulator,
+    //            /api/users/:id/migration-status, /api/users/:id/recalibrate-habits
+    // Note: Level system configuration and migration management
+    // Requirements (level-system-rebalancing): 7.1, 7.2, 10.2, 10.3, 10.4
+    const levelConfigRouter = createLevelConfigRouter();
+    app.route('/api', levelConfigRouter);
     logger.info('Application initialized', {
         version: settings.appVersion,
         debug: settings.debug,

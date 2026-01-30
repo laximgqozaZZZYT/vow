@@ -26,23 +26,123 @@ import { calculateTier } from './userLevelService.js';
 const logger = getLogger('levelDecayService');
 
 // =============================================================================
-// Constants
+// Constants (v1.0 - Legacy)
 // =============================================================================
 
-/** Grace period in days before decay starts (Requirement 8.1) */
-export const GRACE_PERIOD_DAYS = 14;
+/** Grace period in days before decay starts - v1.0 (Requirement 8.1) */
+export const GRACE_PERIOD_DAYS_V1 = 14;
 
-/** Decay rate: points per week of inactivity (Requirement 8.2) */
-export const DECAY_PER_WEEK = 1;
+/** Decay rate: points per week of inactivity - v1.0 (Requirement 8.2) */
+export const DECAY_PER_WEEK_V1 = 1;
 
-/** Maximum decay as a percentage of original level (Requirement 8.3) */
-export const MAX_DECAY_PERCENT = 0.20;
+/** Maximum decay as a percentage of original level - v1.0 (Requirement 8.3) */
+export const MAX_DECAY_PERCENT_V1 = 0.20;
+
+// =============================================================================
+// Constants (v2.0 - Rebalanced)
+// =============================================================================
+
+/** Grace period in days before decay starts - v2.0 (Requirement 9.1) */
+export const GRACE_PERIOD_DAYS_V2 = 21;
+
+/** Decay rate: points per week of inactivity - v2.0 (Requirement 9.2) */
+export const DECAY_PER_WEEK_V2 = 0.5;
+
+/** Maximum decay as a percentage of original level - v2.0 (Requirement 9.3) */
+export const MAX_DECAY_PERCENT_V2 = 0.15;
+
+/** Recovery bonus multiplier for returning users - v2.0 (Requirement 9.4) */
+export const RECOVERY_BONUS_MULTIPLIER = 1.5;
+
+/** Duration of recovery bonus in days - v2.0 (Requirement 9.4) */
+export const RECOVERY_BONUS_DAYS = 7;
+
+// =============================================================================
+// Active Constants (controlled by formula version)
+// =============================================================================
+
+/** Current formula version */
+let currentFormulaVersion: 'v1.0' | 'v2.0' = 'v2.0';
+
+/** Grace period in days before decay starts (active) */
+export let GRACE_PERIOD_DAYS = GRACE_PERIOD_DAYS_V2;
+
+/** Decay rate: points per week of inactivity (active) */
+export let DECAY_PER_WEEK = DECAY_PER_WEEK_V2;
+
+/** Maximum decay as a percentage of original level (active) */
+export let MAX_DECAY_PERCENT = MAX_DECAY_PERCENT_V2;
 
 /** Milliseconds per day */
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
 /** Days per week */
 const DAYS_PER_WEEK = 7;
+
+// =============================================================================
+// Formula Version Control
+// =============================================================================
+
+/**
+ * Set the formula version for decay calculations.
+ * 
+ * This allows switching between v1.0 (legacy) and v2.0 (rebalanced) decay settings.
+ * Used by feature flag system to control rollout.
+ * 
+ * @param version - Formula version ('v1.0' or 'v2.0')
+ */
+export function setDecayFormulaVersion(version: 'v1.0' | 'v2.0'): void {
+  currentFormulaVersion = version;
+  if (version === 'v1.0') {
+    GRACE_PERIOD_DAYS = GRACE_PERIOD_DAYS_V1;
+    DECAY_PER_WEEK = DECAY_PER_WEEK_V1;
+    MAX_DECAY_PERCENT = MAX_DECAY_PERCENT_V1;
+  } else {
+    GRACE_PERIOD_DAYS = GRACE_PERIOD_DAYS_V2;
+    DECAY_PER_WEEK = DECAY_PER_WEEK_V2;
+    MAX_DECAY_PERCENT = MAX_DECAY_PERCENT_V2;
+  }
+}
+
+/**
+ * Get the current decay formula version.
+ * 
+ * @returns Current formula version
+ */
+export function getDecayFormulaVersion(): 'v1.0' | 'v2.0' {
+  return currentFormulaVersion;
+}
+
+/**
+ * Get decay settings for a specific formula version.
+ * 
+ * @param version - Formula version ('v1.0' or 'v2.0')
+ * @returns Decay settings for the specified version
+ */
+export function getDecaySettingsForVersion(version: 'v1.0' | 'v2.0'): {
+  gracePeriodDays: number;
+  decayPerWeek: number;
+  maxDecayPercent: number;
+  recoveryBonusMultiplier: number;
+  recoveryBonusDays: number;
+} {
+  if (version === 'v1.0') {
+    return {
+      gracePeriodDays: GRACE_PERIOD_DAYS_V1,
+      decayPerWeek: DECAY_PER_WEEK_V1,
+      maxDecayPercent: MAX_DECAY_PERCENT_V1,
+      recoveryBonusMultiplier: 1.0, // No recovery bonus in v1.0
+      recoveryBonusDays: 0,
+    };
+  }
+  return {
+    gracePeriodDays: GRACE_PERIOD_DAYS_V2,
+    decayPerWeek: DECAY_PER_WEEK_V2,
+    maxDecayPercent: MAX_DECAY_PERCENT_V2,
+    recoveryBonusMultiplier: RECOVERY_BONUS_MULTIPLIER,
+    recoveryBonusDays: RECOVERY_BONUS_DAYS,
+  };
+}
 
 // =============================================================================
 // Types
@@ -126,6 +226,24 @@ export interface BatchDecayResult {
   errors: string[];
 }
 
+/**
+ * Recovery bonus status for a user
+ */
+export interface RecoveryBonusStatus {
+  /** Whether the user is eligible for recovery bonus */
+  isEligible: boolean;
+  /** The bonus multiplier (1.0 if not eligible) */
+  multiplier: number;
+  /** Days remaining in the bonus period */
+  daysRemaining: number;
+  /** When the bonus started (if active) */
+  bonusStartDate: Date | null;
+  /** When the bonus expires (if active) */
+  bonusExpiryDate: Date | null;
+  /** Reason for eligibility status */
+  reason: string;
+}
+
 // =============================================================================
 // Pure Calculation Functions (Exported for Testing)
 // =============================================================================
@@ -133,12 +251,12 @@ export interface BatchDecayResult {
 /**
  * Calculate decay amount for an expertise level based on days of inactivity.
  *
- * Property 13: Level Decay Rules
- * - Decay begins after the 14-day grace period (Requirement 8.1)
- * - Decay rate is 1 point per week of inactivity (Requirement 8.2)
- * - Maximum decay is 20% of the original expertise_level (Requirement 8.3)
+ * Property 13: Level Decay Rules (v2.0)
+ * - Decay begins after the 21-day grace period (Requirement 9.1)
+ * - Decay rate is 0.5 points per week of inactivity (Requirement 9.2)
+ * - Maximum decay is 15% of the original expertise_level (Requirement 9.3)
  *
- * @param expertiseLevel - Current expertise level (0-199)
+ * @param expertiseLevel - Current expertise level (0-9999)
  * @param daysSinceLastActivity - Days since last activity in this domain
  * @returns Decay calculation result
  */
@@ -157,7 +275,7 @@ export function calculateDecay(
     };
   }
 
-  // Check grace period (Requirement 8.1)
+  // Check grace period (Requirement 9.1 - 21 days in v2.0)
   if (daysSinceLastActivity <= GRACE_PERIOD_DAYS) {
     return {
       shouldDecay: false,
@@ -168,7 +286,7 @@ export function calculateDecay(
     };
   }
 
-  // Calculate weeks of inactivity after grace period (Requirement 8.2)
+  // Calculate weeks of inactivity after grace period (Requirement 9.2)
   const daysAfterGrace = daysSinceLastActivity - GRACE_PERIOD_DAYS;
   const weeksInactive = Math.floor(daysAfterGrace / DAYS_PER_WEEK);
 
@@ -182,10 +300,10 @@ export function calculateDecay(
     };
   }
 
-  // Calculate raw decay: 1 point per week (Requirement 8.2)
+  // Calculate raw decay: 0.5 points per week in v2.0 (Requirement 9.2)
   const rawDecay = weeksInactive * DECAY_PER_WEEK;
 
-  // Calculate maximum allowed decay: 20% of original level (Requirement 8.3)
+  // Calculate maximum allowed decay: 15% of original level in v2.0 (Requirement 9.3)
   const maxDecay = Math.floor(expertiseLevel * MAX_DECAY_PERCENT);
 
   // Apply the lesser of raw decay or max decay
@@ -233,6 +351,123 @@ export function calculateDaysSinceActivity(
   const lastActivity = new Date(lastActivityAt);
   const diffMs = referenceDate.getTime() - lastActivity.getTime();
   return Math.floor(diffMs / MS_PER_DAY);
+}
+
+/**
+ * Check if a user is eligible for recovery bonus.
+ * 
+ * Recovery bonus (1.5x XP for 7 days) is awarded when a user resumes activity
+ * after experiencing level decay. This encourages users to return after breaks.
+ * 
+ * Property 7: Recovery Bonus Application
+ * Validates: Requirements 9.4
+ * 
+ * @param lastActivityAt - Last activity timestamp (ISO string or null)
+ * @param lastDecayAt - Last decay timestamp (ISO string or null)
+ * @param resumedAt - When the user resumed activity (ISO string or null)
+ * @param referenceDate - Reference date for calculation (defaults to now)
+ * @returns Recovery bonus status
+ */
+export function checkRecoveryBonusEligibility(
+  _lastActivityAt: string | null,
+  lastDecayAt: string | null,
+  resumedAt: string | null,
+  referenceDate: Date = new Date()
+): RecoveryBonusStatus {
+  // v1.0 doesn't have recovery bonus
+  if (currentFormulaVersion === 'v1.0') {
+    return {
+      isEligible: false,
+      multiplier: 1.0,
+      daysRemaining: 0,
+      bonusStartDate: null,
+      bonusExpiryDate: null,
+      reason: 'Recovery bonus not available in v1.0',
+    };
+  }
+
+  // No decay history means no recovery bonus
+  if (!lastDecayAt) {
+    return {
+      isEligible: false,
+      multiplier: 1.0,
+      daysRemaining: 0,
+      bonusStartDate: null,
+      bonusExpiryDate: null,
+      reason: 'No decay history - recovery bonus not applicable',
+    };
+  }
+
+  // No resumed activity after decay
+  if (!resumedAt) {
+    return {
+      isEligible: false,
+      multiplier: 1.0,
+      daysRemaining: 0,
+      bonusStartDate: null,
+      bonusExpiryDate: null,
+      reason: 'Activity not resumed after decay',
+    };
+  }
+
+  const decayDate = new Date(lastDecayAt);
+  const resumeDate = new Date(resumedAt);
+
+  // Resume must be after decay
+  if (resumeDate <= decayDate) {
+    return {
+      isEligible: false,
+      multiplier: 1.0,
+      daysRemaining: 0,
+      bonusStartDate: null,
+      bonusExpiryDate: null,
+      reason: 'Resume date must be after decay date',
+    };
+  }
+
+  // Calculate bonus period
+  const bonusStartDate = resumeDate;
+  const bonusExpiryDate = new Date(resumeDate.getTime() + RECOVERY_BONUS_DAYS * MS_PER_DAY);
+  
+  // Check if still within bonus period
+  if (referenceDate > bonusExpiryDate) {
+    return {
+      isEligible: false,
+      multiplier: 1.0,
+      daysRemaining: 0,
+      bonusStartDate,
+      bonusExpiryDate,
+      reason: 'Recovery bonus period has expired',
+    };
+  }
+
+  const daysRemaining = Math.ceil((bonusExpiryDate.getTime() - referenceDate.getTime()) / MS_PER_DAY);
+
+  return {
+    isEligible: true,
+    multiplier: RECOVERY_BONUS_MULTIPLIER,
+    daysRemaining,
+    bonusStartDate,
+    bonusExpiryDate,
+    reason: `Recovery bonus active - ${daysRemaining} days remaining`,
+  };
+}
+
+/**
+ * Apply recovery bonus to XP multiplier.
+ * 
+ * @param baseMultiplier - Base XP multiplier (0.2 - 1.0)
+ * @param recoveryStatus - Recovery bonus status
+ * @returns Final XP multiplier with recovery bonus applied
+ */
+export function applyRecoveryBonus(
+  baseMultiplier: number,
+  recoveryStatus: RecoveryBonusStatus
+): number {
+  if (!recoveryStatus.isEligible) {
+    return baseMultiplier;
+  }
+  return baseMultiplier * recoveryStatus.multiplier;
 }
 
 // =============================================================================

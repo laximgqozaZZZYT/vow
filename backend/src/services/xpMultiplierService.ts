@@ -71,8 +71,8 @@ export type SupportedLocale = 'ja' | 'en';
 // Constants
 // =============================================================================
 
-/** Multiplier values for each tier */
-const MULTIPLIER_VALUES: Record<XPMultiplierTier, number> = {
+/** Multiplier values for each tier (v1.0 - legacy) */
+const MULTIPLIER_VALUES_V1: Record<XPMultiplierTier, number> = {
   minimal: 0.3,
   partial: 0.6,
   near: 0.8,
@@ -80,6 +80,33 @@ const MULTIPLIER_VALUES: Record<XPMultiplierTier, number> = {
   mild_over: 0.9,
   over: 0.7,
 };
+
+/** Multiplier values for each tier (v2.0 - rebalanced)
+ * 
+ * Changes from v1.0:
+ * - minimal: 0.3 → 0.2 (reduced to discourage minimal effort)
+ * - partial: 0.6 → 0.5 (reduced for slower progression)
+ * - near: 0.8 → 0.8 (unchanged)
+ * - optimal: 1.0 → 1.0 (unchanged)
+ * - mild_over: 0.9 → 0.85 (reduced to discourage over-achievement)
+ * - over: 0.7 → 0.6 (reduced for burnout prevention)
+ * 
+ * Requirements: 3.1-3.6
+ */
+const MULTIPLIER_VALUES_V2: Record<XPMultiplierTier, number> = {
+  minimal: 0.2,
+  partial: 0.5,
+  near: 0.8,
+  optimal: 1.0,
+  mild_over: 0.85,
+  over: 0.6,
+};
+
+/** Current active multiplier values (defaults to v2.0) */
+let MULTIPLIER_VALUES: Record<XPMultiplierTier, number> = MULTIPLIER_VALUES_V2;
+
+/** Formula version for multiplier values */
+let currentFormulaVersion: 'v1.0' | 'v2.0' = 'v2.0';
 
 /** Rationale keys for each tier */
 const TIER_RATIONALE_KEYS: Record<XPMultiplierTier, MultiplierRationaleKey> = {
@@ -121,6 +148,44 @@ const RATIONALE_MESSAGES: Record<MultiplierRationaleKey, Record<SupportedLocale,
 
 /** Maximum completion rate to prevent overflow */
 const MAX_COMPLETION_RATE = 500;
+
+// =============================================================================
+// Formula Version Control
+// =============================================================================
+
+/**
+ * Set the formula version for XP multiplier calculations.
+ * 
+ * This allows switching between v1.0 (legacy) and v2.0 (rebalanced) multipliers.
+ * Used by feature flag system to control rollout.
+ * 
+ * @param version - Formula version ('v1.0' or 'v2.0')
+ */
+export function setFormulaVersion(version: 'v1.0' | 'v2.0'): void {
+  currentFormulaVersion = version;
+  MULTIPLIER_VALUES = version === 'v1.0' ? MULTIPLIER_VALUES_V1 : MULTIPLIER_VALUES_V2;
+}
+
+/**
+ * Get the current formula version.
+ * 
+ * @returns Current formula version
+ */
+export function getFormulaVersion(): 'v1.0' | 'v2.0' {
+  return currentFormulaVersion;
+}
+
+/**
+ * Get multiplier values for a specific formula version.
+ * 
+ * @param version - Formula version ('v1.0' or 'v2.0')
+ * @returns Multiplier values for the specified version
+ */
+export function getMultiplierValuesForVersion(
+  version: 'v1.0' | 'v2.0'
+): Record<XPMultiplierTier, number> {
+  return version === 'v1.0' ? { ...MULTIPLIER_VALUES_V1 } : { ...MULTIPLIER_VALUES_V2 };
+}
 
 // =============================================================================
 // Pure Calculation Functions
@@ -403,4 +468,49 @@ export function getMultiplierTooltip(tier: XPMultiplierTier, locale: SupportedLo
   };
 
   return tooltips[tier][locale];
+}
+
+// =============================================================================
+// Comparison Helpers (for migration UI)
+// =============================================================================
+
+/**
+ * Compare multiplier values between v1.0 and v2.0 for a given tier.
+ * 
+ * Useful for displaying migration impact to users.
+ * 
+ * @param tier - XP multiplier tier
+ * @returns Comparison object with old and new values
+ */
+export function compareMultiplierVersions(tier: XPMultiplierTier): {
+  v1: number;
+  v2: number;
+  change: number;
+  changePercent: number;
+} {
+  const v1 = MULTIPLIER_VALUES_V1[tier];
+  const v2 = MULTIPLIER_VALUES_V2[tier];
+  const change = v2 - v1;
+  const changePercent = v1 > 0 ? ((v2 - v1) / v1) * 100 : 0;
+  
+  return { v1, v2, change, changePercent };
+}
+
+/**
+ * Get all multiplier changes between v1.0 and v2.0.
+ * 
+ * @returns Array of tier comparisons
+ */
+export function getAllMultiplierChanges(): Array<{
+  tier: XPMultiplierTier;
+  v1: number;
+  v2: number;
+  change: number;
+  changePercent: number;
+}> {
+  const tiers: XPMultiplierTier[] = ['minimal', 'partial', 'near', 'optimal', 'mild_over', 'over'];
+  return tiers.map(tier => ({
+    tier,
+    ...compareMultiplierVersions(tier),
+  }));
 }

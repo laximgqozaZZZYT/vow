@@ -5,12 +5,23 @@
  * Manages expertise level calculations based on accumulated experience.
  *
  * Key Formulas (from design.md):
+ * 
+ * OLD FORMULAS (v1.0 - when feature flag disabled):
  * - Base XP: habit_difficulty_level * 10
  * - Streak Bonus: min(streak_days * 2, 50)
  * - Total XP: base_xp + streak_bonus
  * - Expertise Level: min(199, floor(10 * log2(experience_points / 100 + 1)))
+ * - Default habit level: 50
+ *
+ * NEW FORMULAS (v2.0 - when feature flag enabled):
+ * - Base XP: floor(habit_difficulty_level * 2)
+ * - Streak Bonus: min(streak_days, 30)
+ * - Total XP: min(base_xp + streak_bonus, 100) (daily cap per habit)
+ * - Expertise Level: min(9999, floor(5 * log2(experience_points / 1000 + 1)))
+ * - Default habit level: 25
  *
  * XP Multiplier System (behavioral science-based):
+ * OLD (v1.0):
  * - 0-49% completion: 0.3x (minimal effort)
  * - 50-79% completion: 0.6x (partial reinforcement)
  * - 80-99% completion: 0.8x (near completion)
@@ -18,7 +29,15 @@
  * - 121-150% completion: 0.9x (mild over-achievement)
  * - 151%+ completion: 0.7x (burnout prevention)
  *
- * Requirements: 6.1, 6.2, 6.3, 6.5
+ * NEW (v2.0):
+ * - 0-49% completion: 0.2x
+ * - 50-79% completion: 0.5x
+ * - 80-99% completion: 0.8x
+ * - 100-120% completion: 1.0x
+ * - 121-150% completion: 0.85x
+ * - 151%+ completion: 0.6x
+ *
+ * Requirements: 6.1, 6.2, 6.3, 6.5, 1.1, 2.1, 2.2, 2.4, 2.5
  */
 
 import type { SupabaseClient } from '@supabase/supabase-js';
@@ -29,12 +48,16 @@ import {
   UserLevelHistoryRepository,
   type MetricsSnapshot,
 } from '../repositories/userLevelRepository.js';
-import { calculateTier, clampLevel } from './userLevelService.js';
+import { calculateTier } from './userLevelService.js';
 import {
   calculateXPMultiplier,
   type XPMultiplierResult,
   type XPMultiplierTier,
 } from './xpMultiplierService.js';
+import { LevelConfigService } from './levelConfigService.js';
+import {
+  calculateExpertiseLevel as calculateExpertiseLevelNew,
+} from './levelRebalancingService.js';
 
 const logger = getLogger('experienceCalculatorService');
 
@@ -42,23 +65,43 @@ const logger = getLogger('experienceCalculatorService');
 // Constants
 // =============================================================================
 
-/** Default habit difficulty level when not assessed (THLI-24) */
-const DEFAULT_HABIT_LEVEL = 50;
+// OLD FORMULA CONSTANTS (v1.0)
+/** Default habit difficulty level when not assessed (THLI-24) - OLD */
+const DEFAULT_HABIT_LEVEL_OLD = 50;
 
-/** Multiplier for base experience points calculation */
-const BASE_XP_MULTIPLIER = 10;
+/** Multiplier for base experience points calculation - OLD */
+const BASE_XP_MULTIPLIER_OLD = 10;
 
-/** Multiplier for streak bonus calculation */
-const STREAK_BONUS_MULTIPLIER = 2;
+/** Multiplier for streak bonus calculation - OLD */
+const STREAK_BONUS_MULTIPLIER_OLD = 2;
 
-/** Maximum streak bonus that can be awarded */
-const MAX_STREAK_BONUS = 50;
+/** Maximum streak bonus that can be awarded - OLD */
+const MAX_STREAK_BONUS_OLD = 50;
 
-/** Divisor for expertise level logarithmic calculation */
-const EXPERTISE_LEVEL_DIVISOR = 100;
+/** Divisor for expertise level logarithmic calculation - OLD */
+const EXPERTISE_LEVEL_DIVISOR_OLD = 100;
 
-/** Multiplier for expertise level logarithmic calculation */
-const EXPERTISE_LEVEL_MULTIPLIER = 10;
+/** Multiplier for expertise level logarithmic calculation - OLD */
+const EXPERTISE_LEVEL_MULTIPLIER_OLD = 10;
+
+/** Maximum expertise level - OLD */
+const MAX_EXPERTISE_LEVEL_OLD = 199;
+
+// NEW FORMULA CONSTANTS (v2.0)
+/** Default habit difficulty level when not assessed (THLI-24) - NEW */
+const DEFAULT_HABIT_LEVEL_NEW = 25;
+
+/** Multiplier for base experience points calculation - NEW */
+const BASE_XP_MULTIPLIER_NEW = 2;
+
+/** Maximum streak bonus that can be awarded - NEW */
+const MAX_STREAK_BONUS_NEW = 30;
+
+/** Daily XP cap per habit - NEW */
+const DAILY_XP_CAP_PER_HABIT = 100;
+
+/** Maximum expertise level - NEW */
+const MAX_EXPERTISE_LEVEL_NEW = 9999;
 
 /** General domain code for unclassified habits */
 const GENERAL_DOMAIN_CODE = '000';
@@ -152,9 +195,79 @@ export interface ExtendedExperienceAwardResult extends ExperienceAwardResult {
 // =============================================================================
 
 /**
- * Calculate experience points from habit completion.
+ * Calculate experience points from habit completion using OLD formula (v1.0).
  *
  * Formula: base_xp + streak_bonus
+ * Where:
+ * - base_xp = habit_difficulty_level * 10
+ * - streak_bonus = min(streak_days * 2, 50)
+ *
+ * Property 9: Experience Points Calculation
+ * Validates: Requirements 6.1, 6.2, 6.3
+ *
+ * @param difficultyLevel - Habit difficulty level (THLI-24), null uses default 50
+ * @param streakDays - Current streak in days
+ * @returns Total experience points to award
+ */
+export function calculateExperiencePointsOld(
+  difficultyLevel: number | null,
+  streakDays: number
+): number {
+  // Use default level if not assessed (Requirement 6.1)
+  const level = difficultyLevel ?? DEFAULT_HABIT_LEVEL_OLD;
+
+  // Calculate base XP: difficulty_level * 10 (Requirement 6.1)
+  const baseXp = level * BASE_XP_MULTIPLIER_OLD;
+
+  // Calculate streak bonus: min(streak_days * 2, 50) (Requirement 6.2)
+  const streakBonus = Math.min(streakDays * STREAK_BONUS_MULTIPLIER_OLD, MAX_STREAK_BONUS_OLD);
+
+  // Total XP = base_xp + streak_bonus (Requirement 6.3)
+  return Math.floor(baseXp + streakBonus);
+}
+
+/**
+ * Calculate experience points from habit completion using NEW formula (v2.0).
+ *
+ * Formula: min(base_xp + streak_bonus, 100)
+ * Where:
+ * - base_xp = floor(habit_difficulty_level * 2)
+ * - streak_bonus = min(streak_days, 30)
+ *
+ * Property 2: XP Calculation Correctness
+ * Validates: Requirements 2.1, 2.2, 2.3, 2.4, 2.5
+ *
+ * @param difficultyLevel - Habit difficulty level (THLI-24), null uses default 25
+ * @param streakDays - Current streak in days
+ * @returns Total experience points to award (capped at 100 per habit)
+ */
+export function calculateExperiencePointsNew(
+  difficultyLevel: number | null,
+  streakDays: number
+): number {
+  // Use default level if not assessed (Requirement 2.3)
+  const level = difficultyLevel ?? DEFAULT_HABIT_LEVEL_NEW;
+
+  // Calculate base XP: floor(habit_level * 2) (Requirement 2.1)
+  const baseXp = Math.floor(level * BASE_XP_MULTIPLIER_NEW);
+
+  // Calculate streak bonus: min(streak_days, 30) (Requirement 2.2)
+  const streakBonus = Math.min(Math.max(0, streakDays), MAX_STREAK_BONUS_NEW);
+
+  // Total XP = base_xp + streak_bonus (Requirement 2.4)
+  const totalXp = baseXp + streakBonus;
+
+  // Cap daily XP per habit at 100 (Requirement 2.5)
+  return Math.min(totalXp, DAILY_XP_CAP_PER_HABIT);
+}
+
+/**
+ * Calculate experience points from habit completion.
+ * 
+ * This function uses the OLD formula (v1.0) by default for backward compatibility.
+ * Use calculateExperiencePointsWithFlag() for feature flag support.
+ *
+ * Formula (OLD): base_xp + streak_bonus
  * Where:
  * - base_xp = habit_difficulty_level * 10
  * - streak_bonus = min(streak_days * 2, 50)
@@ -170,21 +283,59 @@ export function calculateExperiencePoints(
   difficultyLevel: number | null,
   streakDays: number
 ): number {
-  // Use default level if not assessed (Requirement 6.1)
-  const level = difficultyLevel ?? DEFAULT_HABIT_LEVEL;
-
-  // Calculate base XP: difficulty_level * 10 (Requirement 6.1)
-  const baseXp = level * BASE_XP_MULTIPLIER;
-
-  // Calculate streak bonus: min(streak_days * 2, 50) (Requirement 6.2)
-  const streakBonus = Math.min(streakDays * STREAK_BONUS_MULTIPLIER, MAX_STREAK_BONUS);
-
-  // Total XP = base_xp + streak_bonus (Requirement 6.3)
-  return Math.floor(baseXp + streakBonus);
+  // Use OLD formula for backward compatibility
+  return calculateExperiencePointsOld(difficultyLevel, streakDays);
 }
 
 /**
- * Calculate expertise level from accumulated experience points.
+ * Calculate experience points with feature flag support.
+ *
+ * When new_xp_formula_enabled is true, uses NEW formula (v2.0):
+ * - base_xp = floor(habit_level * 2)
+ * - streak_bonus = min(streak_days, 30)
+ * - daily cap = 100 XP per habit
+ * - default habit level = 25
+ *
+ * When new_xp_formula_enabled is false, uses OLD formula (v1.0):
+ * - base_xp = habit_level * 10
+ * - streak_bonus = min(streak_days * 2, 50)
+ * - default habit level = 50
+ *
+ * Validates: Requirements 1.1, 2.1, 2.2, 2.4, 2.5
+ *
+ * @param difficultyLevel - Habit difficulty level (THLI-24), null uses default
+ * @param streakDays - Current streak in days
+ * @param useNewFormula - Whether to use the new formula (v2.0)
+ * @returns Object containing XP and formula version used
+ */
+export function calculateExperiencePointsWithFlag(
+  difficultyLevel: number | null,
+  streakDays: number,
+  useNewFormula: boolean
+): { xp: number; formulaVersion: string } {
+  if (useNewFormula) {
+    const xp = calculateExperiencePointsNew(difficultyLevel, streakDays);
+    logger.debug('Calculated XP using NEW formula (v2.0)', {
+      difficultyLevel,
+      streakDays,
+      xp,
+      formulaVersion: 'v2.0',
+    });
+    return { xp, formulaVersion: 'v2.0' };
+  } else {
+    const xp = calculateExperiencePointsOld(difficultyLevel, streakDays);
+    logger.debug('Calculated XP using OLD formula (v1.0)', {
+      difficultyLevel,
+      streakDays,
+      xp,
+      formulaVersion: 'v1.0',
+    });
+    return { xp, formulaVersion: 'v1.0' };
+  }
+}
+
+/**
+ * Calculate expertise level from accumulated experience points using OLD formula (v1.0).
  *
  * Formula: min(199, floor(10 * log2(experience_points / 100 + 1)))
  *
@@ -194,18 +345,79 @@ export function calculateExperiencePoints(
  * @param experiencePoints - Total accumulated experience points
  * @returns Expertise level (0-199)
  */
-export function calculateExpertiseLevel(experiencePoints: number): number {
+export function calculateExpertiseLevelOld(experiencePoints: number): number {
   if (experiencePoints <= 0) {
     return 0;
   }
 
   // Formula: floor(10 * log2(experience_points / 100 + 1))
   const rawLevel = Math.floor(
-    EXPERTISE_LEVEL_MULTIPLIER * Math.log2(experiencePoints / EXPERTISE_LEVEL_DIVISOR + 1)
+    EXPERTISE_LEVEL_MULTIPLIER_OLD * Math.log2(experiencePoints / EXPERTISE_LEVEL_DIVISOR_OLD + 1)
   );
 
   // Clamp to valid range [0, 199]
-  return clampLevel(rawLevel);
+  return Math.min(MAX_EXPERTISE_LEVEL_OLD, Math.max(0, rawLevel));
+}
+
+/**
+ * Calculate expertise level from accumulated experience points.
+ *
+ * This function uses the OLD formula (v1.0) by default for backward compatibility.
+ * Use calculateExpertiseLevelWithFlag() for feature flag support.
+ *
+ * Formula (OLD): min(199, floor(10 * log2(experience_points / 100 + 1)))
+ *
+ * Property 10: Expertise Level Formula (Logarithmic Scale)
+ * Validates: Requirements 6.5
+ *
+ * @param experiencePoints - Total accumulated experience points
+ * @returns Expertise level (0-199)
+ */
+export function calculateExpertiseLevel(experiencePoints: number): number {
+  // Use OLD formula for backward compatibility
+  return calculateExpertiseLevelOld(experiencePoints);
+}
+
+/**
+ * Calculate expertise level with feature flag support.
+ *
+ * When new_xp_formula_enabled is true, uses NEW formula (v2.0):
+ * - min(9999, floor(5 * log2(experience_points / 1000 + 1)))
+ *
+ * When new_xp_formula_enabled is false, uses OLD formula (v1.0):
+ * - min(199, floor(10 * log2(experience_points / 100 + 1)))
+ *
+ * Property 1: Level Calculation Correctness
+ * Validates: Requirements 1.1, 1.6
+ *
+ * @param experiencePoints - Total accumulated experience points
+ * @param useNewFormula - Whether to use the new formula (v2.0)
+ * @returns Object containing level and formula version used
+ */
+export function calculateExpertiseLevelWithFlag(
+  experiencePoints: number,
+  useNewFormula: boolean
+): { level: number; formulaVersion: string; maxLevel: number } {
+  if (useNewFormula) {
+    // Use the new formula from levelRebalancingService
+    const level = calculateExpertiseLevelNew(experiencePoints);
+    logger.debug('Calculated expertise level using NEW formula (v2.0)', {
+      experiencePoints,
+      level,
+      formulaVersion: 'v2.0',
+      maxLevel: MAX_EXPERTISE_LEVEL_NEW,
+    });
+    return { level, formulaVersion: 'v2.0', maxLevel: MAX_EXPERTISE_LEVEL_NEW };
+  } else {
+    const level = calculateExpertiseLevelOld(experiencePoints);
+    logger.debug('Calculated expertise level using OLD formula (v1.0)', {
+      experiencePoints,
+      level,
+      formulaVersion: 'v1.0',
+      maxLevel: MAX_EXPERTISE_LEVEL_OLD,
+    });
+    return { level, formulaVersion: 'v1.0', maxLevel: MAX_EXPERTISE_LEVEL_OLD };
+  }
 }
 
 /**
@@ -261,12 +473,15 @@ export function distributeExperiencePoints(
  *
  * Manages experience point calculations and awards for habit completions.
  * Updates user expertise levels and records history.
+ * 
+ * Supports both old (v1.0) and new (v2.0) formulas via feature flags.
  */
 export class ExperienceCalculatorService {
   private readonly supabase: SupabaseClient;
   private readonly expertiseRepo: UserExpertiseRepository;
   private readonly userLevelRepo: UserLevelRepository;
   private readonly historyRepo: UserLevelHistoryRepository;
+  private readonly levelConfigService: LevelConfigService;
 
   /**
    * Initialize the ExperienceCalculatorService.
@@ -278,6 +493,76 @@ export class ExperienceCalculatorService {
     this.expertiseRepo = new UserExpertiseRepository(supabase);
     this.userLevelRepo = new UserLevelRepository(supabase);
     this.historyRepo = new UserLevelHistoryRepository(supabase);
+    this.levelConfigService = new LevelConfigService(supabase);
+  }
+
+  // ===========================================================================
+  // Public Methods - Feature Flag Aware
+  // ===========================================================================
+
+  /**
+   * Check if the new XP formula is enabled.
+   *
+   * @returns True if new XP formula (v2.0) should be used
+   */
+  async isNewFormulaEnabled(): Promise<boolean> {
+    return this.levelConfigService.isNewXPFormulaEnabled();
+  }
+
+  /**
+   * Calculate experience points with automatic feature flag detection.
+   *
+   * Automatically checks the feature flag and uses the appropriate formula.
+   *
+   * Requirements: 1.1, 2.1, 2.2, 2.4, 2.5
+   *
+   * @param difficultyLevel - Habit difficulty level (THLI-24), null uses default
+   * @param streakDays - Current streak in days
+   * @returns Object containing XP and formula version used
+   */
+  async calculateExperiencePointsAuto(
+    difficultyLevel: number | null,
+    streakDays: number
+  ): Promise<{ xp: number; formulaVersion: string }> {
+    const useNewFormula = await this.isNewFormulaEnabled();
+    const result = calculateExperiencePointsWithFlag(difficultyLevel, streakDays, useNewFormula);
+    
+    logger.info('Calculated experience points (auto)', {
+      difficultyLevel,
+      streakDays,
+      xp: result.xp,
+      formulaVersion: result.formulaVersion,
+      useNewFormula,
+    });
+    
+    return result;
+  }
+
+  /**
+   * Calculate expertise level with automatic feature flag detection.
+   *
+   * Automatically checks the feature flag and uses the appropriate formula.
+   *
+   * Requirements: 1.1, 1.6
+   *
+   * @param experiencePoints - Total accumulated experience points
+   * @returns Object containing level, formula version, and max level
+   */
+  async calculateExpertiseLevelAuto(
+    experiencePoints: number
+  ): Promise<{ level: number; formulaVersion: string; maxLevel: number }> {
+    const useNewFormula = await this.isNewFormulaEnabled();
+    const result = calculateExpertiseLevelWithFlag(experiencePoints, useNewFormula);
+    
+    logger.info('Calculated expertise level (auto)', {
+      experiencePoints,
+      level: result.level,
+      formulaVersion: result.formulaVersion,
+      maxLevel: result.maxLevel,
+      useNewFormula,
+    });
+    
+    return result;
   }
 
   // ===========================================================================
@@ -377,6 +662,118 @@ export class ExperienceCalculatorService {
         userId,
         habitId,
         xp,
+      });
+      throw error;
+    }
+  }
+
+  /**
+   * Award experience points with automatic feature flag detection.
+   *
+   * This method automatically checks the feature flag and uses the appropriate
+   * formula for both XP calculation and expertise level calculation.
+   *
+   * This method:
+   * 1. Checks the new_xp_formula_enabled feature flag
+   * 2. Distributes XP across mapped domains (or General if none)
+   * 3. Updates expertise records using the appropriate formula
+   * 4. Records level changes in history
+   * 5. Updates total experience points in user_levels
+   * 6. Logs the formula version used for audit purposes
+   *
+   * Requirements: 1.1, 2.1, 2.2, 2.4, 2.5, 2.7, 6.4, 6.6, 6.7, 13.1
+   *
+   * @param userId - The user ID
+   * @param habitId - The habit ID
+   * @param domainCodes - Array of domain codes mapped to the habit
+   * @param xp - Total experience points to award
+   * @returns Experience award result with domain updates, level changes, and formula version
+   */
+  async awardExperiencePointsWithFeatureFlag(
+    userId: string,
+    habitId: string,
+    domainCodes: string[],
+    xp: number
+  ): Promise<ExperienceAwardResult & { formulaVersion: string }> {
+    // Check feature flag
+    const useNewFormula = await this.isNewFormulaEnabled();
+    const formulaVersion = useNewFormula ? 'v2.0' : 'v1.0';
+
+    logger.info('Awarding experience points with feature flag', {
+      userId,
+      habitId,
+      domainCodes,
+      xp,
+      useNewFormula,
+      formulaVersion,
+    });
+
+    try {
+      // Get domain names for the codes
+      const domainNames = await this.getDomainNames(domainCodes);
+
+      // Distribute XP across domains
+      const distribution = distributeExperiencePoints(xp, domainCodes, domainNames);
+
+      const domainUpdates: DomainUpdate[] = [];
+      const levelChanges: LevelChange[] = [];
+
+      // Process each domain with feature flag aware calculation
+      for (const domainPoints of distribution) {
+        const update = await this.updateDomainExpertise(
+          userId,
+          domainPoints.domainCode,
+          domainPoints.domainName,
+          domainPoints.points,
+          useNewFormula // Pass feature flag to use appropriate formula
+        );
+
+        domainUpdates.push(update);
+
+        // Track level changes for notifications
+        if (update.levelChanged) {
+          levelChanges.push({
+            type: 'expertise',
+            domainCode: update.domainCode,
+            domainName: update.domainName,
+            oldLevel: update.oldExpertiseLevel,
+            newLevel: update.newExpertiseLevel,
+          });
+
+          // Record expertise level change in history
+          await this.recordExpertiseLevelChange(
+            userId,
+            update.domainCode,
+            update.oldExpertiseLevel,
+            update.newExpertiseLevel
+          );
+        }
+      }
+
+      // Update total experience points in user_levels
+      await this.updateTotalExperiencePoints(userId, xp);
+
+      logger.info('Experience points awarded successfully with feature flag', {
+        userId,
+        habitId,
+        totalPointsAwarded: xp,
+        domainsUpdated: domainUpdates.length,
+        levelChanges: levelChanges.length,
+        formulaVersion,
+      });
+
+      return {
+        totalPointsAwarded: xp,
+        domainUpdates,
+        levelChanges,
+        formulaVersion,
+      };
+    } catch (error) {
+      logger.error('Failed to award experience points with feature flag', error as Error, {
+        userId,
+        habitId,
+        xp,
+        formulaVersion,
       });
       throw error;
     }
@@ -544,13 +941,15 @@ export class ExperienceCalculatorService {
    * @param domainCode - The domain code
    * @param domainName - The domain name
    * @param points - Experience points to add
+   * @param useNewFormula - Optional: Whether to use new formula (v2.0). If not provided, uses old formula.
    * @returns Domain update result
    */
   private async updateDomainExpertise(
     userId: string,
     domainCode: string,
     domainName: string,
-    points: number
+    points: number,
+    useNewFormula?: boolean
   ): Promise<DomainUpdate> {
     // Get current expertise record (if exists)
     const currentExpertise = await this.expertiseRepo.getByDomain(userId, domainCode);
@@ -560,8 +959,33 @@ export class ExperienceCalculatorService {
 
     // Calculate new values
     const newExperiencePoints = oldExperiencePoints + points;
-    const newExpertiseLevel = calculateExpertiseLevel(newExperiencePoints);
+    
+    // Use feature flag aware calculation if specified, otherwise use old formula for backward compatibility
+    let newExpertiseLevel: number;
+    let formulaVersion: string;
+    
+    if (useNewFormula !== undefined) {
+      const result = calculateExpertiseLevelWithFlag(newExperiencePoints, useNewFormula);
+      newExpertiseLevel = result.level;
+      formulaVersion = result.formulaVersion;
+    } else {
+      // Default to old formula for backward compatibility
+      newExpertiseLevel = calculateExpertiseLevel(newExperiencePoints);
+      formulaVersion = 'v1.0';
+    }
+    
     const newTier = calculateTier(newExpertiseLevel);
+
+    // Log formula version used for audit purposes (Requirement 2.7)
+    logger.debug('Updated domain expertise', {
+      userId,
+      domainCode,
+      oldExperiencePoints,
+      newExperiencePoints,
+      oldExpertiseLevel,
+      newExpertiseLevel,
+      formulaVersion,
+    });
 
     // Upsert expertise record
     await this.expertiseRepo.upsert(userId, domainCode, {
@@ -686,6 +1110,13 @@ export class ExperienceCalculatorService {
    */
   get historyRepository(): UserLevelHistoryRepository {
     return this.historyRepo;
+  }
+
+  /**
+   * Get the level config service.
+   */
+  get levelConfig(): LevelConfigService {
+    return this.levelConfigService;
   }
 
   /**

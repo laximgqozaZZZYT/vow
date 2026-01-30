@@ -68,6 +68,12 @@ export const habitUpdateSchema = z.object({
 // ============================================================================
 /**
  * Schema for activity data from database.
+ *
+ * Column definitions:
+ * - amount: workload increment (増分)
+ * - prev_count: daily count before this activity (増分前の日次累計Workload)
+ * - new_count: daily count after this activity (増分後の日次累計Workload)
+ * - cumulative_workload: total workload from habit creation to this activity (累計Workload)
  */
 export const activitySchema = z.object({
     id: z.string().uuid(),
@@ -78,6 +84,9 @@ export const activitySchema = z.object({
     kind: z.enum(['complete', 'skip', 'partial']).default('complete'),
     timestamp: z.string().datetime(),
     amount: z.number().positive().default(1),
+    prev_count: z.number().nullable().optional(),
+    new_count: z.number().nullable().optional(),
+    cumulative_workload: z.number().nullable().optional(),
     memo: z.string().nullable().optional(),
     created_at: z.string().datetime().optional(),
 });

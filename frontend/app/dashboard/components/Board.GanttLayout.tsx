@@ -113,7 +113,10 @@ export default function GanttLayout({
   // State for lightning line visibility
   const [showLightningLine, setShowLightningLine] = useState(true);
 
-  // Use Gantt data hook
+  // State for view mode (managed separately to avoid circular dependency)
+  const [currentViewMode, setCurrentViewMode] = useState<'day' | 'week' | 'month'>('week');
+
+  // Use Gantt data hook with viewMode
   const {
     rows,
     dependencies,
@@ -124,7 +127,8 @@ export default function GanttLayout({
     goals,
     habits,
     activities,
-    habitRelations
+    habitRelations,
+    viewMode: currentViewMode
   });
 
   // Use Gantt timeline hook
@@ -139,8 +143,15 @@ export default function GanttLayout({
     totalWidth,
     scrollContainerRef
   } = useGanttTimeline({
-    rows
+    rows,
+    initialViewMode: currentViewMode
   });
+
+  // Sync viewMode between timeline and data hooks
+  const handleViewModeChange = useCallback((mode: 'day' | 'week' | 'month') => {
+    setCurrentViewMode(mode);
+    setViewMode(mode);
+  }, [setViewMode]);
 
   // Sync scroll between all panels
   useEffect(() => {
@@ -265,7 +276,7 @@ export default function GanttLayout({
             <GanttTimelineHeader
               cells={cells}
               viewMode={viewMode}
-              onViewModeChange={setViewMode}
+              onViewModeChange={handleViewModeChange}
               headerHeight={HEADER_HEIGHT}
               todayPosition={todayPosition}
               onScrollToToday={scrollToToday}

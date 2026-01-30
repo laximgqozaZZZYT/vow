@@ -165,8 +165,7 @@ export function useActivityManager({
       const idx = activities.findIndex(a => a.habitId === habitId && a.kind === 'start' && a.timestamp === start.ts);
       if (idx !== -1) {
         const old = activities[idx];
-        const prevCountVal = (typeof old.prevCount === 'number') ? old.prevCount : (typeof old.newCount === 'number' ? old.newCount : (habit.count ?? 0));
-        const updatedAct: Activity = { ...old, kind: 'complete', amount: increment, prevCount: prevCountVal, newCount, durationSeconds };
+        const updatedAct: Activity = { ...old, kind: 'complete', amount: increment, durationSeconds };
         
         if (old.id && !isTemporaryActivityId(old.id)) {
           const u = await api.updateActivity(old.id, updatedAct);
@@ -179,7 +178,7 @@ export function useActivityManager({
             debug.log('[persistStartToComplete] XP awarded:', xpResult);
           }
         } else {
-          const created = await api.createActivity({ kind: 'complete', habitId, habitName: habit.name, timestamp: now, amount: increment, prevCount: prev, newCount, durationSeconds });
+          const created = await api.createActivity({ kind: 'complete', habitId, habitName: habit.name, timestamp: now, amount: increment, durationSeconds });
           setActivities(acts => acts.filter(a => !(a.habitId === habitId && a.kind === 'start' && a.timestamp === start.ts)).concat([created]));
           
           // Award XP for habit completion
@@ -190,7 +189,7 @@ export function useActivityManager({
           }
         }
       } else {
-        const created = await api.createActivity({ kind: 'complete', habitId, habitName: habit.name, timestamp: now, amount: increment, prevCount: prev, newCount, durationSeconds });
+        const created = await api.createActivity({ kind: 'complete', habitId, habitName: habit.name, timestamp: now, amount: increment, durationSeconds });
         setActivities(acts => [created, ...acts]);
         
         // Award XP for habit completion
@@ -242,7 +241,7 @@ export function useActivityManager({
     actionKey: string
   ) {
     try {
-      const created = await api.createActivity({ kind: 'complete', habitId, habitName: habit.name, timestamp: now, amount: increment, prevCount: prev, newCount });
+      const created = await api.createActivity({ kind: 'complete', habitId, habitName: habit.name, timestamp: now, amount: increment });
       setActivities(a => [created, ...a]);
 
       // Award XP for habit completion
@@ -253,7 +252,7 @@ export function useActivityManager({
       }
     } catch (e) {
       console.error(e);
-      setActivities(a => [{ id: `a${Date.now()}`, kind: 'complete', habitId, habitName: habit.name, timestamp: now, amount: increment, prevCount: prev, newCount }, ...a]);
+      setActivities(a => [{ id: `a${Date.now()}`, kind: 'complete', habitId, habitName: habit.name, timestamp: now, amount: increment }, ...a]);
     } finally {
       releaseActionLock(actionKey);
     }
@@ -325,10 +324,10 @@ export function useActivityManager({
   /** Persist start activity to backend */
   async function persistStartActivity(habitId: string, habit: Habit, now: string, actionKey: string) {
     try {
-      const created = await api.createActivity({ kind: 'start', habitId, habitName: habit.name, timestamp: now, prevCount: habit.count ?? 0, newCount: habit.count ?? 0 });
+      const created = await api.createActivity({ kind: 'start', habitId, habitName: habit.name, timestamp: now });
       setActivities(a => [created, ...a]);
     } catch (e) {
-      setActivities(a => [{ id: `a${Date.now()}`, kind: 'start', habitId, habitName: habit.name, timestamp: now, prevCount: habit.count ?? 0, newCount: habit.count ?? 0 }, ...a]);
+      setActivities(a => [{ id: `a${Date.now()}`, kind: 'start', habitId, habitName: habit.name, timestamp: now }, ...a]);
     } finally {
       releaseActionLock(actionKey);
     }
@@ -364,9 +363,7 @@ export function useActivityManager({
       habitId, 
       habitName: habit.name, 
       timestamp: now, 
-      amount: 0, 
-      prevCount: habit.count ?? 0, 
-      newCount: habit.count ?? 0 
+      amount: 0
     };
     
     try {
@@ -375,9 +372,7 @@ export function useActivityManager({
         habitId, 
         habitName: habit.name, 
         timestamp: now, 
-        amount: 0, 
-        prevCount: habit.count ?? 0, 
-        newCount: habit.count ?? 0 
+        amount: 0
       });
       setActivities(a => [created, ...a]);
       setEditingActivityId(created.id);
@@ -453,12 +448,8 @@ export function useActivityManager({
   ) {
     try {
       // Calculate the count before today's activities
-      // Sort by timestamp to find the earliest prevCount
-      const sortedActivities = [...todayActivities].sort((a, b) => 
-        (a.timestamp || '').localeCompare(b.timestamp || '')
-      );
-      const firstActivity = sortedActivities[0];
-      const countBeforeToday = firstActivity?.prevCount ?? 0;
+      // We'll reset to 0 since we're deleting all today's activities
+      const countBeforeToday = 0;
       
       // Delete activities from backend and revoke XP for complete activities
       for (const activity of todayActivities) {

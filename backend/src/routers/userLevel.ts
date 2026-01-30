@@ -100,7 +100,7 @@ export function createUserLevelRouter(): Hono {
   // ---------------------------------------------------------------------------
   // GET /users/:id/level
   // Get user's overall level information
-  // Requirements: 12.1
+  // Requirements: 12.1, 10.1 (level-system-rebalancing)
   // ---------------------------------------------------------------------------
   router.get('/users/:id/level', async (c: Context) => {
     const { userId, supabase } = getAuthContext(c);
@@ -128,6 +128,11 @@ export function createUserLevelRouter(): Hono {
         resilienceScore: 50,
         totalExperiencePoints: 0,
         lastCalculatedAt: null,
+        // Level rebalancing fields (Requirements 10.1)
+        formulaVersion: 'v2.0',
+        isMigrated: false,
+        migrationDate: null,
+        pioneerBadgeAwarded: false,
       });
     }
 
@@ -139,6 +144,11 @@ export function createUserLevelRouter(): Hono {
       resilienceScore: userLevel.resilience_score,
       totalExperiencePoints: userLevel.total_experience_points,
       lastCalculatedAt: userLevel.last_calculated_at,
+      // Level rebalancing fields (Requirements 10.1)
+      formulaVersion: (userLevel as unknown as Record<string, unknown>)['formula_version'] ?? 'v1.0',
+      isMigrated: (userLevel as unknown as Record<string, unknown>)['is_migrated'] ?? false,
+      migrationDate: (userLevel as unknown as Record<string, unknown>)['migration_date'] ?? null,
+      pioneerBadgeAwarded: (userLevel as unknown as Record<string, unknown>)['pioneer_badge_awarded'] ?? false,
     });
   });
 

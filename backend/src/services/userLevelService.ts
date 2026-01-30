@@ -2,18 +2,19 @@
  * User Level Service
  *
  * Manages user level calculation and tracking including:
- * - Overall user level (0-199)
+ * - Overall user level (0-9999 with rebalancing, 0-199 legacy)
  * - Habit continuity power (0-100)
  * - Resilience score (0-100)
  * - Expertise levels per domain
  *
- * Requirements: 4.1, 5.1, 7.1, 15.1
+ * Requirements: 1.6, 4.1, 5.1, 7.1, 15.1
  */
 
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { getLogger } from '../utils/logger.js';
 import { HabitRepository } from '../repositories/habitRepository.js';
 import { ActivityRepository } from '../repositories/activityRepository.js';
+import { LevelConfigService, type TierBoundaries } from './levelConfigService.js';
 import {
   UserLevelRepository,
   UserExpertiseRepository,
@@ -46,6 +47,42 @@ const DEFAULT_RESILIENCE_SCORE = 50;
 
 /** Threshold for recording continuity changes in history */
 const CONTINUITY_CHANGE_THRESHOLD = 5;
+
+/** Legacy maximum level (before rebalancing) */
+const LEGACY_MAX_LEVEL = 199;
+
+/** New maximum level (after rebalancing) */
+const NEW_MAX_LEVEL = 9999;
+
+/**
+ * Legacy tier boundaries (before rebalancing)
+ * - beginner: 0-49
+ * - intermediate: 50-99
+ * - advanced: 100-149
+ * - expert: 150-199
+ */
+const LEGACY_TIER_BOUNDARIES: TierBoundaries = {
+  beginner: { min: 0, max: 49 },
+  intermediate: { min: 50, max: 99 },
+  advanced: { min: 100, max: 149 },
+  expert: { min: 150, max: 199 },
+};
+
+/**
+ * New tier boundaries (after rebalancing)
+ * - beginner: 0-49
+ * - intermediate: 50-99
+ * - advanced: 100-499
+ * - expert: 500-9999
+ * 
+ * Requirements: 1.6
+ */
+const NEW_TIER_BOUNDARIES: TierBoundaries = {
+  beginner: { min: 0, max: 49 },
+  intermediate: { min: 50, max: 99 },
+  advanced: { min: 100, max: 499 },
+  expert: { min: 500, max: 9999 },
+};
 
 // =============================================================================
 // Types
@@ -93,31 +130,76 @@ export interface ResilienceMetrics {
  * Calculate level tier from level value.
  * 
  * Property 1: Level Tier Calculation Correctness
+ * 
+ * Legacy boundaries (useNewBoundaries = false):
  * - beginner: 0-49
  * - intermediate: 50-99
  * - advanced: 100-149
  * - expert: 150-199
+ * 
+ * New boundaries (useNewBoundaries = true):
+ * - beginner: 0-49
+ * - intermediate: 50-99
+ * - advanced: 100-499
+ * - expert: 500-9999
  *
- * @param level - Level value (0-199)
+ * Requirements: 1.6
+ *
+ * @param level - Level value (0-199 legacy, 0-9999 new)
+ * @param useNewBoundaries - Whether to use new tier boundaries (default: false for backward compatibility)
  * @returns Level tier
  */
-export function calculateTier(level: number): LevelTier {
-  if (level < 50) return 'beginner';
-  if (level < 100) return 'intermediate';
-  if (level < 150) return 'advanced';
-  return 'expert';
+export function calculateTier(level: number, useNewBoundaries = false): LevelTier {
+  const boundaries = useNewBoundaries ? NEW_TIER_BOUNDARIES : LEGACY_TIER_BOUNDARIES;
+  
+  if (level >= boundaries.expert.min) {
+    return 'expert';
+  }
+  if (level >= boundaries.advanced.min) {
+    return 'advanced';
+  }
+  if (level >= boundaries.intermediate.min) {
+    return 'intermediate';
+  }
+  return 'beginner';
 }
 
 /**
- * Clamp a level value to the valid range [0, 199].
+ * Clamp a level value to the valid range.
+ * 
+ * Legacy range: [0, 199]
+ * New range: [0, 9999]
  *
  * Property 12: Level Value Clamping
+ * Requirements: 1.6
  *
  * @param level - Raw level value
+ * @param useNewMaxLevel - Whether to use new max level of 9999 (default: false for backward compatibility)
  * @returns Clamped level value
  */
-export function clampLevel(level: number): number {
-  return Math.min(199, Math.max(0, Math.floor(level)));
+export function clampLevel(level: number, useNewMaxLevel = false): number {
+  const maxLevel = useNewMaxLevel ? NEW_MAX_LEVEL : LEGACY_MAX_LEVEL;
+  return Math.min(maxLevel, Math.max(0, Math.floor(level)));
+}
+
+/**
+ * Get the tier boundaries based on feature flag.
+ * 
+ * @param useNewBoundaries - Whether to use new tier boundaries
+ * @returns Tier boundaries configuration
+ */
+export function getTierBoundaries(useNewBoundaries = false): TierBoundaries {
+  return useNewBoundaries ? NEW_TIER_BOUNDARIES : LEGACY_TIER_BOUNDARIES;
+}
+
+/**
+ * Get the maximum level based on feature flag.
+ * 
+ * @param useNewMaxLevel - Whether to use new max level
+ * @returns Maximum level value
+ */
+export function getMaxLevel(useNewMaxLevel = false): number {
+  return useNewMaxLevel ? NEW_MAX_LEVEL : LEGACY_MAX_LEVEL;
 }
 
 /**
@@ -166,6 +248,7 @@ export class UserLevelService {
   private readonly historyRepo: UserLevelHistoryRepository;
   private readonly habitRepo: HabitRepository;
   private readonly activityRepo: ActivityRepository;
+  private readonly levelConfigService: LevelConfigService;
 
   /**
    * Initialize the UserLevelService.
@@ -178,6 +261,62 @@ export class UserLevelService {
     this.historyRepo = new UserLevelHistoryRepository(supabase);
     this.habitRepo = new HabitRepository(supabase);
     this.activityRepo = new ActivityRepository(supabase);
+    this.levelConfigService = new LevelConfigService(supabase);
+  }
+
+  // ===========================================================================
+  // Public Methods - Feature Flag Helpers
+  // ===========================================================================
+
+  /**
+   * Check if level rebalancing is enabled.
+   * 
+   * @returns True if level rebalancing feature flag is enabled
+   */
+  async isRebalancingEnabled(): Promise<boolean> {
+    return this.levelConfigService.isRebalancingEnabled();
+  }
+
+  /**
+   * Get tier boundaries based on current feature flag state.
+   * 
+   * @returns Tier boundaries (new or legacy based on feature flag)
+   */
+  async getCurrentTierBoundaries(): Promise<TierBoundaries> {
+    const isRebalancingEnabled = await this.isRebalancingEnabled();
+    return getTierBoundaries(isRebalancingEnabled);
+  }
+
+  /**
+   * Get max level based on current feature flag state.
+   * 
+   * @returns Max level (9999 if rebalancing enabled, 199 otherwise)
+   */
+  async getCurrentMaxLevel(): Promise<number> {
+    const isRebalancingEnabled = await this.isRebalancingEnabled();
+    return getMaxLevel(isRebalancingEnabled);
+  }
+
+  /**
+   * Calculate tier for a level using current feature flag state.
+   * 
+   * @param level - Level value
+   * @returns Level tier
+   */
+  async calculateTierWithConfig(level: number): Promise<LevelTier> {
+    const isRebalancingEnabled = await this.isRebalancingEnabled();
+    return calculateTier(level, isRebalancingEnabled);
+  }
+
+  /**
+   * Clamp level using current feature flag state.
+   * 
+   * @param level - Raw level value
+   * @returns Clamped level value
+   */
+  async clampLevelWithConfig(level: number): Promise<number> {
+    const isRebalancingEnabled = await this.isRebalancingEnabled();
+    return clampLevel(level, isRebalancingEnabled);
   }
 
   // ===========================================================================
@@ -274,41 +413,34 @@ export class UserLevelService {
    * Property 11: Overall Level Formula
    * Formula: (top_expertise_avg * 0.5) + (habit_continuity_power * 0.25) + (resilience_score * 0.25)
    *
-   * Requirements: 7.1, 7.2, 7.3, 7.6
+   * Requirements: 1.6, 7.1, 7.2, 7.3, 7.6
    *
    * @param userId - The user ID
-   * @returns Overall level (0-199)
+   * @returns Overall level (0-199 legacy, 0-9999 with rebalancing)
    */
   async calculateOverallLevel(userId: string): Promise<number> {
     logger.info('Calculating overall level', { userId });
 
     try {
-      // Get top expertise average
-      const topExpertiseAvg = await this.getTopExpertiseAverage(userId);
+      // Check if rebalancing is enabled
+      const isRebalancingEnabled = await this.isRebalancingEnabled();
+      
+      // Get total experience points from user_levels table
+      const userLevel = await this.userLevelRepo.getByUserId(userId);
+      const totalXP = userLevel?.total_experience_points ?? 0;
 
-      // Get habit continuity power
-      const habitContinuityPower = await this.calculateHabitContinuityPower(userId);
+      // Calculate level from total XP using appropriate formula
+      const rawLevel = this.calculateLevelFromXP(totalXP, isRebalancingEnabled);
 
-      // Get resilience score
-      const resilienceScore = await this.calculateResilienceScore(userId);
+      // Clamp to valid range based on feature flag
+      const level = clampLevel(rawLevel, isRebalancingEnabled);
 
-      // Calculate overall level using the formula
-      const rawLevel = this.computeOverallLevel(
-        topExpertiseAvg,
-        habitContinuityPower,
-        resilienceScore
-      );
-
-      // Clamp to valid range
-      const level = clampLevel(rawLevel);
-
-      logger.debug('Overall level calculated', {
+      logger.info('Overall level calculated from total XP', {
         userId,
-        topExpertiseAvg,
-        habitContinuityPower,
-        resilienceScore,
+        totalXP,
         rawLevel,
         level,
+        isRebalancingEnabled,
       });
 
       return level;
@@ -319,9 +451,31 @@ export class UserLevelService {
   }
 
   /**
+   * Calculate level from experience points using logarithmic formula.
+   * 
+   * Legacy formula: min(199, floor(10 * log2(xp / 100 + 1)))
+   * New formula: min(9999, floor(5 * log2(xp / 1000 + 1)))
+   *
+   * @param xp - Total experience points
+   * @param useNewFormula - Whether to use new formula (default: false for backward compatibility)
+   * @returns Level (0-199 legacy, 0-9999 new)
+   */
+  private calculateLevelFromXP(xp: number, useNewFormula = false): number {
+    if (xp <= 0) return 0;
+    
+    if (useNewFormula) {
+      // New formula: min(9999, floor(5 * log2(xp / 1000 + 1)))
+      return Math.min(NEW_MAX_LEVEL, Math.floor(5 * Math.log2(xp / 1000 + 1)));
+    }
+    
+    // Legacy formula: min(199, floor(10 * log2(xp / 100 + 1)))
+    return Math.min(LEGACY_MAX_LEVEL, Math.floor(10 * Math.log2(xp / 100 + 1)));
+  }
+
+  /**
    * Recalculate and save user level.
    *
-   * Requirements: 4.5, 5.6, 7.4, 7.5
+   * Requirements: 1.6, 4.5, 5.6, 7.4, 7.5
    *
    * @param userId - The user ID
    * @returns Updated user level
@@ -330,14 +484,19 @@ export class UserLevelService {
     logger.info('Recalculating user level', { userId });
 
     try {
+      // Check if rebalancing is enabled
+      const isRebalancingEnabled = await this.isRebalancingEnabled();
+      
       // Get current level for comparison
       const currentLevel = await this.userLevelRepo.getByUserId(userId);
 
-      // Calculate new metrics
+      // Calculate overall level from total XP (simple formula)
+      const overallLevel = await this.calculateOverallLevel(userId);
+      const overallTier = calculateTier(overallLevel, isRebalancingEnabled);
+
+      // Calculate continuity and resilience for display purposes (optional metrics)
       const habitContinuityPower = await this.calculateHabitContinuityPower(userId);
       const resilienceScore = await this.calculateResilienceScore(userId);
-      const overallLevel = await this.calculateOverallLevel(userId);
-      const overallTier = calculateTier(overallLevel);
 
       // Update user level record
       const updatedRecord = await this.userLevelRepo.updateMetrics(userId, {
@@ -358,8 +517,10 @@ export class UserLevelService {
         userId,
         overallLevel,
         overallTier,
+        totalXP: currentLevel?.total_experience_points ?? 0,
         habitContinuityPower,
         resilienceScore,
+        isRebalancingEnabled,
       });
 
       return toUserLevel(updatedRecord);
@@ -372,7 +533,7 @@ export class UserLevelService {
   /**
    * Initialize user level for a new user.
    *
-   * Requirements: 15.1, 15.2
+   * Requirements: 1.6, 15.1, 15.2
    *
    * @param userId - The user ID
    * @returns Initialized user level
@@ -387,6 +548,9 @@ export class UserLevelService {
         logger.debug('User level already exists', { userId });
         return toUserLevel(existing);
       }
+
+      // Check if rebalancing is enabled
+      const isRebalancingEnabled = await this.isRebalancingEnabled();
 
       // Check if user has existing habits (e.g., migrated from guest)
       const habits = await this.habitRepo.getByOwner('user', userId, true);
@@ -407,7 +571,7 @@ export class UserLevelService {
 
         initialLevel = await this.userLevelRepo.upsert(userId, {
           overall_level: overallLevel,
-          overall_tier: calculateTier(overallLevel),
+          overall_tier: calculateTier(overallLevel, isRebalancingEnabled),
           habit_continuity_power: Math.round(habitContinuityPower),
           resilience_score: Math.round(resilienceScore),
           total_experience_points: 0,
@@ -429,6 +593,7 @@ export class UserLevelService {
         userId,
         overallLevel: initialLevel.overall_level,
         hasExistingHabits,
+        isRebalancingEnabled,
       });
 
       return toUserLevel(initialLevel);
@@ -602,28 +767,6 @@ export class UserLevelService {
 
   /**
    * Get top expertise average for a user.
-   *
-   * Requirements: 7.2, 7.3
-   *
-   * @param userId - The user ID
-   * @param limit - Number of top domains to average (default 5)
-   * @returns Average expertise level of top domains
-   */
-  private async getTopExpertiseAverage(userId: string, limit = 5): Promise<number> {
-    const topExpertise = await this.expertiseRepo.getTopExpertise(userId, limit);
-
-    if (topExpertise.length === 0) {
-      return 0;
-    }
-
-    const totalLevel = topExpertise.reduce(
-      (sum, exp) => sum + exp.expertise_level,
-      0
-    );
-
-    return totalLevel / topExpertise.length;
-  }
-
   /**
    * Compute habit continuity power from metrics.
    *
@@ -653,28 +796,6 @@ export class UserLevelService {
       metrics.recoveryRate * 0.5 +
       metrics.bounceBackCount * 0.3 +
       metrics.streakRecoveryRatio * 0.2
-    );
-  }
-
-  /**
-   * Compute overall level from components.
-   *
-   * Property 11: Overall Level Formula
-   *
-   * @param topExpertiseAvg - Average of top expertise levels
-   * @param habitContinuityPower - Habit continuity power (0-100)
-   * @param resilienceScore - Resilience score (0-100)
-   * @returns Overall level (raw, before clamping)
-   */
-  private computeOverallLevel(
-    topExpertiseAvg: number,
-    habitContinuityPower: number,
-    resilienceScore: number
-  ): number {
-    return (
-      topExpertiseAvg * 0.5 +
-      habitContinuityPower * 0.25 +
-      resilienceScore * 0.25
     );
   }
 
@@ -936,5 +1057,12 @@ export class UserLevelService {
    */
   get historyRepository(): UserLevelHistoryRepository {
     return this.historyRepo;
+  }
+
+  /**
+   * Get the level config service.
+   */
+  get levelConfig(): LevelConfigService {
+    return this.levelConfigService;
   }
 }
