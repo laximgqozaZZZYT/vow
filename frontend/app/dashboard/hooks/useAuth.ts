@@ -12,6 +12,9 @@ import type { AuthContext } from '../types';
 const ALLOWED_EMAILS_DEV = process.env.NEXT_PUBLIC_ALLOWED_EMAILS_DEV?.split(',').map(e => e.trim().toLowerCase()) || [];
 const IS_DEV_ENV = process.env.NEXT_PUBLIC_ENV === 'development';
 
+// 管理者メールアドレス
+const ADMIN_EMAIL = 'k6285620@gmail.com';
+
 export function useAuth(): AuthContext {
   const router = useRouter();
   const [isAuthed, setIsAuthed] = useState<boolean | null>(null);
@@ -19,6 +22,8 @@ export function useAuth(): AuthContext {
   const [authError, setAuthError] = useState<string | null>(null);
   const [isGuest, setIsGuest] = useState<boolean>(false);
   const [userId, setUserId] = useState<string | null>(null);
+  const [isAdmin, setIsAdmin] = useState<boolean>(false);
+  const [isPremium, setIsPremium] = useState<boolean>(false);
   const previousIsGuestRef = useRef<boolean>(false);
   const migrationInProgressRef = useRef<boolean>(false);
   
@@ -263,16 +268,42 @@ export function useAuth(): AuthContext {
         }
         
         setIsAuthed(!!token);
-        
+
         // 認証状態が変わった場合、ゲスト状態もリセット
         if (token) {
           setIsGuest(false);
-          
+
+          // Check admin status based on email
+          const adminStatus = userEmail === ADMIN_EMAIL.toLowerCase();
+          setIsAdmin(adminStatus);
+          debug.log('[auth] Admin status:', adminStatus);
+
+          // Check premium subscription status
+          try {
+            const apiUrl = process.env.NEXT_PUBLIC_API_URL || '';
+            const response = await fetch(`${apiUrl}/api/subscription/status`, {
+              headers: { Authorization: `Bearer ${token}` },
+            });
+            if (response.ok) {
+              const data = await response.json();
+              const planType = data.subscription?.planType;
+              const premiumStatus = planType === 'premium_basic' || planType === 'premium_pro';
+              setIsPremium(premiumStatus);
+              debug.log('[auth] Premium status:', premiumStatus, 'Plan:', planType);
+            }
+          } catch (error) {
+            debug.log('[auth] Failed to check subscription status:', error);
+            setIsPremium(false);
+          }
+
           // Check for guest data migration on auth state change
           if (userId && GuestDataMigration.hasGuestData() && migrationStatus === 'idle' && !migrationInProgressRef.current) {
             debug.log('[auth] Auth state change: Guest data found for authenticated user, starting migration');
             await performMigration(userId);
           }
+        } else {
+          setIsAdmin(false);
+          setIsPremium(false);
         }
         
         try {
@@ -330,6 +361,8 @@ export function useAuth(): AuthContext {
     handleLogout,
     isGuest,
     userId,
+    isAdmin,
+    isPremium,
     // Migration state
     migrationStatus,
     migrationResult,

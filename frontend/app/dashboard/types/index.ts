@@ -180,6 +180,8 @@ export interface AuthContext {
   handleLogout: () => Promise<void>;
   isGuest: boolean; // ゲストユーザーかどうかを示すフラグ
   userId: string | null; // ユーザーID
+  isAdmin: boolean; // 管理者かどうか
+  isPremium: boolean; // 有料プランユーザーかどうか
   migrationStatus: 'idle' | 'checking' | 'migrating' | 'success' | 'error';
   migrationResult: GuestDataMigrationResult | null;
   migrationError: string | null;

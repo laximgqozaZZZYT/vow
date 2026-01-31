@@ -51,7 +51,7 @@ export default function DashboardPage() {
   const [selectedGoal, setSelectedGoal] = useState<string | null>(null);
   
   // 認証状態を取得
-  const { isAuthed, isGuest, migrationStatus } = useAuth();
+  const { isAuthed, isGuest, migrationStatus, isAdmin, isPremium } = useAuth();
 
   // Check for guest data migration on page load
   useEffect(() => {
@@ -566,6 +566,8 @@ export default function DashboardPage() {
         handleHabitAction={handleHabitAction}
         handleMoveGoal={handleMoveGoal}
         handleMoveHabit={handleMoveHabit}
+        isAdmin={isAdmin}
+        isPremium={isPremium}
       />
     </HandednessProvider>
     </LocaleProvider>
@@ -777,10 +779,12 @@ function DashboardLayout(props: any) {
     handleHabitAction,
     handleMoveGoal,
     handleMoveHabit,
+    isAdmin,
+    isPremium,
   } = props;
 
   // Tab navigation state
-  const visibleTabs = getVisibleTabs(pageSections);
+  const visibleTabs = getVisibleTabs(pageSections, { isAdmin, isPremium });
   const { activeTab, setActiveTab, isFullView, toggleFullView, exitFullView, isCollapsed, toggleCollapse } = useTabNavigation(
     'board', // Always start with Board tab
     pageSections
