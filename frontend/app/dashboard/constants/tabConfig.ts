@@ -6,11 +6,14 @@
 // Default to false if not set (safer for production)
 const ENABLE_AI_COACH = process.env.NEXT_PUBLIC_ENABLE_AI_COACH === 'true';
 
+// Feature flag for Multi-Agent Dashboard
+const ENABLE_MULTI_AGENT = process.env.NEXT_PUBLIC_ENABLE_MULTI_AGENT === 'true';
+
 export interface TabConfig {
   id: string;
   label: string;
   labelJa: string;
-  iconType: 'board' | 'next' | 'activity' | 'calendar' | 'statistics' | 'diary' | 'stickies' | 'mindmap' | 'notices' | 'coach';
+  iconType: 'board' | 'next' | 'activity' | 'calendar' | 'statistics' | 'diary' | 'stickies' | 'mindmap' | 'notices' | 'coach' | 'agents';
   supportsFullView?: boolean;
   /** Alias IDs that should be treated as equivalent to this tab (for backward compatibility) */
   aliases?: string[];
@@ -29,6 +32,7 @@ const ALL_TAB_CONFIGS: TabConfig[] = [
   { id: 'mindmap', label: 'Map', labelJa: 'マップ', iconType: 'mindmap', supportsFullView: true, enabled: true },
   { id: 'notices', label: 'Alerts', labelJa: '通知', iconType: 'notices', enabled: true },
   { id: 'coach', label: 'Coach', labelJa: 'コーチ', iconType: 'coach', enabled: ENABLE_AI_COACH },
+  { id: 'agents', label: 'Agents', labelJa: 'エージェント', iconType: 'agents', enabled: ENABLE_MULTI_AGENT },
 ];
 
 // Filter tabs based on feature flags
@@ -52,11 +56,18 @@ export function normalizeTabId(id: string): string {
 /**
  * Get visible tabs based on pageSections array
  * Handles backward compatibility for 'next' -> 'board' migration
+ * Note: 'agents' tab is always included when enabled, regardless of saved layout
  */
 export function getVisibleTabs(pageSections: string[]): TabConfig[] {
   // Normalize section IDs for backward compatibility
   const normalizedSections = pageSections.map(normalizeTabId);
-  return TAB_CONFIGS.filter(tab => normalizedSections.includes(tab.id));
+  return TAB_CONFIGS.filter(tab => {
+    // Always include agents tab if it's enabled (feature flag)
+    if (tab.id === 'agents' && tab.enabled) {
+      return true;
+    }
+    return normalizedSections.includes(tab.id);
+  });
 }
 
 /**

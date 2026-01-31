@@ -45,6 +45,8 @@ const TabIcon = ({ type }: { type: TabConfig['iconType'] }) => {
       return <svg {...iconProps}><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" /><path d="M13.73 21a2 2 0 0 1-3.46 0" /></svg>;
     case 'coach':
       return <svg {...iconProps}><path d="M12 2a3 3 0 0 0-3 3v4a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z" /><path d="M19 10v2a7 7 0 0 1-14 0v-2" /><line x1="12" y1="19" x2="12" y2="22" /></svg>;
+    case 'agents':
+      return <svg {...iconProps}><rect x="3" y="11" width="6" height="8" rx="1" /><rect x="15" y="11" width="6" height="8" rx="1" /><circle cx="6" cy="6" r="3" /><circle cx="18" cy="6" r="3" /><path d="M6 9v2" /><path d="M18 9v2" /><path d="M9 15h6" /><circle cx="12" cy="15" r="1" /></svg>;
     default:
       return null;
   }

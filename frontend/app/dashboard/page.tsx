@@ -17,6 +17,7 @@ import StickiesSection from './components/Section.Stickies';
 import MindmapSection from './components/Section.Mindmap';
 import NoticeSection from './components/Section.Notice';
 import CoachSection from './components/Section.Coach';
+import AgentsSection from './components/Section.Agents';
 
 // Extracted components
 import DashboardHeader from './components/Layout.Header';
@@ -127,25 +128,44 @@ export default function DashboardPage() {
   useEffect(() => {
     const loadTags = async () => {
       try {
-        const tagList = await api.getTags();
-        
+        let tagList = await api.getTags();
+
         // If no tags exist, create preset tags
         if (tagList.length === 0) {
           debug.log('[Dashboard] No tags found, creating preset tags...');
-          
+
           // Create 'Habit' tag
           await api.createTag({ name: 'Habit', color: '#3b82f6' });
-          
+
           // Create 'Goal' tag
           await api.createTag({ name: 'Goal', color: '#10b981' });
-          
+
           // Reload tags
-          const updatedTagList = await api.getTags();
-          setTags(updatedTagList);
+          tagList = await api.getTags();
           debug.log('[Dashboard] Preset tags created successfully');
-        } else {
-          setTags(tagList);
         }
+
+        // Ensure AIエージェント system tag exists (optional - may fail if migration not run)
+        const aiTagExists = tagList.some((t: any) => t.name === 'AIエージェント');
+        if (!aiTagExists) {
+          try {
+            debug.log('[Dashboard] Creating AIエージェント system tag...');
+            await api.createTag({
+              name: 'AIエージェント',
+              color: '#9333ea',  // Purple
+              icon: 'robot',
+              isSystem: true
+            });
+            // Reload tags to include the new system tag
+            tagList = await api.getTags();
+            debug.log('[Dashboard] AIエージェント tag created successfully');
+          } catch (aiTagError) {
+            // If creating system tag fails (e.g., migration not run), continue without it
+            debug.log('[Dashboard] Could not create AIエージェント tag (migration may not be run yet):', aiTagError);
+          }
+        }
+
+        setTags(tagList);
       } catch (error) {
         console.error('Failed to load tags:', error);
       }
@@ -650,6 +670,19 @@ const MobileTabIcon = ({ type, isActive }: { type: string; isActive: boolean }) 
           <line x1="12" y1="19" x2="12" y2="22" />
         </svg>
       );
+    case 'agents':
+      return (
+        <svg {...iconProps}>
+          <rect x="3" y="11" width="6" height="8" rx="1" />
+          <rect x="15" y="11" width="6" height="8" rx="1" />
+          <circle cx="6" cy="6" r="3" />
+          <circle cx="18" cy="6" r="3" />
+          <path d="M6 9v2" />
+          <path d="M18 9v2" />
+          <path d="M9 15h6" />
+          <circle cx="12" cy="15" r="1" />
+        </svg>
+      );
     default:
       return null;
   }
@@ -902,6 +935,15 @@ function DashboardLayout(props: any) {
               } catch (e) {
                 console.error('Failed to reload habits', e);
               }
+            }}
+          />
+        );
+      case 'agents':
+        return (
+          <AgentsSection
+            onOpenSettings={() => {
+              // TODO: Navigate to Settings with Multi-Agent tab
+              debug.log('[Dashboard] Opening agents settings...');
             }}
           />
         );

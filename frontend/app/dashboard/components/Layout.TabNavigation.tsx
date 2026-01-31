@@ -112,6 +112,20 @@ const TabIcon = ({ type, className = '' }: { type: TabConfig['iconType']; classN
           <line x1="12" y1="19" x2="12" y2="22" />
         </svg>
       );
+    case 'agents':
+      // Multi-agent icon (robot/network)
+      return (
+        <svg {...iconProps}>
+          <rect x="3" y="11" width="6" height="8" rx="1" />
+          <rect x="15" y="11" width="6" height="8" rx="1" />
+          <circle cx="6" cy="6" r="3" />
+          <circle cx="18" cy="6" r="3" />
+          <path d="M6 9v2" />
+          <path d="M18 9v2" />
+          <path d="M9 15h6" />
+          <circle cx="12" cy="15" r="1" />
+        </svg>
+      );
     default:
       return null;
   }

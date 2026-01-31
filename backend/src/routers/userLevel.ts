@@ -630,6 +630,7 @@ export function createUserLevelRouter(): Hono {
   // POST /habits/:id/award-xp
   // Award experience points for habit completion
   // Requirements: gamification-xp-balance 6.4
+  // Note: AI-tagged habits (AIエージェント tag) are excluded from XP awards
   // ---------------------------------------------------------------------------
   router.post('/habits/:id/award-xp', async (c: Context) => {
     const { userId, supabase } = getAuthContext(c);
@@ -660,6 +661,34 @@ export function createUserLevelRouter(): Hono {
     // Validate habit ownership
     const habitRepo = new HabitRepository(supabase);
     await validateHabitOwnership(habitRepo, habitId, userId);
+
+    // Check if this habit has the AIエージェント tag - if so, skip XP award
+    const tagRepo = new TagRepository(supabase);
+    const isAIHabit = await tagRepo.hasAIAgentTag('habit', habitId);
+
+    if (isAIHabit) {
+      logger.info('Skipping XP award for AI-created habit', {
+        userId,
+        habitId,
+        reason: 'AI-tagged habits do not contribute to user XP',
+      });
+
+      return c.json({
+        success: true,
+        skipped: true,
+        reason: 'AI-created habits do not contribute to user XP',
+        habitId,
+        baseXP: 0,
+        finalXP: 0,
+        multiplier: 1.0,
+        tier: 'optimal',
+        completionRate: 100,
+        rationale: 'AIエージェントが作成した習慣はXP付与対象外です',
+        rationaleKey: 'ai_habit_excluded',
+        domainUpdates: [],
+        levelChanges: [],
+      });
+    }
 
     // Get habit details
     const habit = await habitRepo.getById(habitId);

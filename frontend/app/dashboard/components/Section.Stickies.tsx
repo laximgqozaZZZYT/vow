@@ -2,12 +2,14 @@ import { useState, useRef, useEffect, useMemo } from 'react';
 import type { Sticky } from '../types/index';
 import { useHandedness } from '../contexts/HandednessContext';
 import api from '../../../lib/api';
+import { useNestedStickies, MAX_NESTING_DEPTH } from '../hooks/useNestedStickies';
+import NestedStickyItem from './Widget.NestedStickyItem';
 
-type GroupBy = 'none' | 'habit' | 'goal' | 'tag';
+type GroupBy = 'none' | 'habit' | 'goal' | 'tag' | 'nested';
 
 interface StickiesSectionProps {
   stickies: Sticky[];
-  onStickyCreate: () => Promise<Sticky | void>;
+  onStickyCreate: (payload?: { parentStickyId?: string }) => Promise<Sticky | void>;
   onStickyEdit: (stickyId: string) => void;
   onStickyComplete: (stickyId: string) => void;
   onStickyDelete: (stickyId: string) => void;
@@ -40,15 +42,27 @@ export default function StickiesSection({
   const [newStickyId, setNewStickyId] = useState<string | null>(null);
   const [showCompleted, setShowCompleted] = useState(false);
   const stickyRefs = useRef<Map<string, HTMLDivElement>>(new Map());
-  
+
   // ドラッグ&ドロップ状態
   const [draggedStickyId, setDraggedStickyId] = useState<string | null>(null);
   const [dragOverGroupId, setDragOverGroupId] = useState<string | null>(null);
-  
+  const [dragOverStickyId, setDragOverStickyId] = useState<string | null>(null);
+
   // モバイルロングプレス状態
   const [longPressTimer, setLongPressTimer] = useState<NodeJS.Timeout | null>(null);
   const [isDraggingMobile, setIsDraggingMobile] = useState(false);
   const [mobileDragPosition, setMobileDragPosition] = useState<{ x: number; y: number } | null>(null);
+
+  // ネスト管理フック
+  const {
+    visibleList,
+    isExpanded,
+    toggleExpanded,
+    hasChildren,
+    expandAll,
+    collapseAll,
+    checkCanNest,
+  } = useNestedStickies(stickies);
 
   useEffect(() => {
     if (newStickyId) {
@@ -64,11 +78,15 @@ export default function StickiesSection({
     }
   }, [newStickyId, stickies]);
 
-  const handleCreate = async () => {
-    const result = await onStickyCreate();
+  const handleCreate = async (parentId?: string) => {
+    const result = await onStickyCreate(parentId ? { parentStickyId: parentId } : undefined);
     if (result && 'id' in result) {
       setNewStickyId(result.id);
     }
+  };
+
+  const handleAddChild = async (parentId: string) => {
+    await handleCreate(parentId);
   };
 
   const handleNameClick = (sticky: Sticky) => {
@@ -90,7 +108,7 @@ export default function StickiesSection({
       setTouchStart(e.touches[0].clientX);
       return;
     }
-    
+
     // グループ化されている場合はロングプレスでドラッグ開始
     const touch = e.touches[0];
     const timer = setTimeout(() => {
@@ -102,7 +120,7 @@ export default function StickiesSection({
         navigator.vibrate(50);
       }
     }, 500); // 500msロングプレス
-    
+
     setLongPressTimer(timer);
   };
 
@@ -111,7 +129,7 @@ export default function StickiesSection({
       // ドラッグ中の位置更新
       const touch = e.touches[0];
       setMobileDragPosition({ x: touch.clientX, y: touch.clientY });
-      
+
       // ドロップターゲットの検出
       const element = document.elementFromPoint(touch.clientX, touch.clientY);
       const groupElement = element?.closest('[data-group-id]');
@@ -121,11 +139,11 @@ export default function StickiesSection({
       } else {
         setDragOverGroupId(null);
       }
-      
+
       e.preventDefault();
       return;
     }
-    
+
     if (groupBy === 'none' && touchStart !== null) {
       // 従来のスワイプ動作
       const currentTouch = e.touches[0].clientX;
@@ -134,7 +152,7 @@ export default function StickiesSection({
         setSwipedId(stickyId);
       }
     }
-    
+
     // ロングプレスタイマーをキャンセル（移動した場合）
     if (longPressTimer && !isDraggingMobile) {
       clearTimeout(longPressTimer);
@@ -148,21 +166,21 @@ export default function StickiesSection({
       clearTimeout(longPressTimer);
       setLongPressTimer(null);
     }
-    
+
     if (isDraggingMobile && draggedStickyId === stickyId && dragOverGroupId) {
       // モバイルドラッグ&ドロップ完了
-      await handleDrop(new Event('drop') as any, dragOverGroupId);
+      await handleDrop(new Event('drop') as unknown as React.DragEvent, dragOverGroupId);
       setIsDraggingMobile(false);
       setMobileDragPosition(null);
       return;
     }
-    
+
     if (swipedId === stickyId && groupBy === 'none') {
       // 従来のスワイプ完了動作
       onStickyComplete(stickyId);
       setSwipedId(null);
     }
-    
+
     setTouchStart(null);
     setIsDraggingMobile(false);
     setMobileDragPosition(null);
@@ -264,13 +282,65 @@ export default function StickiesSection({
   const handleDragEnd = () => {
     setDraggedStickyId(null);
     setDragOverGroupId(null);
+    setDragOverStickyId(null);
+  };
+
+  // ネストビュー用ドラッグハンドラ
+  const handleNestedDragStart = (e: React.DragEvent, stickyId: string) => {
+    setDraggedStickyId(stickyId);
+    e.dataTransfer.effectAllowed = 'move';
+  };
+
+  const handleNestedDragOver = (e: React.DragEvent, stickyId: string) => {
+    if (!draggedStickyId || draggedStickyId === stickyId) return;
+
+    // ネスト可能かチェック
+    if (!checkCanNest(draggedStickyId, stickyId)) return;
+
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    setDragOverStickyId(stickyId);
+  };
+
+  const handleNestedDrop = async (e: React.DragEvent, targetStickyId: string) => {
+    e.preventDefault();
+    if (!draggedStickyId || draggedStickyId === targetStickyId) return;
+
+    // ネスト可能かチェック
+    if (!checkCanNest(draggedStickyId, targetStickyId)) {
+      alert('Cannot nest here. Maximum depth is 3 levels.');
+      setDraggedStickyId(null);
+      setDragOverStickyId(null);
+      return;
+    }
+
+    try {
+      // TODO: API経由でparentStickyIdを更新
+      // await api.updateSticky(draggedStickyId, { parentStickyId: targetStickyId });
+      console.log(`Move ${draggedStickyId} under ${targetStickyId}`);
+
+      if (onStickyUpdate) {
+        onStickyUpdate();
+      }
+    } catch (error) {
+      console.error('Failed to update sticky nesting:', error);
+      alert('Failed to move sticky. Please try again.');
+    }
+
+    setDraggedStickyId(null);
+    setDragOverStickyId(null);
   };
 
   const incompletedStickies = stickies.filter(s => !s.completed);
   const completedStickies = stickies.filter(s => s.completed);
 
+  // ネストビュー用のフィルタリング
+  const nestedIncomplete = useMemo(() => {
+    return visibleList.filter(s => !s.completed);
+  }, [visibleList]);
+
   const groupedIncomplete = useMemo((): GroupedStickies[] => {
-    if (groupBy === 'none') {
+    if (groupBy === 'none' || groupBy === 'nested') {
       return [{ id: 'all', name: '', stickies: incompletedStickies }];
     }
 
@@ -313,7 +383,7 @@ export default function StickiesSection({
 
     const result = Array.from(groups.values());
     if (ungrouped.length > 0) {
-      result.push({ id: 'ungrouped', name: 'その他', stickies: ungrouped });
+      result.push({ id: 'ungrouped', name: 'Others', stickies: ungrouped });
     }
     return result;
   }, [incompletedStickies, groupBy]);
@@ -325,19 +395,19 @@ export default function StickiesSection({
         if (el) stickyRefs.current.set(sticky.id, el);
         else stickyRefs.current.delete(sticky.id);
       }}
-      draggable={!isCompleted && groupBy !== 'none'}
+      draggable={!isCompleted && groupBy !== 'none' && groupBy !== 'nested'}
       onDragStart={(e) => handleDragStart(e, sticky.id)}
       onDragEnd={handleDragEnd}
       className={`group flex items-start gap-3 p-3 rounded-lg transition-all duration-200 ${
-        isCompleted 
-          ? 'bg-zinc-800/50' 
+        isCompleted
+          ? 'bg-zinc-800/50'
           : 'bg-zinc-800 hover:bg-zinc-700/80'
       } ${swipedId === sticky.id ? 'translate-x-[-100%] opacity-50' : ''} ${
         isLeftHanded ? 'flex-row-reverse' : ''
       } ${newStickyId === sticky.id ? 'ring-2 ring-emerald-500 ring-offset-2 ring-offset-zinc-900' : ''} ${
         draggedStickyId === sticky.id ? 'opacity-50 scale-95' : ''
       } ${
-        groupBy !== 'none' && !isCompleted ? 'cursor-move touch-none' : ''
+        groupBy !== 'none' && groupBy !== 'nested' && !isCompleted ? 'cursor-move touch-none' : ''
       }`}
       onTouchStart={(e) => !isCompleted && handleTouchStart(e, sticky.id)}
       onTouchMove={(e) => !isCompleted && handleTouchMove(e, sticky.id)}
@@ -351,7 +421,7 @@ export default function StickiesSection({
             ? 'bg-emerald-600 text-white'
             : 'bg-zinc-700 border-2 border-zinc-600 hover:border-emerald-500'
         }`}
-        title={isCompleted ? '未完了に戻す' : '完了にする'}
+        title={isCompleted ? 'Mark incomplete' : 'Mark complete'}
       >
         {isCompleted && (
           <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
@@ -383,12 +453,12 @@ export default function StickiesSection({
           <div
             onClick={() => !isCompleted && handleNameClick(sticky)}
             className={`text-sm leading-relaxed cursor-pointer ${
-              isCompleted 
-                ? 'line-through text-zinc-500' 
+              isCompleted
+                ? 'line-through text-zinc-500'
                 : 'text-zinc-100 hover:text-white'
             }`}
           >
-            {sticky.name || 'New Sticky\'n'}
+            {sticky.name || "New Sticky'n"}
           </div>
         )}
         {sticky.description && !isCompleted && (
@@ -418,6 +488,41 @@ export default function StickiesSection({
     </div>
   );
 
+  // ネストビュー用のアイテムレンダリング
+  const renderNestedStickyItem = (sticky: Sticky, isCompleted: boolean = false) => (
+    <div
+      key={sticky.id}
+      ref={(el) => {
+        if (el) stickyRefs.current.set(sticky.id, el);
+        else stickyRefs.current.delete(sticky.id);
+      }}
+      onDragOver={(e) => !isCompleted && handleNestedDragOver(e, sticky.id)}
+      onDrop={(e) => !isCompleted && handleNestedDrop(e, sticky.id)}
+    >
+      <NestedStickyItem
+        sticky={sticky}
+        isExpanded={isExpanded(sticky.id)}
+        hasChildren={hasChildren(sticky.id)}
+        isLeftHanded={isLeftHanded}
+        isEditing={editingId === sticky.id}
+        editingName={editingName}
+        onNameClick={handleNameClick}
+        onNameChange={setEditingName}
+        onNameBlur={handleNameBlur}
+        onComplete={onStickyComplete}
+        onEdit={onStickyEdit}
+        onDelete={onStickyDelete}
+        onAddChild={handleAddChild}
+        onToggleExpand={toggleExpanded}
+        onDragStart={handleNestedDragStart}
+        onDragEnd={handleDragEnd}
+        isDragging={draggedStickyId === sticky.id}
+        isDropTarget={dragOverStickyId === sticky.id}
+        isHighlighted={newStickyId === sticky.id}
+      />
+    </div>
+  );
+
   const renderGroupedSection = (group: GroupedStickies) => {
     if (group.id === 'all') {
       return (
@@ -430,7 +535,7 @@ export default function StickiesSection({
     const isDropTarget = dragOverGroupId === group.id;
 
     return (
-      <div 
+      <div
         key={group.id}
         data-group-id={group.id}
         className={`space-y-2 rounded-lg p-2 transition-all ${
@@ -443,8 +548,8 @@ export default function StickiesSection({
         {/* グループヘッダー */}
         <div className="flex items-center gap-2 py-2 px-2">
           {group.color && (
-            <div 
-              className="w-3 h-3 rounded-full flex-shrink-0" 
+            <div
+              className="w-3 h-3 rounded-full flex-shrink-0"
               style={{ backgroundColor: group.color }}
             />
           )}
@@ -456,7 +561,7 @@ export default function StickiesSection({
           </span>
           {isDropTarget && (
             <span className="text-xs text-emerald-500 ml-auto animate-pulse">
-              📍 Drop here
+              Drop here
             </span>
           )}
         </div>
@@ -468,28 +573,57 @@ export default function StickiesSection({
     );
   };
 
+  // ネストビュー用のセクションレンダリング
+  const renderNestedSection = () => {
+    return (
+      <div className="space-y-1">
+        {/* 展開/折りたたみコントロール */}
+        <div className="flex items-center gap-2 mb-3">
+          <button
+            onClick={expandAll}
+            className="px-2 py-1 text-xs text-zinc-400 hover:text-zinc-200 bg-zinc-800 rounded transition-colors"
+          >
+            Expand All
+          </button>
+          <button
+            onClick={collapseAll}
+            className="px-2 py-1 text-xs text-zinc-400 hover:text-zinc-200 bg-zinc-800 rounded transition-colors"
+          >
+            Collapse All
+          </button>
+          <span className="text-xs text-zinc-500 ml-auto">
+            Max depth: {MAX_NESTING_DEPTH + 1} levels
+          </span>
+        </div>
+        {/* ネスト表示 */}
+        {nestedIncomplete.map(sticky => renderNestedStickyItem(sticky))}
+      </div>
+    );
+  };
+
   return (
     <section className="rounded-lg bg-zinc-900 border border-zinc-800 p-4 sm:p-5">
       {/* ヘッダー */}
       <div className={`flex items-center gap-3 mb-4 ${isLeftHanded ? 'flex-row-reverse' : ''}`}>
         <h2 className="text-base font-semibold text-zinc-100">Sticky&apos;n</h2>
         <div className="flex-1" />
-        
+
         {/* グループ化セレクト */}
         <select
           value={groupBy}
           onChange={(e) => setGroupBy(e.target.value as GroupBy)}
           className="text-xs px-2 py-1.5 bg-zinc-800 border border-zinc-700 rounded text-zinc-300 focus:outline-none focus:ring-1 focus:ring-emerald-500"
         >
-          <option value="none">グループなし</option>
-          <option value="habit">Habitで分類</option>
-          <option value="goal">Goalで分類</option>
-          <option value="tag">Tagで分類</option>
+          <option value="none">No grouping</option>
+          <option value="nested">Nested view</option>
+          <option value="habit">By Habit</option>
+          <option value="goal">By Goal</option>
+          <option value="tag">By Tag</option>
         </select>
 
         {/* 追加ボタン */}
         <button
-          onClick={handleCreate}
+          onClick={() => handleCreate()}
           className="w-7 h-7 flex items-center justify-center bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 rounded text-zinc-300 hover:text-white transition-colors"
           title="Add Sticky'n"
         >
@@ -508,7 +642,11 @@ export default function StickiesSection({
         ) : (
           <>
             {/* 未完了 */}
-            {groupedIncomplete.map(group => renderGroupedSection(group))}
+            {groupBy === 'nested' ? (
+              renderNestedSection()
+            ) : (
+              groupedIncomplete.map(group => renderGroupedSection(group))
+            )}
 
             {/* 完了済みセクション */}
             {completedStickies.length > 0 && (
@@ -517,19 +655,23 @@ export default function StickiesSection({
                   onClick={() => setShowCompleted(!showCompleted)}
                   className="flex items-center gap-2 text-xs text-zinc-500 hover:text-zinc-400 transition-colors mb-2"
                 >
-                  <svg 
-                    className={`w-3 h-3 transition-transform ${showCompleted ? 'rotate-90' : ''}`} 
-                    fill="none" 
-                    viewBox="0 0 24 24" 
+                  <svg
+                    className={`w-3 h-3 transition-transform ${showCompleted ? 'rotate-90' : ''}`}
+                    fill="none"
+                    viewBox="0 0 24 24"
                     stroke="currentColor"
                   >
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
                   </svg>
-                  完了済み ({completedStickies.length})
+                  Completed ({completedStickies.length})
                 </button>
                 {showCompleted && (
                   <div className="space-y-2">
-                    {completedStickies.map((sticky) => renderStickyItem(sticky, true))}
+                    {completedStickies.map((sticky) =>
+                      groupBy === 'nested'
+                        ? renderNestedStickyItem(sticky, true)
+                        : renderStickyItem(sticky, true)
+                    )}
                   </div>
                 )}
               </div>

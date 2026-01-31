@@ -5,8 +5,8 @@ import api from '../../../lib/api';
 import { debug } from '../../../lib/debug';
 import type { Goal, Habit, Activity, SectionId } from '../types/index';
 
-// Default sections - coach is now available in all environments
-const DEFAULT_SECTIONS: SectionId[] = ['board', 'calendar', 'statics', 'stickies', 'coach'];
+// Default sections - coach and agents are now available in all environments
+const DEFAULT_SECTIONS: SectionId[] = ['board', 'calendar', 'statics', 'stickies', 'coach', 'agents'];
 
 export function useDataManager() {
   const [goals, setGoals] = useState<Goal[]>([]);

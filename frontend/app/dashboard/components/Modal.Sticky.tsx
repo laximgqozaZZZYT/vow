@@ -5,15 +5,17 @@ import type { Goal, Habit, Tag, Sticky } from '../types/index';
 import api from '../../../lib/api';
 import SmartSelector, { SmartSelectorItem } from './Widget.SmartSelector';
 import StickyFooter from './Widget.StickyFooter';
+import { getAvailableParents, MAX_NESTING_DEPTH } from '../hooks/useNestedStickies';
 
 /**
  * StickyModal - Sticky'n編集モーダル
- * 
+ *
  * UI/UX改善:
  * - SmartSelectorによる検索式マルチセレクト
  * - StickyFooterによる固定フッター
  * - 折りたたみセクションによる情報整理
- * 
+ * - 親Sticky選択による階層構造サポート
+ *
  * @validates Requirements 1.1-1.5, 2.5, 4.1-4.4, 5.1-5.5
  */
 
@@ -21,6 +23,8 @@ interface StickyModalProps {
   open: boolean;
   onClose: () => void;
   sticky: Sticky | null;
+  stickies?: Sticky[];  // 親Sticky選択用の全Stickyリスト
+  initialParentId?: string | null;  // 新規作成時の初期親ID
   onCreate?: (payload: any) => void;
   onUpdate?: (payload: any) => void;
   onDelete?: (id: string) => void;
@@ -31,13 +35,13 @@ interface StickyModalProps {
 }
 
 // 折りたたみセクションコンポーネント
-function CollapsibleSection({ 
-  title, 
-  isExpanded, 
-  onToggle, 
+function CollapsibleSection({
+  title,
+  isExpanded,
+  onToggle,
   children,
   badge
-}: { 
+}: {
   title: string;
   isExpanded: boolean;
   onToggle: () => void;
@@ -45,7 +49,7 @@ function CollapsibleSection({
   badge?: number;
 }) {
   const sectionId = `section-${title.toLowerCase().replace(/\s+/g, '-')}`;
-  
+
   return (
     <div className="border border-border rounded-lg">
       <button
@@ -61,11 +65,11 @@ function CollapsibleSection({
         aria-controls={sectionId}
       >
         <div className="flex items-center gap-2">
-          <svg 
-            xmlns="http://www.w3.org/2000/svg" 
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
             className={`h-4 w-4 transition-transform ${isExpanded ? 'rotate-90' : ''}`}
-            fill="none" 
-            viewBox="0 0 24 24" 
+            fill="none"
+            viewBox="0 0 24 24"
             stroke="currentColor"
           >
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
@@ -91,6 +95,8 @@ export function StickyModal({
   open,
   onClose,
   sticky,
+  stickies = [],
+  initialParentId,
   onCreate,
   onUpdate,
   onDelete,
@@ -101,13 +107,15 @@ export function StickyModal({
 }: StickyModalProps) {
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
+  const [parentStickyId, setParentStickyId] = useState<string | null>(null);
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [selectedGoals, setSelectedGoals] = useState<string[]>([]);
   const [selectedHabits, setSelectedHabits] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
-  
+
   // 折りたたみセクションの状態
   const [expandedSections, setExpandedSections] = useState({
+    parent: false,
     tags: true,
     goals: false,
     habits: false
@@ -117,26 +125,40 @@ export function StickyModal({
     if (open && sticky) {
       setName(sticky.name || '');
       setDescription(sticky.description || '');
+      setParentStickyId(sticky.parentStickyId || null);
       loadRelations();
     } else if (open && !sticky) {
       setName('');
       setDescription('');
+      setParentStickyId(initialParentId || null);
       setSelectedTags([]);
       setSelectedGoals([]);
       setSelectedHabits([]);
     }
-  }, [open, sticky]);
+  }, [open, sticky, initialParentId]);
+
+  // 利用可能な親Stickyオプション
+  const availableParents = useMemo(() => {
+    return getAvailableParents(sticky?.id || null, stickies);
+  }, [sticky?.id, stickies]);
+
+  // 親Stickyの深さを取得して、自身の深さを計算
+  const currentDepth = useMemo(() => {
+    if (!parentStickyId) return 0;
+    const parent = stickies.find(s => s.id === parentStickyId);
+    return (parent?.depth ?? 0) + 1;
+  }, [parentStickyId, stickies]);
 
   const loadRelations = async () => {
     if (!sticky) return;
-    
+
     try {
       const [tagsData, goalsData, habitsData] = await Promise.all([
         api.getStickyTags(sticky.id),
         api.getStickyGoals(sticky.id),
         api.getStickyHabits(sticky.id)
       ]);
-      
+
       setSelectedTags(tagsData.map((t: any) => t.id));
       setSelectedGoals(goalsData.map((g: any) => g.id));
       setSelectedHabits(habitsData.map((h: any) => h.id));
@@ -155,19 +177,20 @@ export function StickyModal({
     try {
       const payload = {
         name: name.trim(),
-        description: description.trim()
+        description: description.trim(),
+        parentStickyId: parentStickyId
       };
 
       if (sticky) {
         // Update existing sticky
         await onUpdate?.({ ...sticky, ...payload });
-        
+
         // Update relations
         await updateRelations(sticky.id);
       } else {
         // Create new sticky
         const newSticky = await onCreate?.(payload) as Sticky | undefined;
-        
+
         if (newSticky?.id) {
           await updateRelations(newSticky.id);
         }
@@ -192,10 +215,10 @@ export function StickyModal({
       // Update goals
       const currentGoals = await api.getStickyGoals(stickyId);
       const currentGoalIds = currentGoals.map((g: any) => g.id);
-      
+
       const goalsToAdd = selectedGoals.filter(id => !currentGoalIds.includes(id));
       const goalsToRemove = currentGoalIds.filter((id: string) => !selectedGoals.includes(id));
-      
+
       for (const goalId of goalsToAdd) {
         await api.addStickyGoal(stickyId, goalId);
       }
@@ -206,10 +229,10 @@ export function StickyModal({
       // Update habits
       const currentHabits = await api.getStickyHabits(stickyId);
       const currentHabitIds = currentHabits.map((h: any) => h.id);
-      
+
       const habitsToAdd = selectedHabits.filter(id => !currentHabitIds.includes(id));
       const habitsToRemove = currentHabitIds.filter((id: string) => !selectedHabits.includes(id));
-      
+
       for (const habitId of habitsToAdd) {
         await api.addStickyHabit(stickyId, habitId);
       }
@@ -228,7 +251,7 @@ export function StickyModal({
   };
 
   // SmartSelector用のアイテム変換
-  const tagItems: SmartSelectorItem[] = useMemo(() => 
+  const tagItems: SmartSelectorItem[] = useMemo(() =>
     tags.map(tag => ({
       id: tag.id,
       name: tag.name,
@@ -237,7 +260,7 @@ export function StickyModal({
     [tags]
   );
 
-  const goalItems: SmartSelectorItem[] = useMemo(() => 
+  const goalItems: SmartSelectorItem[] = useMemo(() =>
     goals.map(goal => ({
       id: goal.id,
       name: goal.name,
@@ -246,7 +269,7 @@ export function StickyModal({
     [goals]
   );
 
-  const habitItems: SmartSelectorItem[] = useMemo(() => 
+  const habitItems: SmartSelectorItem[] = useMemo(() =>
     habits.map(habit => ({
       id: habit.id,
       name: habit.name,
@@ -291,6 +314,21 @@ export function StickyModal({
     setSelectedHabits(prev => prev.filter(habitId => habitId !== id));
   }, []);
 
+  // 深さインジケーターを生成
+  const renderDepthIndicator = (depth: number) => {
+    if (depth === 0) return null;
+    return (
+      <span className="inline-flex items-center gap-0.5 ml-2">
+        {Array.from({ length: depth }).map((_, i) => (
+          <span
+            key={i}
+            className="w-1.5 h-1.5 rounded-full bg-primary/50"
+          />
+        ))}
+      </span>
+    );
+  };
+
   if (!open) return null;
 
   return (
@@ -301,8 +339,8 @@ export function StickyModal({
           <h2 className="text-xl font-semibold">
             {sticky ? 'Edit Sticky\'n' : 'New Sticky\'n'}
           </h2>
-          <button 
-            onClick={onClose} 
+          <button
+            onClick={onClose}
             className="text-muted-foreground hover:text-foreground p-2 min-w-[44px] min-h-[44px] flex items-center justify-center rounded-md transition-colors"
             aria-label="Close"
           >
@@ -335,8 +373,8 @@ export function StickyModal({
               onChange={(e) => setName(e.target.value)}
               placeholder="Enter name..."
               className="
-                flex h-10 w-full rounded-md border border-input bg-background 
-                px-3 py-2 text-sm placeholder:text-muted-foreground 
+                flex h-10 w-full rounded-md border border-input bg-background
+                px-3 py-2 text-sm placeholder:text-muted-foreground
                 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary
               "
             />
@@ -351,13 +389,65 @@ export function StickyModal({
               placeholder="Enter description..."
               rows={3}
               className="
-                flex min-h-[80px] w-full rounded-md border border-input bg-background 
-                px-3 py-2 text-sm placeholder:text-muted-foreground 
+                flex min-h-[80px] w-full rounded-md border border-input bg-background
+                px-3 py-2 text-sm placeholder:text-muted-foreground
                 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary
                 resize-none
               "
             />
           </div>
+
+          {/* Parent Sticky - 親Sticky選択 */}
+          {availableParents.length > 0 && (
+            <div className="mb-4">
+              <CollapsibleSection
+                title="Parent Sticky'n"
+                isExpanded={expandedSections.parent || !!parentStickyId}
+                onToggle={() => toggleSection('parent')}
+                badge={parentStickyId ? 1 : 0}
+              >
+                <div className="space-y-3">
+                  <p className="text-xs text-muted-foreground">
+                    Nest this Sticky under another one. Max {MAX_NESTING_DEPTH + 1} levels.
+                  </p>
+                  <select
+                    value={parentStickyId || ''}
+                    onChange={(e) => setParentStickyId(e.target.value || null)}
+                    className="
+                      flex h-10 w-full rounded-md border border-input bg-background
+                      px-3 py-2 text-sm
+                      focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary
+                    "
+                  >
+                    <option value="">No parent (root level)</option>
+                    {availableParents.map(parent => (
+                      <option key={parent.id} value={parent.id}>
+                        {parent.name}
+                        {parent.depth !== undefined && parent.depth > 0
+                          ? ` (Level ${parent.depth + 1})`
+                          : ' (Root)'
+                        }
+                      </option>
+                    ))}
+                  </select>
+                  {parentStickyId && (
+                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                      <span>Current level:</span>
+                      <span className="font-medium text-foreground">
+                        {currentDepth + 1}
+                      </span>
+                      {renderDepthIndicator(currentDepth)}
+                      {currentDepth >= MAX_NESTING_DEPTH && (
+                        <span className="text-xs text-yellow-500 ml-2">
+                          (Max depth reached)
+                        </span>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </CollapsibleSection>
+            </div>
+          )}
 
           {/* Tags - SmartSelector */}
           <div className="mb-4">

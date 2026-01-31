@@ -4,7 +4,7 @@ import React from 'react'
 import { useLocale } from '@/contexts/LocaleContext'
 import { useHandedness } from '../contexts/HandednessContext'
 
-type SectionId = 'next' | 'activity' | 'calendar' | 'statics' | 'diary' | 'stickies' | 'mindmap' | 'notices' | 'coach'
+type SectionId = 'next' | 'activity' | 'calendar' | 'statics' | 'diary' | 'stickies' | 'mindmap' | 'notices' | 'coach' | 'agents'
 
 export default function EditLayoutModal({ open, onClose, sections, onChange, onAdd, onDelete }: { open: boolean; onClose: () => void; sections: SectionId[]; onChange: (s: SectionId[]) => void; onAdd: (id: SectionId) => void; onDelete: (id: SectionId) => void }) {
   const [local, setLocal] = React.useState<SectionId[]>(sections || [])
@@ -36,6 +36,7 @@ export default function EditLayoutModal({ open, onClose, sections, onChange, onA
     { id: 'mindmap', label: 'Mind Map' },
     { id: 'notices', label: 'Notices' },
     { id: 'coach', label: 'AI Coach' },
+    { id: 'agents', label: 'Agents' },
   ]
 
   return (

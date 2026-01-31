@@ -2562,27 +2562,29 @@ export class SupabaseDirectClient {
   // Tags methods (for Habits and Goals)
   async getTags() {
     this.checkEnvironment();
-    
+
     const { data: session } = await supabase.auth.getSession();
-    
+
     if (!session?.session?.user) {
       const guestTags = JSON.parse(localStorage.getItem('guest-tags') || '[]');
       return guestTags;
     }
-    
+
     const { data, error } = await supabase
       .from('tags')
       .select('*')
       .eq('owner_type', 'user')
       .eq('owner_id', session.session.user.id)
       .order('name', { ascending: true });
-    
+
     if (error) throw error;
-    
+
     return (data || []).map((tag: any) => ({
       id: tag.id,
       name: tag.name,
       color: tag.color,
+      icon: tag.icon ?? null,           // Handle missing column gracefully
+      isSystem: tag.is_system ?? false, // Handle missing column gracefully
       parentId: tag.parent_id,
       createdAt: tag.created_at,
       updatedAt: tag.updated_at
@@ -2591,48 +2593,64 @@ export class SupabaseDirectClient {
 
   async createTag(payload: any) {
     this.checkEnvironment();
-    
+
     const { data: session } = await supabase.auth.getSession();
-    
+
     if (!session?.session?.user) {
       const now = new Date().toISOString();
       const tag = {
         id: 'tag-' + Date.now(),
         name: payload.name,
         color: payload.color || '#3b82f6',
+        icon: payload.icon || null,
+        isSystem: payload.isSystem || false,
         parentId: payload.parentId || null,
         createdAt: now,
         updatedAt: now
       };
-      
+
       const existingTags = JSON.parse(localStorage.getItem('guest-tags') || '[]');
       existingTags.push(tag);
       localStorage.setItem('guest-tags', JSON.stringify(existingTags));
-      
+
       return tag;
     }
-    
+
     const now = new Date().toISOString();
+
+    // Build insert payload - only include icon/is_system if migration has been run
+    const insertPayload: Record<string, unknown> = {
+      name: payload.name,
+      color: payload.color || '#3b82f6',
+      parent_id: payload.parentId || null,
+      owner_type: 'user',
+      owner_id: session.session.user.id,
+      created_at: now,
+      updated_at: now
+    };
+
+    // Only add icon and is_system if explicitly provided (for forward compatibility)
+    if (payload.icon !== undefined) {
+      insertPayload.icon = payload.icon;
+    }
+    if (payload.isSystem !== undefined) {
+      insertPayload.is_system = payload.isSystem;
+    }
+
     const { data, error } = await supabase
       .from('tags')
-      .insert({
-        name: payload.name,
-        color: payload.color || '#3b82f6',
-        parent_id: payload.parentId || null,
-        owner_type: 'user',
-        owner_id: session.session.user.id,
-        created_at: now,
-        updated_at: now
-      })
+      .insert(insertPayload)
       .select()
       .single();
-    
+
     if (error) throw error;
-    
+
     return {
       id: data.id,
       name: data.name,
       color: data.color,
+      icon: data.icon ?? null,
+      isSystem: data.is_system ?? false,
       parentId: data.parent_id,
       createdAt: data.created_at,
       updatedAt: data.updated_at
@@ -2699,30 +2717,70 @@ export class SupabaseDirectClient {
 
   async deleteTag(id: string) {
     this.checkEnvironment();
-    
+
     const { data: session } = await supabase.auth.getSession();
-    
+
     if (!session?.session?.user) {
       const guestTags = JSON.parse(localStorage.getItem('guest-tags') || '[]');
       const tagIndex = guestTags.findIndex((t: any) => t.id === id);
-      
+
       if (tagIndex === -1) {
         throw new Error(`Tag with id ${id} not found`);
       }
-      
+
+      // Prevent deletion of system tags
+      if (guestTags[tagIndex].isSystem) {
+        throw new Error('System tags cannot be deleted');
+      }
+
       guestTags.splice(tagIndex, 1);
       localStorage.setItem('guest-tags', JSON.stringify(guestTags));
-      
+
       return { success: true };
     }
-    
+
+    // Check if tag is a system tag before attempting deletion
+    // First try to check by is_system column, fall back to name check if column doesn't exist
+    try {
+      const { data: tagData } = await supabase
+        .from('tags')
+        .select('name, is_system')
+        .eq('id', id)
+        .eq('owner_type', 'user')
+        .eq('owner_id', session.session.user.id)
+        .single();
+
+      // Check by is_system flag or by known system tag names
+      const isSystemTag = tagData?.is_system === true || tagData?.name === 'AIエージェント';
+      if (isSystemTag) {
+        throw new Error('System tags cannot be deleted');
+      }
+    } catch (checkError: any) {
+      // If is_system column doesn't exist, check by tag name only
+      if (checkError?.message !== 'System tags cannot be deleted') {
+        const { data: tagData } = await supabase
+          .from('tags')
+          .select('name')
+          .eq('id', id)
+          .eq('owner_type', 'user')
+          .eq('owner_id', session.session.user.id)
+          .single();
+
+        if (tagData?.name === 'AIエージェント') {
+          throw new Error('System tags cannot be deleted');
+        }
+      } else {
+        throw checkError;
+      }
+    }
+
     const { error } = await supabase
       .from('tags')
       .delete()
       .eq('id', id)
       .eq('owner_type', 'user')
       .eq('owner_id', session.session.user.id);
-    
+
     if (error) throw error;
     return { success: true };
   }

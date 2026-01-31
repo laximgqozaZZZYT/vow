@@ -1,6 +1,6 @@
 // Shared type definitions for dashboard components
 
-export type SectionId = 'board' | 'next' | 'activity' | 'calendar' | 'statics' | 'diary' | 'stickies' | 'mindmap' | 'notices' | 'coach';
+export type SectionId = 'board' | 'next' | 'activity' | 'calendar' | 'statics' | 'diary' | 'stickies' | 'mindmap' | 'notices' | 'coach' | 'agents';
 export type ActivityKind = 'start' | 'complete' | 'skip' | 'pause';
 export type HabitAction = 'start' | 'complete' | 'pause' | 'reset';
 
@@ -8,6 +8,10 @@ export interface Tag {
   id: string;
   name: string;
   color?: string;
+  /** Icon identifier (emoji or icon name) for the tag */
+  icon?: string;
+  /** Whether this is a system-managed tag (cannot be deleted by users) */
+  isSystem?: boolean;
   parentId?: string | null;
   createdAt: string;
   updatedAt: string;
@@ -289,9 +293,13 @@ export interface Sticky {
   completed: boolean;
   completedAt?: string;
   displayOrder: number;
+  parentStickyId?: string | null;  // 親Sticky'nのID
+  depth?: number;                   // ネストの深さ (0-2)
+  agentTaskId?: string | null;      // エージェントタスクとの紐付け
   tags?: Tag[];
   goals?: Goal[];
   habits?: Habit[];
+  children?: Sticky[];              // 子Sticky'n（フロントエンドで構築）
   createdAt: string;
   updatedAt: string;
 }
@@ -300,6 +308,7 @@ export interface CreateStickyPayload {
   name: string;
   description?: string;
   displayOrder?: number;
+  parentStickyId?: string | null;
 }
 
 export interface StickySectionProps {

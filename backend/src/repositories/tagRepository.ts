@@ -185,4 +185,38 @@ export class TagRepository {
 
     return tagMap;
   }
+
+  /**
+   * Check if an entity has the AIエージェント system tag.
+   * Used to determine if XP should be excluded for AI-created habits.
+   *
+   * @param entityType - Type of entity ('habit', 'goal', 'sticky', etc.)
+   * @param entityId - ID of the entity
+   * @returns true if the entity has the AIエージェント tag
+   */
+  async hasAIAgentTag(entityType: string, entityId: string): Promise<boolean> {
+    const AI_AGENT_TAG_NAME = 'AIエージェント';
+
+    const { data, error } = await this.supabase
+      .from('entity_tags')
+      .select(`
+        tag_id,
+        tags:tag_id (
+          name,
+          is_system
+        )
+      `)
+      .eq('entity_type', entityType)
+      .eq('entity_id', entityId);
+
+    if (error || !data) {
+      return false;
+    }
+
+    // Check if any of the associated tags is the AIエージェント tag
+    return data.some((row) => {
+      const tag = row.tags as unknown as Record<string, unknown> | null;
+      return tag && tag['name'] === AI_AGENT_TAG_NAME;
+    });
+  }
 }
