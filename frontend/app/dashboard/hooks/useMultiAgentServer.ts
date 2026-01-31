@@ -25,7 +25,7 @@ import type {
 // Default configuration
 const DEFAULT_CONFIG: MultiAgentConfig = {
   enabled: false,
-  serverUrl: 'http://192.168.2.126:3456',
+  serverUrl: '', // User must configure their own MCP server URL
   serverToken: '',
   autoConnect: true,
   showInDashboard: true,
@@ -33,8 +33,11 @@ const DEFAULT_CONFIG: MultiAgentConfig = {
   notifyOnAgentOffline: true,
 };
 
-// Storage key for config
+// Storage key for config (localStorage fallback)
 const CONFIG_STORAGE_KEY = 'vow-multi-agent-config';
+
+// Backend API URL for MCP connection settings (stored in DynamoDB)
+const BACKEND_API_URL = process.env.NEXT_PUBLIC_BACKEND_API_URL || '';
 
 // Connection states
 export type ConnectionState = 'disconnected' | 'connecting' | 'connected' | 'error';
@@ -114,9 +117,9 @@ export interface UseMultiAgentServerReturn {
 }
 
 /**
- * Load config from localStorage
+ * Load config from localStorage (fallback for non-authenticated users)
  */
-function loadConfig(): MultiAgentConfig {
+function loadConfigFromLocalStorage(): MultiAgentConfig {
   if (typeof window === 'undefined') return DEFAULT_CONFIG;
 
   try {
@@ -125,28 +128,100 @@ function loadConfig(): MultiAgentConfig {
       return { ...DEFAULT_CONFIG, ...JSON.parse(stored) };
     }
   } catch (e) {
-    console.error('[useMultiAgentServer] Failed to load config:', e);
+    console.error('[useMultiAgentServer] Failed to load config from localStorage:', e);
   }
   return DEFAULT_CONFIG;
 }
 
 /**
- * Save config to localStorage
+ * Save config to localStorage (fallback for non-authenticated users)
  */
-function saveConfig(config: MultiAgentConfig): void {
+function saveConfigToLocalStorage(config: MultiAgentConfig): void {
   if (typeof window === 'undefined') return;
 
   try {
     localStorage.setItem(CONFIG_STORAGE_KEY, JSON.stringify(config));
   } catch (e) {
-    console.error('[useMultiAgentServer] Failed to save config:', e);
+    console.error('[useMultiAgentServer] Failed to save config to localStorage:', e);
   }
+}
+
+/**
+ * Load config from backend API (DynamoDB)
+ * Falls back to localStorage if API is not available
+ */
+async function loadConfigFromBackend(authToken: string | null): Promise<MultiAgentConfig> {
+  if (!authToken || !BACKEND_API_URL) {
+    return loadConfigFromLocalStorage();
+  }
+
+  try {
+    const response = await fetch(`${BACKEND_API_URL}/api/mcp-connections`, {
+      headers: {
+        'Authorization': `Bearer ${authToken}`,
+      },
+    });
+
+    if (response.ok) {
+      const result = await response.json();
+      if (result.success && result.data) {
+        // Merge with defaults and localStorage (for serverToken which is masked from API)
+        const localConfig = loadConfigFromLocalStorage();
+        return {
+          ...DEFAULT_CONFIG,
+          ...result.data,
+          // Use local token if API returns masked token
+          serverToken: result.data.hasToken ? localConfig.serverToken : '',
+        };
+      }
+    }
+  } catch (e) {
+    console.error('[useMultiAgentServer] Failed to load config from backend:', e);
+  }
+
+  return loadConfigFromLocalStorage();
+}
+
+/**
+ * Save config to backend API (DynamoDB)
+ * Also saves to localStorage for offline access
+ */
+async function saveConfigToBackend(config: MultiAgentConfig, authToken: string | null): Promise<void> {
+  // Always save to localStorage as fallback
+  saveConfigToLocalStorage(config);
+
+  if (!authToken || !BACKEND_API_URL) {
+    return;
+  }
+
+  try {
+    await fetch(`${BACKEND_API_URL}/api/mcp-connections`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${authToken}`,
+      },
+      body: JSON.stringify(config),
+    });
+  } catch (e) {
+    console.error('[useMultiAgentServer] Failed to save config to backend:', e);
+  }
+}
+
+/**
+ * Hook options
+ */
+interface UseMultiAgentServerOptions {
+  /** Auth token for backend API (from Supabase session) */
+  authToken?: string | null;
 }
 
 /**
  * Hook for connecting to the Multi-Agent Task Server
  */
-export function useMultiAgentServer(): UseMultiAgentServerReturn {
+export function useMultiAgentServer(options?: UseMultiAgentServerOptions): UseMultiAgentServerReturn {
+  const authToken = options?.authToken ?? null;
+
   // State
   const [config, setConfig] = useState<MultiAgentConfig>(DEFAULT_CONFIG);
   const [connectionState, setConnectionState] = useState<ConnectionState>('disconnected');
@@ -156,24 +231,36 @@ export function useMultiAgentServer(): UseMultiAgentServerReturn {
   const [activities, setActivities] = useState<AgentActivity[]>([]);
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [machines, setMachines] = useState<TrustedMachine[]>([]);
+  const [configLoaded, setConfigLoaded] = useState(false);
 
   // Refs
   const eventSourceRef = useRef<EventSource | null>(null);
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const isConnectingRef = useRef(false);
+  const authTokenRef = useRef(authToken);
 
-  // Load config on mount
+  // Update authToken ref
   useEffect(() => {
-    const loaded = loadConfig();
-    setConfig(loaded);
+    authTokenRef.current = authToken;
+  }, [authToken]);
 
-    // Auto-connect if enabled
-    if (loaded.enabled && loaded.autoConnect && loaded.serverToken) {
-      // Delay to ensure component is mounted
-      setTimeout(() => {
-        connectToServer(loaded);
-      }, 500);
-    }
+  // Load config on mount or when authToken changes
+  useEffect(() => {
+    const loadAndSetConfig = async () => {
+      const loaded = await loadConfigFromBackend(authToken);
+      setConfig(loaded);
+      setConfigLoaded(true);
+
+      // Auto-connect if enabled
+      if (loaded.enabled && loaded.autoConnect && loaded.serverToken && loaded.serverUrl) {
+        // Delay to ensure component is mounted
+        setTimeout(() => {
+          connectToServer(loaded);
+        }, 500);
+      }
+    };
+
+    loadAndSetConfig();
 
     return () => {
       // Cleanup on unmount
@@ -184,7 +271,7 @@ export function useMultiAgentServer(): UseMultiAgentServerReturn {
         clearTimeout(reconnectTimeoutRef.current);
       }
     };
-  }, []);
+  }, [authToken]);
 
   /**
    * Make authenticated API request
@@ -420,7 +507,8 @@ export function useMultiAgentServer(): UseMultiAgentServerReturn {
   const updateConfig = useCallback((updates: Partial<MultiAgentConfig>) => {
     setConfig(prev => {
       const newConfig = { ...prev, ...updates };
-      saveConfig(newConfig);
+      // Save to backend (and localStorage as fallback)
+      saveConfigToBackend(newConfig, authTokenRef.current);
       return newConfig;
     });
   }, []);

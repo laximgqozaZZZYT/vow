@@ -487,12 +487,29 @@ export default function AgentsSection({ onOpenSettings }: AgentsSectionProps) {
   const [isActivityPanelExpanded, setIsActivityPanelExpanded] = useState(false);
   const [activityPanelHeight, setActivityPanelHeight] = useState(200);
   const [showInstructionFlow, setShowInstructionFlow] = useState(false);
+  const [authToken, setAuthToken] = useState<string | null>(null);
+
+  // Get auth token from Supabase session
+  useEffect(() => {
+    const getAuthToken = async () => {
+      try {
+        const { supabase } = await import('../../../lib/supabaseClient');
+        if (supabase) {
+          const { data: { session } } = await supabase.auth.getSession();
+          setAuthToken(session?.access_token ?? null);
+        }
+      } catch (e) {
+        console.error('[AgentsSection] Failed to get auth token:', e);
+      }
+    };
+    getAuthToken();
+  }, []);
 
   // Tooltip hook for agent cards
   const tooltip = useAgentTooltip();
 
-  // Multi-agent server hook
-  const server = useMultiAgentServer();
+  // Multi-agent server hook with auth token for DynamoDB config storage
+  const server = useMultiAgentServer({ authToken });
 
   // Use real data when connected, otherwise mock data
   const isConnected = server.connectionState === 'connected';

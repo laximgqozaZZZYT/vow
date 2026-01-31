@@ -294,14 +294,23 @@ export default function MultiAgentConfigModal({
           </div>
 
           {/* Help text */}
-          <div className="text-xs text-muted-foreground p-3 bg-muted/30 rounded-lg">
-            <p className="font-medium mb-1">設定方法:</p>
-            <ol className="list-decimal list-inside space-y-1">
-              <li>タスクサーバーを起動: <code className="bg-muted px-1 rounded">./scripts/agents/multi-agent-launcher.sh start</code></li>
-              <li>サーバーURLとトークンを入力</li>
-              <li>「接続テスト」で接続を確認</li>
-              <li>「接続」ボタンでリアルタイム接続を開始</li>
-            </ol>
+          <div className="text-xs text-muted-foreground p-3 bg-muted/30 rounded-lg space-y-3">
+            <div>
+              <p className="font-medium mb-1">設定方法:</p>
+              <ol className="list-decimal list-inside space-y-1">
+                <li>タスクサーバーを起動: <code className="bg-muted px-1 rounded">./scripts/agents/multi-agent-launcher.sh start</code></li>
+                <li>サーバーURLとトークンを入力</li>
+                <li>「接続テスト」で接続を確認</li>
+                <li>「接続」ボタンでリアルタイム接続を開始</li>
+              </ol>
+            </div>
+            <div className="pt-2 border-t border-border/50">
+              <p className="font-medium mb-1">リモートからの接続:</p>
+              <p className="text-muted-foreground/80">
+                AWS等のリモート環境から接続するには、Tailscale VPNまたはngrokでサーバーを公開してください。
+                Tailscale使用時はTailscale IPを入力します。
+              </p>
+            </div>
           </div>
         </div>
 

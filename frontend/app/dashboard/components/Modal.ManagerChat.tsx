@@ -345,8 +345,8 @@ export default function ManagerChatModal({
         onClick={onClose}
       />
 
-      {/* Modal */}
-      <div className="fixed inset-4 sm:inset-auto sm:left-1/2 sm:top-1/2 sm:-translate-x-1/2 sm:-translate-y-1/2 sm:w-[600px] sm:h-[80vh] sm:max-h-[700px] bg-card border border-border rounded-lg shadow-xl z-50 flex flex-col">
+      {/* Modal - Mobile: account for bottom nav bar (~70px) */}
+      <div className="fixed inset-x-4 top-4 bottom-[calc(70px+env(safe-area-inset-bottom,0px)+16px)] sm:inset-auto sm:left-1/2 sm:top-1/2 sm:-translate-x-1/2 sm:-translate-y-1/2 sm:w-[600px] sm:h-[80vh] sm:max-h-[700px] bg-card border border-border rounded-lg shadow-xl z-50 flex flex-col">
         {/* Header */}
         <div className="flex items-center justify-between p-4 border-b border-border">
           <div className="flex items-center gap-3">
