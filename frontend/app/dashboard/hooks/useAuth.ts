@@ -110,18 +110,47 @@ export function useAuth(): AuthContext {
         // Supabase統合版: 認証状態の確認
         let hasSupabaseSession = false;
         let sessionUserId: string | null = null;
+        let sessionUserEmail: string | null = null;
+        let sessionAccessToken: string | null = null;
         try {
           const { supabase } = await import('../../../lib/supabaseClient');
           if (supabase) {
             const { data: { session } } = await supabase.auth.getSession();
-            const accessToken = session?.access_token ?? null;
-            hasSupabaseSession = !!accessToken;
+            sessionAccessToken = session?.access_token ?? null;
+            hasSupabaseSession = !!sessionAccessToken;
             sessionUserId = session?.user?.id || null;
-            
-            debug.log('[auth] Supabase session check:', { hasSession: hasSupabaseSession, userId: sessionUserId });
-            
+            sessionUserEmail = session?.user?.email?.toLowerCase() || null;
+
+            debug.log('[auth] Supabase session check:', { hasSession: hasSupabaseSession, userId: sessionUserId, email: sessionUserEmail });
+
             // APIライブラリにトークンを設定（互換性のため）
-            ;(api as any).setBearerToken?.(accessToken);
+            ;(api as any).setBearerToken?.(sessionAccessToken);
+
+            // Check admin status based on email (initial load)
+            if (sessionUserEmail) {
+              const adminStatus = sessionUserEmail === ADMIN_EMAIL.toLowerCase();
+              setIsAdmin(adminStatus);
+              debug.log('[auth] Initial admin status:', adminStatus);
+            }
+
+            // Check premium subscription status (initial load)
+            if (sessionAccessToken) {
+              try {
+                const apiUrl = process.env.NEXT_PUBLIC_BACKEND_API_URL || '';
+                const response = await fetch(`${apiUrl}/api/subscription/status`, {
+                  headers: { Authorization: `Bearer ${sessionAccessToken}` },
+                });
+                if (response.ok) {
+                  const data = await response.json();
+                  const planType = data.subscription?.planType;
+                  const premiumStatus = planType === 'premium_basic' || planType === 'premium_pro';
+                  setIsPremium(premiumStatus);
+                  debug.log('[auth] Initial premium status:', premiumStatus, 'Plan:', planType);
+                }
+              } catch (error) {
+                debug.log('[auth] Initial premium check failed:', error);
+              }
+            }
           }
         } catch (error) {
           console.error('[auth] Session check failed:', error);
@@ -280,13 +309,13 @@ export function useAuth(): AuthContext {
 
           // Check premium subscription status
           try {
-            const apiUrl = process.env.NEXT_PUBLIC_API_URL || '';
+            const apiUrl = process.env.NEXT_PUBLIC_BACKEND_API_URL || '';
             const response = await fetch(`${apiUrl}/api/subscription/status`, {
               headers: { Authorization: `Bearer ${token}` },
             });
             if (response.ok) {
-              const data = await response.json();
-              const planType = data.subscription?.planType;
+              const subData = await response.json();
+              const planType = subData.subscription?.planType;
               const premiumStatus = planType === 'premium_basic' || planType === 'premium_pro';
               setIsPremium(premiumStatus);
               debug.log('[auth] Premium status:', premiumStatus, 'Plan:', planType);
