@@ -1020,9 +1020,13 @@ function DashboardLayout(props: any) {
 
       {/* Mobile Tab Navigation - Bottom fixed, OUTSIDE of main */}
       <nav className="md:hidden fixed bottom-0 left-0 right-0 z-[9999] bg-background border-t border-border shadow-[0_-2px_10px_rgba(0,0,0,0.1)]">
-        <div 
-          className="flex overflow-x-auto scrollbar-hide px-1 py-1.5 gap-0.5" 
-          style={{ paddingBottom: 'max(env(safe-area-inset-bottom, 0px), 8px)' }}
+        <div
+          className="flex overflow-x-auto scrollbar-hide py-1.5 gap-0.5"
+          style={{
+            paddingBottom: 'max(env(safe-area-inset-bottom, 0px), 8px)',
+            paddingLeft: '4px',
+            paddingRight: '16px'
+          }}
         >
           {visibleTabs.map((tab) => {
             // Normalize activeTab for comparison (e.g., 'next' -> 'board')
