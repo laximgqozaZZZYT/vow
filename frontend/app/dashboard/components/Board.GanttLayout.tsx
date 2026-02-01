@@ -1,11 +1,16 @@
 /**
  * Board Gantt Layout Component
- * 
+ *
  * Main container for the Gantt chart view in the Board section.
  * Integrates all Gantt sub-components and manages state.
- * 
+ *
+ * Features:
+ * - Horizontal scroll navigation with arrow buttons
+ * - Touch/swipe support for mobile
+ * - Fixed header with controls
+ *
  * @module Board.GanttLayout
- * 
+ *
  * Validates: Requirements 1.2, 8.6
  */
 
@@ -24,6 +29,57 @@ import { GanttTimelineHeader } from './Gantt.TimelineHeader';
 import { GanttLightningLine } from './Gantt.LightningLine';
 import { GanttTooltip } from './Gantt.Tooltip';
 import type { GanttRowData } from '../utils/ganttDataUtils';
+
+// ============================================================================
+// Navigation Arrow Component
+// ============================================================================
+
+interface ScrollArrowProps {
+  direction: 'left' | 'right';
+  visible: boolean;
+  onClick: () => void;
+}
+
+function ScrollArrow({ direction, visible, onClick }: ScrollArrowProps) {
+  if (!visible) return null;
+
+  return (
+    <button
+      onClick={onClick}
+      className={`
+        absolute top-1/2 -translate-y-1/2 z-30
+        w-10 h-20
+        flex items-center justify-center
+        bg-gradient-to-${direction === 'left' ? 'r' : 'l'}
+        from-card/90 via-card/70 to-transparent
+        text-muted-foreground hover:text-foreground
+        transition-all duration-200
+        hover:from-card hover:via-card/80
+        ${direction === 'left' ? 'left-0 pl-1' : 'right-0 pr-1'}
+      `}
+      aria-label={direction === 'left' ? '左へスクロール' : '右へスクロール'}
+    >
+      <svg
+        xmlns="http://www.w3.org/2000/svg"
+        width="24"
+        height="24"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        className="drop-shadow-sm"
+      >
+        {direction === 'left' ? (
+          <polyline points="15 18 9 12 15 6" />
+        ) : (
+          <polyline points="9 6 15 12 9 18" />
+        )}
+      </svg>
+    </button>
+  );
+}
 
 // ============================================================================
 // Interfaces
@@ -49,11 +105,15 @@ export interface GanttLayoutProps {
 // ============================================================================
 
 const ROW_HEIGHT = 36;
-const HEADER_HEIGHT = 48;
+const HEADER_HEIGHT = 24; // Reduced - controls moved to toolbar
 const ROW_NAMES_WIDTH_DESKTOP = 180;
 const ROW_NAMES_WIDTH_MOBILE = 120;
 const BAR_HEIGHT = 20;
 const BAR_PADDING = (ROW_HEIGHT - BAR_HEIGHT) / 2;
+
+// Minimum chart width to ensure scrollability (in pixels)
+const MIN_CHART_WIDTH = 800;
+const MIN_CHART_WIDTH_MOBILE = 600;
 
 // ============================================================================
 // Component
@@ -72,13 +132,16 @@ export default function GanttLayout({
 }: GanttLayoutProps) {
   // Detect mobile viewport
   const [isMobile, setIsMobile] = useState(false);
-  const [containerWidth, setContainerWidth] = useState(0);
-  
+
   // Refs for scroll synchronization
   const mainScrollRef = useRef<HTMLDivElement>(null);
   const rowNamesRef = useRef<HTMLDivElement>(null);
   const headerScrollRef = useRef<HTMLDivElement>(null);
-  
+
+  // Scroll arrow visibility state
+  const [canScrollLeft, setCanScrollLeft] = useState(false);
+  const [canScrollRight, setCanScrollRight] = useState(false);
+
   useEffect(() => {
     const checkMobile = () => setIsMobile(window.innerWidth < 768);
     checkMobile();
@@ -86,19 +149,37 @@ export default function GanttLayout({
     return () => window.removeEventListener('resize', checkMobile);
   }, []);
 
-  // Track container width for minimum chart width
-  useEffect(() => {
-    const updateContainerWidth = () => {
-      if (mainScrollRef.current) {
-        setContainerWidth(mainScrollRef.current.clientWidth);
-      }
-    };
-    updateContainerWidth();
-    window.addEventListener('resize', updateContainerWidth);
-    return () => window.removeEventListener('resize', updateContainerWidth);
+  const rowNamesWidth = isMobile ? ROW_NAMES_WIDTH_MOBILE : ROW_NAMES_WIDTH_DESKTOP;
+  const minChartWidth = isMobile ? MIN_CHART_WIDTH_MOBILE : MIN_CHART_WIDTH;
+
+  // Update scroll arrow visibility
+  const updateScrollArrows = useCallback(() => {
+    const container = mainScrollRef.current;
+    if (!container) return;
+
+    const { scrollLeft, scrollWidth, clientWidth } = container;
+    setCanScrollLeft(scrollLeft > 10);
+    setCanScrollRight(scrollLeft < scrollWidth - clientWidth - 10);
   }, []);
 
-  const rowNamesWidth = isMobile ? ROW_NAMES_WIDTH_MOBILE : ROW_NAMES_WIDTH_DESKTOP;
+  // Scroll by a fixed amount
+  const scrollByAmount = useCallback((direction: 'left' | 'right') => {
+    const container = mainScrollRef.current;
+    if (!container) return;
+
+    const scrollAmount = container.clientWidth * 0.6;
+    container.scrollBy({
+      left: direction === 'left' ? -scrollAmount : scrollAmount,
+      behavior: 'smooth'
+    });
+  }, []);
+
+  // Update arrows on resize
+  useEffect(() => {
+    updateScrollArrows();
+    window.addEventListener('resize', updateScrollArrows);
+    return () => window.removeEventListener('resize', updateScrollArrows);
+  }, [updateScrollArrows]);
 
   // State for tooltip
   const [tooltipData, setTooltipData] = useState<{
@@ -153,14 +234,14 @@ export default function GanttLayout({
     setViewMode(mode);
   }, [setViewMode]);
 
-  // Sync scroll between all panels
+  // Sync scroll between all panels and update arrow visibility
   useEffect(() => {
     const mainScroll = mainScrollRef.current;
     const rowNames = rowNamesRef.current;
     const headerScroll = headerScrollRef.current;
-    
+
     if (!mainScroll) return;
-    
+
     const handleMainScroll = () => {
       // Sync vertical scroll to row names
       if (rowNames) {
@@ -170,11 +251,27 @@ export default function GanttLayout({
       if (headerScroll) {
         headerScroll.scrollLeft = mainScroll.scrollLeft;
       }
+      // Update scroll arrows visibility
+      updateScrollArrows();
     };
-    
+
     mainScroll.addEventListener('scroll', handleMainScroll);
+    // Initial check for arrows
+    updateScrollArrows();
     return () => mainScroll.removeEventListener('scroll', handleMainScroll);
-  }, []);
+  }, [updateScrollArrows]);
+
+  // Calculate actual chart width (ensures minimum width for scrollability)
+  const chartWidth = useMemo(() => {
+    return Math.max(totalWidth, minChartWidth);
+  }, [totalWidth, minChartWidth]);
+
+  // Update arrows when chart dimensions change
+  useEffect(() => {
+    // Small delay to let the DOM update
+    const timer = setTimeout(updateScrollArrows, 100);
+    return () => clearTimeout(timer);
+  }, [chartWidth, rows.length, updateScrollArrows]);
 
   // Calculate lightning line points
   const lightningPoints = useMemo(() => {
@@ -226,9 +323,9 @@ export default function GanttLayout({
   }, [rows]);
 
   return (
-    <div className="flex flex-col h-full min-h-0 max-h-[calc(100vh-200px)]">
-      {/* Toolbar */}
-      <div className="flex items-center justify-between px-2 py-1 border-b border-border bg-muted/30">
+    <div className="flex flex-col h-full min-h-0 min-w-0 max-h-[calc(100vh-200px)] overflow-hidden">
+      {/* Toolbar - Fixed position controls */}
+      <div className="flex items-center justify-between px-2 py-1 border-b border-border bg-muted/30 flex-shrink-0">
         <div className="flex items-center gap-2">
           <button
             onClick={expandAll}
@@ -243,8 +340,72 @@ export default function GanttLayout({
             すべて折りたたむ
           </button>
         </div>
-        
+
         <div className="flex items-center gap-2">
+          {/* View mode controls - Fixed position */}
+          <div className="flex items-center gap-0.5">
+            <button
+              onClick={() => handleViewModeChange('day')}
+              className={`
+                px-1.5 py-0.5 text-[10px] font-medium rounded
+                transition-colors
+                focus-visible:outline-2 focus-visible:outline-primary
+                ${viewMode === 'day'
+                  ? 'bg-primary text-primary-foreground'
+                  : 'bg-muted text-muted-foreground hover:bg-muted/80'
+                }
+              `}
+              aria-pressed={viewMode === 'day'}
+            >
+              日
+            </button>
+            <button
+              onClick={() => handleViewModeChange('week')}
+              className={`
+                px-1.5 py-0.5 text-[10px] font-medium rounded
+                transition-colors
+                focus-visible:outline-2 focus-visible:outline-primary
+                ${viewMode === 'week'
+                  ? 'bg-primary text-primary-foreground'
+                  : 'bg-muted text-muted-foreground hover:bg-muted/80'
+                }
+              `}
+              aria-pressed={viewMode === 'week'}
+            >
+              週
+            </button>
+            <button
+              onClick={() => handleViewModeChange('month')}
+              className={`
+                px-1.5 py-0.5 text-[10px] font-medium rounded
+                transition-colors
+                focus-visible:outline-2 focus-visible:outline-primary
+                ${viewMode === 'month'
+                  ? 'bg-primary text-primary-foreground'
+                  : 'bg-muted text-muted-foreground hover:bg-muted/80'
+                }
+              `}
+              aria-pressed={viewMode === 'month'}
+            >
+              月
+            </button>
+          </div>
+
+          <button
+            onClick={scrollToToday}
+            className="
+              px-1.5 py-0.5 text-[10px] font-medium
+              bg-primary/10 text-primary
+              rounded hover:bg-primary/20
+              transition-colors
+              focus-visible:outline-2 focus-visible:outline-primary
+            "
+          >
+            今日
+          </button>
+
+          <div className="w-px h-4 bg-border" />
+
           <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer">
             <input
               type="checkbox"
@@ -258,7 +419,7 @@ export default function GanttLayout({
       </div>
 
       {/* Header Row (Fixed) */}
-      <div className="flex border-b border-border flex-shrink-0">
+      <div className="flex border-b border-border flex-shrink-0 min-w-0 overflow-hidden">
         {/* Task column header */}
         <div
           className="flex-shrink-0 border-r border-border bg-card flex items-center justify-center text-sm font-medium text-muted-foreground"
@@ -268,29 +429,28 @@ export default function GanttLayout({
         </div>
         
         {/* Timeline header (horizontal scroll synced) */}
-        <div 
+        <div
           ref={headerScrollRef}
-          className="flex-1 overflow-hidden"
+          className="flex-1 overflow-hidden min-w-0"
         >
-          <div style={{ width: Math.max(totalWidth, containerWidth), minWidth: '100%' }}>
+          <div style={{ minWidth: chartWidth, width: 'max-content' }}>
             <GanttTimelineHeader
               cells={cells}
               viewMode={viewMode}
-              onViewModeChange={handleViewModeChange}
               headerHeight={HEADER_HEIGHT}
               todayPosition={todayPosition}
-              onScrollToToday={scrollToToday}
+              showControls={false}
             />
           </div>
         </div>
       </div>
 
       {/* Main Content - Synchronized scrolling */}
-      <div className="flex flex-1 min-h-0 overflow-hidden">
+      <div className="flex flex-1 min-h-0 min-w-0 overflow-hidden relative">
         {/* Row Names Panel (Vertical scroll synced, no scrollbar) */}
         <div
           ref={rowNamesRef}
-          className="flex-shrink-0 border-r border-border bg-card overflow-hidden"
+          className="flex-shrink-0 border-r border-border bg-card overflow-hidden z-10"
           style={{ width: rowNamesWidth }}
         >
           {rows.map((row) => (
@@ -304,21 +464,38 @@ export default function GanttLayout({
           ))}
         </div>
 
-        {/* Chart Area (Both horizontal and vertical scroll with scrollbars) */}
-        <div
-          ref={mainScrollRef}
-          className="flex-1 overflow-auto touch-pan-x touch-pan-y"
-          style={{
-            WebkitOverflowScrolling: 'touch'
-          }}
-        >
-          <div style={{ width: Math.max(totalWidth, containerWidth), minWidth: '100%' }}>
+        {/* Chart Area Container with Navigation Arrows */}
+        <div className="flex-1 min-w-0 relative overflow-hidden">
+          {/* Left Arrow */}
+          <ScrollArrow
+            direction="left"
+            visible={canScrollLeft}
+            onClick={() => scrollByAmount('left')}
+          />
+
+          {/* Right Arrow */}
+          <ScrollArrow
+            direction="right"
+            visible={canScrollRight}
+            onClick={() => scrollByAmount('right')}
+          />
+
+          {/* Chart Area (Both horizontal and vertical scroll with scrollbars) */}
+          <div
+            ref={mainScrollRef}
+            className="absolute inset-0 overflow-auto overscroll-x-contain"
+            style={{
+              WebkitOverflowScrolling: 'touch',
+              scrollbarWidth: 'thin',
+              touchAction: 'pan-x pan-y'
+            }}
+          >
+          <div style={{ minWidth: chartWidth, width: 'max-content' }}>
             {/* Chart Body */}
             <svg
-              width="100%"
+              width={chartWidth}
               height={rows.length * ROW_HEIGHT}
               className="block"
-              style={{ minWidth: totalWidth }}
             >
               {/* Grid lines */}
               <g className="pointer-events-none">
@@ -328,7 +505,7 @@ export default function GanttLayout({
                     key={`h-${index}`}
                     x1={0}
                     y1={(index + 1) * ROW_HEIGHT}
-                    x2={totalWidth}
+                    x2={chartWidth}
                     y2={(index + 1) * ROW_HEIGHT}
                     stroke="#374151"
                     strokeWidth={1}
@@ -424,6 +601,8 @@ export default function GanttLayout({
               />
             </svg>
           </div>
+        </div>
+        {/* End of Chart Area Container */}
         </div>
       </div>
 

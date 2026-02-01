@@ -126,7 +126,7 @@ export function TabContent({
       id={`tabpanel-${activeTab}`}
       role="tabpanel"
       aria-labelledby={`tab-${activeTab}`}
-      className="relative"
+      className="relative min-w-0 max-w-full overflow-hidden"
     >
       {/* Full view toggle button */}
       {supportsFullView && (

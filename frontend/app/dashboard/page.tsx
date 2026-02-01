@@ -957,7 +957,7 @@ function DashboardLayout(props: any) {
   };
 
   return (
-    <div className="flex flex-col md:flex-row min-h-screen md:min-h-screen bg-background text-foreground">
+    <div className="flex flex-col md:flex-row min-h-screen md:min-h-screen bg-background text-foreground overflow-hidden max-w-[100vw]">
         <DashboardHeader
           onToggleSidebar={() => setShowLeftPane((s: boolean) => !s)}
           showSidebar={showLeftPane}
@@ -992,7 +992,7 @@ function DashboardLayout(props: any) {
       />
 
   {/* Main content pane with left tab navigation */}
-  <main className="flex-1 pt-16 pb-20 md:pb-0 flex flex-col md:flex-row">
+  <main className="flex-1 min-w-0 pt-16 pb-20 md:pb-0 flex flex-col md:flex-row overflow-hidden">
         {/* Left Tab Navigation - Desktop */}
         <div className="hidden md:flex flex-col h-[calc(100vh-4rem)] sticky top-16">
           <TabNavigation
@@ -1005,7 +1005,7 @@ function DashboardLayout(props: any) {
         </div>
 
         {/* Tab Content */}
-        <div className="flex-1 p-4 lg:p-6">
+        <div className="flex-1 p-4 lg:p-6 min-w-0 overflow-hidden">
           <TabContent
             activeTab={activeTab}
             isFullView={isFullView}

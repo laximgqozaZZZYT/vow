@@ -396,11 +396,11 @@ export default function BoardSection({
   const hasAddActions = onNewGoal || onNewHabit || onManageTags;
 
   return (
-    <section className="rounded-lg border border-border bg-card text-card-foreground shadow-sm flex flex-col min-h-0">
+    <section className="rounded-lg border border-border bg-card text-card-foreground shadow-sm flex flex-col min-h-0 max-w-full overflow-hidden">
       {/* Header with title, add button, and layout toggle */}
-      <div className={`sticky top-0 z-20 flex items-center justify-between p-4 sm:p-6 pb-2 sm:pb-3 bg-card border-b border-border ${isLeftHanded ? 'flex-row-reverse' : ''}`}>
-        <h2 className="text-lg font-semibold">Board</h2>
-        <div className={`flex items-center gap-2 ${isLeftHanded ? 'flex-row-reverse' : ''}`}>
+      <div className={`sticky top-0 z-20 flex items-center justify-between p-4 sm:p-6 pb-2 sm:pb-3 bg-card border-b border-border flex-shrink-0 ${isLeftHanded ? 'flex-row-reverse' : ''}`}>
+        <h2 className="text-lg font-semibold flex-shrink-0">Board</h2>
+        <div className={`flex items-center gap-2 flex-shrink-0 ${isLeftHanded ? 'flex-row-reverse' : ''}`}>
           {hasAddActions && (
             <AddButton
               onNewGoal={onNewGoal}
@@ -415,9 +415,9 @@ export default function BoardSection({
           />
         </div>
       </div>
-      
+
       {/* Content area - conditional rendering based on layout mode */}
-      <div className={`flex-1 min-h-0 ${isGanttMode ? 'overflow-hidden' : 'overflow-visible'}`}>
+      <div className={`flex-1 min-h-0 min-w-0 ${isGanttMode ? 'overflow-hidden' : 'overflow-visible'}`}>
         {isDetailedMode ? (
           <KanbanLayout
             habits={habits}
