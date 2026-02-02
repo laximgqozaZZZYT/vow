@@ -483,10 +483,9 @@ export default function GanttLayout({
           {/* Chart Area (Both horizontal and vertical scroll with scrollbars) */}
           <div
             ref={mainScrollRef}
-            className="absolute inset-0 overflow-auto overscroll-x-contain"
+            className="absolute inset-0 overflow-auto overscroll-x-contain modern-scrollbar"
             style={{
               WebkitOverflowScrolling: 'touch',
-              scrollbarWidth: 'thin',
               touchAction: 'pan-x pan-y'
             }}
           >

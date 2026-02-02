@@ -19,8 +19,9 @@ import { useLocalStorage } from './useLocalStorage';
  * - 'simple': List view similar to original NextSection
  * - 'detailed': Kanban board view with three columns
  * - 'gantt': Gantt chart view with timeline
+ * - 'mindmap': Mind map view with goal/habit relations
  */
-export type LayoutMode = 'simple' | 'detailed' | 'gantt';
+export type LayoutMode = 'simple' | 'detailed' | 'gantt' | 'mindmap';
 
 /**
  * Return type for useBoardLayout hook
@@ -30,7 +31,7 @@ export interface UseBoardLayoutReturn {
   layoutMode: LayoutMode;
   /** Set layout mode directly */
   setLayoutMode: (mode: LayoutMode) => void;
-  /** Toggle between simple and detailed layout modes */
+  /** Toggle between simple, detailed, gantt, and mindmap layout modes */
   toggleLayoutMode: () => void;
   /** Whether the layout is in detailed (Kanban) mode */
   isDetailedMode: boolean;
@@ -38,6 +39,8 @@ export interface UseBoardLayoutReturn {
   isSimpleMode: boolean;
   /** Whether the layout is in gantt chart mode */
   isGanttMode: boolean;
+  /** Whether the layout is in mindmap mode */
+  isMindmapMode: boolean;
   /** Loading state (true during SSR) */
   loading: boolean;
 }
@@ -51,7 +54,7 @@ export const DEFAULT_MODE: LayoutMode = 'detailed';
 /**
  * Valid layout modes for validation
  */
-const VALID_MODES: readonly LayoutMode[] = ['simple', 'detailed', 'gantt'] as const;
+const VALID_MODES: readonly LayoutMode[] = ['simple', 'detailed', 'gantt', 'mindmap'] as const;
 
 /**
  * Validates if a value is a valid LayoutMode
@@ -112,15 +115,16 @@ export function useBoardLayout(): UseBoardLayoutReturn {
   }, [setValue]);
 
   /**
-   * Toggle between simple, detailed, and gantt layout modes
+   * Toggle between simple, detailed, gantt, and mindmap layout modes
    * Requirement 1.3: Switch without page reload
    */
   const toggleLayoutMode = useCallback(() => {
     setValue((current) => {
       const currentMode = isValidLayoutMode(current) ? current : DEFAULT_MODE;
-      // Cycle: detailed -> simple -> gantt -> detailed
+      // Cycle: detailed -> simple -> gantt -> mindmap -> detailed
       if (currentMode === 'detailed') return 'simple';
       if (currentMode === 'simple') return 'gantt';
+      if (currentMode === 'gantt') return 'mindmap';
       return 'detailed';
     });
   }, [setValue]);
@@ -129,6 +133,7 @@ export function useBoardLayout(): UseBoardLayoutReturn {
   const isDetailedMode = layoutMode === 'detailed';
   const isSimpleMode = layoutMode === 'simple';
   const isGanttMode = layoutMode === 'gantt';
+  const isMindmapMode = layoutMode === 'mindmap';
 
   return {
     layoutMode,
@@ -137,6 +142,7 @@ export function useBoardLayout(): UseBoardLayoutReturn {
     isDetailedMode,
     isSimpleMode,
     isGanttMode,
+    isMindmapMode,
     loading,
   };
 }

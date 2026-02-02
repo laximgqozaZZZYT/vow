@@ -27,6 +27,7 @@ import type { Habit, Activity, HabitAction, Goal } from '../types';
 import type { HabitRelation } from '../types/shared';
 import KanbanLayout from './Board.KanbanLayout';
 import GanttLayout from './Board.GanttLayout';
+import MindmapLayout from './Board.MindmapLayout';
 import { useHandedness } from '../contexts/HandednessContext';
 import { useState, useRef, useEffect } from 'react';
 import { formatTime24, formatDateTime24 } from '../../../lib/format';
@@ -66,6 +67,12 @@ export interface BoardSectionProps {
   onNewSticky?: () => void;
   /** Callback when manage tags is requested */
   onManageTags?: () => void;
+  /** Callback for registering data as habit (Mindmap) */
+  onRegisterAsHabit?: (data: any) => Promise<any>;
+  /** Callback for registering data as goal (Mindmap) */
+  onRegisterAsGoal?: (data: any) => Promise<any>;
+  /** Callback when data changes (Mindmap) */
+  onDataChange?: () => void;
 }
 
 /**
@@ -129,21 +136,47 @@ function LayoutToggleButton({
       case 'gantt':
         // Gantt chart icon
         return (
-          <svg 
-            xmlns="http://www.w3.org/2000/svg" 
-            width="14" 
-            height="14" 
-            viewBox="0 0 24 24" 
-            fill="none" 
-            stroke="currentColor" 
-            strokeWidth="2" 
-            strokeLinecap="round" 
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            width="14"
+            height="14"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
             strokeLinejoin="round"
             aria-hidden="true"
           >
             <rect x="3" y="4" width="12" height="4" rx="1" />
             <rect x="7" y="10" width="10" height="4" rx="1" />
             <rect x="5" y="16" width="14" height="4" rx="1" />
+          </svg>
+        );
+      case 'mindmap':
+        // Mindmap icon (nodes connected)
+        return (
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            width="14"
+            height="14"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            aria-hidden="true"
+          >
+            <circle cx="12" cy="12" r="3" />
+            <circle cx="4" cy="6" r="2" />
+            <circle cx="20" cy="6" r="2" />
+            <circle cx="4" cy="18" r="2" />
+            <circle cx="20" cy="18" r="2" />
+            <line x1="9.5" y1="10" x2="5.5" y2="7.5" />
+            <line x1="14.5" y1="10" x2="18.5" y2="7.5" />
+            <line x1="9.5" y1="14" x2="5.5" y2="16.5" />
+            <line x1="14.5" y1="14" x2="18.5" y2="16.5" />
           </svg>
         );
     }
@@ -154,6 +187,7 @@ function LayoutToggleButton({
       case 'detailed': return 'カンバン';
       case 'simple': return 'リスト';
       case 'gantt': return 'ガント';
+      case 'mindmap': return 'マップ';
     }
   };
 
@@ -380,14 +414,18 @@ export default function BoardSection({
   onNewGoal,
   onNewHabit,
   onNewSticky,
-  onManageTags
+  onManageTags,
+  onRegisterAsHabit,
+  onRegisterAsGoal,
+  onDataChange
 }: BoardSectionProps) {
-  const { 
-    layoutMode, 
-    toggleLayoutMode, 
+  const {
+    layoutMode,
+    toggleLayoutMode,
     isDetailedMode,
     isGanttMode,
-    loading 
+    isMindmapMode,
+    loading
   } = useBoardLayout();
   
   const { isLeftHanded } = useHandedness();
@@ -417,7 +455,7 @@ export default function BoardSection({
       </div>
 
       {/* Content area - conditional rendering based on layout mode */}
-      <div className={`flex-1 min-h-0 min-w-0 ${isGanttMode ? 'overflow-hidden' : 'overflow-visible'}`}>
+      <div className={`flex-1 min-h-0 min-w-0 ${isGanttMode || isMindmapMode ? 'overflow-hidden' : 'overflow-visible'}`}>
         {isDetailedMode ? (
           <KanbanLayout
             habits={habits}
@@ -438,6 +476,14 @@ export default function BoardSection({
             habitRelations={habitRelations}
             onGoalEdit={onGoalEdit || (() => {})}
             onHabitEdit={onHabitEdit}
+          />
+        ) : isMindmapMode ? (
+          <MindmapLayout
+            goals={goals}
+            habits={habits}
+            onRegisterAsHabit={onRegisterAsHabit}
+            onRegisterAsGoal={onRegisterAsGoal}
+            onDataChange={onDataChange}
           />
         ) : (
           <SimpleLayout

@@ -24,6 +24,7 @@ export function useAuth(): AuthContext {
   const [userId, setUserId] = useState<string | null>(null);
   const [isAdmin, setIsAdmin] = useState<boolean>(false);
   const [isPremium, setIsPremium] = useState<boolean>(false);
+  const [authToken, setAuthToken] = useState<string | null>(null);
   const previousIsGuestRef = useRef<boolean>(false);
   const migrationInProgressRef = useRef<boolean>(false);
   
@@ -122,6 +123,9 @@ export function useAuth(): AuthContext {
             sessionUserEmail = session?.user?.email?.toLowerCase() || null;
 
             debug.log('[auth] Supabase session check:', { hasSession: hasSupabaseSession, userId: sessionUserId, email: sessionUserEmail });
+
+            // Set auth token state
+            setAuthToken(sessionAccessToken);
 
             // APIライブラリにトークンを設定（互換性のため）
             ;(api as any).setBearerToken?.(sessionAccessToken);
@@ -283,7 +287,10 @@ export function useAuth(): AuthContext {
         const wasGuest = isGuest;
         
         debug.log('[auth] Auth state change:', { event, hasToken: !!token, userId, wasGuest });
-        
+
+        // Update auth token state
+        setAuthToken(token);
+
         // 開発環境でのアクセス制限チェック
         if (IS_DEV_ENV && token && userEmail && ALLOWED_EMAILS_DEV.length > 0) {
           if (!ALLOWED_EMAILS_DEV.includes(userEmail)) {
@@ -392,6 +399,7 @@ export function useAuth(): AuthContext {
     userId,
     isAdmin,
     isPremium,
+    authToken,
     // Migration state
     migrationStatus,
     migrationResult,

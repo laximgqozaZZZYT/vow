@@ -4,6 +4,14 @@
  * Provides intelligent coaching using OpenAI Function Calling.
  * The AI can autonomously call tools to analyze habits, get workload data,
  * and provide personalized coaching advice.
+ *
+ * === MIGRATION NOTE (USE_MASTRA_COACH) ===
+ * This service supports gradual migration to VowCoachAgent:
+ * - Set USE_MASTRA_COACH=true to use the new Mastra-based agent
+ * - Set USE_MASTRA_COACH=false (default) for legacy OpenAI direct calls
+ *
+ * The migration preserves backward compatibility while enabling
+ * the new Mastra agent architecture.
  */
 
 import OpenAI from 'openai';
@@ -27,7 +35,39 @@ import { LevelManagerService } from './levelManagerService.js';
 import { UsageQuotaService } from './usageQuotaService.js';
 import type { LevelEstimate, BabyStepPlans, BabyStepPlan, QuotaStatus } from '../types/thli.js';
 
+// VowCoachAgent integration imports
+import {
+  getVowCoachAgent,
+  coachTools as vowCoachTools,
+  type CoachExecutionContext,
+  type CoachTool,
+} from '../agents/mastra/vow-coach-agent.js';
+import {
+  OpenAIToolRegistry,
+  convertCoachToolsToOpenAI,
+} from '../adapters/openai-tool-adapter.js';
+
 const logger = getLogger('aiCoachService');
+
+// =============================================================================
+// Migration Flag
+// =============================================================================
+
+/**
+ * Check if Mastra Coach should be used instead of legacy OpenAI direct calls.
+ * Controlled by environment variable USE_MASTRA_COACH.
+ */
+function shouldUseMastraCoach(): boolean {
+  const envValue = process.env['USE_MASTRA_COACH'];
+  return envValue === 'true' || envValue === '1';
+}
+
+/**
+ * Get the current migration mode for logging/debugging
+ */
+function getMigrationMode(): 'mastra' | 'legacy' {
+  return shouldUseMastraCoach() ? 'mastra' : 'legacy';
+}
 
 /**
  * Tool definitions for OpenAI Function Calling
@@ -787,6 +827,10 @@ export interface CoachResponse {
 
 /**
  * AI Coach Service
+ *
+ * Supports two modes controlled by USE_MASTRA_COACH environment variable:
+ * - Legacy mode (default): Direct OpenAI API calls with COACH_TOOLS
+ * - Mastra mode: Delegates to VowCoachAgent for unified agent architecture
  */
 export class AICoachService {
   private openai: OpenAI | null = null;
@@ -804,6 +848,10 @@ export class AICoachService {
   private levelManagerService: LevelManagerService;
   private usageQuotaService: UsageQuotaService;
 
+  // VowCoachAgent integration (for Mastra mode)
+  private toolRegistry: OpenAIToolRegistry | null = null;
+  private sessionId: string | null = null;
+
   constructor(supabase: SupabaseClient, userId: string) {
     const settings = getSettings();
     this.model = settings.openaiModel || 'gpt-4o-mini';
@@ -818,25 +866,286 @@ export class AICoachService {
     this.activityRepo = new ActivityRepository(supabase);
     this.goalRepo = new GoalRepository(supabase);
     this.personalizationEngine = new PersonalizationEngine(supabase);
-    
+
     // Initialize THLI-24 services
     this.thliAssessmentService = new THLIAssessmentService(supabase);
     this.babyStepGeneratorService = new BabyStepGeneratorService(supabase);
     this.levelManagerService = new LevelManagerService(supabase);
     this.usageQuotaService = new UsageQuotaService(supabase);
+
+    // Initialize Mastra integration if enabled
+    if (shouldUseMastraCoach()) {
+      this.initializeMastraIntegration();
+    }
+
+    logger.info('AICoachService initialized', {
+      userId,
+      mode: getMigrationMode(),
+      openaiConfigured: !!this.openai,
+    });
+  }
+
+  /**
+   * Initialize Mastra/VowCoachAgent integration
+   */
+  private initializeMastraIntegration(): void {
+    try {
+      // Create tool registry with Japanese descriptions
+      this.toolRegistry = new OpenAIToolRegistry({
+        useJapaneseDescriptions: true,
+      });
+
+      // Register VowCoachAgent tools converted to OpenAI format
+      // Cast CoachTool[] to CoachToolDefinition[] since they have compatible structure
+      // The execute function type differs slightly (CoachExecutionContext vs unknown)
+      // but is compatible at runtime
+      const toolDefinitions = vowCoachTools.map((tool: CoachTool) => ({
+        name: tool.name,
+        description: tool.description,
+        descriptionJa: tool.descriptionJa,
+        inputSchema: tool.inputSchema,
+        execute: tool.execute as (input: unknown, context: unknown) => Promise<unknown>,
+      }));
+      const convertedTools = convertCoachToolsToOpenAI(toolDefinitions, {
+        useJapaneseDescriptions: true,
+      });
+      for (const [, tool] of convertedTools) {
+        this.toolRegistry.registerCustomTool(tool.openaiTool, tool.execute);
+      }
+
+      // Generate session ID for multi-turn conversations
+      this.sessionId = `session_${this.userId}_${Date.now()}`;
+
+      logger.info('Mastra integration initialized', {
+        userId: this.userId,
+        toolCount: this.toolRegistry.size,
+        sessionId: this.sessionId,
+      });
+    } catch (error) {
+      logger.error('Failed to initialize Mastra integration', error as Error, {
+        userId: this.userId,
+      });
+      // Fall back to legacy mode on error
+      this.toolRegistry = null;
+    }
   }
 
   /**
    * Check if service is available
    */
   isAvailable(): boolean {
+    // In Mastra mode, we also need to check if toolRegistry is available
+    if (shouldUseMastraCoach()) {
+      return this.openai !== null && this.toolRegistry !== null;
+    }
     return this.openai !== null;
   }
 
   /**
+   * Get the current execution mode
+   */
+  getMode(): 'mastra' | 'legacy' {
+    return getMigrationMode();
+  }
+
+  /**
    * Process a coaching conversation with function calling
+   *
+   * This method supports two execution modes:
+   * - Legacy mode (USE_MASTRA_COACH=false): Direct OpenAI API calls
+   * - Mastra mode (USE_MASTRA_COACH=true): Delegates to VowCoachAgent
    */
   async chat(
+    userMessage: string,
+    conversationHistory: Array<{ role: 'user' | 'assistant'; content: string }> = []
+  ): Promise<CoachResponse> {
+    // Use Mastra-based execution if enabled
+    if (shouldUseMastraCoach()) {
+      return this.chatWithMastra(userMessage, conversationHistory);
+    }
+
+    // Legacy execution path
+    return this.chatLegacy(userMessage, conversationHistory);
+  }
+
+  /**
+   * Process chat using VowCoachAgent (Mastra mode)
+   * This is the new unified agent architecture.
+   */
+  private async chatWithMastra(
+    userMessage: string,
+    conversationHistory: Array<{ role: 'user' | 'assistant'; content: string }> = []
+  ): Promise<CoachResponse> {
+    if (!this.openai) {
+      throw new Error('OpenAI API key not configured');
+    }
+
+    if (!this.toolRegistry) {
+      logger.warning('Mastra integration not available, falling back to legacy', {
+        userId: this.userId,
+      });
+      return this.chatLegacy(userMessage, conversationHistory);
+    }
+
+    // Check if the topic is within scope (guardrail)
+    if (!isWithinScope(userMessage)) {
+      return {
+        message: '申し訳ありませんが、習慣管理に関することでお手伝いできます。\n\n例えば：\n・新しい習慣を作りたい\n・習慣の達成率を確認したい\n・ワークロードを調整したい\n\nなどについてお聞きください',
+        toolsUsed: [],
+        tokensUsed: 0,
+      };
+    }
+
+    try {
+      // Get VowCoachAgent instance
+      const vowCoachAgent = getVowCoachAgent();
+
+      // Analyze user context for personalization
+      this.userContext = await this.personalizationEngine.analyzeUserContext(this.userId);
+
+      // Create execution context for VowCoachAgent tools
+      const executionContext: CoachExecutionContext = {
+        userId: this.userId,
+        sessionId: this.sessionId || `session_${this.userId}_${Date.now()}`,
+        supabase: this.supabase,
+        locale: 'ja',
+        userContext: this.userContext,
+      };
+
+      // Get system prompt from VowCoachAgent
+      const systemPrompt = vowCoachAgent.getSystemPrompt('ja', this.userContext);
+
+      // Check if clarification is needed
+      const clarification = needsClarification(userMessage);
+      const shouldProceed = shouldProceedWithoutClarification(userMessage);
+
+      let contextMessage = '';
+      if (clarification.needed && !shouldProceed && conversationHistory.length === 0) {
+        contextMessage = `\n\n[システム注記: ユーザーの意図が曖昧な可能性があります。以下の点を確認することを検討してください: ${clarification.questions.join(', ')}。]`;
+      }
+
+      // Build messages
+      const messages: ChatCompletionMessageParam[] = [
+        { role: 'system', content: systemPrompt + contextMessage },
+        ...conversationHistory.slice(-10).map(m => ({
+          role: m.role as 'user' | 'assistant',
+          content: m.content,
+        })),
+        { role: 'user', content: userMessage },
+      ];
+
+      // Get tools from registry (includes VowCoachAgent tools converted to OpenAI format)
+      // Also include legacy COACH_TOOLS for backward compatibility
+      const allTools = [...this.toolRegistry.getOpenAITools(), ...COACH_TOOLS];
+
+      const toolsUsed: string[] = [];
+      const collectedData: NonNullable<CoachResponse['data']> = {};
+      let totalTokens = 0;
+
+      // Allow up to 3 tool call iterations
+      for (let iteration = 0; iteration < 3; iteration++) {
+        const response = await this.openai.chat.completions.create({
+          model: this.model,
+          messages,
+          tools: allTools,
+          tool_choice: 'auto',
+          temperature: 0.7,
+          max_tokens: 1500,
+        });
+
+        totalTokens += response.usage?.total_tokens || 0;
+        const choice = response.choices[0];
+
+        if (!choice) {
+          break;
+        }
+
+        if (choice.finish_reason === 'tool_calls' && choice.message.tool_calls) {
+          messages.push(choice.message);
+
+          for (const toolCall of choice.message.tool_calls) {
+            if (toolCall.type !== 'function') continue;
+
+            const toolName = toolCall.function.name;
+            let args: Record<string, unknown>;
+            try {
+              args = JSON.parse(toolCall.function.arguments || '{}') as Record<string, unknown>;
+            } catch {
+              args = {};
+            }
+
+            toolsUsed.push(toolName);
+            logger.info('Executing tool (Mastra mode)', { toolName, userId: this.userId });
+
+            // Try to execute through registry (VowCoachAgent tools), then fall back to legacy
+            let result: unknown;
+            if (this.toolRegistry.hasTool(toolName)) {
+              result = await this.toolRegistry.executeTool(toolName, args, executionContext);
+            } else {
+              // Fall back to legacy tool execution
+              result = await this.executeToolSafely(toolName, args);
+            }
+
+            // Store collected data
+            this.storeToolResult(collectedData, toolName, result);
+
+            messages.push({
+              role: 'tool',
+              tool_call_id: toolCall.id,
+              content: JSON.stringify(result),
+            });
+          }
+        } else {
+          // Final response
+          logger.info('Chat completed (Mastra mode)', {
+            userId: this.userId,
+            toolsUsed,
+            tokensUsed: totalTokens,
+          });
+
+          return {
+            message: choice.message.content || 'すみません、応答を生成できませんでした。',
+            toolsUsed,
+            tokensUsed: totalTokens,
+            data: Object.keys(collectedData).length > 0 ? collectedData : undefined,
+          };
+        }
+      }
+
+      // If we hit max iterations, get final response
+      const finalResponse = await this.openai.chat.completions.create({
+        model: this.model,
+        messages,
+        temperature: 0.7,
+        max_tokens: 1000,
+      });
+
+      totalTokens += finalResponse.usage?.total_tokens || 0;
+      const finalChoice = finalResponse.choices[0];
+
+      return {
+        message: finalChoice?.message.content || 'すみません、応答を生成できませんでした。',
+        toolsUsed,
+        tokensUsed: totalTokens,
+        data: Object.keys(collectedData).length > 0 ? collectedData : undefined,
+      };
+    } catch (error) {
+      const errorResult = handleError(error);
+      logger.error(createErrorLogMessage(error, { userId: this.userId, userMessage, mode: 'mastra' }));
+
+      return {
+        message: errorResult.userMessage,
+        toolsUsed: [],
+        tokensUsed: 0,
+      };
+    }
+  }
+
+  /**
+   * Process chat using legacy OpenAI direct calls
+   * This is the original implementation preserved for backward compatibility.
+   */
+  private async chatLegacy(
     userMessage: string,
     conversationHistory: Array<{ role: 'user' | 'assistant'; content: string }> = []
   ): Promise<CoachResponse> {
@@ -847,7 +1156,7 @@ export class AICoachService {
     // Check if the topic is within scope (guardrail)
     if (!isWithinScope(userMessage)) {
       return {
-        message: '申し訳ありませんが、習慣管理に関することでお手伝いできます。\n\n例えば：\n・新しい習慣を作りたい\n・習慣の達成率を確認したい\n・ワークロードを調整したい\n\nなどについてお聞きください 😊',
+        message: '申し訳ありませんが、習慣管理に関することでお手伝いできます。\n\n例えば：\n・新しい習慣を作りたい\n・習慣の達成率を確認したい\n・ワークロードを調整したい\n\nなどについてお聞きください',
         toolsUsed: [],
         tokensUsed: 0,
       };
@@ -3123,4 +3432,56 @@ export function createAICoachService(
   userId: string
 ): AICoachService {
   return new AICoachService(supabase, userId);
+}
+
+// =============================================================================
+// Migration Utilities
+// =============================================================================
+
+/**
+ * Check if Mastra Coach mode is enabled
+ * Can be used by other modules to check the migration status
+ */
+export function isMastraCoachEnabled(): boolean {
+  return shouldUseMastraCoach();
+}
+
+/**
+ * Get detailed migration status for debugging/monitoring
+ */
+export function getMigrationStatus(): {
+  mode: 'mastra' | 'legacy';
+  envVar: string | undefined;
+  isEnabled: boolean;
+} {
+  return {
+    mode: getMigrationMode(),
+    envVar: process.env['USE_MASTRA_COACH'],
+    isEnabled: shouldUseMastraCoach(),
+  };
+}
+
+/**
+ * Create AI Coach Service with explicit mode override
+ * Useful for testing both modes without changing environment variables
+ */
+export function createAICoachServiceWithMode(
+  supabase: SupabaseClient,
+  userId: string,
+  mode: 'mastra' | 'legacy'
+): AICoachService {
+  // Temporarily override the environment variable
+  const originalValue = process.env['USE_MASTRA_COACH'];
+
+  try {
+    process.env['USE_MASTRA_COACH'] = mode === 'mastra' ? 'true' : 'false';
+    return new AICoachService(supabase, userId);
+  } finally {
+    // Restore original value
+    if (originalValue !== undefined) {
+      process.env['USE_MASTRA_COACH'] = originalValue;
+    } else {
+      delete process.env['USE_MASTRA_COACH'];
+    }
+  }
 }

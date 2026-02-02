@@ -5,7 +5,7 @@ import { Popover } from "@headlessui/react"
 import { DayPicker } from "react-day-picker"
 import "react-day-picker/dist/style.css"
 import SmartSelector, { SmartSelectorItem } from './Widget.SmartSelector'
-import StickyFooter from './Widget.StickyFooter'
+import StickyFooter, { ModalHeaderButtons } from './Widget.StickyFooter'
 import { supabaseDirectClient } from '../../../lib/supabase-direct'
 import { useSubscription } from '../../../hooks/useSubscription'
 import { supabase } from '../../../lib/supabaseClient'
@@ -299,19 +299,29 @@ export function GoalModal({ open, onClose, goal, onUpdate, onDelete, onCreate, o
                 {/* ヘッダー */}
                 <div className="flex items-center justify-between px-6 py-4 border-b border-border">
                     <h3 className="text-lg font-semibold">{goal ? 'Edit Goal' : 'New Goal'}</h3>
-                    <button 
-                        onClick={onClose} 
-                        className="text-muted-foreground hover:text-foreground p-2 min-w-[44px] min-h-[44px] flex items-center justify-center rounded-md transition-colors"
-                        aria-label="Close"
-                    >
-                        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                        </svg>
-                    </button>
+                    <div className="flex items-center gap-2">
+                        <ModalHeaderButtons
+                            onSave={handleSave}
+                            onCancel={onClose}
+                            onDelete={goal ? handleDelete : undefined}
+                            saveDisabled={!name.trim()}
+                            isLoading={isLoading}
+                            deleteConfirmMessage="Are you sure you want to delete this goal?"
+                        />
+                        <button
+                            onClick={onClose}
+                            className="hidden sm:flex text-muted-foreground hover:text-foreground p-2 min-w-[44px] min-h-[44px] items-center justify-center rounded-md transition-colors"
+                            aria-label="Close"
+                        >
+                            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                            </svg>
+                        </button>
+                    </div>
                 </div>
 
                 {/* スクロール可能なコンテンツ */}
-                <div className="flex-1 overflow-y-auto px-6 py-4">
+                <div className="flex-1 overflow-y-auto px-6 py-4 modern-scrollbar">
                     <style>{`
                         @keyframes fadeIn {
                             from { opacity: 0; transform: translateY(-10px); }

@@ -15,17 +15,52 @@ export type AgentRole =
 
 export type AgentStatus = 'idle' | 'busy' | 'offline';
 
+export type AgentType = 'mastra' | 'strands' | 'claude' | 'custom';
+
+export interface AgentMetrics {
+  tasksCompleted: number;
+  tasksFailed: number;
+  averageTaskDuration: number; // in seconds
+  successRate: number; // 0-100
+  uptime: number; // in seconds
+  lastActiveAt: string;
+}
+
+export interface WorkflowStep {
+  id: string;
+  name: string;
+  status: 'pending' | 'running' | 'completed' | 'failed' | 'skipped';
+  startedAt?: string;
+  completedAt?: string;
+  error?: string;
+  output?: unknown;
+}
+
+export interface WorkflowExecution {
+  id: string;
+  workflowName: string;
+  status: 'running' | 'completed' | 'failed' | 'cancelled';
+  steps: WorkflowStep[];
+  startedAt: string;
+  completedAt?: string;
+  progress: number; // 0-100
+}
+
 export interface Agent {
   id: string;
   name: string;
   role: AgentRole;
   status: AgentStatus;
+  agentType?: AgentType;
   capabilities: string[];
   machineId: string;
   machineName: string;
   currentTaskId: string | null;
+  currentTaskTitle?: string;
   lastHeartbeat: string;
   registeredAt: string;
+  metrics?: AgentMetrics;
+  currentWorkflow?: WorkflowExecution;
 }
 
 export type TaskStatus = 'pending' | 'assigned' | 'in_progress' | 'completed' | 'failed';
@@ -80,11 +115,30 @@ export interface ChatAction {
   payload: unknown;
 }
 
+export type ChatMessageRole = 'user' | 'manager' | 'agent' | 'system';
+export type ChatMessageType =
+  | 'message'           // 通常のメッセージ
+  | 'task_assignment'   // タスク割当通知
+  | 'progress_report'   // 進捗報告
+  | 'completion_report' // 完了報告
+  | 'error_report'      // エラー報告
+  | 'spec_draft'        // SPEC作成
+  | 'instruction';      // 指示
+
 export interface ChatMessage {
   id: string;
   sessionId: string;
-  role: 'user' | 'manager';
+  role: ChatMessageRole;
   content: string;
+  /** エージェントからのメッセージの場合 */
+  agentId?: string;
+  agentName?: string;
+  agentRole?: AgentRole;
+  /** メッセージタイプ */
+  messageType?: ChatMessageType;
+  /** 関連タスクID */
+  taskId?: string;
+  taskTitle?: string;
   metadata?: Record<string, unknown>;
   actions?: ChatAction[];
   createdAt: string;
@@ -117,7 +171,33 @@ export interface AgentActivity {
   createdAt: string;
 }
 
+/**
+ * Individual MCP Server configuration
+ */
+export interface McpServer {
+  id: string;                    // UUID
+  name: string;                  // Display name (e.g., "Local Server", "Remote Dev")
+  serverUrl: string;             // e.g., "https://ubuntu.tailddc354.ts.net"
+  serverToken: string;           // Auth token
+  enabled: boolean;              // Enable/disable without deleting
+  autoConnect: boolean;          // Auto-connect on page load
+}
+
+/**
+ * Multi-Agent configuration with multiple server support
+ */
 export interface MultiAgentConfig {
+  servers: McpServer[];          // Array of server configs
+  showInDashboard: boolean;      // Global setting
+  notifyOnTaskComplete: boolean; // Global setting
+  notifyOnAgentOffline: boolean; // Global setting
+}
+
+/**
+ * Legacy single-server config (for migration)
+ * @deprecated Use MultiAgentConfig with servers array
+ */
+export interface LegacyMultiAgentConfig {
   enabled: boolean;
   serverUrl: string;
   serverToken: string;
@@ -144,6 +224,21 @@ export const STATUS_CONFIG: Record<AgentStatus, { label: string; labelJa: string
   idle: { label: 'Idle', labelJa: '待機中', color: 'text-green-600', bgColor: 'bg-green-500' },
   busy: { label: 'Busy', labelJa: '作業中', color: 'text-yellow-600', bgColor: 'bg-yellow-500' },
   offline: { label: 'Offline', labelJa: 'オフライン', color: 'text-gray-400', bgColor: 'bg-gray-400' },
+};
+
+export const AGENT_TYPE_CONFIG: Record<AgentType, { label: string; labelJa: string; color: string; bgColor: string; icon: string }> = {
+  mastra: { label: 'Mastra', labelJa: 'Mastra', color: 'text-purple-600', bgColor: 'bg-purple-500/10 border-purple-500/30', icon: 'M' },
+  strands: { label: 'Strands', labelJa: 'Strands', color: 'text-cyan-600', bgColor: 'bg-cyan-500/10 border-cyan-500/30', icon: 'S' },
+  claude: { label: 'Claude', labelJa: 'Claude', color: 'text-orange-600', bgColor: 'bg-orange-500/10 border-orange-500/30', icon: 'C' },
+  custom: { label: 'Custom', labelJa: 'カスタム', color: 'text-gray-600', bgColor: 'bg-gray-500/10 border-gray-500/30', icon: '?' },
+};
+
+export const WORKFLOW_STEP_STATUS_CONFIG: Record<WorkflowStep['status'], { label: string; labelJa: string; color: string; bgColor: string; icon: string }> = {
+  pending: { label: 'Pending', labelJa: '待機中', color: 'text-gray-500', bgColor: 'bg-gray-500/10', icon: 'o' },
+  running: { label: 'Running', labelJa: '実行中', color: 'text-blue-500', bgColor: 'bg-blue-500/10', icon: '>' },
+  completed: { label: 'Completed', labelJa: '完了', color: 'text-green-500', bgColor: 'bg-green-500/10', icon: '+' },
+  failed: { label: 'Failed', labelJa: '失敗', color: 'text-red-500', bgColor: 'bg-red-500/10', icon: 'x' },
+  skipped: { label: 'Skipped', labelJa: 'スキップ', color: 'text-yellow-500', bgColor: 'bg-yellow-500/10', icon: '-' },
 };
 
 export const TRUST_LEVEL_CONFIG: Record<TrustLevel, { label: string; labelJa: string; color: string; maxAgents: number }> = {

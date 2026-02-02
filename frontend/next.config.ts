@@ -4,6 +4,7 @@ import type { NextConfig } from "next";
 const isVercelDeployment = process.env.VERCEL === '1';
 const isStaticExport = process.env.NEXT_STATIC_EXPORT === 'true';
 const isDockerBuild = process.env.DOCKER_BUILD === 'true';
+const isDevelopment = process.env.NODE_ENV === 'development';
 
 const nextConfig: NextConfig = {
   // 出力モードの設定:
@@ -76,10 +77,11 @@ const nextConfig: NextConfig = {
             key: 'X-XSS-Protection',
             value: '1; mode=block',
           },
-          {
+          // HSTS は本番環境のみで有効化（開発環境ではHTTPを使用するため除外）
+          ...(isDevelopment ? [] : [{
             key: 'Strict-Transport-Security',
             value: 'max-age=31536000; includeSubDomains',
-          },
+          }]),
         ],
       },
     ];

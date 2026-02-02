@@ -3,19 +3,30 @@
 /**
  * ManagerChatModal Component
  *
- * Modal for chatting with the Manager agent.
+ * Unified chat interface for multi-agent communication.
  * Features:
- * - Message history display
- * - Markdown rendering for Manager responses
- * - Action buttons for task approval/rejection
- * - Session management
+ * - User instructions to Manager
+ * - Manager responses and SPEC drafting
+ * - Task assignments to agents
+ * - Agent progress and completion reports
+ * - All participants visible in one chat stream
  *
  * @module Modal.ManagerChat
  */
 
-import { useState, useRef, useEffect } from 'react';
-import type { ChatMessage, ChatSession, ChatAction, AgentTask } from '../types/agent.types';
-import { MOCK_CHAT_MESSAGES, MOCK_CHAT_SESSIONS } from '../mocks/mockAgentData';
+import { useState, useRef, useEffect, useMemo, useCallback } from 'react';
+import type {
+  ChatMessage,
+  ChatSession,
+  ChatAction,
+  AgentTask,
+  Agent,
+  AgentRole,
+  ChatMessageRole,
+  ChatMessageType,
+  AgentActivity,
+} from '../types/agent.types';
+import { ROLE_CONFIG } from '../types/agent.types';
 import type { ConnectionState } from '../hooks/useMultiAgentServer';
 
 interface ManagerChatModalProps {
@@ -24,77 +35,188 @@ interface ManagerChatModalProps {
   /** Connection state for displaying status */
   connectionState?: ConnectionState;
   /** Create task on the server */
-  onCreateTask?: (task: Partial<AgentTask>) => Promise<AgentTask | null>;
+  onCreateTask?: (task: Partial<AgentTask> & { assignTo?: string }) => Promise<AgentTask | null>;
+  /** Assign task to agent */
+  onAssignTask?: (taskId: string, agentId: string) => Promise<boolean>;
+  /** Available agents for assignment */
+  agents?: Agent[];
   /** Server error if any */
   serverError?: string | null;
+  /** Real-time activities from SSE */
+  activities?: AgentActivity[];
+  /** All tasks for reference */
+  tasks?: AgentTask[];
+  /** Focus on a specific task (highlight related messages) */
+  focusTaskId?: string | null;
 }
 
 /**
- * Message Bubble Component
+ * Get avatar/icon for message sender
+ * Each role gets a unique color for easy identification in group chat
+ */
+function getAvatarConfig(role: ChatMessageRole, agentRole?: AgentRole): { icon: string; bgColor: string; textColor: string; borderColor: string } {
+  if (role === 'user') {
+    return { icon: '👤', bgColor: 'bg-blue-500', textColor: 'text-white', borderColor: 'border-blue-500' };
+  }
+  if (role === 'system') {
+    return { icon: '⚙️', bgColor: 'bg-gray-500', textColor: 'text-white', borderColor: 'border-gray-500' };
+  }
+  if (role === 'manager' || agentRole === 'manager') {
+    return { icon: '👔', bgColor: 'bg-purple-500', textColor: 'text-white', borderColor: 'border-purple-500' };
+  }
+  // Assign colors based on agent role for group chat distinction
+  if (agentRole) {
+    const roleColors: Record<string, { bgColor: string; borderColor: string }> = {
+      developer: { bgColor: 'bg-blue-400', borderColor: 'border-blue-400' },
+      reviewer: { bgColor: 'bg-orange-400', borderColor: 'border-orange-400' },
+      tester: { bgColor: 'bg-green-400', borderColor: 'border-green-400' },
+      architect: { bgColor: 'bg-indigo-400', borderColor: 'border-indigo-400' },
+      devops: { bgColor: 'bg-red-400', borderColor: 'border-red-400' },
+      documenter: { bgColor: 'bg-yellow-400', borderColor: 'border-yellow-400' },
+      analyst: { bgColor: 'bg-cyan-400', borderColor: 'border-cyan-400' },
+    };
+    const config = ROLE_CONFIG[agentRole];
+    const colors = roleColors[agentRole] || { bgColor: 'bg-gray-400', borderColor: 'border-gray-400' };
+    return { icon: config.icon, bgColor: colors.bgColor, textColor: 'text-white', borderColor: colors.borderColor };
+  }
+  return { icon: '🤖', bgColor: 'bg-gray-400', textColor: 'text-white', borderColor: 'border-gray-400' };
+}
+
+/**
+ * Message type badge
+ */
+function MessageTypeBadge({ type }: { type?: ChatMessageType }) {
+  if (!type || type === 'message') return null;
+
+  const config: Record<string, { label: string; color: string }> = {
+    task_assignment: { label: '割当', color: 'bg-blue-500/20 text-blue-500' },
+    progress_report: { label: '進捗', color: 'bg-yellow-500/20 text-yellow-500' },
+    completion_report: { label: '完了', color: 'bg-green-500/20 text-green-500' },
+    error_report: { label: 'エラー', color: 'bg-red-500/20 text-red-500' },
+    spec_draft: { label: 'SPEC', color: 'bg-purple-500/20 text-purple-500' },
+    instruction: { label: '指示', color: 'bg-cyan-500/20 text-cyan-500' },
+  };
+
+  const cfg = config[type];
+  if (!cfg) return null;
+
+  return (
+    <span className={`text-[10px] px-1.5 py-0.5 rounded ${cfg.color}`}>
+      {cfg.label}
+    </span>
+  );
+}
+
+/**
+ * Message Bubble Component - Group Chat Style
+ * All messages aligned left with sender identification
  */
 function MessageBubble({
   message,
   onAction,
+  isHighlighted = false,
 }: {
   message: ChatMessage;
   onAction?: (action: ChatAction) => void;
+  isHighlighted?: boolean;
 }) {
   const isUser = message.role === 'user';
+  const isSystem = message.role === 'system';
+  const isManager = message.role === 'manager' || message.agentRole === 'manager';
+  const avatar = getAvatarConfig(message.role, message.agentRole);
+
+  const getSenderName = () => {
+    if (isUser) return 'You';
+    if (isSystem) return 'System';
+    if (message.agentName) return message.agentName;
+    if (message.role === 'manager') return 'Manager';
+    return 'Agent';
+  };
+
+  const getRoleLabel = () => {
+    if (isUser) return null;
+    if (isSystem) return null;
+    if (isManager) return 'Manager';
+    if (message.agentRole) return ROLE_CONFIG[message.agentRole]?.label || message.agentRole;
+    return null;
+  };
+
+  // Get bubble background based on role for visual distinction
+  const getBubbleStyle = () => {
+    if (isUser) {
+      return 'bg-blue-500/10 border-l-4 border-l-blue-500';
+    }
+    if (isSystem) {
+      return 'bg-muted/30 border-l-4 border-l-gray-400 italic';
+    }
+    if (isManager) {
+      return 'bg-purple-500/10 border-l-4 border-l-purple-500';
+    }
+    // Other agents get their role color
+    return `bg-muted border-l-4 ${avatar.borderColor}`;
+  };
 
   return (
-    <div className={`flex ${isUser ? 'justify-end' : 'justify-start'} mb-3`}>
-      <div
-        className={`
-          max-w-[85%] rounded-lg px-3 py-2
-          ${isUser
-            ? 'bg-primary text-primary-foreground'
-            : 'bg-muted text-foreground'
-          }
-        `}
-      >
-        {/* Role Label */}
-        {!isUser && (
-          <div className="flex items-center gap-1.5 mb-1 text-xs text-muted-foreground">
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <rect x="3" y="11" width="6" height="8" rx="1" />
-              <rect x="15" y="11" width="6" height="8" rx="1" />
-              <circle cx="6" cy="6" r="3" />
-              <circle cx="18" cy="6" r="3" />
-            </svg>
-            <span>Manager</span>
-          </div>
-        )}
+    <div className={`flex gap-3 mb-4 group rounded-lg transition-colors ${isHighlighted ? 'bg-primary/5 -mx-2 px-2 py-1 ring-1 ring-primary/20' : ''}`}>
+      {/* Avatar */}
+      <div className={`shrink-0 w-9 h-9 rounded-full flex items-center justify-center text-sm shadow-sm ${avatar.bgColor} ${avatar.textColor}`}>
+        {avatar.icon}
+      </div>
 
-        {/* Content */}
-        <div className="text-sm whitespace-pre-wrap">{message.content}</div>
+      {/* Content */}
+      <div className="flex-1 min-w-0">
+        {/* Sender info bar */}
+        <div className="flex items-center gap-2 mb-1">
+          <span className={`text-sm font-semibold ${isUser ? 'text-blue-600 dark:text-blue-400' : isManager ? 'text-purple-600 dark:text-purple-400' : 'text-foreground'}`}>
+            {getSenderName()}
+          </span>
+          {getRoleLabel() && !isUser && (
+            <span className="text-[10px] px-1.5 py-0.5 rounded bg-muted text-muted-foreground">
+              {getRoleLabel()}
+            </span>
+          )}
+          <MessageTypeBadge type={message.messageType} />
+          <span className="text-[10px] text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity">
+            {new Date(message.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+          </span>
+        </div>
 
-        {/* Actions */}
-        {message.actions && message.actions.length > 0 && (
-          <div className="flex flex-wrap gap-2 mt-2 pt-2 border-t border-border/50">
-            {message.actions.map((action) => (
-              <button
-                key={action.id}
-                onClick={() => onAction?.(action)}
-                className={`
-                  text-xs px-2.5 py-1 rounded-md
-                  transition-colors
-                  ${action.type === 'approve'
-                    ? 'bg-green-500 hover:bg-green-600 text-white'
-                    : action.type === 'reject'
-                      ? 'bg-red-500 hover:bg-red-600 text-white'
-                      : 'bg-primary/10 hover:bg-primary/20 text-primary'
-                  }
-                `}
-              >
-                {action.label}
-              </button>
-            ))}
-          </div>
-        )}
+        {/* Message bubble */}
+        <div className={`rounded-lg px-3 py-2 ${getBubbleStyle()}`}>
+          {/* Task reference */}
+          {message.taskTitle && (
+            <div className="text-[10px] text-muted-foreground mb-1 flex items-center gap-1 bg-background/50 rounded px-1.5 py-0.5 w-fit">
+              <span>📋</span>
+              <span className="truncate max-w-[200px]">{message.taskTitle}</span>
+            </div>
+          )}
 
-        {/* Timestamp */}
-        <div className={`text-[10px] mt-1 ${isUser ? 'text-primary-foreground/70' : 'text-muted-foreground'}`}>
-          {new Date(message.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+          {/* Content */}
+          <div className="text-sm whitespace-pre-wrap">{message.content}</div>
+
+          {/* Actions */}
+          {message.actions && message.actions.length > 0 && (
+            <div className="flex flex-wrap gap-2 mt-2 pt-2 border-t border-border/50">
+              {message.actions.map((action) => (
+                <button
+                  key={action.id}
+                  onClick={() => onAction?.(action)}
+                  className={`
+                    text-xs px-2.5 py-1 rounded-md
+                    transition-colors
+                    ${action.type === 'approve'
+                      ? 'bg-green-500 hover:bg-green-600 text-white'
+                      : action.type === 'reject'
+                        ? 'bg-red-500 hover:bg-red-600 text-white'
+                        : 'bg-primary/10 hover:bg-primary/20 text-primary'
+                    }
+                  `}
+                >
+                  {action.label}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
       </div>
     </div>
@@ -175,13 +297,109 @@ function SessionSelector({
 }
 
 /**
+ * Agent Selector for manual assignment
+ */
+function AgentSelector({
+  agents,
+  selectedAgentId,
+  onSelect,
+}: {
+  agents: Agent[];
+  selectedAgentId: string | null;
+  onSelect: (agentId: string | null) => void;
+}) {
+  const [isOpen, setIsOpen] = useState(false);
+  const selectedAgent = agents.find(a => a.id === selectedAgentId);
+
+  const idleAgents = agents.filter(a => a.status === 'idle');
+  const busyAgents = agents.filter(a => a.status === 'busy');
+
+  return (
+    <div className="relative">
+      <button
+        onClick={() => setIsOpen(!isOpen)}
+        className="flex items-center gap-1 text-xs px-2 py-1 bg-muted rounded-md hover:bg-muted/80 transition-colors"
+      >
+        {selectedAgent ? (
+          <>
+            <span>{ROLE_CONFIG[selectedAgent.role]?.icon}</span>
+            <span className="truncate max-w-[80px]">{selectedAgent.name}</span>
+          </>
+        ) : (
+          <>
+            <span>👔</span>
+            <span>Auto (Manager)</span>
+          </>
+        )}
+        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+          <polyline points="6 9 12 15 18 9" />
+        </svg>
+      </button>
+
+      {isOpen && (
+        <>
+          <div className="fixed inset-0 z-40" onClick={() => setIsOpen(false)} />
+          <div className="absolute right-0 bottom-full mb-1 w-48 bg-card border border-border rounded-lg shadow-lg z-50 py-1 max-h-64 overflow-y-auto">
+            <button
+              onClick={() => { onSelect(null); setIsOpen(false); }}
+              className={`w-full text-left px-3 py-2 text-xs hover:bg-muted ${!selectedAgentId ? 'bg-muted' : ''}`}
+            >
+              <span className="flex items-center gap-2">
+                <span>👔</span>
+                <span>Auto (Manager first)</span>
+              </span>
+            </button>
+            <div className="border-t border-border my-1" />
+            {idleAgents.length > 0 && (
+              <>
+                <div className="px-3 py-1 text-[10px] text-green-500 font-medium">IDLE</div>
+                {idleAgents.map(agent => (
+                  <button
+                    key={agent.id}
+                    onClick={() => { onSelect(agent.id); setIsOpen(false); }}
+                    className={`w-full text-left px-3 py-1.5 text-xs hover:bg-muted ${selectedAgentId === agent.id ? 'bg-muted' : ''}`}
+                  >
+                    <span className="flex items-center gap-2">
+                      <span>{ROLE_CONFIG[agent.role]?.icon}</span>
+                      <span className="truncate">{agent.name}</span>
+                      <span className="text-[10px] text-muted-foreground">{agent.role}</span>
+                    </span>
+                  </button>
+                ))}
+              </>
+            )}
+            {busyAgents.length > 0 && (
+              <>
+                <div className="px-3 py-1 text-[10px] text-yellow-500 font-medium">BUSY</div>
+                {busyAgents.map(agent => (
+                  <button
+                    key={agent.id}
+                    onClick={() => { onSelect(agent.id); setIsOpen(false); }}
+                    className={`w-full text-left px-3 py-1.5 text-xs hover:bg-muted opacity-60 ${selectedAgentId === agent.id ? 'bg-muted' : ''}`}
+                  >
+                    <span className="flex items-center gap-2">
+                      <span>{ROLE_CONFIG[agent.role]?.icon}</span>
+                      <span className="truncate">{agent.name}</span>
+                    </span>
+                  </button>
+                ))}
+              </>
+            )}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+/**
  * Quick Command Buttons
  */
 function QuickCommands({ onCommand }: { onCommand: (command: string) => void }) {
   const commands = [
     { label: 'Status', command: '現在のエージェント状況を教えてください', icon: '📊' },
     { label: 'Tasks', command: '進行中のタスク一覧を表示してください', icon: '📋' },
-    { label: 'Assign', command: 'タスクを割り当ててください', icon: '👥' },
+    { label: 'SPEC', command: 'この機能のSPECを作成してください', icon: '📝' },
   ];
 
   return (
@@ -201,27 +419,279 @@ function QuickCommands({ onCommand }: { onCommand: (command: string) => void }) 
 }
 
 /**
+ * Online Agents Indicator
+ */
+function OnlineAgents({ agents }: { agents: Agent[] }) {
+  const idleCount = agents.filter(a => a.status === 'idle').length;
+  const busyCount = agents.filter(a => a.status === 'busy').length;
+
+  return (
+    <div className="flex items-center gap-2 text-xs text-muted-foreground">
+      <span className="flex items-center gap-1">
+        <span className="w-1.5 h-1.5 rounded-full bg-green-500"></span>
+        {idleCount} idle
+      </span>
+      <span className="flex items-center gap-1">
+        <span className="w-1.5 h-1.5 rounded-full bg-yellow-500"></span>
+        {busyCount} busy
+      </span>
+    </div>
+  );
+}
+
+/**
  * ManagerChatModal Component
  */
+// Storage keys for persistence
+const CHAT_MESSAGES_KEY = 'vow-agent-chat-messages';
+const CHAT_SESSIONS_KEY = 'vow-agent-chat-sessions';
+const CURRENT_SESSION_KEY = 'vow-agent-chat-current-session';
+
+/**
+ * Load data from localStorage
+ */
+function loadFromStorage<T>(key: string, defaultValue: T): T {
+  if (typeof window === 'undefined') return defaultValue;
+  try {
+    const stored = localStorage.getItem(key);
+    if (stored) {
+      return JSON.parse(stored);
+    }
+  } catch (e) {
+    console.error(`[Chat] Failed to load ${key}:`, e);
+  }
+  return defaultValue;
+}
+
+/**
+ * Save data to localStorage
+ */
+function saveToStorage<T>(key: string, value: T): void {
+  if (typeof window === 'undefined') return;
+  try {
+    localStorage.setItem(key, JSON.stringify(value));
+  } catch (e) {
+    console.error(`[Chat] Failed to save ${key}:`, e);
+  }
+}
+
 export default function ManagerChatModal({
   isOpen,
   onClose,
   connectionState = 'disconnected',
   onCreateTask,
+  onAssignTask,
+  agents = [],
   serverError,
+  activities = [],
+  tasks = [],
+  focusTaskId = null,
 }: ManagerChatModalProps) {
-  const [messages, setMessages] = useState<ChatMessage[]>(MOCK_CHAT_MESSAGES);
-  const [sessions, setSessions] = useState<ChatSession[]>(MOCK_CHAT_SESSIONS);
-  const [currentSessionId, setCurrentSessionId] = useState(MOCK_CHAT_SESSIONS[0]?.id || '');
+  // Load initial state from localStorage
+  const [messages, setMessages] = useState<ChatMessage[]>(() =>
+    loadFromStorage<ChatMessage[]>(CHAT_MESSAGES_KEY, [])
+  );
+  const [sessions, setSessions] = useState<ChatSession[]>(() =>
+    loadFromStorage<ChatSession[]>(CHAT_SESSIONS_KEY, [])
+  );
+  const [currentSessionId, setCurrentSessionId] = useState<string>(() =>
+    loadFromStorage<string>(CURRENT_SESSION_KEY, '')
+  );
   const [inputValue, setInputValue] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [selectedAgentId, setSelectedAgentId] = useState<string | null>(null);
+  const [filterByTask, setFilterByTask] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const focusMessageRef = useRef<HTMLDivElement>(null);
+
+  // Initialize processedActivityIds from existing messages to prevent duplicates on reload
+  const processedActivityIds = useRef<Set<string>>(new Set<string>());
+
+  // One-time initialization of processedActivityIds from loaded messages
+  const [activityIdsInitialized, setActivityIdsInitialized] = useState(false);
+  useEffect(() => {
+    if (!activityIdsInitialized) {
+      const stored = loadFromStorage<ChatMessage[]>(CHAT_MESSAGES_KEY, []);
+      stored.forEach(m => {
+        if (m.id.startsWith('activity-')) {
+          processedActivityIds.current.add(m.id.replace('activity-', ''));
+        }
+      });
+      setActivityIdsInitialized(true);
+    }
+  }, [activityIdsInitialized]);
 
   const isConnected = connectionState === 'connected';
 
-  // Filter messages for current session
-  const sessionMessages = messages.filter(m => m.sessionId === currentSessionId);
+  // Persist messages to localStorage
+  useEffect(() => {
+    saveToStorage(CHAT_MESSAGES_KEY, messages);
+  }, [messages]);
+
+  // Persist sessions to localStorage
+  useEffect(() => {
+    saveToStorage(CHAT_SESSIONS_KEY, sessions);
+  }, [sessions]);
+
+  // Persist current session ID to localStorage
+  useEffect(() => {
+    if (currentSessionId) {
+      saveToStorage(CURRENT_SESSION_KEY, currentSessionId);
+    }
+  }, [currentSessionId]);
+
+  // Find Manager agent (prefer idle, then busy)
+  const managerAgent = useMemo(() => {
+    const managers = agents.filter(a => a.role === 'manager');
+    return managers.find(a => a.status === 'idle') || managers.find(a => a.status === 'busy') || managers[0] || null;
+  }, [agents]);
+
+  // Get target agent (selected or manager)
+  const targetAgent = useMemo(() => {
+    if (selectedAgentId) {
+      return agents.find(a => a.id === selectedAgentId) || null;
+    }
+    return managerAgent;
+  }, [selectedAgentId, managerAgent, agents]);
+
+  // Create initial session if none exists
+  useEffect(() => {
+    if (sessions.length === 0 && isOpen) {
+      const initialSession: ChatSession = {
+        id: `session-${Date.now()}`,
+        userId: 'current-user',
+        title: `Chat ${new Date().toLocaleDateString()}`,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+      setSessions([initialSession]);
+      setCurrentSessionId(initialSession.id);
+    }
+  }, [sessions.length, isOpen]);
+
+  // Handle focus task change
+  useEffect(() => {
+    if (focusTaskId && isOpen) {
+      setFilterByTask(focusTaskId);
+      // Scroll to first message related to this task after a short delay
+      setTimeout(() => {
+        focusMessageRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }, 100);
+    }
+  }, [focusTaskId, isOpen]);
+
+  // Get focused task info
+  const focusedTask = useMemo(() => {
+    if (!filterByTask) return null;
+    return tasks.find(t => t.id === filterByTask) || null;
+  }, [filterByTask, tasks]);
+
+  // Convert activities to chat messages
+  useEffect(() => {
+    if (!currentSessionId) return;
+
+    activities.forEach(activity => {
+      // Skip if already processed
+      if (processedActivityIds.current.has(activity.id)) return;
+      processedActivityIds.current.add(activity.id);
+
+      // Skip heartbeat and connected events
+      if (activity.eventType === 'heartbeat') return;
+
+      const agent = agents.find(a => a.id === activity.agentId);
+      const task = tasks.find(t => t.id === activity.taskId);
+
+      let content = '';
+      let messageType: ChatMessageType = 'message';
+      let role: ChatMessageRole = 'agent';
+
+      switch (activity.eventType) {
+        case 'task_created':
+          content = `📋 新しいタスクが作成されました: "${activity.taskTitle || task?.title || 'Untitled'}"`;
+          messageType = 'message';
+          role = 'system';
+          break;
+        case 'task_assigned':
+          content = `👉 タスク "${activity.taskTitle || task?.title || ''}" が ${activity.agentName || agent?.name || 'エージェント'} に割り当てられました`;
+          messageType = 'task_assignment';
+          role = 'system';
+          break;
+        case 'task_started':
+          content = `▶️ タスクを開始しました: "${activity.taskTitle || task?.title || ''}"`;
+          messageType = 'progress_report';
+          break;
+        case 'task_completed': {
+          const result = (activity.details as any)?.result || '';
+          content = result
+            ? `✅ タスク完了: "${activity.taskTitle || task?.title || ''}"\n\n${result}`
+            : `✅ タスクを完了しました: "${activity.taskTitle || task?.title || ''}"`;
+          messageType = 'completion_report';
+          break;
+        }
+        case 'task_failed': {
+          const error = (activity.details as any)?.result || (activity.details as any)?.error || '';
+          content = `❌ タスク失敗: "${activity.taskTitle || task?.title || ''}"\n${error}`;
+          messageType = 'error_report';
+          break;
+        }
+        case 'agent_registered':
+          content = `🤖 ${activity.agentName || 'エージェント'} が参加しました (${agent?.role || 'general'})`;
+          role = 'system';
+          break;
+        case 'agent_status_changed': {
+          const newStatus = (activity.details as any)?.newStatus;
+          if (newStatus === 'offline') {
+            content = `👋 ${activity.agentName || 'エージェント'} がオフラインになりました`;
+            role = 'system';
+          } else {
+            return; // Skip other status changes
+          }
+          break;
+        }
+        default:
+          return; // Skip unknown events
+      }
+
+      const chatMessage: ChatMessage = {
+        id: `activity-${activity.id}`,
+        sessionId: currentSessionId,
+        role,
+        content,
+        agentId: activity.agentId,
+        agentName: activity.agentName || agent?.name,
+        agentRole: agent?.role,
+        messageType,
+        taskId: activity.taskId,
+        taskTitle: activity.taskTitle || task?.title,
+        createdAt: activity.createdAt,
+      };
+
+      setMessages(prev => {
+        // Check if message already exists
+        if (prev.some(m => m.id === chatMessage.id)) return prev;
+        // Insert in chronological order
+        const newMessages = [...prev, chatMessage];
+        return newMessages.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+      });
+    });
+  }, [activities, agents, tasks, currentSessionId]);
+
+  // Filter messages for current session (and optionally by task)
+  const sessionMessages = useMemo(() => {
+    let filtered = messages.filter(m => m.sessionId === currentSessionId);
+
+    // If filtering by task, only show related messages
+    if (filterByTask) {
+      filtered = filtered.filter(m =>
+        m.taskId === filterByTask ||
+        // Also include system messages about this task
+        (m.role === 'system' && m.content.includes(filterByTask))
+      );
+    }
+
+    return filtered.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+  }, [messages, currentSessionId, filterByTask]);
 
   // Scroll to bottom when messages change
   useEffect(() => {
@@ -235,68 +705,117 @@ export default function ManagerChatModal({
     }
   }, [isOpen]);
 
-  const handleSend = async () => {
+  const handleSend = useCallback(async () => {
     if (!inputValue.trim() || isLoading) return;
 
     const userContent = inputValue.trim();
-    const newMessage: ChatMessage = {
+    const now = new Date().toISOString();
+
+    // Add user message
+    const userMessage: ChatMessage = {
       id: `msg-${Date.now()}`,
       sessionId: currentSessionId,
       role: 'user',
       content: userContent,
-      createdAt: new Date().toISOString(),
+      messageType: 'instruction',
+      createdAt: now,
     };
-
-    setMessages(prev => [...prev, newMessage]);
+    setMessages(prev => [...prev, userMessage]);
     setInputValue('');
     setIsLoading(true);
 
-    // If connected to real server, create a task
-    if (isConnected && onCreateTask) {
+    // Create task and assign
+    if (isConnected && onCreateTask && targetAgent) {
       try {
-        const task = await onCreateTask({
+        const taskPayload: Partial<AgentTask> & { assignTo?: string } = {
           title: userContent.slice(0, 100),
           description: userContent,
           priority: 'normal',
-          tags: ['manager-instruction'],
-        });
+          tags: ['chat-instruction'],
+          assignTo: targetAgent.id,
+        };
+
+        const task = await onCreateTask(taskPayload);
+
+        let responseContent = '';
+        let responseType: ChatMessageType = 'message';
+
+        if (task) {
+          const isAssigned = task.status === 'assigned' || task.assignedTo;
+
+          if (isAssigned) {
+            responseContent = `了解しました。タスクを受け付けました。\n\n📋 タスクID: ${task.id}\n\n処理を開始します。完了次第、このチャットで報告します。`;
+            responseType = 'message';
+          } else {
+            // Try explicit assignment
+            if (onAssignTask) {
+              const assigned = await onAssignTask(task.id, targetAgent.id);
+              if (assigned) {
+                responseContent = `了解しました。タスクを受け付けました。\n\n📋 タスクID: ${task.id}`;
+                responseType = 'message';
+              } else {
+                responseContent = `⚠️ タスクを作成しましたが、割り当てに失敗しました。\n\nタスクID: ${task.id}`;
+                responseType = 'error_report';
+              }
+            }
+          }
+        } else {
+          responseContent = '❌ タスクの作成に失敗しました。';
+          responseType = 'error_report';
+        }
 
         const responseMessage: ChatMessage = {
           id: `msg-${Date.now() + 1}`,
           sessionId: currentSessionId,
-          role: 'manager',
-          content: task
-            ? `タスクを作成しました。\n\nタスクID: ${task.id}\nタイトル: ${task.title}\nステータス: ${task.status}\n\nManager エージェントが自動的にタスクを取得して処理します。`
-            : 'タスクの作成に失敗しました。サーバー接続を確認してください。',
+          role: targetAgent.role === 'manager' ? 'manager' : 'agent',
+          content: responseContent,
+          agentId: targetAgent.id,
+          agentName: targetAgent.name,
+          agentRole: targetAgent.role,
+          messageType: responseType,
+          taskId: task?.id,
+          taskTitle: task?.title,
           createdAt: new Date().toISOString(),
         };
         setMessages(prev => [...prev, responseMessage]);
+
       } catch (error: any) {
         const errorMessage: ChatMessage = {
           id: `msg-${Date.now() + 1}`,
           sessionId: currentSessionId,
-          role: 'manager',
-          content: `エラー: ${error.message || 'タスクの作成に失敗しました'}`,
+          role: 'system',
+          content: `❌ エラー: ${error.message || 'タスクの作成に失敗しました'}`,
+          messageType: 'error_report',
           createdAt: new Date().toISOString(),
         };
         setMessages(prev => [...prev, errorMessage]);
       }
-      setIsLoading(false);
-    } else {
-      // Fallback to mock response when not connected
-      setTimeout(() => {
-        const mockResponse: ChatMessage = {
-          id: `msg-${Date.now() + 1}`,
-          sessionId: currentSessionId,
-          role: 'manager',
-          content: `[オフライン モード]\n\nサーバーに接続されていません。\n設定からMCPタスクサーバーに接続してください。\n\n接続後は、このメッセージがタスクとしてManagerエージェントに送信されます。`,
-          createdAt: new Date().toISOString(),
-        };
-        setMessages(prev => [...prev, mockResponse]);
-        setIsLoading(false);
-      }, 500);
+    } else if (!isConnected) {
+      // Offline mode message
+      const offlineMessage: ChatMessage = {
+        id: `msg-${Date.now() + 1}`,
+        sessionId: currentSessionId,
+        role: 'system',
+        content: `⚠️ サーバーに接続されていません。\n\n設定からMCPタスクサーバーに接続してください。`,
+        messageType: 'error_report',
+        createdAt: new Date().toISOString(),
+      };
+      setMessages(prev => [...prev, offlineMessage]);
+    } else if (!targetAgent) {
+      // No agent available
+      const noAgentMessage: ChatMessage = {
+        id: `msg-${Date.now() + 1}`,
+        sessionId: currentSessionId,
+        role: 'system',
+        content: `⚠️ 利用可能なエージェントがありません。\n\nClaude CodeからMCPサーバーにエージェントを登録してください。`,
+        messageType: 'error_report',
+        createdAt: new Date().toISOString(),
+      };
+      setMessages(prev => [...prev, noAgentMessage]);
     }
-  };
+
+    setIsLoading(false);
+  }, [inputValue, isLoading, currentSessionId, isConnected, onCreateTask, onAssignTask, targetAgent]);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -307,12 +826,11 @@ export default function ManagerChatModal({
 
   const handleAction = (action: ChatAction) => {
     console.log('Action clicked:', action);
-    // MOC: Just show a confirmation
     const confirmMessage: ChatMessage = {
       id: `msg-${Date.now()}`,
       sessionId: currentSessionId,
-      role: 'manager',
-      content: `[MOC] アクション「${action.label}」を実行しました。`,
+      role: 'system',
+      content: `アクション「${action.label}」を実行しました。`,
       createdAt: new Date().toISOString(),
     };
     setMessages(prev => [...prev, confirmMessage]);
@@ -322,12 +840,13 @@ export default function ManagerChatModal({
     const newSession: ChatSession = {
       id: `session-${Date.now()}`,
       userId: 'user-001',
-      title: `新規セッション ${new Date().toLocaleDateString()}`,
+      title: `Chat ${new Date().toLocaleDateString()} ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
     setSessions(prev => [newSession, ...prev]);
     setCurrentSessionId(newSession.id);
+    processedActivityIds.current.clear();
   };
 
   const handleQuickCommand = (command: string) => {
@@ -345,25 +864,20 @@ export default function ManagerChatModal({
         onClick={onClose}
       />
 
-      {/* Modal - Mobile: account for bottom nav bar (~70px) */}
-      <div className="fixed inset-x-4 top-4 bottom-[calc(70px+env(safe-area-inset-bottom,0px)+16px)] sm:inset-auto sm:left-1/2 sm:top-1/2 sm:-translate-x-1/2 sm:-translate-y-1/2 sm:w-[600px] sm:h-[80vh] sm:max-h-[700px] bg-card border border-border rounded-lg shadow-xl z-50 flex flex-col">
+      {/* Modal */}
+      <div className="fixed inset-x-4 top-4 bottom-[calc(70px+env(safe-area-inset-bottom,0px)+16px)] sm:inset-auto sm:left-1/2 sm:top-1/2 sm:-translate-x-1/2 sm:-translate-y-1/2 sm:w-[700px] sm:h-[85vh] sm:max-h-[800px] bg-card border border-border rounded-lg shadow-xl z-50 flex flex-col">
         {/* Header */}
         <div className="flex items-center justify-between p-4 border-b border-border">
           <div className="flex items-center gap-3">
-            <div className={`w-8 h-8 rounded-full flex items-center justify-center ${isConnected ? 'bg-green-500/10' : 'bg-primary/10'}`}>
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className={isConnected ? 'text-green-500' : 'text-primary'}>
-                <rect x="3" y="11" width="6" height="8" rx="1" />
-                <rect x="15" y="11" width="6" height="8" rx="1" />
-                <circle cx="6" cy="6" r="3" />
-                <circle cx="18" cy="6" r="3" />
-              </svg>
+            <div className={`w-10 h-10 rounded-full flex items-center justify-center ${isConnected ? 'bg-green-500/10' : 'bg-muted'}`}>
+              <span className="text-xl">💬</span>
             </div>
             <div>
               <h2 className="font-semibold flex items-center gap-2">
-                Manager Chat
+                Agent Chat
                 {isConnected ? (
                   <span className="text-xs font-normal text-green-500 bg-green-500/10 px-2 py-0.5 rounded flex items-center gap-1">
-                    <span className="w-1.5 h-1.5 rounded-full bg-green-500"></span>
+                    <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse"></span>
                     LIVE
                   </span>
                 ) : (
@@ -372,12 +886,15 @@ export default function ManagerChatModal({
                   </span>
                 )}
               </h2>
-              <SessionSelector
-                sessions={sessions}
-                currentSessionId={currentSessionId}
-                onSelect={setCurrentSessionId}
-                onNewSession={handleNewSession}
-              />
+              <div className="flex items-center gap-3">
+                <SessionSelector
+                  sessions={sessions}
+                  currentSessionId={currentSessionId}
+                  onSelect={setCurrentSessionId}
+                  onNewSession={handleNewSession}
+                />
+                {isConnected && <OnlineAgents agents={agents} />}
+              </div>
             </div>
           </div>
           <button
@@ -391,31 +908,91 @@ export default function ManagerChatModal({
           </button>
         </div>
 
+        {/* Task Focus Banner */}
+        {focusedTask && (
+          <div className="px-4 py-2 bg-primary/10 border-b border-primary/20 flex items-center justify-between">
+            <div className="flex items-center gap-2 min-w-0">
+              <span className="text-sm">📋</span>
+              <div className="min-w-0">
+                <div className="text-xs text-primary font-medium">Focused on task:</div>
+                <div className="text-sm font-medium truncate">{focusedTask.title}</div>
+              </div>
+              <span className={`text-[10px] px-1.5 py-0.5 rounded ${
+                focusedTask.status === 'completed' ? 'bg-green-500/20 text-green-500' :
+                focusedTask.status === 'in_progress' ? 'bg-yellow-500/20 text-yellow-500' :
+                focusedTask.status === 'assigned' ? 'bg-blue-500/20 text-blue-500' :
+                'bg-gray-500/20 text-gray-500'
+              }`}>
+                {focusedTask.status}
+              </span>
+            </div>
+            <button
+              onClick={() => setFilterByTask(null)}
+              className="shrink-0 text-xs px-2 py-1 rounded bg-primary/20 text-primary hover:bg-primary/30 transition-colors"
+            >
+              Show all
+            </button>
+          </div>
+        )}
+
         {/* Messages */}
         <div className="flex-1 overflow-y-auto p-4">
           {sessionMessages.length === 0 ? (
-            <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
-              <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="mb-2 opacity-50">
-                <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
-              </svg>
-              <p className="text-sm">マネージャーに質問や指示を送信してください</p>
-            </div>
+            filterByTask ? (
+              <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
+                <div className="text-4xl mb-3">📋</div>
+                <p className="text-sm font-medium">このタスクに関連するメッセージはまだありません</p>
+                <p className="text-xs mt-1">タスクの進捗があればここに表示されます</p>
+                <button
+                  onClick={() => setFilterByTask(null)}
+                  className="mt-3 text-xs px-3 py-1.5 rounded bg-primary text-primary-foreground hover:bg-primary/90 transition-colors"
+                >
+                  全てのメッセージを表示
+                </button>
+              </div>
+            ) : (
+              <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
+                <div className="text-4xl mb-3">🤖</div>
+                <p className="text-sm font-medium">エージェントに指示を送信してください</p>
+                <p className="text-xs mt-1">Managerが一次対応し、必要に応じて他のエージェントに割り当てます</p>
+              </div>
+            )
           ) : (
             <>
-              {sessionMessages.map((message) => (
-                <MessageBubble
-                  key={message.id}
-                  message={message}
-                  onAction={handleAction}
-                />
-              ))}
+              {sessionMessages.map((message, index) => {
+                // First message for the focused task gets the ref
+                const isFirstFocusedMessage = filterByTask &&
+                  message.taskId === filterByTask &&
+                  !sessionMessages.slice(0, index).some(m => m.taskId === filterByTask);
+
+                return (
+                  <div
+                    key={message.id}
+                    ref={isFirstFocusedMessage ? focusMessageRef : undefined}
+                  >
+                    <MessageBubble
+                      message={message}
+                      onAction={handleAction}
+                      isHighlighted={filterByTask ? message.taskId === filterByTask : false}
+                    />
+                  </div>
+                );
+              })}
               {isLoading && (
-                <div className="flex justify-start mb-3">
-                  <div className="bg-muted rounded-lg px-4 py-3">
-                    <div className="flex items-center gap-1">
-                      <div className="w-2 h-2 bg-muted-foreground rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
-                      <div className="w-2 h-2 bg-muted-foreground rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
-                      <div className="w-2 h-2 bg-muted-foreground rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+                <div className="flex gap-3 mb-4">
+                  <div className={`shrink-0 w-9 h-9 rounded-full flex items-center justify-center text-sm shadow-sm ${getAvatarConfig(targetAgent?.role === 'manager' ? 'manager' : 'agent', targetAgent?.role).bgColor} ${getAvatarConfig(targetAgent?.role === 'manager' ? 'manager' : 'agent', targetAgent?.role).textColor}`}>
+                    {getAvatarConfig(targetAgent?.role === 'manager' ? 'manager' : 'agent', targetAgent?.role).icon}
+                  </div>
+                  <div className="flex-1">
+                    <div className="text-sm font-semibold text-muted-foreground mb-1">
+                      {targetAgent?.name || 'Agent'} is typing...
+                    </div>
+                    <div className="bg-muted rounded-lg px-4 py-3 w-fit border-l-4 border-l-gray-300">
+                      <div className="flex items-center gap-1.5">
+                        <div className="w-2 h-2 bg-muted-foreground/60 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+                        <div className="w-2 h-2 bg-muted-foreground/60 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+                        <div className="w-2 h-2 bg-muted-foreground/60 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -431,13 +1008,22 @@ export default function ManagerChatModal({
         {/* Input */}
         <div className="p-4 border-t border-border">
           <div className="flex items-center gap-2">
+            {/* Agent Selector */}
+            {isConnected && agents.length > 0 && (
+              <AgentSelector
+                agents={agents}
+                selectedAgentId={selectedAgentId}
+                onSelect={setSelectedAgentId}
+              />
+            )}
+
             <input
               ref={inputRef}
               type="text"
               value={inputValue}
               onChange={(e) => setInputValue(e.target.value)}
               onKeyDown={handleKeyDown}
-              placeholder="メッセージを入力..."
+              placeholder={targetAgent ? `${targetAgent.name} に指示...` : 'メッセージを入力...'}
               disabled={isLoading}
               className="flex-1 bg-muted border-0 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary disabled:opacity-50"
             />

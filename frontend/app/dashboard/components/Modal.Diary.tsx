@@ -9,6 +9,7 @@ import rehypeRaw from 'rehype-raw'
 import rehypeSanitize, { defaultSchema } from 'rehype-sanitize'
 import type { Tag } from '../types/index'
 import ItemSelector from './Widget.ItemSelector'
+import { ModalHeaderButtons } from './Widget.StickyFooter'
 
 type Goal = { id: string; name: string }
 type Habit = { id: string; name: string }
@@ -384,7 +385,32 @@ export default function DiaryModal({
     setError(null)
   }, [open, initial])
 
+  // Handler functions for header buttons
+  const handleSave = async () => {
+    try {
+      setSaving(true)
+      setError(null)
+      await onSave({ id: initial?.id, frontMd, backMd, tagIds, goalIds, habitIds })
+      onClose()
+    } catch (e: any) {
+      setError(String(e?.message ?? e))
+    } finally {
+      setSaving(false)
+    }
+  }
 
+  const handleDelete = async () => {
+    if (!initial?.id || !onDelete) return
+    try {
+      setSaving(true)
+      await onDelete(initial.id)
+      onClose()
+    } catch (e: any) {
+      setError(String(e?.message ?? e))
+    } finally {
+      setSaving(false)
+    }
+  }
 
   if (!open) return null
 
@@ -451,11 +477,20 @@ export default function DiaryModal({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 overflow-y-auto py-4">
-      <div className="w-full max-w-5xl rounded bg-white px-4 pt-4 pb-4 shadow-lg text-black dark:bg-[#0f1724] dark:text-slate-100 max-h-[calc(100vh-2rem)] overflow-y-auto my-auto">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 overflow-y-auto py-4 modern-scrollbar">
+      <div className="w-full max-w-5xl rounded bg-white px-4 pt-4 pb-4 shadow-lg text-black dark:bg-[#0f1724] dark:text-slate-100 max-h-[calc(100vh-2rem)] overflow-y-auto my-auto modern-scrollbar">
         <div className="flex items-center justify-between">
           <h3 className="text-2xl font-semibold">Diary Card</h3>
-          <button onClick={onClose} className="text-slate-500">✕</button>
+          <div className="flex items-center gap-2">
+            <ModalHeaderButtons
+              onSave={handleSave}
+              onCancel={onClose}
+              onDelete={initial?.id && onDelete ? handleDelete : undefined}
+              isLoading={saving}
+              deleteConfirmMessage="Are you sure you want to delete this diary card?"
+            />
+            <button onClick={onClose} className="hidden sm:block text-slate-500">✕</button>
+          </div>
         </div>
 
         {error ? (
@@ -530,8 +565,8 @@ export default function DiaryModal({
               />
             </div>
 
-            {/* Mobile only: buttons at bottom of left column */}
-            <div className="mt-5 flex items-center justify-between lg:hidden">
+            {/* Mobile only: buttons at bottom of left column - now hidden, buttons are in header */}
+            <div className="mt-5 items-center justify-between hidden">
               <div className="flex items-center gap-2">
                 {initial?.id && onDelete ? (
                   <button

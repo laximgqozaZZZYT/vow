@@ -140,20 +140,30 @@ export default function ManageTagsModal({
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header - Linear style with subtle gradient */}
-        <div className="relative px-8 py-6 border-b border-white/5 bg-gradient-to-b from-white/[0.02] to-transparent">
+        <div className="relative px-4 sm:px-8 py-4 sm:py-6 border-b border-white/5 bg-gradient-to-b from-white/[0.02] to-transparent">
           <div className="flex items-start justify-between">
             <div className="space-y-1">
-              <h2 className="text-2xl font-semibold tracking-tight">Manage Tags</h2>
-              <p className="text-sm text-white/50">Organize your workflow with custom tags</p>
+              <h2 className="text-xl sm:text-2xl font-semibold tracking-tight">Manage Tags</h2>
+              <p className="text-xs sm:text-sm text-white/50 hidden sm:block">Organize your workflow with custom tags</p>
             </div>
-            <button
-              onClick={onClose}
-              className="inline-flex items-center justify-center rounded-lg w-8 h-8 text-white/40 hover:text-white/80 hover:bg-white/5 transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20"
-            >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-              </svg>
-            </button>
+            <div className="flex items-center gap-2">
+              {/* Mobile close button */}
+              <button
+                onClick={onClose}
+                className="sm:hidden inline-flex items-center justify-center px-3 h-9 text-sm font-medium bg-white/10 hover:bg-white/20 text-white rounded-lg transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20"
+              >
+                Close
+              </button>
+              {/* Desktop close button */}
+              <button
+                onClick={onClose}
+                className="hidden sm:inline-flex items-center justify-center rounded-lg w-8 h-8 text-white/40 hover:text-white/80 hover:bg-white/5 transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
           </div>
         </div>
 
@@ -355,8 +365,8 @@ export default function ManageTagsModal({
           </div>
         </div>
 
-        {/* Footer - Subtle with gradient */}
-        <div className="px-8 py-5 border-t border-white/5 bg-gradient-to-t from-white/[0.02] to-transparent flex justify-end">
+        {/* Footer - Subtle with gradient (hidden on mobile) */}
+        <div className="hidden sm:flex px-8 py-5 border-t border-white/5 bg-gradient-to-t from-white/[0.02] to-transparent justify-end">
           <button
             onClick={onClose}
             className="inline-flex items-center justify-center rounded-lg border border-white/10 hover:bg-white/5 px-6 py-2.5 text-sm font-medium text-white/70 hover:text-white transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20"

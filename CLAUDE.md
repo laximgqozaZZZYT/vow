@@ -204,6 +204,148 @@ gh pr merge --auto --squash
 
 See `.kiro/specs/claude-agent-delegation-workflow/templates/remote-collaboration-guide.md` for full details.
 
+## MCP Multi-Agent Scale System (10-20 Agents)
+
+For large-scale parallel development with 10-20 Claude agents, use the MCP Task Distribution System.
+
+### Architecture
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│              Central Task Server (port 3456)                 │
+│            http://192.168.2.126:3456                        │
+│  ┌─────────┐  ┌─────────┐  ┌─────────┐  ┌─────────┐        │
+│  │  Tasks  │  │ Agents  │  │  Auth   │  │   SSE   │        │
+│  └─────────┘  └─────────┘  └─────────┘  └─────────┘        │
+└─────────────────────────────────────────────────────────────┘
+        ▲                           ▲
+        │ HTTP                      │ HTTP
+        │                           │
+┌───────┴───────┐           ┌───────┴───────┐
+│   Machine A   │           │   Machine B   │
+│  (This Host)  │           │   (Remote)    │
+│  10 agents    │           │  10 agents    │
+└───────────────┘           └───────────────┘
+```
+
+### Quick Start (Local Machine)
+
+```bash
+# Start environment with 10 agents
+./scripts/agents/multi-agent-launcher.sh start 10
+
+# Check status
+./scripts/agents/multi-agent-launcher.sh status
+
+# Connect to tmux session
+./scripts/agents/multi-agent-launcher.sh connect
+
+# In each tmux pane, Claude starts automatically configured with MCP
+# Or start manually:
+claude --mcp-config /home/ubuntu/mcp-multi-agent/mcp-config.json
+```
+
+### Agent Roles for VOW
+
+| Pane | Role | Working Directory | Focus |
+|------|------|-------------------|-------|
+| 0 | Manager | vow/ | Task coordination |
+| 1-3 | Frontend | vow/frontend/ | React components |
+| 4-5 | Backend | vow/backend/ | Lambda services |
+| 6-7 | Tester | vow/ | Jest, property tests |
+| 8 | Spec | vow/.kiro/specs/ | KIRO specifications |
+| 9 | DevOps | vow/infra/ | Deployment, AWS |
+| 10 | Architect | vow/ | System design |
+| 11 | Reviewer | vow/ | Code review |
+| 12+ | General | vow/ | Flexible |
+
+### Remote Machine Setup
+
+```bash
+# 1. Get connection info from host
+./scripts/agents/multi-agent-launcher.sh remote-info
+
+# 2. On remote machine, set environment
+export TASK_SERVER_URL=http://192.168.2.126:3456
+export TASK_SERVER_TOKEN=mcp-2583b09967362d705553582c115c81b4
+export AGENT_NAME="Remote-Agent-1"
+export AGENT_ROLE="developer"
+export MACHINE_ID="remote-machine"
+
+# 3. Test connection
+curl -H "Authorization: Bearer $TASK_SERVER_TOKEN" $TASK_SERVER_URL/health
+
+# 4. Copy MCP config and start Claude
+scp host:/home/ubuntu/mcp-multi-agent/mcp-config.json ./
+claude --mcp-config mcp-config.json
+```
+
+### MCP Tools Available
+
+**Manager Tools:**
+- `register_agent` - Register with server
+- `list_agents` - View all agents
+- `create_task` - Create new task
+- `assign_task` - Assign task to agent
+- `dashboard` - View statistics
+
+**Worker Tools:**
+- `get_my_tasks` - View assigned tasks
+- `claim_task` - Start working on task
+- `submit_result` - Report completion
+- `heartbeat` - Update status
+
+### Server Management
+
+```bash
+# Server commands (from MCP directory)
+cd /home/ubuntu/mcp-multi-agent
+
+./setup_multi_agent.sh start-server    # Start server
+./setup_multi_agent.sh server-status   # Check status
+./setup_multi_agent.sh stop-server     # Stop server
+./setup_multi_agent.sh show-config     # View configuration
+./setup_multi_agent.sh generate-token  # New auth token
+```
+
+### Manager Agent Commands
+
+Managerロールのエージェントは以下のMCPツールで管理操作を実行できます：
+
+**信頼関係管理:**
+```
+list_trusted_machines        # 信頼済みマシン一覧
+add_trusted_machine          # マシンを信頼リストに追加
+update_machine_trust         # 信頼設定を更新
+remove_trusted_machine       # マシンを削除
+```
+
+**エージェント管理:**
+```
+invite_agent                 # リモートマシンにエージェント招待
+remove_agent                 # エージェントを削除
+```
+
+**LDAP設定:**
+```
+configure_ldap               # OpenLDAP連携を設定
+get_ldap_config              # 現在のLDAP設定を確認
+```
+
+**拡張ダッシュボード:**
+```
+manager_dashboard            # マシン・信頼情報を含む詳細統計
+```
+
+### Trust Levels (信頼レベル)
+
+| レベル | 最大エージェント数 | 説明 |
+|--------|------------------|------|
+| none | 0 | アクセス不可 |
+| basic | 5 | 基本ロールのみ |
+| elevated | 10 | 全ロール（manager除く） |
+| full | 20 | 完全アクセス |
+
 ## Getting Help
 
 - Project overview: `.kiro/specs/project-overview/`

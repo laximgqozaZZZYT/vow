@@ -4,10 +4,11 @@ import React, { useState, useCallback } from 'react';
 
 /**
  * StickyFooter - 固定フッターコンポーネント
- * 
+ *
  * モーダル下部に固定表示されるアクションボタン群。
  * スクロール位置に関係なく常に表示される。
- * 
+ * スマホ表示では非表示（ヘッダーボタンを使用）
+ *
  * @validates Requirements 4.1, 4.2, 4.3, 4.4
  */
 
@@ -72,7 +73,7 @@ export function StickyFooter({
   }, []);
 
   return (
-    <div 
+    <div
       className="
         flex-shrink-0
         bg-card border-t border-border
@@ -80,6 +81,7 @@ export function StickyFooter({
         shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.1)]
         dark:shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.3)]
         z-10
+        hidden sm:block
       "
     >
       {/* 削除確認ダイアログ */}
@@ -139,23 +141,23 @@ export function StickyFooter({
           >
             {isLoading ? (
               <>
-                <svg 
-                  className="animate-spin -ml-1 mr-2 h-4 w-4" 
-                  xmlns="http://www.w3.org/2000/svg" 
-                  fill="none" 
+                <svg
+                  className="animate-spin -ml-1 mr-2 h-4 w-4"
+                  xmlns="http://www.w3.org/2000/svg"
+                  fill="none"
                   viewBox="0 0 24 24"
                 >
-                  <circle 
-                    className="opacity-25" 
-                    cx="12" 
-                    cy="12" 
-                    r="10" 
-                    stroke="currentColor" 
+                  <circle
+                    className="opacity-25"
+                    cx="12"
+                    cy="12"
+                    r="10"
+                    stroke="currentColor"
                     strokeWidth="4"
                   />
-                  <path 
-                    className="opacity-75" 
-                    fill="currentColor" 
+                  <path
+                    className="opacity-75"
+                    fill="currentColor"
                     d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
                   />
                 </svg>
@@ -226,6 +228,123 @@ export function StickyFooter({
           </button>
         )}
       </div>
+    </div>
+  );
+}
+
+/**
+ * ModalHeaderButtons - モバイル用ヘッダーボタンコンポーネント
+ *
+ * モーダルヘッダー内に表示するアクションボタン群。
+ * スマホ表示（sm未満）でのみ表示される。
+ */
+export interface ModalHeaderButtonsProps {
+  /** 保存ボタンクリック時のコールバック */
+  onSave: () => void;
+  /** キャンセル/閉じるボタンクリック時のコールバック */
+  onCancel: () => void;
+  /** 削除ボタンクリック時のコールバック（オプション） */
+  onDelete?: () => void;
+  /** 保存ボタンの無効化 */
+  saveDisabled?: boolean;
+  /** ローディング状態 */
+  isLoading?: boolean;
+  /** 削除確認メッセージ */
+  deleteConfirmMessage?: string;
+}
+
+export function ModalHeaderButtons({
+  onSave,
+  onCancel,
+  onDelete,
+  saveDisabled = false,
+  isLoading = false,
+  deleteConfirmMessage = 'Are you sure you want to delete this item?',
+}: ModalHeaderButtonsProps) {
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+
+  const handleDeleteClick = useCallback(() => {
+    if (window.confirm(deleteConfirmMessage)) {
+      onDelete?.();
+    }
+  }, [onDelete, deleteConfirmMessage]);
+
+  return (
+    <div className="flex items-center gap-1 sm:hidden">
+      {/* 削除ボタン */}
+      {onDelete && (
+        <button
+          type="button"
+          onClick={handleDeleteClick}
+          disabled={isLoading}
+          className="
+            inline-flex items-center justify-center
+            w-9 h-9
+            text-destructive
+            rounded-md transition-colors
+            hover:bg-destructive/10
+            focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-destructive
+            disabled:cursor-not-allowed disabled:opacity-50
+          "
+          aria-label="Delete"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M3 6h18" />
+            <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6" />
+            <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2" />
+          </svg>
+        </button>
+      )}
+
+      {/* キャンセルボタン */}
+      <button
+        type="button"
+        onClick={onCancel}
+        disabled={isLoading}
+        className="
+          inline-flex items-center justify-center
+          px-3 h-9
+          text-sm font-medium
+          text-muted-foreground
+          rounded-md transition-colors
+          hover:bg-accent hover:text-foreground
+          focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary
+          disabled:cursor-not-allowed disabled:opacity-50
+        "
+      >
+        Cancel
+      </button>
+
+      {/* 保存ボタン */}
+      <button
+        type="button"
+        onClick={onSave}
+        disabled={saveDisabled || isLoading}
+        className="
+          inline-flex items-center justify-center
+          px-3 h-9
+          text-sm font-medium
+          bg-primary text-primary-foreground
+          rounded-md transition-colors
+          hover:bg-primary/90
+          focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary
+          disabled:cursor-not-allowed disabled:opacity-50
+        "
+      >
+        {isLoading ? (
+          <svg
+            className="animate-spin h-4 w-4"
+            xmlns="http://www.w3.org/2000/svg"
+            fill="none"
+            viewBox="0 0 24 24"
+          >
+            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+          </svg>
+        ) : (
+          'Save'
+        )}
+      </button>
     </div>
   );
 }

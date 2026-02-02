@@ -1,18 +1,10 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import Header from "@/components/Header";
 import { baseMetadata, createWebApplicationSchema } from "../lib/seo.metadata";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
-  subsets: ["latin"],
-});
-
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
-  subsets: ["latin"],
-});
+// Note: Using system font stack. Google Fonts (Geist) was previously used but
+// removed due to network connectivity issues during build.
 
 export const metadata: Metadata = baseMetadata;
 
@@ -62,7 +54,7 @@ export default function RootLayout({
         <link rel="alternate" hrefLang="x-default" href={`${process.env.NEXT_PUBLIC_SITE_URL || ''}/`} />
       </head>
       <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased`}
+        className="font-sans antialiased"
       >
         {/* アクセシビリティ: スキップリンク */}
         <a href="#main-content" className="skip-link">

@@ -3,6 +3,7 @@
 import React from 'react'
 import { useLocale } from '@/contexts/LocaleContext'
 import { useHandedness } from '../contexts/HandednessContext'
+import { ModalHeaderButtons } from './Widget.StickyFooter'
 
 type SectionId = 'next' | 'activity' | 'calendar' | 'statics' | 'diary' | 'stickies' | 'mindmap' | 'notices' | 'coach' | 'agents'
 
@@ -44,10 +45,16 @@ export default function EditLayoutModal({ open, onClose, sections, onChange, onA
       <div className="w-full max-w-lg rounded-lg border border-border bg-card shadow-lg text-card-foreground flex flex-col">
         <div className="flex items-center justify-between p-6 border-b border-border">
           <h3 className="text-xl font-semibold">Edit Layout</h3>
-          <button onClick={onClose} className="inline-flex items-center justify-center rounded-md w-8 h-8 text-muted-foreground hover:bg-accent hover:text-accent-foreground transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">✕</button>
+          <div className="flex items-center gap-2">
+            <ModalHeaderButtons
+              onSave={() => { onChange(local); onClose(); }}
+              onCancel={onClose}
+            />
+            <button onClick={onClose} className="hidden sm:inline-flex items-center justify-center rounded-md w-8 h-8 text-muted-foreground hover:bg-accent hover:text-accent-foreground transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">✕</button>
+          </div>
         </div>
 
-        <div className="p-6 space-y-6 overflow-auto max-h-[65vh]">
+        <div className="p-6 space-y-6 overflow-auto max-h-[65vh] modern-scrollbar">
           {/* Locale Settings */}
           <div className="p-4 rounded-lg border border-border bg-muted">
             <div className="mb-3">
@@ -176,15 +183,15 @@ export default function EditLayoutModal({ open, onClose, sections, onChange, onA
           </div>
         </div>
 
-        <div className="flex justify-end gap-2 p-6 border-t border-border">
-          <button 
-            className="inline-flex items-center justify-center rounded-md border border-input bg-background px-4 py-2 text-sm font-medium transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary" 
+        <div className="hidden sm:flex justify-end gap-2 p-6 border-t border-border">
+          <button
+            className="inline-flex items-center justify-center rounded-md border border-input bg-background px-4 py-2 text-sm font-medium transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
             onClick={onClose}
           >
             Cancel
           </button>
-          <button 
-            className="inline-flex items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary" 
+          <button
+            className="inline-flex items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
             onClick={() => { onChange(local); onClose(); }}
           >
             Save

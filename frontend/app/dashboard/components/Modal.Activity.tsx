@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import type { ReactNode } from 'react';
+import { ModalHeaderButtons } from './Widget.StickyFooter';
 
 type ActivityKind = 'start' | 'complete' | 'skip' | 'pause';
 export type Activity = { id: string; kind: ActivityKind; habitId: string; habitName: string; timestamp: string; amount?: number; durationSeconds?: number; memo?: string }
@@ -78,10 +79,17 @@ export default function ActivityModal({ open, onClose, initial, onSave }: { open
       <div className="w-full max-w-lg rounded-lg border border-border bg-card px-4 pt-4 pb-0 shadow-lg text-card-foreground flex flex-col">
         <div className="flex items-center justify-between">
           <h3 className="text-2xl font-semibold">Activity</h3>
-          <button onClick={onClose} className="text-slate-500">✕</button>
+          <div className="flex items-center gap-2">
+            <ModalHeaderButtons
+              onSave={handleSave}
+              onCancel={onClose}
+              saveDisabled={Object.keys(errors).length > 0}
+            />
+            <button onClick={onClose} className="hidden sm:block text-slate-500">✕</button>
+          </div>
         </div>
 
-        <div className="mt-4 flex gap-4 habit-scroll-area overflow-auto max-h-[65vh] pr-2 modal-scroll-gap">
+        <div className="mt-4 flex gap-4 habit-scroll-area overflow-auto max-h-[65vh] pr-2 modal-scroll-gap modern-scrollbar">
           <div className="flex-1">
             <div className="space-y-3">
               <label className="block text-xs text-slate-400">Status</label>
@@ -110,7 +118,7 @@ export default function ActivityModal({ open, onClose, initial, onSave }: { open
                 {errors.duration && <div className="text-xs text-red-600">{errors.duration}</div>}
               </div>
 
-              <div className="mt-4 flex items-center gap-2">
+              <div className="mt-4 hidden sm:flex items-center gap-2">
                 <button className={`rounded bg-sky-600 px-3 py-2 text-white ${Object.keys(errors).length ? 'opacity-50 cursor-not-allowed' : ''}`} onClick={handleSave} disabled={Object.keys(errors).length > 0}>Save</button>
                 <button className="rounded border px-3 py-2" onClick={onClose}>Cancel</button>
               </div>

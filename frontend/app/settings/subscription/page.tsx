@@ -294,21 +294,33 @@ export default function SubscriptionPage() {
             <h2 className="text-lg font-semibold mb-4">よくある質問</h2>
             <div className="space-y-4">
               <div>
+                <h3 className="font-medium">自前のOpenAI APIキーを使う場合、有料プランは必要ですか？</h3>
+                <p className="text-sm text-muted-foreground mt-1">
+                  <strong>いいえ、必要ありません。</strong>設定画面でご自身のOpenAI APIキーを登録すれば、フリープランでもMOC（マルチエージェントAI）機能をご利用いただけます。MCPサーバーを自前で用意する場合も同様です。有料プランは、サーバー側で提供するOpenAI APIを利用したい場合にお選びください。
+                </p>
+              </div>
+              <div>
                 <h3 className="font-medium">トークンとは何ですか？</h3>
                 <p className="text-sm text-muted-foreground mt-1">
-                  トークンはAI機能を使用する際に消費される単位です。自然言語でのHabit登録・編集、AI提案などで使用されます。1回の操作で約1,000トークンを消費します。
+                  トークンはサーバー提供のAI機能を使用する際に消費される単位です。有料プランで提供されるOpenAI API利用時に適用されます。自前のAPIキーを使用する場合は、ご自身のOpenAIアカウントに課金されます。
                 </p>
               </div>
               <div>
                 <h3 className="font-medium">トークンが足りなくなったらどうなりますか？</h3>
                 <p className="text-sm text-muted-foreground mt-1">
-                  月間トークン上限に達すると、AI機能は翌月のリセットまで使用できなくなります。基本的なHabit管理機能は引き続き利用可能です。
+                  月間トークン上限に達すると、サーバー提供のAI機能は翌月のリセットまで使用できなくなります。自前のAPIキーを設定すれば、引き続きMOC機能をご利用いただけます。
                 </p>
               </div>
               <div>
                 <h3 className="font-medium">プランの変更はいつでもできますか？</h3>
                 <p className="text-sm text-muted-foreground mt-1">
                   はい、いつでもアップグレード・ダウングレードが可能です。アップグレードは即時反映され、ダウングレードは現在の請求期間終了時に適用されます。
+                </p>
+              </div>
+              <div>
+                <h3 className="font-medium">MCPサーバーとは何ですか？</h3>
+                <p className="text-sm text-muted-foreground mt-1">
+                  MCP（Model Context Protocol）サーバーは、外部のAIエージェントと連携するためのサーバーです。自前でMCPサーバーを立てることで、カスタムのAIエージェントを接続できます。設定は「設定 &gt; AI設定」から行えます。
                 </p>
               </div>
             </div>

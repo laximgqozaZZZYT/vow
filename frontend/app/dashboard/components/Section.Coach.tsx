@@ -13,8 +13,14 @@
  * - View past AI suggestions history
  * - Level assessment for habits (THLI-24)
  *
+ * Mastra Agent Integration:
+ * - Streaming response display via SSE
+ * - Tool call visualization with icons and descriptions
+ * - User context-based recommended prompts
+ * - Workflow progress indicator
+ *
  * Requirements: Premium subscription features
- * 
+ *
  * UI Design:
  * - Gemini-style spacious layout
  * - Chat area: flex-1, min-h-400px (desktop), min-h-250px (mobile)
@@ -22,7 +28,7 @@
  * - Quick actions: centered when no conversation
  */
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { supabase } from '../../../lib/supabaseClient';
 import { CoachingWidget } from './Widget.Coaching';
 import { HabitStatsCard, type HabitStats } from './Widget.HabitStats';
@@ -33,6 +39,82 @@ import { HabitModal } from './Modal.Habit';
 import { GoalModal } from './Modal.Goal';
 import { SuggestionHistory } from './Widget.SuggestionHistory';
 import LevelAssessmentSliders, { type LevelVariables, calculateLevel } from './Widget.LevelAssessmentSliders';
+import { useMastraAgent, type MastraMessage, type UseMastraAgentOptions } from '../hooks/useMastraAgent';
+import type { ToolCallResult } from '../../../lib/mastra/config';
+
+/**
+ * Tool call icons and descriptions for visualization
+ * ツール呼び出しの視覚化用アイコンと説明
+ */
+const TOOL_CALL_CONFIG: Record<string, { icon: string; label: string; labelEn: string; description: string; descriptionEn: string }> = {
+  parse_habit: {
+    icon: '📝',
+    label: '習慣解析',
+    labelEn: 'Parsing Habit',
+    description: '入力から習慣情報を抽出中...',
+    descriptionEn: 'Extracting habit info from input...',
+  },
+  suggest_habits: {
+    icon: '💡',
+    label: '習慣提案',
+    labelEn: 'Suggesting Habits',
+    description: 'おすすめの習慣を生成中...',
+    descriptionEn: 'Generating habit suggestions...',
+  },
+  analyze_progress: {
+    icon: '📊',
+    label: '進捗分析',
+    labelEn: 'Analyzing Progress',
+    description: '習慣の達成状況を分析中...',
+    descriptionEn: 'Analyzing habit progress...',
+  },
+  get_coaching: {
+    icon: '🎯',
+    label: 'コーチング',
+    labelEn: 'Coaching',
+    description: 'パーソナライズされたアドバイスを生成中...',
+    descriptionEn: 'Generating personalized advice...',
+  },
+  assess_level: {
+    icon: '📈',
+    label: 'レベル評価',
+    labelEn: 'Level Assessment',
+    description: '習慣のレベルを評価中...',
+    descriptionEn: 'Assessing habit level...',
+  },
+  search_habits: {
+    icon: '🔍',
+    label: '習慣検索',
+    labelEn: 'Searching Habits',
+    description: '関連する習慣を検索中...',
+    descriptionEn: 'Searching for related habits...',
+  },
+  calculate_workload: {
+    icon: '⚖️',
+    label: 'ワークロード計算',
+    labelEn: 'Calculating Workload',
+    description: '日々の負荷を計算中...',
+    descriptionEn: 'Calculating daily workload...',
+  },
+  default: {
+    icon: '⚙️',
+    label: 'ツール実行',
+    labelEn: 'Running Tool',
+    description: 'ツールを実行中...',
+    descriptionEn: 'Running tool...',
+  },
+};
+
+/**
+ * Workflow steps for progress indicator
+ * ワークフロー進行状況インジケーター用のステップ
+ */
+interface WorkflowStep {
+  id: string;
+  label: string;
+  labelEn: string;
+  status: 'pending' | 'active' | 'completed' | 'error';
+}
 
 /**
  * デフォルトのクイックアクション（Choice形式）
@@ -71,6 +153,42 @@ const DEFAULT_QUICK_ACTIONS: Choice[] = [
 ];
 
 /**
+ * English versions of quick actions
+ */
+const DEFAULT_QUICK_ACTIONS_EN: Choice[] = [
+  {
+    id: 'assess-level',
+    label: 'Set Level',
+    icon: '📈',
+    description: 'Set the level for your habits',
+  },
+  {
+    id: 'add-habit',
+    label: 'Add Habit',
+    icon: '➕',
+    description: 'Create a new habit',
+  },
+  {
+    id: 'set-goal',
+    label: 'Set Goal',
+    icon: '🎯',
+    description: 'Set a goal',
+  },
+  {
+    id: 'check-progress',
+    label: 'Check Progress',
+    icon: '📊',
+    description: 'Check your habit progress',
+  },
+  {
+    id: 'get-advice',
+    label: 'Get Advice',
+    icon: '💡',
+    description: 'Get tips for habit building',
+  },
+];
+
+/**
  * クイックアクションIDからプロンプトへのマッピング
  */
 const QUICK_ACTION_PROMPTS: Record<string, string> = {
@@ -80,6 +198,80 @@ const QUICK_ACTION_PROMPTS: Record<string, string> = {
   'check-progress': '習慣の進捗を確認したい',
   'get-advice': '習慣を続けるコツを教えて',
 };
+
+const QUICK_ACTION_PROMPTS_EN: Record<string, string> = {
+  'assess-level': 'Please help me set levels for my existing habits',
+  'add-habit': 'I want to add a new habit',
+  'set-goal': 'I want to set a goal',
+  'check-progress': 'I want to check my habit progress',
+  'get-advice': 'Give me tips for sticking to habits',
+};
+
+/**
+ * Context-based recommended prompts based on user data
+ * ユーザーコンテキストに基づく推奨プロンプト
+ */
+function getContextualPrompts(
+  habits: CoachSectionProps['habits'],
+  goals: CoachSectionProps['goals'],
+  locale: 'ja' | 'en' = 'ja'
+): Choice[] {
+  const prompts: Choice[] = [];
+
+  // Check for habits without levels
+  const unassessedHabits = (habits || []).filter(h => h.level === null || h.level === undefined);
+  if (unassessedHabits.length > 0) {
+    prompts.push({
+      id: 'assess-unleveled',
+      label: locale === 'ja' ? `${unassessedHabits.length}件の習慣にレベル設定` : `Set levels for ${unassessedHabits.length} habits`,
+      icon: '📈',
+      description: locale === 'ja'
+        ? `「${unassessedHabits[0]?.name}」など未設定の習慣があります`
+        : `"${unassessedHabits[0]?.name}" and others need levels`,
+    });
+  }
+
+  // Check for incomplete habits today
+  const incompleteHabits = (habits || []).filter(h => !h.completed);
+  if (incompleteHabits.length > 0 && incompleteHabits.length < 5) {
+    prompts.push({
+      id: 'motivate-incomplete',
+      label: locale === 'ja' ? '今日の習慣を達成するコツ' : 'Tips to complete today\'s habits',
+      icon: '🔥',
+      description: locale === 'ja'
+        ? `残り${incompleteHabits.length}件の習慣があります`
+        : `${incompleteHabits.length} habits remaining`,
+    });
+  }
+
+  // Check for goals without habits
+  const goalsWithoutHabits = (goals || []).filter(g => {
+    const goalHabits = (habits || []).filter(h => h.goalId === g.id);
+    return goalHabits.length === 0;
+  });
+  if (goalsWithoutHabits.length > 0) {
+    prompts.push({
+      id: 'suggest-for-goal',
+      label: locale === 'ja' ? `「${goalsWithoutHabits[0]?.name}」の習慣を提案` : `Suggest habits for "${goalsWithoutHabits[0]?.name}"`,
+      icon: '🎯',
+      description: locale === 'ja'
+        ? 'このゴールに向けた習慣を提案します'
+        : 'Get habit suggestions for this goal',
+    });
+  }
+
+  // General suggestions when not much context
+  if (prompts.length === 0) {
+    prompts.push({
+      id: 'weekly-review',
+      label: locale === 'ja' ? '今週の振り返り' : 'Weekly Review',
+      icon: '📅',
+      description: locale === 'ja' ? '今週の習慣達成状況を確認' : 'Review this week\'s progress',
+    });
+  }
+
+  return prompts.slice(0, 3);
+}
 
 interface Goal {
   id: string;
@@ -140,15 +332,206 @@ interface CoachSectionProps {
   onHabitCreated?: () => void;
   onGoalCreated?: () => void;
   onHabitUpdated?: () => void;
+  /** Language preference */
+  locale?: 'ja' | 'en';
+  /** Enable Mastra agent integration (default: true) */
+  useMastra?: boolean;
 }
 
 type DetectedIntent = 'create' | 'edit' | 'suggest' | 'coaching' | 'followup' | 'level_assessment' | null;
 
-export function CoachSection({ goals, habits, onHabitCreated, onGoalCreated, onHabitUpdated }: CoachSectionProps) {
+/**
+ * Tool Call Visualization Component
+ * ツール呼び出しの視覚化コンポーネント
+ */
+function ToolCallVisualization({
+  toolCalls,
+  locale = 'ja',
+}: {
+  toolCalls: ToolCallResult[];
+  locale?: 'ja' | 'en';
+}) {
+  if (!toolCalls || toolCalls.length === 0) return null;
+
+  return (
+    <div className="flex flex-wrap gap-2 mt-2">
+      {toolCalls.map((call, idx) => {
+        const config = TOOL_CALL_CONFIG[call.toolName] || TOOL_CALL_CONFIG.default;
+        const isSuccess = call.success;
+
+        return (
+          <div
+            key={`tool-${idx}-${call.toolName}`}
+            className={`
+              flex items-center gap-1.5 px-2 py-1 rounded-md text-xs
+              ${isSuccess
+                ? 'bg-green-500/10 text-green-700 dark:text-green-400 border border-green-500/20'
+                : 'bg-red-500/10 text-red-700 dark:text-red-400 border border-red-500/20'
+              }
+            `}
+            title={call.error || (locale === 'ja' ? config.description : config.descriptionEn)}
+          >
+            <span>{config.icon}</span>
+            <span>{locale === 'ja' ? config.label : config.labelEn}</span>
+            {isSuccess ? (
+              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+              </svg>
+            ) : (
+              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+/**
+ * Streaming Message Indicator Component
+ * ストリーミングメッセージインジケーターコンポーネント
+ */
+function StreamingIndicator({
+  toolName,
+  locale = 'ja',
+}: {
+  toolName?: string;
+  locale?: 'ja' | 'en';
+}) {
+  const config = toolName
+    ? (TOOL_CALL_CONFIG[toolName] || TOOL_CALL_CONFIG.default)
+    : TOOL_CALL_CONFIG.default;
+
+  return (
+    <div className="flex items-center gap-2 text-sm text-muted-foreground">
+      <div className="flex gap-1">
+        <span className="w-2 h-2 bg-primary rounded-full animate-bounce [animation-delay:0ms]" />
+        <span className="w-2 h-2 bg-primary rounded-full animate-bounce [animation-delay:150ms]" />
+        <span className="w-2 h-2 bg-primary rounded-full animate-bounce [animation-delay:300ms]" />
+      </div>
+      <span className="flex items-center gap-1">
+        <span>{config.icon}</span>
+        <span>{locale === 'ja' ? config.description : config.descriptionEn}</span>
+      </span>
+    </div>
+  );
+}
+
+/**
+ * Workflow Progress Component
+ * ワークフロー進行状況コンポーネント
+ */
+function WorkflowProgress({
+  steps,
+  currentStep,
+  locale = 'ja',
+}: {
+  steps: WorkflowStep[];
+  currentStep: number;
+  locale?: 'ja' | 'en';
+}) {
+  return (
+    <div className="flex items-center gap-1 p-2 bg-muted/30 rounded-lg">
+      {steps.map((step, idx) => {
+        const isActive = idx === currentStep;
+        const isCompleted = idx < currentStep || step.status === 'completed';
+        const isError = step.status === 'error';
+
+        return (
+          <div key={step.id} className="flex items-center">
+            {idx > 0 && (
+              <div
+                className={`w-6 h-0.5 mx-1 ${
+                  isCompleted ? 'bg-green-500' : isError ? 'bg-red-500' : 'bg-muted'
+                }`}
+              />
+            )}
+            <div
+              className={`
+                flex items-center justify-center w-6 h-6 rounded-full text-xs font-medium
+                ${isActive ? 'bg-primary text-primary-foreground ring-2 ring-primary/30' : ''}
+                ${isCompleted && !isActive ? 'bg-green-500 text-white' : ''}
+                ${isError ? 'bg-red-500 text-white' : ''}
+                ${!isActive && !isCompleted && !isError ? 'bg-muted text-muted-foreground' : ''}
+              `}
+              title={locale === 'ja' ? step.label : step.labelEn}
+            >
+              {isCompleted && !isActive ? (
+                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                </svg>
+              ) : isError ? (
+                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              ) : (
+                idx + 1
+              )}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+/**
+ * Contextual Prompts Display Component
+ * コンテキストに基づくプロンプト表示コンポーネント
+ */
+function ContextualPromptsSection({
+  prompts,
+  onSelect,
+  locale = 'ja',
+}: {
+  prompts: Choice[];
+  onSelect: (prompt: Choice) => void;
+  locale?: 'ja' | 'en';
+}) {
+  if (prompts.length === 0) return null;
+
+  return (
+    <div className="mb-4">
+      <h4 className="text-sm font-medium text-muted-foreground mb-2">
+        {locale === 'ja' ? 'おすすめ' : 'Recommended'}
+      </h4>
+      <div className="flex flex-wrap gap-2">
+        {prompts.map((prompt) => (
+          <button
+            key={prompt.id}
+            onClick={() => onSelect(prompt)}
+            className="
+              flex items-center gap-1.5 px-3 py-1.5
+              bg-primary/5 hover:bg-primary/10
+              border border-primary/20 hover:border-primary/40
+              rounded-full text-sm transition-colors
+            "
+          >
+            <span>{prompt.icon}</span>
+            <span>{prompt.label}</span>
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+export function CoachSection({
+  goals,
+  habits,
+  onHabitCreated,
+  onGoalCreated,
+  onHabitUpdated,
+  locale = 'ja',
+  useMastra: enableMastra = true,
+}: CoachSectionProps) {
   const [isPremium, setIsPremium] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
   const [loading, setLoading] = useState(true);
   const [tokenInfo, setTokenInfo] = useState<{ remaining: number; total: number } | null>(null);
+  const [authToken, setAuthToken] = useState<string | null>(null);
 
   // Conversation state
   const [messages, setMessages] = useState<Message[]>([]);
@@ -157,6 +540,21 @@ export function CoachSection({ goals, habits, onHabitCreated, onGoalCreated, onH
   const [error, setError] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  // Mastra agent state
+  const [activeToolCall, setActiveToolCall] = useState<string | null>(null);
+  const [workflowSteps, setWorkflowSteps] = useState<WorkflowStep[]>([]);
+  const [currentWorkflowStep, setCurrentWorkflowStep] = useState(0);
+
+  // Context-based prompts
+  const contextualPrompts = useMemo(
+    () => getContextualPrompts(habits, goals, locale),
+    [habits, goals, locale]
+  );
+
+  // Get localized quick actions
+  const quickActions = locale === 'ja' ? DEFAULT_QUICK_ACTIONS : DEFAULT_QUICK_ACTIONS_EN;
+  const quickActionPrompts = locale === 'ja' ? QUICK_ACTION_PROMPTS : QUICK_ACTION_PROMPTS_EN;
 
   // Level assessment state
   const [levelAssessmentHabit, setLevelAssessmentHabit] = useState<{ id: string; name: string } | null>(null);
@@ -264,7 +662,7 @@ export function CoachSection({ goals, habits, onHabitCreated, onGoalCreated, onH
     }
   }, [input]);
 
-  // Check premium/admin status
+  // Check premium/admin status and get auth token
   useEffect(() => {
     const checkStatus = async () => {
       if (!apiUrl) {
@@ -279,6 +677,9 @@ export function CoachSection({ goals, habits, onHabitCreated, onGoalCreated, onH
           return;
         }
 
+        // Store auth token for Mastra agent
+        setAuthToken(session.access_token);
+
         const response = await fetch(`${apiUrl}/api/subscription/status`, {
           headers: { Authorization: `Bearer ${session.access_token}` },
         });
@@ -288,7 +689,7 @@ export function CoachSection({ goals, habits, onHabitCreated, onGoalCreated, onH
           const planType = data.subscription?.planType;
           setIsPremium(planType === 'premium_basic' || planType === 'premium_pro');
           setIsPro(planType === 'premium_pro');
-          
+
           if (data.tokenUsage) {
             setTokenInfo({
               remaining: data.tokenUsage.monthlyQuota - data.tokenUsage.usedQuota,
@@ -306,7 +707,7 @@ export function CoachSection({ goals, habits, onHabitCreated, onGoalCreated, onH
           },
           body: JSON.stringify({ text: '' }),
         });
-        
+
         if (adminCheck.status !== 402) {
           setIsAdmin(true);
           setIsPremium(true);
@@ -320,6 +721,64 @@ export function CoachSection({ goals, habits, onHabitCreated, onGoalCreated, onH
 
     checkStatus();
   }, [apiUrl]);
+
+  // Mastra Agent Hook Integration
+  // This provides streaming responses and tool call visualization
+  const mastraAgent = useMastraAgent({
+    authToken,
+    enableStreaming: true,
+    systemMessage: locale === 'ja'
+      ? 'あなたはVOWアプリの習慣コーチです。ユーザーの習慣形成をサポートします。'
+      : 'You are a habit coach for the VOW app. You help users build better habits.',
+    onMessage: useCallback((msg: MastraMessage) => {
+      // Process tool calls for visualization
+      if (msg.toolCalls && msg.toolCalls.length > 0) {
+        setActiveToolCall(null);
+      }
+
+      // Update workflow progress on completion
+      if (msg.status === 'complete' && workflowSteps.length > 0) {
+        setWorkflowSteps(prev => prev.map((step, idx) =>
+          idx === currentWorkflowStep
+            ? { ...step, status: 'completed' }
+            : step
+        ));
+        setCurrentWorkflowStep(prev => Math.min(prev + 1, workflowSteps.length - 1));
+      }
+    }, [workflowSteps.length, currentWorkflowStep]),
+    onError: useCallback((err: Error) => {
+      setError(err.message);
+      setActiveToolCall(null);
+      // Mark current workflow step as error
+      if (workflowSteps.length > 0) {
+        setWorkflowSteps(prev => prev.map((step, idx) =>
+          idx === currentWorkflowStep
+            ? { ...step, status: 'error' }
+            : step
+        ));
+      }
+    }, [workflowSteps.length, currentWorkflowStep]),
+  });
+
+  // Sync Mastra messages to local messages state when using Mastra
+  useEffect(() => {
+    if (!enableMastra) return;
+
+    // Convert Mastra messages to local Message format
+    const convertedMessages: Message[] = mastraAgent.messages
+      .filter(m => m.role !== 'system')
+      .map(m => ({
+        id: m.id,
+        role: m.role as 'user' | 'assistant',
+        content: m.content,
+        timestamp: m.timestamp || new Date(),
+        data: m.toolCalls ? { toolCalls: m.toolCalls } : undefined,
+      }));
+
+    if (convertedMessages.length > 0) {
+      setMessages(convertedMessages);
+    }
+  }, [enableMastra, mastraAgent.messages]);
 
   const addMessage = useCallback((role: 'user' | 'assistant', content: string, intent?: DetectedIntent, data?: unknown, uiComponents?: UIComponentData[]) => {
     const newMessage: Message = {
@@ -561,24 +1020,58 @@ export function CoachSection({ goals, habits, onHabitCreated, onGoalCreated, onH
 
     const userInput = input.trim();
     setInput('');
-    setProcessing(true);
     setError(null);
 
+    // Use Mastra agent if enabled
+    if (enableMastra && authToken) {
+      setProcessing(true);
+      setActiveToolCall('default'); // Show generic processing indicator
+
+      // Initialize workflow steps for complex operations
+      if (userInput.includes('習慣') || userInput.includes('habit')) {
+        setWorkflowSteps([
+          { id: 'analyze', label: '解析', labelEn: 'Analyze', status: 'pending' },
+          { id: 'process', label: '処理', labelEn: 'Process', status: 'pending' },
+          { id: 'respond', label: '応答', labelEn: 'Respond', status: 'pending' },
+        ]);
+        setCurrentWorkflowStep(0);
+        setWorkflowSteps(prev => prev.map((step, idx) =>
+          idx === 0 ? { ...step, status: 'active' } : step
+        ));
+      }
+
+      try {
+        await mastraAgent.sendMessage(userInput);
+      } catch (err: unknown) {
+        const errorMsg = err instanceof Error ? err.message : locale === 'ja' ? 'エラーが発生しました' : 'An error occurred';
+        setError(errorMsg);
+      } finally {
+        setProcessing(false);
+        setActiveToolCall(null);
+        setWorkflowSteps([]);
+        setCurrentWorkflowStep(0);
+      }
+      return;
+    }
+
+    // Fallback to legacy API
+    setProcessing(true);
     addMessage('user', userInput);
 
     try {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session?.access_token) {
-        setError('認証が必要です');
-        addMessage('assistant', '認証が必要です。ログインしてください。');
+        const errMsg = locale === 'ja' ? '認証が必要です' : 'Authentication required';
+        setError(errMsg);
+        addMessage('assistant', locale === 'ja' ? '認証が必要です。ログインしてください。' : 'Authentication required. Please log in.');
         return;
       }
 
       await handleAIChat(session.access_token, userInput);
     } catch (err: unknown) {
-      const errorMsg = err instanceof Error ? err.message : 'エラーが発生しました';
+      const errorMsg = err instanceof Error ? err.message : locale === 'ja' ? 'エラーが発生しました' : 'An error occurred';
       setError(errorMsg);
-      addMessage('assistant', `エラー: ${errorMsg}`);
+      addMessage('assistant', `${locale === 'ja' ? 'エラー' : 'Error'}: ${errorMsg}`);
     } finally {
       setProcessing(false);
     }
@@ -612,37 +1105,69 @@ export function CoachSection({ goals, habits, onHabitCreated, onGoalCreated, onH
   }, [addMessage, handleAIChat]);
 
   const handleQuickAction = useCallback(async (choice: Choice) => {
-    const prompt = QUICK_ACTION_PROMPTS[choice.id];
+    const prompt = quickActionPrompts[choice.id];
     if (!prompt || !apiUrl) return;
-    
-    // レベル設定アクションは特別に処理
+
+    // Level assessment action is handled specially
     if (choice.id === 'assess-level') {
       addMessage('user', prompt);
       handleStartLevelAssessment();
       return;
     }
-    
+
     setInput('');
+    setError(null);
+
+    // Use Mastra agent if enabled
+    if (enableMastra && authToken) {
+      setProcessing(true);
+      setActiveToolCall('default');
+      try {
+        await mastraAgent.sendMessage(prompt);
+      } catch (err: unknown) {
+        const errorMsg = err instanceof Error ? err.message : locale === 'ja' ? 'エラーが発生しました' : 'An error occurred';
+        setError(errorMsg);
+      } finally {
+        setProcessing(false);
+        setActiveToolCall(null);
+      }
+      return;
+    }
+
+    // Fallback to legacy API
     setProcessing(true);
     addMessage('user', prompt);
 
     try {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session?.access_token) {
-        setError('認証が必要です');
-        addMessage('assistant', '認証が必要です。ログインしてください。');
+        const errMsg = locale === 'ja' ? '認証が必要です' : 'Authentication required';
+        setError(errMsg);
+        addMessage('assistant', locale === 'ja' ? '認証が必要です。ログインしてください。' : 'Authentication required. Please log in.');
         return;
       }
 
       await handleAIChat(session.access_token, prompt);
     } catch (err: unknown) {
-      const errorMsg = err instanceof Error ? err.message : 'エラーが発生しました';
+      const errorMsg = err instanceof Error ? err.message : locale === 'ja' ? 'エラーが発生しました' : 'An error occurred';
       setError(errorMsg);
-      addMessage('assistant', `エラー: ${errorMsg}`);
+      addMessage('assistant', `${locale === 'ja' ? 'エラー' : 'Error'}: ${errorMsg}`);
     } finally {
       setProcessing(false);
     }
-  }, [apiUrl, addMessage, handleAIChat, handleStartLevelAssessment]);
+  }, [apiUrl, addMessage, handleAIChat, handleStartLevelAssessment, enableMastra, authToken, mastraAgent, quickActionPrompts, locale]);
+
+  // Handler for contextual prompt selection
+  const handleContextualPromptSelect = useCallback((prompt: Choice) => {
+    // Convert contextual prompt to input and process
+    const promptText = prompt.description || prompt.label;
+    setInput(promptText);
+    // Trigger processing after a brief delay to show the input
+    setTimeout(() => {
+      const fakeEvent = { preventDefault: () => {} } as React.FormEvent;
+      handleProcess();
+    }, 100);
+  }, [handleProcess]);
 
   const handleClearConversation = () => {
     setShowClearConfirm(true);
@@ -650,6 +1175,10 @@ export function CoachSection({ goals, habits, onHabitCreated, onGoalCreated, onH
 
   const confirmClear = () => {
     setMessages([]);
+    // Also clear Mastra messages if enabled
+    if (enableMastra) {
+      mastraAgent.clearMessages();
+    }
     setHabitModalOpen(false);
     setHabitModalInitial(undefined);
     setGoalModalOpen(false);
@@ -659,6 +1188,9 @@ export function CoachSection({ goals, habits, onHabitCreated, onGoalCreated, onH
     setShowCoaching(false);
     setError(null);
     setShowClearConfirm(false);
+    setActiveToolCall(null);
+    setWorkflowSteps([]);
+    setCurrentWorkflowStep(0);
   };
 
   const handleSelectSuggestion = (suggestion: HabitSuggestion) => {
@@ -698,25 +1230,58 @@ export function CoachSection({ goals, habits, onHabitCreated, onGoalCreated, onH
               Admin
             </span>
           )}
+          {/* Mastra Connection Indicator */}
+          {enableMastra && (
+            <span
+              className={`w-2 h-2 rounded-full ${
+                mastraAgent.connectionState === 'streaming'
+                  ? 'bg-green-500 animate-pulse'
+                  : mastraAgent.connectionState === 'connecting'
+                  ? 'bg-yellow-500 animate-pulse'
+                  : mastraAgent.connectionState === 'error'
+                  ? 'bg-red-500'
+                  : 'bg-gray-400'
+              }`}
+              title={
+                mastraAgent.connectionState === 'streaming'
+                  ? locale === 'ja' ? 'ストリーミング中' : 'Streaming'
+                  : mastraAgent.connectionState === 'connecting'
+                  ? locale === 'ja' ? '接続中' : 'Connecting'
+                  : mastraAgent.connectionState === 'error'
+                  ? locale === 'ja' ? 'エラー' : 'Error'
+                  : locale === 'ja' ? '待機中' : 'Idle'
+              }
+            />
+          )}
         </h2>
         <div className="flex items-center gap-3">
           {hasAccess && tokenInfo && (
             <div className="text-xs text-muted-foreground">
-              残り: 約{Math.floor(tokenInfo.remaining / 1000)}回
+              {locale === 'ja' ? '残り' : 'Remaining'}: ~{Math.floor(tokenInfo.remaining / 1000)}{locale === 'ja' ? '回' : ' calls'}
             </div>
           )}
           {(isPro || isAdmin) && (
             <button
               onClick={() => setShowHistory(!showHistory)}
               className={`text-xs px-2 py-1 rounded transition-colors flex items-center gap-1 ${
-                showHistory 
-                  ? 'bg-primary/10 text-primary' 
+                showHistory
+                  ? 'bg-primary/10 text-primary'
                   : 'text-muted-foreground hover:text-foreground hover:bg-muted'
               }`}
-              title="AI提案履歴"
+              title={locale === 'ja' ? 'AI提案履歴' : 'AI Suggestion History'}
             >
               <span>📋</span>
-              <span className="hidden sm:inline">履歴</span>
+              <span className="hidden sm:inline">{locale === 'ja' ? '履歴' : 'History'}</span>
+            </button>
+          )}
+          {/* Cancel streaming button */}
+          {enableMastra && mastraAgent.isStreaming && (
+            <button
+              onClick={() => mastraAgent.cancelStream()}
+              className="text-xs px-2 py-1 text-red-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded transition-colors"
+              title={locale === 'ja' ? 'キャンセル' : 'Cancel'}
+            >
+              {locale === 'ja' ? '停止' : 'Stop'}
             </button>
           )}
           {messages.length > 0 && (
@@ -724,7 +1289,7 @@ export function CoachSection({ goals, habits, onHabitCreated, onGoalCreated, onH
               onClick={handleClearConversation}
               className="text-xs px-2 py-1 text-muted-foreground hover:text-foreground hover:bg-muted rounded transition-colors"
             >
-              クリア
+              {locale === 'ja' ? 'クリア' : 'Clear'}
             </button>
           )}
         </div>
@@ -760,12 +1325,35 @@ export function CoachSection({ goals, habits, onHabitCreated, onGoalCreated, onH
         <>
           {/* Chat Area - scrollable, with padding-bottom for fixed input */}
           <div className="flex-1 overflow-y-auto p-4 pb-40 md:pb-36">
+            {/* Workflow Progress Indicator */}
+            {workflowSteps.length > 0 && (
+              <div className="mb-4">
+                <WorkflowProgress
+                  steps={workflowSteps}
+                  currentStep={currentWorkflowStep}
+                  locale={locale}
+                />
+              </div>
+            )}
+
             {messages.length === 0 ? (
               /* Quick Actions - centered with more top spacing */
               <div className="flex flex-col items-center justify-center min-h-[300px] pt-12">
-                <p className="text-lg text-muted-foreground mb-6 text-center">何をお手伝いしましょうか？</p>
+                <p className="text-lg text-muted-foreground mb-6 text-center">
+                  {locale === 'ja' ? '何をお手伝いしましょうか？' : 'How can I help you?'}
+                </p>
+
+                {/* Contextual Prompts based on user data */}
+                {contextualPrompts.length > 0 && (
+                  <ContextualPromptsSection
+                    prompts={contextualPrompts}
+                    onSelect={handleContextualPromptSelect}
+                    locale={locale}
+                  />
+                )}
+
                 <ChoiceButtons
-                  choices={DEFAULT_QUICK_ACTIONS}
+                  choices={quickActions}
                   onSelect={handleQuickAction}
                   layout="vertical"
                   size="md"
@@ -775,34 +1363,43 @@ export function CoachSection({ goals, habits, onHabitCreated, onGoalCreated, onH
             ) : (
               /* Conversation History */
               <div className="space-y-4">
-                {messages.map((msg) => (
-                  <div key={msg.id} className="space-y-2">
-                    <div className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                      <div
-                        className={`max-w-[95%] md:max-w-[85%] px-4 py-3 rounded-xl text-base whitespace-pre-wrap break-words ${
-                          msg.role === 'user'
-                            ? 'bg-primary text-primary-foreground rounded-br-sm'
-                            : 'bg-muted border border-border rounded-bl-sm'
-                        }`}
-                      >
-                        {msg.content}
+                {messages.map((msg) => {
+                  // Check for tool calls in message data (from Mastra)
+                  const toolCalls = (msg.data as { toolCalls?: ToolCallResult[] })?.toolCalls;
+
+                  return (
+                    <div key={msg.id} className="space-y-2">
+                      <div className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                        <div
+                          className={`max-w-[95%] md:max-w-[85%] px-4 py-3 rounded-xl text-base whitespace-pre-wrap break-words ${
+                            msg.role === 'user'
+                              ? 'bg-primary text-primary-foreground rounded-br-sm'
+                              : 'bg-muted border border-border rounded-bl-sm'
+                          }`}
+                        >
+                          {msg.content}
+                          {/* Tool Call Visualization for assistant messages */}
+                          {msg.role === 'assistant' && toolCalls && toolCalls.length > 0 && (
+                            <ToolCallVisualization toolCalls={toolCalls} locale={locale} />
+                          )}
+                        </div>
                       </div>
+                      {/* UI Components */}
+                      {msg.uiComponents && msg.uiComponents.length > 0 && (
+                        <div className="space-y-2 ml-2">
+                          {msg.uiComponents.map((comp, idx) => (
+                            <UIComponentRenderer
+                              key={`${msg.id}-ui-${idx}`}
+                              component={comp}
+                              onChoiceSelect={handleChoiceSelect}
+                            />
+                          ))}
+                        </div>
+                      )}
                     </div>
-                    {/* UI Components */}
-                    {msg.uiComponents && msg.uiComponents.length > 0 && (
-                      <div className="space-y-2 ml-2">
-                        {msg.uiComponents.map((comp, idx) => (
-                          <UIComponentRenderer
-                            key={`${msg.id}-ui-${idx}`}
-                            component={comp}
-                            onChoiceSelect={handleChoiceSelect}
-                          />
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                ))}
-              
+                  );
+                })}
+
                 {/* Level Assessment Slider UI */}
                 {levelAssessmentHabit && (
                   <div className="mt-4">
@@ -817,22 +1414,43 @@ export function CoachSection({ goals, habits, onHabitCreated, onGoalCreated, onH
                   </div>
                 )}
 
-                {/* Loading indicator when processing */}
-                {processing && (
+                {/* Streaming/Processing indicator */}
+                {(processing || mastraAgent.isStreaming) && (
                   <div className="flex justify-start">
                     <div className="px-4 py-3 rounded-xl bg-muted border border-border rounded-bl-sm">
-                      <div className="flex items-center gap-2">
-                        <div className="flex gap-1">
-                          <span className="w-2 h-2 bg-primary rounded-full animate-bounce [animation-delay:0ms]"></span>
-                          <span className="w-2 h-2 bg-primary rounded-full animate-bounce [animation-delay:150ms]"></span>
-                          <span className="w-2 h-2 bg-primary rounded-full animate-bounce [animation-delay:300ms]"></span>
+                      {activeToolCall ? (
+                        <StreamingIndicator toolName={activeToolCall} locale={locale} />
+                      ) : (
+                        <div className="flex items-center gap-2">
+                          <div className="flex gap-1">
+                            <span className="w-2 h-2 bg-primary rounded-full animate-bounce [animation-delay:0ms]"></span>
+                            <span className="w-2 h-2 bg-primary rounded-full animate-bounce [animation-delay:150ms]"></span>
+                            <span className="w-2 h-2 bg-primary rounded-full animate-bounce [animation-delay:300ms]"></span>
+                          </div>
+                          <span className="text-sm text-muted-foreground">
+                            {locale === 'ja' ? '考え中...' : 'Thinking...'}
+                          </span>
                         </div>
-                        <span className="text-sm text-muted-foreground">考え中...</span>
-                      </div>
+                      )}
                     </div>
                   </div>
                 )}
-                
+
+                {/* Error retry button for Mastra */}
+                {enableMastra && mastraAgent.error && (
+                  <div className="flex justify-start">
+                    <button
+                      onClick={() => mastraAgent.retry()}
+                      className="text-sm text-primary hover:text-primary/80 flex items-center gap-1"
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                      </svg>
+                      {locale === 'ja' ? '再試行' : 'Retry'}
+                    </button>
+                  </div>
+                )}
+
                 <div ref={messagesEndRef} />
               </div>
             )}
@@ -880,13 +1498,15 @@ export function CoachSection({ goals, habits, onHabitCreated, onGoalCreated, onH
           {goals.length > 1 && (
             <div className="absolute bottom-24 md:bottom-20 left-0 right-0 px-4 py-2 bg-muted/30 border-t border-border">
               <div className="flex items-center gap-2">
-                <label className="text-xs text-muted-foreground">提案対象ゴール:</label>
+                <label className="text-xs text-muted-foreground">
+                  {locale === 'ja' ? '提案対象ゴール:' : 'Target Goal:'}
+                </label>
                 <select
                   value={selectedGoalId}
                   onChange={(e) => setSelectedGoalId(e.target.value)}
                   className="text-xs px-2 py-1 rounded border border-input bg-background"
                 >
-                  <option value="">自動選択</option>
+                  <option value="">{locale === 'ja' ? '自動選択' : 'Auto-select'}</option>
                   {goals.map((goal) => (
                     <option key={goal.id} value={goal.id}>{goal.name}</option>
                   ))}
@@ -898,8 +1518,16 @@ export function CoachSection({ goals, habits, onHabitCreated, onGoalCreated, onH
           {/* Input Area - FIXED at absolute bottom */}
           <div className="absolute bottom-0 left-0 right-0 border-t border-border bg-card p-3 md:p-4">
             {error && (
-              <div className="mb-2 p-2 bg-destructive/10 border border-destructive/20 rounded-md text-sm text-destructive">
-                {error}
+              <div className="mb-2 p-2 bg-destructive/10 border border-destructive/20 rounded-md text-sm text-destructive flex items-center justify-between">
+                <span>{error}</span>
+                <button
+                  onClick={() => setError(null)}
+                  className="text-destructive/70 hover:text-destructive"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
               </div>
             )}
             <div className="flex gap-2 md:gap-3 items-end">
@@ -907,12 +1535,16 @@ export function CoachSection({ goals, habits, onHabitCreated, onGoalCreated, onH
                 ref={textareaRef}
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
-                placeholder={messages.length === 0 
-                  ? "例: 毎朝7時に30分ジョギングする"
-                  : "続けて入力..."
+                placeholder={messages.length === 0
+                  ? locale === 'ja'
+                    ? '例: 毎朝7時に30分ジョギングする'
+                    : 'e.g., Jog for 30 minutes at 7am every day'
+                  : locale === 'ja'
+                    ? '続けて入力...'
+                    : 'Continue typing...'
                 }
                 className="flex-1 min-h-[44px] md:min-h-[52px] max-h-[100px] px-3 md:px-4 py-2 md:py-3 rounded-lg border border-input bg-background text-base resize-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
-                disabled={processing}
+                disabled={processing || mastraAgent.isStreaming}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter' && !e.shiftKey) {
                     e.preventDefault();
@@ -922,10 +1554,10 @@ export function CoachSection({ goals, habits, onHabitCreated, onGoalCreated, onH
               />
               <button
                 onClick={handleProcess}
-                disabled={processing || !input.trim()}
+                disabled={processing || mastraAgent.isStreaming || !input.trim()}
                 className="px-4 md:px-6 py-2 md:py-3 min-h-[44px] bg-primary text-primary-foreground rounded-lg font-medium hover:opacity-90 disabled:opacity-50 transition-opacity"
               >
-                {processing ? '...' : '送信'}
+                {processing || mastraAgent.isStreaming ? '...' : locale === 'ja' ? '送信' : 'Send'}
               </button>
             </div>
           </div>

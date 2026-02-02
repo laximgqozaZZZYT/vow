@@ -182,6 +182,7 @@ export interface AuthContext {
   userId: string | null; // ユーザーID
   isAdmin: boolean; // 管理者かどうか
   isPremium: boolean; // 有料プランユーザーかどうか
+  authToken: string | null; // 認証トークン (API呼び出し用)
   migrationStatus: 'idle' | 'checking' | 'migrating' | 'success' | 'error';
   migrationResult: GuestDataMigrationResult | null;
   migrationError: string | null;

@@ -16,14 +16,16 @@ export interface GanttTimelineHeaderProps {
   cells: TimelineCell[];
   /** Current view mode */
   viewMode: ViewMode;
-  /** Callback to change view mode */
-  onViewModeChange: (mode: ViewMode) => void;
+  /** Callback to change view mode (optional - controls may be external) */
+  onViewModeChange?: (mode: ViewMode) => void;
   /** Header height in pixels */
   headerHeight: number;
   /** X position of today */
   todayPosition: number;
-  /** Callback to scroll to today */
-  onScrollToToday: () => void;
+  /** Callback to scroll to today (optional - controls may be external) */
+  onScrollToToday?: () => void;
+  /** Whether to show inline controls (default: false - controls are now in the fixed toolbar) */
+  showControls?: boolean;
 }
 
 /**
@@ -70,50 +72,58 @@ function GanttTimelineHeaderComponent({
   onViewModeChange,
   headerHeight,
   todayPosition,
-  onScrollToToday
+  onScrollToToday,
+  showControls = false
 }: GanttTimelineHeaderProps) {
+  // Calculate header height based on whether controls are shown
+  const controlsHeight = showControls ? 24 : 0;
+  const cellsHeight = 24;
+  const totalHeight = showControls ? headerHeight : cellsHeight;
+
   return (
     <div
-      className="sticky top-0 z-10 bg-card border-b border-border"
-      style={{ height: headerHeight }}
+      className="bg-card border-b border-border"
+      style={{ height: totalHeight }}
     >
-      {/* Controls Row */}
-      <div className="flex items-center justify-between px-1 py-0.5 border-b border-border bg-muted/50">
-        <div className="flex items-center gap-0.5">
-          <ViewModeButton
-            mode="day"
-            currentMode={viewMode}
-            label="日"
-            onClick={() => onViewModeChange('day')}
-          />
-          <ViewModeButton
-            mode="week"
-            currentMode={viewMode}
-            label="週"
-            onClick={() => onViewModeChange('week')}
-          />
-          <ViewModeButton
-            mode="month"
-            currentMode={viewMode}
-            label="月"
-            onClick={() => onViewModeChange('month')}
-          />
+      {/* Controls Row - Only shown if showControls is true */}
+      {showControls && onViewModeChange && onScrollToToday && (
+        <div className="flex items-center justify-between px-1 py-0.5 border-b border-border bg-muted/50">
+          <div className="flex items-center gap-0.5">
+            <ViewModeButton
+              mode="day"
+              currentMode={viewMode}
+              label="日"
+              onClick={() => onViewModeChange('day')}
+            />
+            <ViewModeButton
+              mode="week"
+              currentMode={viewMode}
+              label="週"
+              onClick={() => onViewModeChange('week')}
+            />
+            <ViewModeButton
+              mode="month"
+              currentMode={viewMode}
+              label="月"
+              onClick={() => onViewModeChange('month')}
+            />
+          </div>
+
+          <button
+            onClick={onScrollToToday}
+            className="
+              px-1.5 py-0.5 text-[10px] font-medium
+              bg-primary/10 text-primary
+              rounded hover:bg-primary/20
+              transition-colors
+              focus-visible:outline-2 focus-visible:outline-primary
+            "
+          >
+            今日
+          </button>
         </div>
-        
-        <button
-          onClick={onScrollToToday}
-          className="
-            px-1.5 py-0.5 text-[10px] font-medium
-            bg-primary/10 text-primary
-            rounded hover:bg-primary/20
-            transition-colors
-            focus-visible:outline-2 focus-visible:outline-primary
-          "
-        >
-          今日
-        </button>
-      </div>
-      
+      )}
+
       {/* Timeline Cells */}
       <div className="flex h-6">
         {cells.map((cell, index) => (

@@ -31,6 +31,7 @@ import { jobsRouter } from './routers/jobs.js';
 import { userLevelRouter } from './routers/userLevel.js';
 import { createXPRecoveryRouter } from './routers/xpRecoveryRoutes.js';
 import { createLevelConfigRouter } from './routers/levelConfig.js';
+import { createMcpConnectionsRouter } from './routers/mcpConnections.js';
 // Error handling imports
 import { AppError, getUserFriendlyMessage } from './errors/index.js';
 import { getLogger } from './utils/logger.js';
@@ -233,6 +234,11 @@ export function createApp() {
     // Requirements (level-system-rebalancing): 7.1, 7.2, 10.2, 10.3, 10.4
     const levelConfigRouter = createLevelConfigRouter();
     app.route('/api', levelConfigRouter);
+    // MCP Connections router - mounted at /api/mcp-connections
+    // Endpoints: GET/PUT/DELETE /api/mcp-connections
+    // Note: User-specific MCP server connection settings stored in DynamoDB
+    const mcpConnectionsRouter = createMcpConnectionsRouter();
+    app.route('/api/mcp-connections', mcpConnectionsRouter);
     logger.info('Application initialized', {
         version: settings.appVersion,
         debug: settings.debug,

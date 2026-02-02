@@ -36,6 +36,11 @@ import { userLevelRouter } from './routers/userLevel.js';
 import { createXPRecoveryRouter } from './routers/xpRecoveryRoutes.js';
 import { createLevelConfigRouter } from './routers/levelConfig.js';
 import { createMcpConnectionsRouter } from './routers/mcpConnections.js';
+import { createRagRouter } from './routers/rag.js';
+import { createAgentsRouter } from './routers/agents.js';
+import { createSuggestionsRouter } from './routers/suggestions.js';
+import { createConversationsRouter } from './routers/conversations.js';
+import { createCredentialsRouter } from './routers/credentials.js';
 
 // Error handling imports
 import { AppError, getUserFriendlyMessage } from './errors/index.js';
@@ -294,6 +299,47 @@ export function createApp(): Hono {
   // Note: User-specific MCP server connection settings stored in DynamoDB
   const mcpConnectionsRouter = createMcpConnectionsRouter();
   app.route('/api/mcp-connections', mcpConnectionsRouter);
+
+  // RAG router - mounted at /api/rag
+  // Endpoints: POST /api/rag/search
+  // Note: Semantic search using embeddings for habits, goals, diary, activities
+  // Requirements: C-003 - RAG Search API
+  const ragRouter = createRagRouter();
+  app.route('/api/rag', ragRouter);
+
+  // Agents router - mounted at /api/agents
+  // Endpoints: POST /api/agents/chat, POST /api/agents/tasks,
+  //            GET /api/agents/status, POST /api/agents/workflow/:workflowId,
+  //            GET /api/agents/orchestration-log
+  // Note: Unified AI agents API (VowCoachAgent, TaskOrchestratorAgent, workflows)
+  // Requirements: B-005, B-006, B-007, B-008
+  const agentsRouter = createAgentsRouter();
+  app.route('/api/agents', agentsRouter);
+
+  // Suggestions router - mounted at /api/suggestions
+  // Endpoints: POST /api/suggestions, GET /api/suggestions,
+  //            PATCH /api/suggestions/:id, DELETE /api/suggestions/:id,
+  //            POST /api/suggestions/:id/snooze, GET /api/suggestions/stats
+  // Note: Deferred AI suggestions management (when user selects "Later")
+  // Requirements: MOC-001 (Suggestion save/restore)
+  const suggestionsRouter = createSuggestionsRouter();
+  app.route('/api/suggestions', suggestionsRouter);
+
+  // Conversations router - mounted at /api/conversations
+  // Endpoints: GET /api/conversations, GET /api/conversations/:id,
+  //            DELETE /api/conversations/:id, GET /api/conversations/:id/messages,
+  //            GET /api/conversations/stats
+  // Note: AI conversation history management (Premium feature)
+  // Requirements: MOC-002 (Conversation history persistence)
+  const conversationsRouter = createConversationsRouter();
+  app.route('/api/conversations', conversationsRouter);
+
+  // Credentials router - mounted at /api/credentials
+  // Endpoints: GET /api/credentials/:type, POST /api/credentials/:type,
+  //            DELETE /api/credentials/:type
+  // Note: Encrypted storage of user API credentials (OpenAI, etc.)
+  const credentialsRouter = createCredentialsRouter();
+  app.route('/api/credentials', credentialsRouter);
 
   logger.info('Application initialized', {
     version: settings.appVersion,

@@ -23,7 +23,7 @@ import React from "react"
 import { supabaseDirectClient } from '../../../lib/supabase-direct'
 import { supabase } from '../../../lib/supabaseClient'
 import { debug } from '../../../lib/debug'
-import StickyFooter from './Widget.StickyFooter'
+import StickyFooter, { ModalHeaderButtons } from './Widget.StickyFooter'
 import { useLocale } from '@/contexts/LocaleContext'
 import { type LevelVariables } from './Widget.LevelAssessmentSliders'
 
@@ -466,7 +466,16 @@ export function HabitModal({
       <div className="w-full max-w-[720px] rounded-lg border border-border bg-card px-3 sm:px-4 pt-3 sm:pt-4 pb-0 shadow-lg text-card-foreground flex flex-col max-h-[98vh] sm:max-h-[95vh] md:max-h-[90vh]">
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-xl sm:text-2xl font-semibold">{t('habit.title')}</h2>
-          <button onClick={onClose} className="text-muted-foreground hover:text-foreground text-lg sm:text-xl p-2 min-w-[44px] min-h-[44px] flex items-center justify-center transition-colors" aria-label="Close modal">✕</button>
+          <div className="flex items-center gap-2">
+            <ModalHeaderButtons
+              onSave={handleSave}
+              onCancel={onClose}
+              onDelete={habit ? handleDelete : undefined}
+              saveDisabled={!name.trim()}
+              deleteConfirmMessage="Are you sure you want to delete this habit?"
+            />
+            <button onClick={onClose} className="hidden sm:flex text-muted-foreground hover:text-foreground text-lg sm:text-xl p-2 min-w-[44px] min-h-[44px] items-center justify-center transition-colors" aria-label="Close modal">✕</button>
+          </div>
         </div>
         <TabNavigation tabs={HABIT_MODAL_TABS} activeTab={activeTab} onTabChange={setActiveTab} hasErrors={tabErrors} />
         <style>{`
@@ -492,8 +501,8 @@ export function HabitModal({
             }
           }
         `}</style>
-        <div 
-          className="mt-4 habit-scroll-area habit-tab-content overflow-auto flex-1 pr-2" 
+        <div
+          className="mt-4 habit-scroll-area habit-tab-content overflow-auto flex-1 pr-2 modern-scrollbar"
           {...swipeHandlers} 
           style={{ 
             transform: isDragging ? `translateX(${swipeOffset}px)` : undefined, 

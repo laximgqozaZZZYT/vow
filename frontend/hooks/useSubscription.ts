@@ -62,6 +62,7 @@ export const PLAN_CONFIGS: Record<PlanType, PlanConfig> = {
       'Workload coaching (rule-based)',
       'Notice section',
       'Web push notifications',
+      'MOC with your own API key',
     ],
     featuresJa: [
       '基本的なHabit管理',
@@ -70,6 +71,7 @@ export const PLAN_CONFIGS: Record<PlanType, PlanConfig> = {
       'Workloadコーチング（ルールベース）',
       'Notice Section',
       'Web Push通知',
+      'MOC（自前のAPIキー使用）',
     ],
   },
   premium_basic: {
@@ -79,14 +81,14 @@ export const PLAN_CONFIGS: Record<PlanType, PlanConfig> = {
     price: 980,
     features: [
       'All Free features',
+      'MOC Multi-Agent AI (server-hosted)',
       'Natural language habit creation',
-      'Natural language habit editing',
       'Token usage dashboard',
     ],
     featuresJa: [
       'フリープランの全機能',
+      'MOC マルチエージェントAI（サーバー提供）',
       '自然言語でHabit登録',
-      '自然言語でHabit編集',
       'トークン使用量ダッシュボード',
     ],
     estimatedOperations: 500,
@@ -99,13 +101,13 @@ export const PLAN_CONFIGS: Record<PlanType, PlanConfig> = {
     price: 1980,
     features: [
       'All Premium Basic features',
-      'AI habit suggestions for goals',
+      'Unlimited MOC conversations',
       'AI suggestion history',
       'Priority support',
     ],
     featuresJa: [
       'プレミアム ベーシックの全機能',
-      'Goal向けAI Habit提案',
+      'MOC会話無制限',
       'AI提案履歴',
       '優先サポート',
     ],

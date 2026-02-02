@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import type { Goal, Habit, Tag, Sticky } from '../types/index';
 import api from '../../../lib/api';
 import SmartSelector, { SmartSelectorItem } from './Widget.SmartSelector';
-import StickyFooter from './Widget.StickyFooter';
+import StickyFooter, { ModalHeaderButtons } from './Widget.StickyFooter';
 import { getAvailableParents, MAX_NESTING_DEPTH } from '../hooks/useNestedStickies';
 
 /**
@@ -339,15 +339,25 @@ export function StickyModal({
           <h2 className="text-xl font-semibold">
             {sticky ? 'Edit Sticky\'n' : 'New Sticky\'n'}
           </h2>
-          <button
-            onClick={onClose}
-            className="text-muted-foreground hover:text-foreground p-2 min-w-[44px] min-h-[44px] flex items-center justify-center rounded-md transition-colors"
-            aria-label="Close"
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-            </svg>
-          </button>
+          <div className="flex items-center gap-2">
+            <ModalHeaderButtons
+              onSave={handleSave}
+              onCancel={onClose}
+              onDelete={sticky ? handleDelete : undefined}
+              saveDisabled={!name.trim()}
+              isLoading={loading}
+              deleteConfirmMessage="Are you sure you want to delete this sticky?"
+            />
+            <button
+              onClick={onClose}
+              className="hidden sm:flex text-muted-foreground hover:text-foreground p-2 min-w-[44px] min-h-[44px] items-center justify-center rounded-md transition-colors"
+              aria-label="Close"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
         </div>
 
         {/* スクロール可能なコンテンツ - フッター分の余白を確保 */}

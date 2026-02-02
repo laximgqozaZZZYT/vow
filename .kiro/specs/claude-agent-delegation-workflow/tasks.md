@@ -154,6 +154,60 @@ KIROで作成したSPECをClaude AIエージェントに委任するためのワ
   - [x] 14.4 Remote collaboration guide
     - Created: templates/remote-collaboration-guide.md
 
+## MCP Multi-Agent Scale System (10-20 Agents)
+
+- [x] 15. Create MCP Task Distribution Server
+  - [x] 15.1 Central HTTP+SSE server for task management
+    - Created: /home/ubuntu/mcp-multi-agent/mcp-task-distributor/src/server.ts
+    - Port: 3456, Host: 0.0.0.0
+  - [x] 15.2 MCP Bridge for Claude Code integration
+    - Created: /home/ubuntu/mcp-multi-agent/mcp-task-distributor/src/mcp-bridge.ts
+  - [x] 15.3 Task types and API definitions
+    - Created: /home/ubuntu/mcp-multi-agent/mcp-task-distributor/src/types.ts
+
+- [x] 16. Create Multi-Machine Setup Scripts
+  - [x] 16.1 Main setup script (1-20 agents)
+    - Created: /home/ubuntu/mcp-multi-agent/setup_multi_agent.sh
+  - [x] 16.2 MCP configuration template
+    - Created: /home/ubuntu/mcp-multi-agent/mcp-config.json
+  - [x] 16.3 Server configuration
+    - Created: /home/ubuntu/mcp-multi-agent/config/server.env
+    - URL: http://192.168.2.126:3456
+  - [x] 16.4 Agent role prompts
+    - Created: /home/ubuntu/mcp-multi-agent/prompts/
+
+- [x] 17. Create MCP Multi-Agent Documentation
+  - [x] 17.1 README with architecture diagram
+    - Created: /home/ubuntu/mcp-multi-agent/README.md
+  - [x] 17.2 Remote machine connection guide
+    - Included in README.md
+
+- [x] 18. VOW Project Integration
+  - [x] 18.1 Create VOW-specific multi-agent launcher
+    - Created: scripts/agents/multi-agent-launcher.sh
+  - [x] 18.2 Link MCP server from VOW scripts
+    - Launcher uses /home/ubuntu/mcp-multi-agent
+  - [x] 18.3 Update CLAUDE.md with MCP multi-agent usage
+    - Updated: CLAUDE.md with full MCP Multi-Agent Scale System section
+
+- [x] 19. Manager Agent Capabilities
+  - [x] 19.1 Add trust management types
+    - Updated: mcp-task-distributor/src/types.ts
+    - Added: TrustedMachine, TrustLevel, TrustRequest, LDAPConfig, Project
+  - [x] 19.2 Implement trust management API
+    - Updated: mcp-task-distributor/src/server.ts
+    - Endpoints: /trust/machines, /agents/invite, /agents/:id/remove
+  - [x] 19.3 Add manager MCP tools
+    - Updated: mcp-task-distributor/src/mcp-bridge.ts
+    - Tools: list_trusted_machines, add_trusted_machine, invite_agent, etc.
+  - [x] 19.4 LDAP integration support
+    - Added: config/ldap.example.env
+    - Endpoints: /config/ldap (GET/PUT), /config/ldap/test
+  - [x] 19.5 Manager documentation
+    - Created: prompts/manager-guide.md
+    - Created: docs/remote-agent-guide.md
+    - Updated: README.md with manager features
+
 ## Notes
 
 - Tasks marked with `*` are optional and can be skipped for faster MVP

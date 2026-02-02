@@ -1,33 +1,33 @@
 /**
  * useMultiAgentServer Hook
  *
- * Provides connection to the MCP Multi-Agent Task Server.
+ * Provides connection to multiple MCP Multi-Agent Task Servers.
  * Features:
+ * - Multiple server configurations
+ * - Simultaneous connections to multiple servers
+ * - Aggregated data from all connected servers
  * - REST API for agents, tasks, dashboard
  * - SSE connection for real-time updates
  * - Automatic reconnection
- * - Configuration persistence
+ * - Configuration persistence (DynamoDB + localStorage)
  *
  * @module hooks/useMultiAgentServer
  */
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import type {
   Agent,
   AgentTask,
   AgentActivity,
   AgentRole,
-  SSEEventType,
+  McpServer,
   MultiAgentConfig,
-  TrustedMachine,
+  LegacyMultiAgentConfig,
 } from '../types/agent.types';
 
 // Default configuration
 const DEFAULT_CONFIG: MultiAgentConfig = {
-  enabled: false,
-  serverUrl: '', // User must configure their own MCP server URL
-  serverToken: '',
-  autoConnect: true,
+  servers: [],
   showInDashboard: true,
   notifyOnTaskComplete: true,
   notifyOnAgentOffline: true,
@@ -68,56 +68,112 @@ export interface DashboardStats {
     totalCapacity: number;
     usedCapacity: number;
   };
-  recentTasks?: Array<{
-    id: string;
-    title: string;
-    status: string;
-    assignedTo: string | null;
-  }>;
+}
+
+// Per-server connection state
+export interface ServerConnection {
+  serverId: string;
+  serverName: string;
+  connectionState: ConnectionState;
+  error: string | null;
+  agents: Agent[];
+  tasks: AgentTask[];
+  activities: AgentActivity[];
+  stats: DashboardStats | null;
 }
 
 // SSE Event data
 interface SSEEvent {
-  type: SSEEventType;
+  type: string;
   timestamp: string;
   data: unknown;
 }
 
 // Hook return type
 export interface UseMultiAgentServerReturn {
-  // Connection state
-  connectionState: ConnectionState;
-  error: string | null;
-
   // Config
   config: MultiAgentConfig;
   updateConfig: (updates: Partial<MultiAgentConfig>) => void;
 
+  // Server management
+  addServer: (server: Omit<McpServer, 'id'>) => string;
+  updateServer: (serverId: string, updates: Partial<McpServer>) => void;
+  removeServer: (serverId: string) => void;
+
   // Connection control
-  connect: () => Promise<void>;
-  disconnect: () => void;
+  connectServer: (serverId: string) => Promise<void>;
+  disconnectServer: (serverId: string) => void;
+  connectAllEnabled: () => Promise<void>;
+  disconnectAll: () => void;
 
-  // Data
-  agents: Agent[];
-  tasks: AgentTask[];
-  activities: AgentActivity[];
+  // Aggregated data (from all connected servers)
+  agents: (Agent & { serverId: string; serverName: string })[];
+  tasks: (AgentTask & { serverId: string; serverName: string })[];
+  activities: (AgentActivity & { serverId: string; serverName: string })[];
   stats: DashboardStats | null;
-  machines: TrustedMachine[];
 
-  // API methods
-  refreshData: () => Promise<void>;
-  createTask: (task: Partial<AgentTask>) => Promise<AgentTask | null>;
-  assignTask: (taskId: string, agentId: string) => Promise<boolean>;
-  registerAgent: (name: string, role: AgentRole, capabilities?: string[]) => Promise<string | null>;
-  sendHeartbeat: (agentId: string, status?: 'idle' | 'busy' | 'offline') => Promise<boolean>;
+  // Per-server state
+  connections: Map<string, ServerConnection>;
+  getServerState: (serverId: string) => ServerConnection | undefined;
+
+  // Overall connection state (connected if any server is connected)
+  connectionState: ConnectionState;
+  error: string | null;
 
   // Utilities
-  getAgentById: (id: string) => Agent | undefined;
-  getTaskById: (id: string) => AgentTask | undefined;
+  refreshData: () => Promise<void>;
+  createTask: (serverId: string, task: Partial<AgentTask> & { assignTo?: string }) => Promise<AgentTask | null>;
+  assignTask: (serverId: string, taskId: string, agentId: string) => Promise<boolean>;
+
+  // Deprecated compatibility (for existing code that expects single server)
+  /** @deprecated Use connectServer instead */
+  connect: () => Promise<void>;
+  /** @deprecated Use disconnectAll instead */
+  disconnect: () => void;
 }
 
 /**
- * Load config from localStorage (fallback for non-authenticated users)
+ * Hook options
+ */
+interface UseMultiAgentServerOptions {
+  /** Auth token for backend API (from Supabase session) */
+  authToken?: string | null;
+}
+
+/**
+ * Check if config is legacy format
+ */
+function isLegacyConfig(config: unknown): config is LegacyMultiAgentConfig {
+  return typeof config === 'object' && config !== null && 'serverUrl' in config && !('servers' in config);
+}
+
+/**
+ * Migrate legacy config to new format
+ */
+function migrateLegacyConfig(legacy: LegacyMultiAgentConfig): MultiAgentConfig {
+  const servers: McpServer[] = [];
+
+  if (legacy.serverUrl) {
+    servers.push({
+      id: crypto.randomUUID(),
+      name: 'Default Server',
+      serverUrl: legacy.serverUrl,
+      serverToken: legacy.serverToken || '',
+      enabled: legacy.enabled,
+      autoConnect: legacy.autoConnect,
+    });
+  }
+
+  return {
+    servers,
+    showInDashboard: legacy.showInDashboard ?? true,
+    notifyOnTaskComplete: legacy.notifyOnTaskComplete ?? true,
+    notifyOnAgentOffline: legacy.notifyOnAgentOffline ?? true,
+  };
+}
+
+/**
+ * Load config from localStorage (fallback)
  */
 function loadConfigFromLocalStorage(): MultiAgentConfig {
   if (typeof window === 'undefined') return DEFAULT_CONFIG;
@@ -125,7 +181,12 @@ function loadConfigFromLocalStorage(): MultiAgentConfig {
   try {
     const stored = localStorage.getItem(CONFIG_STORAGE_KEY);
     if (stored) {
-      return { ...DEFAULT_CONFIG, ...JSON.parse(stored) };
+      const parsed = JSON.parse(stored);
+      // Check for legacy format
+      if (isLegacyConfig(parsed)) {
+        return migrateLegacyConfig(parsed);
+      }
+      return { ...DEFAULT_CONFIG, ...parsed };
     }
   } catch (e) {
     console.error('[useMultiAgentServer] Failed to load config from localStorage:', e);
@@ -134,7 +195,7 @@ function loadConfigFromLocalStorage(): MultiAgentConfig {
 }
 
 /**
- * Save config to localStorage (fallback for non-authenticated users)
+ * Save config to localStorage
  */
 function saveConfigToLocalStorage(config: MultiAgentConfig): void {
   if (typeof window === 'undefined') return;
@@ -148,7 +209,6 @@ function saveConfigToLocalStorage(config: MultiAgentConfig): void {
 
 /**
  * Load config from backend API (DynamoDB)
- * Falls back to localStorage if API is not available
  */
 async function loadConfigFromBackend(authToken: string | null): Promise<MultiAgentConfig> {
   if (!authToken || !BACKEND_API_URL) {
@@ -165,13 +225,34 @@ async function loadConfigFromBackend(authToken: string | null): Promise<MultiAge
     if (response.ok) {
       const result = await response.json();
       if (result.success && result.data) {
-        // Merge with defaults and localStorage (for serverToken which is masked from API)
+        const apiConfig = result.data;
+
+        // Handle migration flag from server
+        if (result.migrated) {
+          console.log('[useMultiAgentServer] Config migrated from legacy format');
+        }
+
+        // Merge tokens from localStorage (since API returns masked tokens)
         const localConfig = loadConfigFromLocalStorage();
+        const localServerById = new Map(localConfig.servers.map(s => [s.id, s]));
+        const localServerByUrl = new Map(localConfig.servers.map(s => [s.serverUrl, s]));
+
+        // Restore tokens where API returned masked values
+        const serversWithTokens = apiConfig.servers.map((server: McpServer & { hasToken?: boolean }) => {
+          if (server.hasToken && server.serverToken === '********') {
+            // Try to find matching server by ID first, then by URL (for migration cases)
+            const localServer = localServerById.get(server.id) || localServerByUrl.get(server.serverUrl);
+            if (localServer?.serverToken && localServer.serverToken !== '********') {
+              return { ...server, serverToken: localServer.serverToken };
+            }
+          }
+          return server;
+        });
+
         return {
           ...DEFAULT_CONFIG,
-          ...result.data,
-          // Use local token if API returns masked token
-          serverToken: result.data.hasToken ? localConfig.serverToken : '',
+          ...apiConfig,
+          servers: serversWithTokens,
         };
       }
     }
@@ -184,7 +265,6 @@ async function loadConfigFromBackend(authToken: string | null): Promise<MultiAge
 
 /**
  * Save config to backend API (DynamoDB)
- * Also saves to localStorage for offline access
  */
 async function saveConfigToBackend(config: MultiAgentConfig, authToken: string | null): Promise<void> {
   // Always save to localStorage as fallback
@@ -209,34 +289,19 @@ async function saveConfigToBackend(config: MultiAgentConfig, authToken: string |
 }
 
 /**
- * Hook options
- */
-interface UseMultiAgentServerOptions {
-  /** Auth token for backend API (from Supabase session) */
-  authToken?: string | null;
-}
-
-/**
- * Hook for connecting to the Multi-Agent Task Server
+ * Hook for connecting to multiple MCP Task Servers
  */
 export function useMultiAgentServer(options?: UseMultiAgentServerOptions): UseMultiAgentServerReturn {
   const authToken = options?.authToken ?? null;
 
   // State
   const [config, setConfig] = useState<MultiAgentConfig>(DEFAULT_CONFIG);
-  const [connectionState, setConnectionState] = useState<ConnectionState>('disconnected');
-  const [error, setError] = useState<string | null>(null);
-  const [agents, setAgents] = useState<Agent[]>([]);
-  const [tasks, setTasks] = useState<AgentTask[]>([]);
-  const [activities, setActivities] = useState<AgentActivity[]>([]);
-  const [stats, setStats] = useState<DashboardStats | null>(null);
-  const [machines, setMachines] = useState<TrustedMachine[]>([]);
+  const [connections, setConnections] = useState<Map<string, ServerConnection>>(new Map());
   const [configLoaded, setConfigLoaded] = useState(false);
 
   // Refs
-  const eventSourceRef = useRef<EventSource | null>(null);
-  const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-  const isConnectingRef = useRef(false);
+  const eventSourcesRef = useRef<Map<string, EventSource>>(new Map());
+  const reconnectTimeoutsRef = useRef<Map<string, NodeJS.Timeout>>(new Map());
   const authTokenRef = useRef(authToken);
 
   // Update authToken ref
@@ -251,12 +316,29 @@ export function useMultiAgentServer(options?: UseMultiAgentServerOptions): UseMu
       setConfig(loaded);
       setConfigLoaded(true);
 
-      // Auto-connect if enabled
-      if (loaded.enabled && loaded.autoConnect && loaded.serverToken && loaded.serverUrl) {
-        // Delay to ensure component is mounted
-        setTimeout(() => {
-          connectToServer(loaded);
-        }, 500);
+      // Initialize connection states for all servers
+      const initialConnections = new Map<string, ServerConnection>();
+      for (const server of loaded.servers) {
+        initialConnections.set(server.id, {
+          serverId: server.id,
+          serverName: server.name,
+          connectionState: 'disconnected',
+          error: null,
+          agents: [],
+          tasks: [],
+          activities: [],
+          stats: null,
+        });
+      }
+      setConnections(initialConnections);
+
+      // Auto-connect enabled servers
+      for (const server of loaded.servers) {
+        if (server.enabled && server.autoConnect && server.serverUrl && server.serverToken) {
+          setTimeout(() => {
+            connectToServer(server);
+          }, 500);
+        }
       }
     };
 
@@ -264,250 +346,390 @@ export function useMultiAgentServer(options?: UseMultiAgentServerOptions): UseMu
 
     return () => {
       // Cleanup on unmount
-      if (eventSourceRef.current) {
-        eventSourceRef.current.close();
-      }
-      if (reconnectTimeoutRef.current) {
-        clearTimeout(reconnectTimeoutRef.current);
-      }
+      eventSourcesRef.current.forEach((es) => es.close());
+      reconnectTimeoutsRef.current.forEach((timeout) => clearTimeout(timeout));
     };
   }, [authToken]);
 
   /**
-   * Make authenticated API request
+   * Make authenticated API request to a server
    */
   const apiRequest = useCallback(async (
+    server: McpServer,
     endpoint: string,
-    options: RequestInit = {},
-    currentConfig?: MultiAgentConfig
-  ): Promise<any> => {
-    const cfg = currentConfig || config;
-    const url = `${cfg.serverUrl}${endpoint}`;
+    options: RequestInit = {}
+  ): Promise<unknown> => {
+    const url = `${server.serverUrl}${endpoint}`;
 
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
-      'Authorization': `Bearer ${cfg.serverToken}`,
+      'Authorization': `Bearer ${server.serverToken}`,
       ...(options.headers as Record<string, string> || {}),
     };
 
-    try {
-      const response = await fetch(url, {
-        ...options,
-        headers,
-      });
+    const response = await fetch(url, {
+      ...options,
+      headers,
+    });
 
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-      }
-
-      const data = await response.json();
-      if (!data.success) {
-        throw new Error(data.error || 'Unknown error');
-      }
-
-      return data.data;
-    } catch (e: any) {
-      console.error(`[useMultiAgentServer] API error (${endpoint}):`, e);
-      throw e;
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}: ${response.statusText}`);
     }
-  }, [config]);
+
+    const data = await response.json();
+    if (!data.success) {
+      throw new Error(data.error || 'Unknown error');
+    }
+
+    return data.data;
+  }, []);
 
   /**
-   * Connect to SSE event stream
+   * Update connection state for a server
    */
-  const connectSSE = useCallback((cfg: MultiAgentConfig) => {
-    if (eventSourceRef.current) {
-      eventSourceRef.current.close();
+  const updateConnectionState = useCallback((
+    serverId: string,
+    updates: Partial<ServerConnection>
+  ) => {
+    setConnections(prev => {
+      const newMap = new Map(prev);
+      const existing = newMap.get(serverId);
+      if (existing) {
+        newMap.set(serverId, { ...existing, ...updates });
+      }
+      return newMap;
+    });
+  }, []);
+
+  /**
+   * Connect SSE for a server
+   */
+  const connectSSE = useCallback((server: McpServer) => {
+    const existingES = eventSourcesRef.current.get(server.id);
+    if (existingES) {
+      existingES.close();
     }
 
-    const url = `${cfg.serverUrl}/events`;
-
-    // EventSource doesn't support custom headers, so we use a workaround
-    // by appending token as query parameter (server should also accept this)
-    const eventSource = new EventSource(`${url}?token=${encodeURIComponent(cfg.serverToken)}`);
+    const url = `${server.serverUrl}/events?token=${encodeURIComponent(server.serverToken)}`;
+    const eventSource = new EventSource(url);
 
     eventSource.onopen = () => {
-      console.log('[useMultiAgentServer] SSE connected');
-      setConnectionState('connected');
-      setError(null);
+      console.log(`[useMultiAgentServer] SSE connected to ${server.name}`);
+      updateConnectionState(server.id, {
+        connectionState: 'connected',
+        error: null,
+      });
     };
 
     eventSource.onmessage = (event) => {
       try {
         const sseEvent: SSEEvent = JSON.parse(event.data);
 
-        // Handle different event types
-        switch (sseEvent.type) {
-          case 'agent_registered':
-            setAgents(prev => {
+        setConnections(prev => {
+          const newMap = new Map(prev);
+          const existing = newMap.get(server.id);
+          if (!existing) return prev;
+
+          let updated = { ...existing };
+          const eventData = (sseEvent.data || {}) as Record<string, unknown>;
+
+          switch (sseEvent.type) {
+            case 'agent_registered': {
               const agent = sseEvent.data as Agent;
-              const existing = prev.find(a => a.id === agent.id);
-              if (existing) {
-                return prev.map(a => a.id === agent.id ? agent : a);
+              const existingIdx = updated.agents.findIndex(a => a.id === agent.id);
+              if (existingIdx >= 0) {
+                updated.agents = [...updated.agents];
+                updated.agents[existingIdx] = agent;
+              } else {
+                updated.agents = [...updated.agents, agent];
               }
-              return [...prev, agent];
-            });
-            addActivity(sseEvent);
-            break;
+              break;
+            }
 
-          case 'agent_status_changed':
-            setAgents(prev => {
-              const { agentId, newStatus } = sseEvent.data as { agentId: string; oldStatus: string; newStatus: string };
-              return prev.map(a => a.id === agentId ? { ...a, status: newStatus as Agent['status'] } : a);
-            });
-            addActivity(sseEvent);
-            break;
+            case 'agent_status_changed': {
+              const { agentId, newStatus } = sseEvent.data as { agentId: string; newStatus: string };
+              updated.agents = updated.agents.map(a =>
+                a.id === agentId ? { ...a, status: newStatus as Agent['status'] } : a
+              );
+              break;
+            }
 
-          case 'task_created':
-            setTasks(prev => [...prev, sseEvent.data as AgentTask]);
-            addActivity(sseEvent);
-            break;
+            case 'task_created': {
+              const newTask = sseEvent.data as AgentTask;
+              updated.tasks = [...updated.tasks, newTask];
+              break;
+            }
 
-          case 'task_assigned':
-          case 'task_started':
-          case 'task_completed':
-          case 'task_failed':
-            // Refresh tasks to get updated data
-            refreshTasks(cfg);
-            addActivity(sseEvent);
-            break;
+            case 'task_assigned':
+            case 'task_started':
+            case 'task_completed':
+            case 'task_failed': {
+              // Refresh tasks from server
+              apiRequest(server, '/tasks')
+                .then(data => {
+                  updateConnectionState(server.id, { tasks: data as AgentTask[] });
+                })
+                .catch(() => {});
+              break;
+            }
+          }
 
-          case 'heartbeat':
-            // Ignore heartbeat events
-            break;
+          // Add activity for all events except heartbeat and connected
+          if (sseEvent.type !== 'heartbeat' && sseEvent.type !== 'connected') {
+            // Try to get agent info from current agents list
+            const agentIdFromEvent = (eventData?.agentId || eventData?.id || eventData?.assignedTo || '') as string;
+            const agentFromEvent = eventData?.name as string | undefined;
+            const existingAgent = updated.agents.find(a => a.id === agentIdFromEvent);
 
-          default:
-            console.log('[useMultiAgentServer] Unknown SSE event:', sseEvent.type);
-        }
+            // For task events, get task info
+            const taskIdFromEvent = (eventData?.taskId || eventData?.id) as string | undefined;
+            const taskTitleFromEvent = (eventData?.title) as string | undefined;
+            const existingTask = taskIdFromEvent ? updated.tasks.find(t => t.id === taskIdFromEvent) : undefined;
+
+            const activity: AgentActivity = {
+              id: `activity-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+              eventType: sseEvent.type as AgentActivity['eventType'],
+              agentId: agentIdFromEvent,
+              agentName: agentFromEvent || existingAgent?.name || agentIdFromEvent || 'System',
+              taskId: taskIdFromEvent,
+              taskTitle: taskTitleFromEvent || existingTask?.title,
+              details: eventData,
+              createdAt: sseEvent.timestamp,
+            };
+            updated.activities = [activity, ...updated.activities.slice(0, 99)];
+          }
+
+          newMap.set(server.id, updated);
+          return newMap;
+        });
       } catch (e) {
-        console.error('[useMultiAgentServer] SSE parse error:', e);
+        console.error(`[useMultiAgentServer] SSE parse error for ${server.name}:`, e);
       }
     };
 
-    eventSource.onerror = (e) => {
-      console.error('[useMultiAgentServer] SSE error:', e);
-      setConnectionState('error');
-      setError('Connection lost. Attempting to reconnect...');
+    eventSource.onerror = () => {
+      console.error(`[useMultiAgentServer] SSE error for ${server.name}`);
+      updateConnectionState(server.id, {
+        connectionState: 'error',
+        error: 'Connection lost. Attempting to reconnect...',
+      });
 
       eventSource.close();
-      eventSourceRef.current = null;
+      eventSourcesRef.current.delete(server.id);
 
       // Attempt reconnection
-      if (reconnectTimeoutRef.current) {
-        clearTimeout(reconnectTimeoutRef.current);
+      const existingTimeout = reconnectTimeoutsRef.current.get(server.id);
+      if (existingTimeout) {
+        clearTimeout(existingTimeout);
       }
-      reconnectTimeoutRef.current = setTimeout(() => {
-        if (cfg.enabled && cfg.autoConnect) {
-          connectToServer(cfg);
+
+      const timeout = setTimeout(() => {
+        const currentServer = config.servers.find(s => s.id === server.id);
+        if (currentServer?.enabled && currentServer.autoConnect) {
+          connectToServer(currentServer);
         }
       }, 5000);
+
+      reconnectTimeoutsRef.current.set(server.id, timeout);
     };
 
-    eventSourceRef.current = eventSource;
-  }, []);
+    eventSourcesRef.current.set(server.id, eventSource);
+  }, [apiRequest, config.servers, updateConnectionState]);
 
   /**
-   * Add activity from SSE event
+   * Connect to a specific server
    */
-  const addActivity = useCallback((sseEvent: SSEEvent) => {
-    const eventData = sseEvent.data as Record<string, unknown>;
-    const activity: AgentActivity = {
-      id: `activity-${Date.now()}`,
-      eventType: sseEvent.type,
-      agentId: (eventData.agentId || eventData.id || '') as string,
-      agentName: (eventData.name || eventData.agentName || 'Unknown') as string,
-      taskId: eventData.taskId as string | undefined,
-      taskTitle: eventData.title as string | undefined,
-      details: eventData as Record<string, unknown>,
-      createdAt: sseEvent.timestamp,
-    };
-    setActivities(prev => [activity, ...prev.slice(0, 99)]);
-  }, []);
-
-  /**
-   * Refresh tasks from server
-   */
-  const refreshTasks = useCallback(async (cfg: MultiAgentConfig) => {
-    try {
-      const data = await apiRequest('/tasks', {}, cfg);
-      setTasks(data || []);
-    } catch (e) {
-      // Ignore refresh errors
-    }
-  }, [apiRequest]);
-
-  /**
-   * Connect to server
-   */
-  const connectToServer = useCallback(async (cfg: MultiAgentConfig) => {
-    if (isConnectingRef.current) return;
-    isConnectingRef.current = true;
-
-    setConnectionState('connecting');
-    setError(null);
+  const connectToServer = useCallback(async (server: McpServer) => {
+    updateConnectionState(server.id, {
+      connectionState: 'connecting',
+      error: null,
+    });
 
     try {
       // Test connection with health check
-      const health = await fetch(`${cfg.serverUrl}/health`);
+      const health = await fetch(`${server.serverUrl}/health`);
       if (!health.ok) {
         throw new Error('Server health check failed');
       }
 
       // Fetch initial data
       const [agentsData, tasksData, statsData] = await Promise.all([
-        apiRequest('/agents', {}, cfg).catch(() => []),
-        apiRequest('/tasks', {}, cfg).catch(() => []),
-        apiRequest('/dashboard', {}, cfg).catch(() => null),
+        apiRequest(server, '/agents').catch(() => []),
+        apiRequest(server, '/tasks').catch(() => []),
+        apiRequest(server, '/dashboard').catch(() => null),
       ]);
 
-      setAgents(agentsData || []);
-      setTasks(tasksData || []);
-      setStats(statsData || null);
+      updateConnectionState(server.id, {
+        agents: (agentsData as Agent[]) || [],
+        tasks: (tasksData as AgentTask[]) || [],
+        stats: (statsData as DashboardStats) || null,
+      });
 
       // Connect SSE
-      connectSSE(cfg);
-    } catch (e: any) {
-      console.error('[useMultiAgentServer] Connection failed:', e);
-      setConnectionState('error');
-      setError(e.message || 'Failed to connect to server');
-    } finally {
-      isConnectingRef.current = false;
+      connectSSE(server);
+    } catch (e: unknown) {
+      console.error(`[useMultiAgentServer] Connection failed for ${server.name}:`, e);
+      updateConnectionState(server.id, {
+        connectionState: 'error',
+        error: e instanceof Error ? e.message : 'Failed to connect to server',
+      });
     }
-  }, [apiRequest, connectSSE]);
+  }, [apiRequest, connectSSE, updateConnectionState]);
 
   /**
-   * Public: Connect to server
+   * Public: Connect to a specific server by ID
    */
-  const connect = useCallback(async () => {
-    if (!config.serverUrl || !config.serverToken) {
-      setError('Server URL and token are required');
+  const connectServer = useCallback(async (serverId: string) => {
+    const server = config.servers.find(s => s.id === serverId);
+    if (!server) {
+      console.error(`[useMultiAgentServer] Server not found: ${serverId}`);
       return;
     }
-    await connectToServer(config);
-  }, [config, connectToServer]);
+
+    if (!server.serverUrl || !server.serverToken) {
+      updateConnectionState(serverId, {
+        connectionState: 'error',
+        error: 'Server URL and token are required',
+      });
+      return;
+    }
+
+    await connectToServer(server);
+  }, [config.servers, connectToServer, updateConnectionState]);
 
   /**
-   * Public: Disconnect from server
+   * Public: Disconnect from a specific server
    */
-  const disconnect = useCallback(() => {
-    if (eventSourceRef.current) {
-      eventSourceRef.current.close();
-      eventSourceRef.current = null;
+  const disconnectServer = useCallback((serverId: string) => {
+    const es = eventSourcesRef.current.get(serverId);
+    if (es) {
+      es.close();
+      eventSourcesRef.current.delete(serverId);
     }
-    if (reconnectTimeoutRef.current) {
-      clearTimeout(reconnectTimeoutRef.current);
+
+    const timeout = reconnectTimeoutsRef.current.get(serverId);
+    if (timeout) {
+      clearTimeout(timeout);
+      reconnectTimeoutsRef.current.delete(serverId);
     }
-    setConnectionState('disconnected');
-    setError(null);
+
+    updateConnectionState(serverId, {
+      connectionState: 'disconnected',
+      error: null,
+    });
+  }, [updateConnectionState]);
+
+  /**
+   * Public: Connect all enabled servers
+   */
+  const connectAllEnabled = useCallback(async () => {
+    const enabledServers = config.servers.filter(s => s.enabled && s.serverUrl && s.serverToken);
+    await Promise.all(enabledServers.map(s => connectToServer(s)));
+  }, [config.servers, connectToServer]);
+
+  /**
+   * Public: Disconnect all servers
+   */
+  const disconnectAll = useCallback(() => {
+    config.servers.forEach(s => disconnectServer(s.id));
+  }, [config.servers, disconnectServer]);
+
+  /**
+   * Public: Add a new server
+   */
+  const addServer = useCallback((serverData: Omit<McpServer, 'id'>): string => {
+    const newServer: McpServer = {
+      ...serverData,
+      id: crypto.randomUUID(),
+    };
+
+    setConfig(prev => {
+      const newConfig = {
+        ...prev,
+        servers: [...prev.servers, newServer],
+      };
+      saveConfigToBackend(newConfig, authTokenRef.current);
+      return newConfig;
+    });
+
+    // Initialize connection state
+    setConnections(prev => {
+      const newMap = new Map(prev);
+      newMap.set(newServer.id, {
+        serverId: newServer.id,
+        serverName: newServer.name,
+        connectionState: 'disconnected',
+        error: null,
+        agents: [],
+        tasks: [],
+        activities: [],
+        stats: null,
+      });
+      return newMap;
+    });
+
+    return newServer.id;
   }, []);
 
   /**
-   * Public: Update config
+   * Public: Update an existing server
+   */
+  const updateServer = useCallback((serverId: string, updates: Partial<McpServer>) => {
+    setConfig(prev => {
+      const newConfig = {
+        ...prev,
+        servers: prev.servers.map(s =>
+          s.id === serverId ? { ...s, ...updates } : s
+        ),
+      };
+      saveConfigToBackend(newConfig, authTokenRef.current);
+
+      // Update connection state name if changed
+      if (updates.name) {
+        setConnections(prevConn => {
+          const newMap = new Map(prevConn);
+          const existing = newMap.get(serverId);
+          if (existing) {
+            newMap.set(serverId, { ...existing, serverName: updates.name! });
+          }
+          return newMap;
+        });
+      }
+
+      return newConfig;
+    });
+  }, []);
+
+  /**
+   * Public: Remove a server
+   */
+  const removeServer = useCallback((serverId: string) => {
+    // Disconnect first
+    disconnectServer(serverId);
+
+    setConfig(prev => {
+      const newConfig = {
+        ...prev,
+        servers: prev.servers.filter(s => s.id !== serverId),
+      };
+      saveConfigToBackend(newConfig, authTokenRef.current);
+      return newConfig;
+    });
+
+    // Remove connection state
+    setConnections(prev => {
+      const newMap = new Map(prev);
+      newMap.delete(serverId);
+      return newMap;
+    });
+  }, [disconnectServer]);
+
+  /**
+   * Public: Update global config
    */
   const updateConfig = useCallback((updates: Partial<MultiAgentConfig>) => {
     setConfig(prev => {
       const newConfig = { ...prev, ...updates };
-      // Save to backend (and localStorage as fallback)
       saveConfigToBackend(newConfig, authTokenRef.current);
       return newConfig;
     });
@@ -517,138 +739,222 @@ export function useMultiAgentServer(options?: UseMultiAgentServerOptions): UseMu
    * Public: Refresh all data
    */
   const refreshData = useCallback(async () => {
-    if (connectionState !== 'connected') return;
+    const connectedServers = config.servers.filter(s => {
+      const conn = connections.get(s.id);
+      return conn?.connectionState === 'connected';
+    });
 
-    try {
-      const [agentsData, tasksData, statsData] = await Promise.all([
-        apiRequest('/agents').catch(() => agents),
-        apiRequest('/tasks').catch(() => tasks),
-        apiRequest('/dashboard').catch(() => stats),
-      ]);
+    await Promise.all(connectedServers.map(async (server) => {
+      try {
+        const [agentsData, tasksData, statsData] = await Promise.all([
+          apiRequest(server, '/agents').catch(() => null),
+          apiRequest(server, '/tasks').catch(() => null),
+          apiRequest(server, '/dashboard').catch(() => null),
+        ]);
 
-      setAgents(agentsData || []);
-      setTasks(tasksData || []);
-      setStats(statsData || null);
-    } catch (e) {
-      console.error('[useMultiAgentServer] Refresh failed:', e);
-    }
-  }, [connectionState, apiRequest, agents, tasks, stats]);
+        const updates: Partial<ServerConnection> = {};
+        if (agentsData) updates.agents = agentsData as Agent[];
+        if (tasksData) updates.tasks = tasksData as AgentTask[];
+        if (statsData) updates.stats = statsData as DashboardStats;
+
+        if (Object.keys(updates).length > 0) {
+          updateConnectionState(server.id, updates);
+        }
+      } catch (e) {
+        console.error(`[useMultiAgentServer] Refresh failed for ${server.name}:`, e);
+      }
+    }));
+  }, [config.servers, connections, apiRequest, updateConnectionState]);
 
   /**
-   * Public: Create task
+   * Public: Create task on a specific server
    */
-  const createTask = useCallback(async (task: Partial<AgentTask>): Promise<AgentTask | null> => {
+  const createTask = useCallback(async (
+    serverId: string,
+    task: Partial<AgentTask> & { assignTo?: string }
+  ): Promise<AgentTask | null> => {
+    const server = config.servers.find(s => s.id === serverId);
+    if (!server) {
+      console.error(`[useMultiAgentServer] Server not found: ${serverId}`);
+      return null;
+    }
+
     try {
-      const result = await apiRequest('/tasks', {
+      const result = await apiRequest(server, '/tasks', {
         method: 'POST',
         body: JSON.stringify(task),
       });
-      return result;
+      return result as AgentTask;
     } catch (e) {
-      console.error('[useMultiAgentServer] Create task failed:', e);
+      console.error(`[useMultiAgentServer] Create task failed for ${server.name}:`, e);
       return null;
     }
-  }, [apiRequest]);
+  }, [config.servers, apiRequest]);
 
   /**
-   * Public: Assign task
+   * Public: Assign task to agent on a specific server
    */
-  const assignTask = useCallback(async (taskId: string, agentId: string): Promise<boolean> => {
+  const assignTask = useCallback(async (
+    serverId: string,
+    taskId: string,
+    agentId: string
+  ): Promise<boolean> => {
+    const server = config.servers.find(s => s.id === serverId);
+    if (!server) {
+      console.error(`[useMultiAgentServer] Server not found: ${serverId}`);
+      return false;
+    }
+
     try {
-      await apiRequest(`/tasks/${taskId}/assign`, {
+      await apiRequest(server, `/tasks/${taskId}/assign`, {
         method: 'POST',
         body: JSON.stringify({ agentId }),
       });
       return true;
     } catch (e) {
-      console.error('[useMultiAgentServer] Assign task failed:', e);
+      console.error(`[useMultiAgentServer] Assign task failed for ${server.name}:`, e);
       return false;
     }
-  }, [apiRequest]);
+  }, [config.servers, apiRequest]);
 
   /**
-   * Public: Register agent
+   * Public: Get server state by ID
    */
-  const registerAgent = useCallback(async (
-    name: string,
-    role: AgentRole,
-    capabilities?: string[]
-  ): Promise<string | null> => {
-    try {
-      const machineId = 'local-machine'; // Would get from server in real implementation
-      const result = await apiRequest('/agents/register', {
-        method: 'POST',
-        body: JSON.stringify({ name, role, capabilities, machineId }),
+  const getServerState = useCallback((serverId: string): ServerConnection | undefined => {
+    return connections.get(serverId);
+  }, [connections]);
+
+  // Aggregated data from all connected servers
+  const aggregatedAgents = useMemo(() => {
+    const result: (Agent & { serverId: string; serverName: string })[] = [];
+    connections.forEach((conn) => {
+      if (conn.connectionState === 'connected') {
+        conn.agents.forEach(agent => {
+          result.push({ ...agent, serverId: conn.serverId, serverName: conn.serverName });
+        });
+      }
+    });
+    return result;
+  }, [connections]);
+
+  const aggregatedTasks = useMemo(() => {
+    const result: (AgentTask & { serverId: string; serverName: string })[] = [];
+    connections.forEach((conn) => {
+      if (conn.connectionState === 'connected') {
+        conn.tasks.forEach(task => {
+          result.push({ ...task, serverId: conn.serverId, serverName: conn.serverName });
+        });
+      }
+    });
+    return result;
+  }, [connections]);
+
+  const aggregatedActivities = useMemo(() => {
+    const result: (AgentActivity & { serverId: string; serverName: string })[] = [];
+    connections.forEach((conn) => {
+      conn.activities.forEach(activity => {
+        result.push({ ...activity, serverId: conn.serverId, serverName: conn.serverName });
       });
-      return result.agentId;
-    } catch (e) {
-      console.error('[useMultiAgentServer] Register agent failed:', e);
-      return null;
-    }
-  }, [apiRequest]);
+    });
+    // Sort by createdAt descending
+    return result.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  }, [connections]);
 
-  /**
-   * Public: Send heartbeat
-   */
-  const sendHeartbeat = useCallback(async (
-    agentId: string,
-    status?: 'idle' | 'busy' | 'offline'
-  ): Promise<boolean> => {
-    try {
-      await apiRequest(`/agents/${agentId}/heartbeat`, {
-        method: 'POST',
-        body: JSON.stringify({ status }),
-      });
-      return true;
-    } catch (e) {
-      return false;
-    }
-  }, [apiRequest]);
+  const aggregatedStats = useMemo((): DashboardStats | null => {
+    const connectedStats: DashboardStats[] = [];
+    connections.forEach((conn) => {
+      if (conn.connectionState === 'connected' && conn.stats) {
+        connectedStats.push(conn.stats);
+      }
+    });
 
-  /**
-   * Public: Get agent by ID
-   */
-  const getAgentById = useCallback((id: string): Agent | undefined => {
-    return agents.find(a => a.id === id);
-  }, [agents]);
+    if (connectedStats.length === 0) return null;
 
-  /**
-   * Public: Get task by ID
-   */
-  const getTaskById = useCallback((id: string): AgentTask | undefined => {
-    return tasks.find(t => t.id === id);
-  }, [tasks]);
+    // Aggregate stats
+    return {
+      timestamp: new Date().toISOString(),
+      tasks: {
+        total: connectedStats.reduce((sum, s) => sum + s.tasks.total, 0),
+        pending: connectedStats.reduce((sum, s) => sum + s.tasks.pending, 0),
+        assigned: connectedStats.reduce((sum, s) => sum + s.tasks.assigned, 0),
+        in_progress: connectedStats.reduce((sum, s) => sum + s.tasks.in_progress, 0),
+        completed: connectedStats.reduce((sum, s) => sum + s.tasks.completed, 0),
+        failed: connectedStats.reduce((sum, s) => sum + s.tasks.failed, 0),
+      },
+      agents: {
+        total: connectedStats.reduce((sum, s) => sum + s.agents.total, 0),
+        idle: connectedStats.reduce((sum, s) => sum + s.agents.idle, 0),
+        busy: connectedStats.reduce((sum, s) => sum + s.agents.busy, 0),
+        offline: connectedStats.reduce((sum, s) => sum + s.agents.offline, 0),
+        byRole: {},
+        byMachine: {},
+      },
+    };
+  }, [connections]);
+
+  // Overall connection state
+  const overallConnectionState = useMemo((): ConnectionState => {
+    const states = Array.from(connections.values()).map(c => c.connectionState);
+    if (states.some(s => s === 'connected')) return 'connected';
+    if (states.some(s => s === 'connecting')) return 'connecting';
+    if (states.some(s => s === 'error')) return 'error';
+    return 'disconnected';
+  }, [connections]);
+
+  const overallError = useMemo((): string | null => {
+    const errors = Array.from(connections.values())
+      .filter(c => c.error)
+      .map(c => `${c.serverName}: ${c.error}`);
+    return errors.length > 0 ? errors.join('; ') : null;
+  }, [connections]);
+
+  // Deprecated compatibility methods
+  const connect = useCallback(async () => {
+    await connectAllEnabled();
+  }, [connectAllEnabled]);
+
+  const disconnect = useCallback(() => {
+    disconnectAll();
+  }, [disconnectAll]);
 
   return {
-    // Connection state
-    connectionState,
-    error,
-
     // Config
     config,
     updateConfig,
 
+    // Server management
+    addServer,
+    updateServer,
+    removeServer,
+
     // Connection control
-    connect,
-    disconnect,
+    connectServer,
+    disconnectServer,
+    connectAllEnabled,
+    disconnectAll,
 
-    // Data
-    agents,
-    tasks,
-    activities,
-    stats,
-    machines,
+    // Aggregated data
+    agents: aggregatedAgents,
+    tasks: aggregatedTasks,
+    activities: aggregatedActivities,
+    stats: aggregatedStats,
 
-    // API methods
+    // Per-server state
+    connections,
+    getServerState,
+
+    // Overall state
+    connectionState: overallConnectionState,
+    error: overallError,
+
+    // Utilities
     refreshData,
     createTask,
     assignTask,
-    registerAgent,
-    sendHeartbeat,
 
-    // Utilities
-    getAgentById,
-    getTaskById,
+    // Deprecated compatibility
+    connect,
+    disconnect,
   };
 }
 

@@ -1,0 +1,1667 @@
+/**
+ * Section.MOC - Multi-agent Orchestration Center
+ *
+ * AI Agents Hub with group chat as the main view.
+ * Tabs: Chat, Tasks, Agents, History
+ *
+ * @module Section.MOC
+ */
+
+'use client';
+
+import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
+import { useMultiAgentServer } from '../hooks/useMultiAgentServer';
+import { useMastraAgent, type MastraMessage } from '../hooks/useMastraAgent';
+import type { Goal, Habit } from '@/types';
+
+// Tab types
+type TabId = 'chat' | 'tasks' | 'agents' | 'history';
+
+interface TabConfig {
+  id: TabId;
+  label: string;
+  labelJa: string;
+  icon: string;
+  badge?: number;
+}
+
+const TABS: TabConfig[] = [
+  { id: 'chat', label: 'Chat', labelJa: 'チャット', icon: '💬' },
+  { id: 'tasks', label: 'Tasks', labelJa: 'タスク', icon: '📋' },
+  { id: 'agents', label: 'Agents', labelJa: 'エージェント', icon: '🤖' },
+  { id: 'history', label: 'History', labelJa: '履歴', icon: '📜' },
+];
+
+// Message types for group chat
+export interface GroupChatMessage {
+  id: string;
+  senderId: string;
+  senderName: string;
+  senderType: 'user' | 'agent' | 'coach' | 'system';
+  senderRole?: string;
+  senderIcon?: string;
+  content: string;
+  timestamp: Date;
+  taskId?: string;
+  taskTitle?: string;
+  suggestion?: {
+    type: 'habit' | 'goal';
+    data: Record<string, unknown>;
+    actions: Array<{ id: string; label: string; variant: 'primary' | 'secondary' | 'ghost' }>;
+  };
+}
+
+interface MOCSectionProps {
+  goals?: Goal[];
+  habits?: Habit[];
+  onHabitCreated?: (habit: Habit) => void;
+  onGoalCreated?: (goal: Goal) => void;
+  locale?: 'ja' | 'en';
+  authToken?: string;
+}
+
+// Suggestion state management
+type SuggestionStatus = 'pending' | 'accepted' | 'snoozed' | 'dismissed' | 'loading' | 'error';
+
+interface SuggestionState {
+  status: SuggestionStatus;
+  error?: string;
+}
+
+// Snoozed suggestion for later review
+interface SnoozedSuggestion {
+  id: string;
+  messageId: string;
+  type: 'habit' | 'goal';
+  data: Record<string, unknown>;
+  snoozedAt: Date;
+}
+
+// Task with extended info for detail view
+interface TaskWithDetail {
+  id: string;
+  title: string;
+  description?: string;
+  status: string;
+  priority: string;
+  assignedTo?: string;
+  createdAt?: string;
+  updatedAt?: string;
+  serverId?: string;
+}
+
+// History filter options
+type HistoryFilter = 'all' | 'user' | 'coach' | 'agent' | 'system';
+
+// Agent role icons
+const ROLE_ICONS: Record<string, string> = {
+  manager: '👔',
+  developer: '💻',
+  reviewer: '🔍',
+  tester: '🧪',
+  architect: '🏗️',
+  devops: '🔧',
+  analyst: '📊',
+  coach: '🤖',
+  user: '👤',
+  system: '⚙️',
+};
+
+export function MOCSection({
+  goals = [],
+  habits = [],
+  onHabitCreated,
+  onGoalCreated,
+  locale = 'ja',
+  authToken,
+}: MOCSectionProps) {
+  const [activeTab, setActiveTab] = useState<TabId>('chat');
+  const [messages, setMessages] = useState<GroupChatMessage[]>([]);
+  const [inputValue, setInputValue] = useState('');
+  const [selectedAgent, setSelectedAgent] = useState<string>('manager'); // Manager is the default entry point
+
+  // Suggestion states for tracking action status
+  const [suggestionStates, setSuggestionStates] = useState<Record<string, SuggestionState>>({});
+  const [snoozedSuggestions, setSnoozedSuggestions] = useState<SnoozedSuggestion[]>([]);
+
+  // Task detail view state
+  const [selectedTask, setSelectedTask] = useState<TaskWithDetail | null>(null);
+
+  // History filter state
+  const [historyFilter, setHistoryFilter] = useState<HistoryFilter>('all');
+  const [historySearch, setHistorySearch] = useState('');
+
+  // Multi-agent server hook
+  const server = useMultiAgentServer({ authToken });
+
+  // Available agents for selection (AI Coach + connected MCP agents)
+  interface SelectableAgent {
+    id: string;
+    name: string;
+    role: string;
+    icon: string;
+    type: 'coach' | 'mcp-agent';
+    serverId?: string;
+    status?: string;
+  }
+
+  const availableAgents = useMemo((): SelectableAgent[] => {
+    const agents: SelectableAgent[] = [
+      // Manager is the top-level orchestrator (always available)
+      {
+        id: 'manager',
+        name: locale === 'ja' ? 'マネージャー' : 'Manager',
+        role: 'Manager',
+        icon: ROLE_ICONS.manager,
+        type: 'coach', // Uses the coach AI but acts as manager
+      },
+      // AI Coach is a callable sub-agent
+      {
+        id: 'coach',
+        name: 'AI Coach',
+        role: 'Coach',
+        icon: ROLE_ICONS.coach,
+        type: 'coach',
+      },
+    ];
+
+    // Add connected MCP agents
+    server.agents.forEach(agent => {
+      agents.push({
+        id: agent.id,
+        name: agent.name,
+        role: agent.role,
+        icon: ROLE_ICONS[agent.role.toLowerCase()] || ROLE_ICONS.developer,
+        type: 'mcp-agent',
+        serverId: agent.serverId,
+        status: agent.status,
+      });
+    });
+
+    // Add broadcast option if there are multiple agents
+    if (agents.length > 2) {
+      agents.push({
+        id: 'broadcast',
+        name: locale === 'ja' ? '全員' : 'Everyone',
+        role: 'Broadcast',
+        icon: '📢',
+        type: 'mcp-agent',
+      });
+    }
+
+    return agents;
+  }, [server.agents, locale]);
+
+  // Mastra agent hook for AI Coach
+  const coachAgent = useMastraAgent({
+    authToken,
+    locale,
+    enableStreaming: true,
+  });
+
+  // Connection status
+  const isConnected = useMemo(() => {
+    const connections = Array.from(server.connections.values());
+    return connections.some(c => c.connectionState === 'connected');
+  }, [server.connections]);
+
+  const connectedAgentCount = useMemo(() => {
+    const connections = Array.from(server.connections.values());
+    return connections.reduce((sum, c) => sum + (c.agents?.length || 0), 0);
+  }, [server.connections]);
+
+  // Convert agent activities to chat messages
+  useEffect(() => {
+    const connections = Array.from(server.connections.values());
+    connections.forEach(conn => {
+      conn.activities?.forEach(activity => {
+        const existingMsg = messages.find(m => m.id === `activity-${activity.id}`);
+        if (!existingMsg) {
+          // Determine role from agent name
+          const agentNameLower = (activity.agentName || '').toLowerCase();
+          let role = 'Developer';
+          if (agentNameLower.includes('manager')) role = 'Manager';
+          else if (agentNameLower.includes('reviewer')) role = 'Reviewer';
+          else if (agentNameLower.includes('tester')) role = 'Tester';
+          else if (agentNameLower.includes('architect')) role = 'Architect';
+          else if (agentNameLower.includes('devops')) role = 'DevOps';
+          else if (agentNameLower.includes('analyst')) role = 'Analyst';
+
+          const newMessage: GroupChatMessage = {
+            id: `activity-${activity.id}`,
+            senderId: activity.agentId || 'system',
+            senderName: activity.agentName || 'System',
+            senderType: activity.agentId ? 'agent' : 'system',
+            senderRole: activity.agentId ? role : undefined,
+            senderIcon: ROLE_ICONS[role.toLowerCase()] || ROLE_ICONS.developer,
+            content: formatActivityContent(activity),
+            timestamp: new Date(activity.createdAt),
+            taskId: activity.taskId,
+            taskTitle: activity.taskTitle,
+          };
+          setMessages(prev => [...prev, newMessage]);
+        }
+      });
+    });
+  }, [server.connections, messages]);
+
+  // Handle sending message
+  const handleSendMessage = useCallback(async () => {
+    if (!inputValue.trim()) return;
+
+    // Find selected agent info
+    const targetAgent = availableAgents.find(a => a.id === selectedAgent);
+
+    const userMessage: GroupChatMessage = {
+      id: `user-${Date.now()}`,
+      senderId: 'user',
+      senderName: 'You',
+      senderType: 'user',
+      senderIcon: ROLE_ICONS.user,
+      content: inputValue,
+      timestamp: new Date(),
+    };
+
+    setMessages(prev => [...prev, userMessage]);
+    const messageText = inputValue;
+    setInputValue('');
+
+    if (selectedAgent === 'manager') {
+      // Send to Manager (orchestrator mode)
+      // Manager can delegate to other agents based on the request
+      try {
+        // For now, Manager uses the same AI backend but with manager context
+        await coachAgent.sendMessage(`[Manager Mode] ${messageText}`);
+      } catch (error) {
+        console.error('Failed to send message to manager:', error);
+        setMessages(prev => [...prev, {
+          id: `error-${Date.now()}`,
+          senderId: 'system',
+          senderName: 'System',
+          senderType: 'system',
+          senderIcon: ROLE_ICONS.system,
+          content: locale === 'ja' ? '❌ マネージャーへのメッセージ送信に失敗しました' : '❌ Failed to send message to manager',
+          timestamp: new Date(),
+        }]);
+      }
+    } else if (selectedAgent === 'coach' || targetAgent?.type === 'coach') {
+      // Send to AI Coach (habit/goal specialist)
+      try {
+        await coachAgent.sendMessage(messageText);
+      } catch (error) {
+        console.error('Failed to send message to coach:', error);
+        setMessages(prev => [...prev, {
+          id: `error-${Date.now()}`,
+          senderId: 'system',
+          senderName: 'System',
+          senderType: 'system',
+          senderIcon: ROLE_ICONS.system,
+          content: locale === 'ja' ? '❌ コーチへのメッセージ送信に失敗しました' : '❌ Failed to send message to coach',
+          timestamp: new Date(),
+        }]);
+      }
+    } else if (selectedAgent === 'broadcast') {
+      // Broadcast to all MCP agents - create unassigned task
+      const enabledServers = server.config.servers.filter(s => s.enabled);
+      if (enabledServers.length > 0) {
+        try {
+          const task = await server.createTask(enabledServers[0].id, {
+            title: messageText.slice(0, 100),
+            description: messageText,
+            priority: 'medium',
+          });
+
+          if (task) {
+            setMessages(prev => [...prev, {
+              id: `task-broadcast-${Date.now()}`,
+              senderId: 'system',
+              senderName: 'System',
+              senderType: 'system',
+              senderIcon: '📢',
+              content: locale === 'ja'
+                ? `📋 タスクを作成しました（エージェントが自動的に引き受けます）`
+                : `📋 Task created (agents will pick it up)`,
+              timestamp: new Date(),
+              taskId: task.id,
+              taskTitle: task.title,
+            }]);
+          }
+        } catch (error) {
+          console.error('Failed to broadcast task:', error);
+          setMessages(prev => [...prev, {
+            id: `error-${Date.now()}`,
+            senderId: 'system',
+            senderName: 'System',
+            senderType: 'system',
+            senderIcon: ROLE_ICONS.system,
+            content: locale === 'ja' ? '❌ タスクの作成に失敗しました' : '❌ Failed to create task',
+            timestamp: new Date(),
+          }]);
+        }
+      }
+    } else if (targetAgent?.type === 'mcp-agent' && targetAgent.serverId) {
+      // Send to specific MCP agent (create task and assign)
+      try {
+        const task = await server.createTask(targetAgent.serverId, {
+          title: messageText.slice(0, 100),
+          description: messageText,
+          priority: 'medium',
+        });
+
+        if (task) {
+          // Assign task to specific agent
+          await server.assignTask(targetAgent.serverId, task.id, targetAgent.id);
+
+          // Add confirmation message
+          setMessages(prev => [...prev, {
+            id: `task-created-${Date.now()}`,
+            senderId: 'system',
+            senderName: 'System',
+            senderType: 'system',
+            senderIcon: ROLE_ICONS.system,
+            content: locale === 'ja'
+              ? `📋 タスクを ${targetAgent.name} に割り当てました`
+              : `📋 Task assigned to ${targetAgent.name}`,
+            timestamp: new Date(),
+            taskId: task.id,
+            taskTitle: task.title,
+          }]);
+        }
+      } catch (error) {
+        console.error('Failed to create/assign task:', error);
+        setMessages(prev => [...prev, {
+          id: `error-${Date.now()}`,
+          senderId: 'system',
+          senderName: 'System',
+          senderType: 'system',
+          senderIcon: ROLE_ICONS.system,
+          content: locale === 'ja' ? '❌ タスクの作成に失敗しました' : '❌ Failed to create task',
+          timestamp: new Date(),
+        }]);
+      }
+    } else {
+      // No valid target - show error
+      setMessages(prev => [...prev, {
+        id: `error-${Date.now()}`,
+        senderId: 'system',
+        senderName: 'System',
+        senderType: 'system',
+        senderIcon: ROLE_ICONS.system,
+        content: locale === 'ja' ? '⚠️ エージェントが選択されていません' : '⚠️ No agent selected',
+        timestamp: new Date(),
+      }]);
+    }
+  }, [inputValue, selectedAgent, availableAgents, coachAgent, server, locale]);
+
+  // Convert coach/manager messages to group chat format
+  useEffect(() => {
+    coachAgent.messages.forEach(msg => {
+      if (msg.role === 'assistant') {
+        const existingMsg = messages.find(m => m.id === `ai-${msg.id}`);
+        if (!existingMsg) {
+          // Determine if this was a manager or coach response based on the preceding user message
+          const userMsgIndex = coachAgent.messages.findIndex(m => m.id === msg.id) - 1;
+          const precedingUserMsg = userMsgIndex >= 0 ? coachAgent.messages[userMsgIndex] : null;
+          const isManagerMode = precedingUserMsg?.content?.startsWith('[Manager Mode]');
+
+          const newMessage: GroupChatMessage = {
+            id: `ai-${msg.id}`,
+            senderId: isManagerMode ? 'manager' : 'coach',
+            senderName: isManagerMode ? (locale === 'ja' ? 'マネージャー' : 'Manager') : 'AI Coach',
+            senderType: isManagerMode ? 'agent' : 'coach',
+            senderRole: isManagerMode ? 'Manager' : 'Coach',
+            senderIcon: isManagerMode ? ROLE_ICONS.manager : ROLE_ICONS.coach,
+            content: msg.content,
+            timestamp: new Date(msg.createdAt || Date.now()),
+            suggestion: msg.toolCalls?.length ? parseSuggestion(msg) : undefined,
+          };
+          setMessages(prev => [...prev, newMessage]);
+        }
+      }
+    });
+  }, [coachAgent.messages, messages, locale]);
+
+  // Quick actions
+  const quickActions = [
+    { id: 'status', label: '📊 Status', command: '現在のステータスを教えて' },
+    { id: 'tasks', label: '📋 Tasks', command: '進行中のタスクを確認して' },
+    { id: 'advice', label: '💡 Advice', command: '習慣について提案して' },
+    { id: 'analyze', label: '📈 Analyze', command: '習慣の達成率を分析して' },
+  ];
+
+  const handleQuickAction = (command: string) => {
+    setInputValue(command);
+  };
+
+  // Handle suggestion actions (accept, snooze, dismiss)
+  const handleSuggestionAction = useCallback(async (
+    messageId: string,
+    actionId: string,
+    suggestion: NonNullable<GroupChatMessage['suggestion']>
+  ) => {
+    // Update state to loading
+    setSuggestionStates(prev => ({
+      ...prev,
+      [messageId]: { status: 'loading' },
+    }));
+
+    try {
+      if (actionId === 'accept') {
+        // Create habit or goal based on suggestion type
+        if (suggestion.type === 'habit') {
+          const habitData = {
+            name: (suggestion.data.name as string) || 'New Habit',
+            goalId: (suggestion.data.goalId as string) || goals[0]?.id || '',
+            type: (suggestion.data.type as 'do' | 'avoid') || 'do',
+            duration: suggestion.data.duration as number | undefined,
+            notes: suggestion.data.reason as string | undefined,
+          };
+
+          // Import and call API
+          const { createHabit } = await import('@/lib/api');
+          const newHabit = await createHabit(habitData);
+
+          if (newHabit && onHabitCreated) {
+            onHabitCreated(newHabit as Habit);
+          }
+
+          // Add success message
+          setMessages(prev => [...prev, {
+            id: `system-${Date.now()}`,
+            senderId: 'system',
+            senderName: 'System',
+            senderType: 'system',
+            senderIcon: ROLE_ICONS.system,
+            content: locale === 'ja'
+              ? `✅ 習慣「${habitData.name}」を作成しました`
+              : `✅ Created habit "${habitData.name}"`,
+            timestamp: new Date(),
+          }]);
+        } else {
+          // Create goal
+          const goalData = {
+            name: (suggestion.data.name as string) || 'New Goal',
+            details: suggestion.data.reason as string | undefined,
+            dueDate: suggestion.data.dueDate as string | undefined,
+          };
+
+          const { createGoal } = await import('@/lib/api');
+          const newGoal = await createGoal(goalData);
+
+          if (newGoal && onGoalCreated) {
+            onGoalCreated(newGoal as Goal);
+          }
+
+          // Add success message
+          setMessages(prev => [...prev, {
+            id: `system-${Date.now()}`,
+            senderId: 'system',
+            senderName: 'System',
+            senderType: 'system',
+            senderIcon: ROLE_ICONS.system,
+            content: locale === 'ja'
+              ? `✅ 目標「${goalData.name}」を作成しました`
+              : `✅ Created goal "${goalData.name}"`,
+            timestamp: new Date(),
+          }]);
+        }
+
+        setSuggestionStates(prev => ({
+          ...prev,
+          [messageId]: { status: 'accepted' },
+        }));
+
+      } else if (actionId === 'snooze') {
+        // Save to snoozed suggestions for later
+        const snoozedItem: SnoozedSuggestion = {
+          id: `snoozed-${Date.now()}`,
+          messageId,
+          type: suggestion.type,
+          data: suggestion.data,
+          snoozedAt: new Date(),
+        };
+
+        setSnoozedSuggestions(prev => [...prev, snoozedItem]);
+
+        // Add system message
+        setMessages(prev => [...prev, {
+          id: `system-${Date.now()}`,
+          senderId: 'system',
+          senderName: 'System',
+          senderType: 'system',
+          senderIcon: ROLE_ICONS.system,
+          content: locale === 'ja'
+            ? '⏭️ 提案を後で確認リストに追加しました'
+            : '⏭️ Added suggestion to review later list',
+          timestamp: new Date(),
+        }]);
+
+        setSuggestionStates(prev => ({
+          ...prev,
+          [messageId]: { status: 'snoozed' },
+        }));
+
+      } else if (actionId === 'dismiss') {
+        // Just mark as dismissed
+        setSuggestionStates(prev => ({
+          ...prev,
+          [messageId]: { status: 'dismissed' },
+        }));
+
+        // Add system message
+        setMessages(prev => [...prev, {
+          id: `system-${Date.now()}`,
+          senderId: 'system',
+          senderName: 'System',
+          senderType: 'system',
+          senderIcon: ROLE_ICONS.system,
+          content: locale === 'ja'
+            ? '❌ 提案を非表示にしました'
+            : '❌ Dismissed suggestion',
+          timestamp: new Date(),
+        }]);
+      }
+    } catch (error) {
+      console.error('Failed to process suggestion action:', error);
+      setSuggestionStates(prev => ({
+        ...prev,
+        [messageId]: {
+          status: 'error',
+          error: error instanceof Error ? error.message : 'Unknown error',
+        },
+      }));
+
+      // Add error message
+      setMessages(prev => [...prev, {
+        id: `error-${Date.now()}`,
+        senderId: 'system',
+        senderName: 'System',
+        senderType: 'system',
+        senderIcon: ROLE_ICONS.system,
+        content: locale === 'ja'
+          ? '❌ 提案の処理に失敗しました'
+          : '❌ Failed to process suggestion',
+        timestamp: new Date(),
+      }]);
+    }
+  }, [goals, locale, onHabitCreated, onGoalCreated]);
+
+  // Handle task status change
+  const handleTaskStatusChange = useCallback(async (
+    task: TaskWithDetail,
+    newStatus: string
+  ) => {
+    if (!task.serverId) return;
+
+    try {
+      // Note: This would need the actual API endpoint for updating task status
+      // For now, show a message and refresh data
+      setMessages(prev => [...prev, {
+        id: `system-${Date.now()}`,
+        senderId: 'system',
+        senderName: 'System',
+        senderType: 'system',
+        senderIcon: ROLE_ICONS.system,
+        content: locale === 'ja'
+          ? `📋 タスク「${task.title}」のステータスを ${newStatus} に変更しました`
+          : `📋 Changed task "${task.title}" status to ${newStatus}`,
+        timestamp: new Date(),
+      }]);
+
+      // Refresh data
+      await server.refreshData();
+    } catch (error) {
+      console.error('Failed to update task status:', error);
+    }
+  }, [server, locale]);
+
+  // Tab badges
+  const tabsWithBadges = TABS.map(tab => ({
+    ...tab,
+    badge: tab.id === 'tasks'
+      ? Array.from(server.connections.values()).reduce((sum, c) => sum + (c.tasks?.filter(t => t.status === 'in_progress').length || 0), 0)
+      : tab.id === 'agents'
+      ? connectedAgentCount
+      : undefined,
+  }));
+
+  // Reference for auto-scroll
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  // Auto-scroll to bottom when new messages arrive
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages]);
+
+  return (
+    <section className="flex flex-col h-full rounded-lg border border-border bg-card text-card-foreground shadow-sm overflow-hidden">
+      {/* Header - Minimal and clean */}
+      <header className="flex items-center justify-between px-4 py-2.5 border-b border-border bg-card">
+        <div className="flex items-center gap-3">
+          <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center text-primary-foreground text-sm shadow-sm">
+            🤖
+          </div>
+          <div>
+            <h2 className="text-sm font-semibold text-foreground">
+              {locale === 'ja' ? 'MOCセンター' : 'MOC Center'}
+            </h2>
+            <div className="flex items-center gap-2 text-xs text-muted-foreground">
+              <span className={`inline-flex items-center gap-1 ${isConnected ? 'text-green-600 dark:text-green-400' : ''}`}>
+                <span className={`w-1.5 h-1.5 rounded-full ${isConnected ? 'bg-green-500 animate-pulse' : 'bg-muted-foreground'}`} />
+                {isConnected ? 'Connected' : 'Offline'}
+              </span>
+              <span>•</span>
+              <span>{connectedAgentCount + 2} agents</span>
+            </div>
+          </div>
+        </div>
+        <button
+          onClick={() => server.openConfigModal?.()}
+          className="p-2 text-muted-foreground hover:text-foreground rounded-lg hover:bg-muted transition-colors"
+          title={locale === 'ja' ? '設定' : 'Settings'}
+        >
+          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+          </svg>
+        </button>
+      </header>
+
+      {/* Tab Bar - Sleek design */}
+      <div className="flex px-2 py-1 gap-1 border-b border-border bg-muted/30">
+        {tabsWithBadges.map(tab => (
+          <button
+            key={tab.id}
+            onClick={() => setActiveTab(tab.id)}
+            className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg transition-all ${
+              activeTab === tab.id
+                ? 'bg-primary text-primary-foreground shadow-sm'
+                : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+            }`}
+          >
+            <span className="text-sm">{tab.icon}</span>
+            <span>{locale === 'ja' ? tab.labelJa : tab.label}</span>
+            {tab.badge !== undefined && tab.badge > 0 && (
+              <span className={`min-w-[18px] h-[18px] px-1 text-[10px] font-semibold rounded-full flex items-center justify-center ${
+                activeTab === tab.id
+                  ? 'bg-primary-foreground/20 text-primary-foreground'
+                  : 'bg-primary/10 text-primary'
+              }`}>
+                {tab.badge}
+              </span>
+            )}
+          </button>
+        ))}
+      </div>
+
+      {/* Main Content Area - flex container for proper layout */}
+      <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
+        {activeTab === 'chat' ? (
+          <>
+            {/* Chat Messages - Scrollable area */}
+            <div className="flex-1 overflow-y-auto min-h-0">
+              <GroupChatView
+                messages={messages}
+                isLoading={coachAgent.isLoading}
+                locale={locale}
+                messagesEndRef={messagesEndRef}
+                suggestionStates={suggestionStates}
+                onSuggestionAction={handleSuggestionAction}
+              />
+            </div>
+
+            {/* Fixed Input Area at Bottom - flex-shrink-0 to prevent shrinking */}
+            <div
+              className="flex-shrink-0 border-t border-border bg-card"
+              style={{
+                paddingBottom: 'env(safe-area-inset-bottom, 0px)',
+              }}
+            >
+              {/* Quick Actions - only when no messages */}
+              {messages.length === 0 && (
+                <div className="px-4 pt-3">
+                  <p className="text-xs text-muted-foreground mb-2">
+                    {locale === 'ja' ? 'クイックアクション' : 'Quick Actions'}
+                  </p>
+                  <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">
+                    {quickActions.map(action => (
+                      <button
+                        key={action.id}
+                        onClick={() => handleQuickAction(action.command)}
+                        className="flex-shrink-0 px-3 py-2 text-sm bg-muted border border-border rounded-xl hover:bg-muted/80 text-foreground transition-all hover:shadow-sm"
+                      >
+                        {action.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Agent Selector Pills */}
+              <div className="px-4 pt-2">
+                <div className="flex gap-1.5 overflow-x-auto pb-2 scrollbar-hide">
+                  {availableAgents.map(agent => {
+                    const isSelected = selectedAgent === agent.id;
+                    const isOffline = agent.status === 'offline';
+
+                    return (
+                      <button
+                        key={agent.id}
+                        onClick={() => setSelectedAgent(agent.id)}
+                        disabled={isOffline}
+                        className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-full text-xs font-medium transition-all flex-shrink-0 ${
+                          isSelected
+                            ? 'bg-primary text-primary-foreground shadow-sm'
+                            : isOffline
+                            ? 'bg-muted text-muted-foreground/50 cursor-not-allowed'
+                            : 'bg-muted text-muted-foreground hover:bg-muted/80 hover:text-foreground'
+                        }`}
+                      >
+                        <span>{agent.icon}</span>
+                        <span className="max-w-[80px] truncate">{agent.name}</span>
+                        {agent.type === 'mcp-agent' && agent.id !== 'broadcast' && (
+                          <span className={`w-1.5 h-1.5 rounded-full ${
+                            agent.status === 'idle' ? 'bg-green-400' :
+                            agent.status === 'busy' ? 'bg-yellow-400' :
+                            'bg-muted-foreground'
+                          }`} />
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Input Container */}
+              <div className="px-4 pb-3 md:pb-4">
+                <div className="relative flex items-end gap-2 p-2 bg-muted rounded-2xl border border-border focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/20 transition-all">
+                  {/* Text Input */}
+                  <textarea
+                    value={inputValue}
+                    onChange={(e) => {
+                      setInputValue(e.target.value);
+                      // Auto-resize
+                      e.target.style.height = 'auto';
+                      e.target.style.height = Math.min(e.target.scrollHeight, 120) + 'px';
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && !e.shiftKey) {
+                        e.preventDefault();
+                        handleSendMessage();
+                      }
+                    }}
+                    placeholder={`${availableAgents.find(a => a.id === selectedAgent)?.name || 'Manager'} ${locale === 'ja' ? 'にメッセージ...' : '- Message...'}`}
+                    rows={1}
+                    className="flex-1 px-3 py-2 bg-transparent text-sm text-foreground placeholder-muted-foreground focus:outline-none resize-none max-h-[120px]"
+                    style={{ minHeight: '40px' }}
+                  />
+
+                  {/* Send Button */}
+                  <button
+                    onClick={handleSendMessage}
+                    disabled={!inputValue.trim() || coachAgent.isLoading}
+                    className={`flex-shrink-0 w-10 h-10 rounded-xl flex items-center justify-center transition-all ${
+                      inputValue.trim() && !coachAgent.isLoading
+                        ? 'bg-primary text-primary-foreground shadow-sm hover:bg-primary/90'
+                        : 'bg-muted text-muted-foreground cursor-not-allowed'
+                    }`}
+                  >
+                    {coachAgent.isLoading ? (
+                      <svg className="w-5 h-5 animate-spin" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                      </svg>
+                    ) : (
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+                      </svg>
+                    )}
+                  </button>
+                </div>
+
+                {/* Keyboard hint - hidden on mobile */}
+                <p className="hidden md:block text-[10px] text-muted-foreground mt-1.5 text-center">
+                  {locale === 'ja' ? 'Enter で送信 • Shift+Enter で改行' : 'Enter to send • Shift+Enter for new line'}
+                </p>
+              </div>
+
+              {/* Mobile bottom spacer - accounts for bottom nav bar (approx 70px) */}
+              <div className="block md:hidden h-[70px]" />
+            </div>
+          </>
+        ) : (
+          <div className="flex-1 overflow-y-auto">
+            {activeTab === 'tasks' && (
+              <TaskListView
+                connections={server.connections}
+                locale={locale}
+              />
+            )}
+            {activeTab === 'agents' && (
+              <AgentListView
+                connections={server.connections}
+                locale={locale}
+                onSelectAgent={(agentId) => {
+                  setSelectedAgent(agentId);
+                  setActiveTab('chat');
+                }}
+                selectedAgentId={selectedAgent}
+              />
+            )}
+            {activeTab === 'history' && (
+              <HistoryView
+                messages={messages}
+                locale={locale}
+              />
+            )}
+          </div>
+        )}
+      </div>
+    </section>
+  );
+}
+
+// Helper functions
+function formatActivityContent(activity: { eventType: string; details?: Record<string, unknown> }): string {
+  const details = activity.details || {};
+  switch (activity.eventType) {
+    case 'task_created':
+      return `📋 タスク作成: ${details.title || 'New Task'}`;
+    case 'task_started':
+      return `▶️ タスク開始: ${details.title || 'Task'}`;
+    case 'task_completed':
+      return `✅ タスク完了: ${details.title || 'Task'}`;
+    case 'agent_registered':
+      return `🤖 エージェント登録: ${details.name || 'Agent'}`;
+    case 'agent_status_changed':
+      return `📊 ステータス変更: ${details.status || 'unknown'}`;
+    default:
+      return `📝 ${activity.eventType}`;
+  }
+}
+
+function parseSuggestion(msg: MastraMessage): GroupChatMessage['suggestion'] | undefined {
+  // Parse tool calls for suggestions
+  if (!msg.toolCalls?.length) return undefined;
+
+  const suggestionCall = msg.toolCalls.find(tc =>
+    tc.toolName === 'suggest_goals' || tc.toolName === 'create_habit_suggestion'
+  );
+
+  if (!suggestionCall) return undefined;
+
+  return {
+    type: suggestionCall.toolName === 'suggest_goals' ? 'goal' : 'habit',
+    data: suggestionCall.input as Record<string, unknown>,
+    actions: [
+      { id: 'accept', label: '✅ 採用', variant: 'primary' },
+      { id: 'snooze', label: '⏭️ 後で', variant: 'secondary' },
+      { id: 'dismiss', label: '❌ 不要', variant: 'ghost' },
+    ],
+  };
+}
+
+// Sub-components
+
+interface GroupChatViewProps {
+  messages: GroupChatMessage[];
+  isLoading: boolean;
+  locale: 'ja' | 'en';
+  messagesEndRef?: React.RefObject<HTMLDivElement>;
+  suggestionStates?: Record<string, SuggestionState>;
+  onSuggestionAction?: (messageId: string, actionId: string, suggestion: NonNullable<GroupChatMessage['suggestion']>) => void;
+}
+
+function GroupChatView({ messages, isLoading, locale, messagesEndRef, suggestionStates, onSuggestionAction }: GroupChatViewProps) {
+  return (
+    <div className="flex flex-col min-h-full p-4 space-y-4">
+      {messages.length === 0 ? (
+        <div className="flex-1 flex items-center justify-center min-h-[300px]">
+          <div className="text-center max-w-md px-6">
+            {/* Welcome illustration */}
+            <div className="w-20 h-20 mx-auto mb-6 rounded-2xl bg-primary/10 flex items-center justify-center">
+              <span className="text-4xl">💬</span>
+            </div>
+            <h3 className="text-lg font-semibold text-foreground mb-2">
+              {locale === 'ja' ? 'MOCセンターへようこそ' : 'Welcome to MOC Center'}
+            </h3>
+            <p className="text-sm text-muted-foreground leading-relaxed">
+              {locale === 'ja'
+                ? 'マネージャーやAIコーチと会話して、習慣の管理やタスクの実行をサポートしてもらいましょう。'
+                : 'Chat with Manager or AI Coach to get help with habit management and task execution.'}
+            </p>
+            <div className="mt-6 flex flex-wrap justify-center gap-2">
+              <span className="inline-flex items-center gap-1 px-3 py-1.5 bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-300 rounded-full text-xs font-medium">
+                👔 {locale === 'ja' ? 'マネージャー' : 'Manager'}
+              </span>
+              <span className="inline-flex items-center gap-1 px-3 py-1.5 bg-purple-50 dark:bg-purple-900/20 text-purple-700 dark:text-purple-300 rounded-full text-xs font-medium">
+                🤖 AI Coach
+              </span>
+            </div>
+          </div>
+        </div>
+      ) : (
+        <>
+          {messages.map((msg, index) => (
+            <ChatMessageBubble
+              key={msg.id}
+              message={msg}
+              locale={locale}
+              isFirstInGroup={index === 0 || messages[index - 1]?.senderId !== msg.senderId}
+              isLastInGroup={index === messages.length - 1 || messages[index + 1]?.senderId !== msg.senderId}
+              suggestionState={suggestionStates?.[msg.id]}
+              onSuggestionAction={onSuggestionAction}
+            />
+          ))}
+        </>
+      )}
+
+      {/* Loading indicator */}
+      {isLoading && (
+        <div className="flex items-start gap-3">
+          <div className="w-10 h-10 rounded-full bg-gradient-to-br from-purple-500 to-indigo-600 flex items-center justify-center text-white text-lg shadow-md flex-shrink-0">
+            🤖
+          </div>
+          <div className="flex items-center gap-2 px-4 py-3 bg-muted rounded-2xl rounded-tl-sm">
+            <div className="flex gap-1">
+              <span className="w-2 h-2 bg-muted-foreground rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+              <span className="w-2 h-2 bg-muted-foreground rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+              <span className="w-2 h-2 bg-muted-foreground rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+            </div>
+            <span className="text-sm text-muted-foreground ml-2">
+              {locale === 'ja' ? '考え中...' : 'Thinking...'}
+            </span>
+          </div>
+        </div>
+      )}
+
+      {/* Scroll anchor */}
+      <div ref={messagesEndRef} />
+    </div>
+  );
+}
+
+interface ChatMessageBubbleProps {
+  message: GroupChatMessage;
+  locale: 'ja' | 'en';
+  isFirstInGroup?: boolean;
+  isLastInGroup?: boolean;
+  suggestionState?: SuggestionState;
+  onSuggestionAction?: (messageId: string, actionId: string, suggestion: NonNullable<GroupChatMessage['suggestion']>) => void;
+}
+
+function ChatMessageBubble({ message, locale, isFirstInGroup = true, isLastInGroup = true, suggestionState, onSuggestionAction }: ChatMessageBubbleProps) {
+  const isUser = message.senderType === 'user';
+
+  // Sender type specific styling with gradients
+  const senderStyles = {
+    user: {
+      avatar: 'bg-gradient-to-br from-blue-500 to-blue-600',
+      bubble: 'bg-gradient-to-br from-blue-500 to-blue-600 text-white',
+      name: 'text-blue-600 dark:text-blue-400',
+    },
+    coach: {
+      avatar: 'bg-gradient-to-br from-purple-500 to-indigo-600',
+      bubble: 'bg-white dark:bg-gray-800 text-gray-900 dark:text-white shadow-sm border border-gray-100 dark:border-gray-700',
+      name: 'text-purple-600 dark:text-purple-400',
+    },
+    agent: {
+      avatar: 'bg-gradient-to-br from-amber-500 to-orange-500',
+      bubble: 'bg-white dark:bg-gray-800 text-gray-900 dark:text-white shadow-sm border border-gray-100 dark:border-gray-700',
+      name: 'text-amber-600 dark:text-amber-400',
+    },
+    system: {
+      avatar: 'bg-gray-400',
+      bubble: 'bg-gray-100 dark:bg-gray-800/50 text-gray-600 dark:text-gray-400 text-center italic',
+      name: 'text-gray-500 dark:text-gray-400',
+    },
+  };
+
+  const styles = senderStyles[message.senderType] || senderStyles.agent;
+
+  // Role badge colors with better contrast
+  const roleBadgeColors: Record<string, string> = {
+    manager: 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300',
+    developer: 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300',
+    reviewer: 'bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-300',
+    tester: 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300',
+    architect: 'bg-indigo-100 text-indigo-800 dark:bg-indigo-900/30 dark:text-indigo-300',
+    devops: 'bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-300',
+    analyst: 'bg-cyan-100 text-cyan-800 dark:bg-cyan-900/30 dark:text-cyan-300',
+    coach: 'bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-300',
+  };
+
+  // System messages are displayed differently
+  if (message.senderType === 'system') {
+    return (
+      <div className="flex justify-center my-2">
+        <div className={`px-4 py-2 rounded-full ${styles.bubble} text-xs`}>
+          {message.content}
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className={`flex gap-3 ${isUser ? 'flex-row-reverse' : ''} ${!isLastInGroup ? 'mb-1' : ''}`}>
+      {/* Avatar - only show for first message in group */}
+      {isFirstInGroup ? (
+        <div className={`flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center text-lg text-white shadow-md ${styles.avatar}`}>
+          {message.senderIcon || (isUser ? '👤' : '🤖')}
+        </div>
+      ) : (
+        <div className="w-10 flex-shrink-0" /> /* Spacer */
+      )}
+
+      {/* Message Content */}
+      <div className={`flex flex-col max-w-[70%] ${isUser ? 'items-end' : 'items-start'}`}>
+        {/* Sender Info - only show for first message in group */}
+        {isFirstInGroup && (
+          <div className={`flex items-center gap-2 mb-1 ${isUser ? 'flex-row-reverse' : ''}`}>
+            <span className={`text-xs font-semibold ${styles.name}`}>
+              {message.senderName}
+            </span>
+            {message.senderRole && message.senderType !== 'user' && (
+              <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${roleBadgeColors[message.senderRole.toLowerCase()] || 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-400'}`}>
+                {message.senderRole}
+              </span>
+            )}
+          </div>
+        )}
+
+        {/* Message Bubble */}
+        <div className={`px-4 py-2.5 ${styles.bubble} ${
+          isUser
+            ? `rounded-2xl ${isFirstInGroup ? 'rounded-tr-md' : ''} ${isLastInGroup ? '' : 'rounded-br-md'}`
+            : `rounded-2xl ${isFirstInGroup ? 'rounded-tl-md' : ''} ${isLastInGroup ? '' : 'rounded-bl-md'}`
+        }`}>
+          <p className="whitespace-pre-wrap text-sm leading-relaxed">{message.content}</p>
+        </div>
+
+        {/* Task reference */}
+        {message.taskId && isLastInGroup && (
+          <div className="flex items-center gap-1 mt-1 text-[10px] text-gray-400 dark:text-gray-500">
+            <span>📋</span>
+            <span>{message.taskTitle || message.taskId}</span>
+          </div>
+        )}
+
+        {/* Timestamp - only show for last message in group */}
+        {isLastInGroup && (
+          <span className="text-[10px] text-gray-400 dark:text-gray-500 mt-1">
+            {formatTime(message.timestamp)}
+          </span>
+        )}
+
+        {/* Suggestion Card */}
+        {message.suggestion && (
+          <SuggestionCard
+            messageId={message.id}
+            suggestion={message.suggestion}
+            locale={locale}
+            state={suggestionState}
+            onAction={onSuggestionAction}
+          />
+        )}
+      </div>
+    </div>
+  );
+}
+
+interface SuggestionCardProps {
+  messageId: string;
+  suggestion: NonNullable<GroupChatMessage['suggestion']>;
+  locale: 'ja' | 'en';
+  state?: SuggestionState;
+  onAction?: (messageId: string, actionId: string, suggestion: NonNullable<GroupChatMessage['suggestion']>) => void;
+}
+
+function SuggestionCard({ messageId, suggestion, locale, state, onAction }: SuggestionCardProps) {
+  const data = suggestion.data;
+  const isHabit = suggestion.type === 'habit';
+  const status = state?.status || 'pending';
+
+  // If already processed, show status
+  if (status === 'accepted' || status === 'snoozed' || status === 'dismissed') {
+    const statusIcons = {
+      accepted: '✅',
+      snoozed: '⏭️',
+      dismissed: '❌',
+    };
+    const statusLabels = {
+      accepted: locale === 'ja' ? '採用済み' : 'Accepted',
+      snoozed: locale === 'ja' ? '後で確認' : 'Snoozed',
+      dismissed: locale === 'ja' ? '不要' : 'Dismissed',
+    };
+    const statusColors = {
+      accepted: 'bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800',
+      snoozed: 'bg-yellow-50 dark:bg-yellow-900/20 border-yellow-200 dark:border-yellow-800',
+      dismissed: 'bg-gray-50 dark:bg-gray-800/50 border-gray-200 dark:border-gray-700 opacity-60',
+    };
+
+    return (
+      <div className={`mt-2 p-3 rounded-lg shadow-sm max-w-sm border ${statusColors[status]}`}>
+        <div className="flex items-center gap-2">
+          <span className="text-lg">{statusIcons[status]}</span>
+          <div>
+            <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
+              {(data.name as string) || (locale === 'ja' ? '提案' : 'Suggestion')}
+            </span>
+            <span className="ml-2 text-xs text-gray-500 dark:text-gray-400">
+              {statusLabels[status]}
+            </span>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="mt-2 p-3 bg-card border border-border rounded-lg shadow-sm max-w-sm">
+      <div className="flex items-start gap-2 mb-2">
+        <span className="text-lg">{isHabit ? '📝' : '🎯'}</span>
+        <div>
+          <h4 className="font-medium text-foreground">
+            {(data.name as string) || (locale === 'ja' ? '提案' : 'Suggestion')}
+          </h4>
+          {data.frequency && (
+            <p className="text-xs text-muted-foreground">
+              {locale === 'ja' ? '頻度' : 'Frequency'}: {data.frequency as string}
+            </p>
+          )}
+        </div>
+      </div>
+      {data.reason && (
+        <p className="text-sm text-muted-foreground mb-3">
+          💡 {data.reason as string}
+        </p>
+      )}
+
+      {/* Error message */}
+      {status === 'error' && state?.error && (
+        <p className="text-xs text-red-600 dark:text-red-400 mb-2">
+          ⚠️ {state.error}
+        </p>
+      )}
+
+      <div className="flex gap-2">
+        {suggestion.actions.map(action => (
+          <button
+            key={action.id}
+            onClick={() => onAction?.(messageId, action.id, suggestion)}
+            disabled={status === 'loading'}
+            className={`px-3 py-1.5 text-sm rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
+              action.variant === 'primary'
+                ? 'bg-primary text-primary-foreground hover:bg-primary/90'
+                : action.variant === 'secondary'
+                ? 'bg-muted text-foreground hover:bg-muted/80'
+                : 'text-muted-foreground hover:text-foreground'
+            }`}
+          >
+            {status === 'loading' && action.variant === 'primary' ? (
+              <span className="flex items-center gap-1">
+                <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                </svg>
+                {locale === 'ja' ? '処理中...' : 'Processing...'}
+              </span>
+            ) : (
+              action.label
+            )}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+interface TaskListViewProps {
+  connections: Map<string, { tasks?: Array<{ id: string; title: string; status: string; priority: string; assignedTo?: string }> }>;
+  locale: 'ja' | 'en';
+}
+
+function TaskListView({ connections, locale }: TaskListViewProps) {
+  const allTasks = Array.from(connections.values()).flatMap(c => c.tasks || []);
+
+  const inProgress = allTasks.filter(t => t.status === 'in_progress');
+  const pending = allTasks.filter(t => t.status === 'pending');
+  const completed = allTasks.filter(t => t.status === 'completed').slice(0, 5);
+
+  return (
+    <div className="p-4 space-y-4 overflow-y-auto h-full">
+      {/* In Progress */}
+      <TaskSection
+        title={locale === 'ja' ? '🔄 進行中' : '🔄 In Progress'}
+        tasks={inProgress}
+        locale={locale}
+      />
+
+      {/* Pending */}
+      <TaskSection
+        title={locale === 'ja' ? '⏳ 待機中' : '⏳ Pending'}
+        tasks={pending}
+        locale={locale}
+      />
+
+      {/* Completed */}
+      <TaskSection
+        title={locale === 'ja' ? '✅ 完了 (最近)' : '✅ Completed (Recent)'}
+        tasks={completed}
+        locale={locale}
+      />
+
+      {allTasks.length === 0 && (
+        <div className="text-center text-muted-foreground py-8">
+          <span className="text-3xl mb-2 block">📋</span>
+          <p>{locale === 'ja' ? 'タスクはありません' : 'No tasks'}</p>
+        </div>
+      )}
+    </div>
+  );
+}
+
+interface TaskSectionProps {
+  title: string;
+  tasks: Array<{ id: string; title: string; status: string; priority: string; assignedTo?: string }>;
+  locale: 'ja' | 'en';
+}
+
+function TaskSection({ title, tasks, locale }: TaskSectionProps) {
+  if (tasks.length === 0) return null;
+
+  const priorityColors: Record<string, string> = {
+    urgent: 'text-red-600 dark:text-red-400',
+    high: 'text-orange-600 dark:text-orange-400',
+    medium: 'text-yellow-600 dark:text-yellow-400',
+    low: 'text-gray-600 dark:text-gray-400',
+  };
+
+  return (
+    <div>
+      <h3 className="text-sm font-medium text-foreground mb-2">
+        {title} ({tasks.length})
+      </h3>
+      <div className="space-y-2">
+        {tasks.map(task => (
+          <div
+            key={task.id}
+            className="p-3 bg-muted rounded-lg border border-border"
+          >
+            <div className="flex items-center justify-between">
+              <span className="font-medium text-foreground">{task.title}</span>
+              <span className={`text-xs font-medium ${priorityColors[task.priority] || priorityColors.medium}`}>
+                {task.priority}
+              </span>
+            </div>
+            {task.assignedTo && (
+              <p className="text-xs text-muted-foreground mt-1">
+                {locale === 'ja' ? '担当' : 'Assigned'}: {task.assignedTo}
+              </p>
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+interface AgentListViewProps {
+  connections: Map<string, {
+    agents?: Array<{ id: string; name: string; role: string; status: string }>;
+    tasks?: Array<{ id: string; title: string; status: string; assignedTo?: string }>;
+  }>;
+  locale: 'ja' | 'en';
+  onSelectAgent?: (agentId: string) => void;
+  selectedAgentId?: string;
+}
+
+function AgentListView({ connections, locale, onSelectAgent, selectedAgentId }: AgentListViewProps) {
+  const allAgents = Array.from(connections.values()).flatMap(c => c.agents || []);
+  const allTasks = Array.from(connections.values()).flatMap(c => c.tasks || []);
+
+  // Get current task for an agent
+  const getAgentCurrentTask = (agentId: string) => {
+    return allTasks.find(t => t.assignedTo === agentId && t.status === 'in_progress');
+  };
+
+  const [hoveredAgent, setHoveredAgent] = useState<string | null>(null);
+  const [expandedNodes, setExpandedNodes] = useState<Set<string>>(new Set(['manager']));
+
+  const toggleNode = (nodeId: string) => {
+    setExpandedNodes(prev => {
+      const next = new Set(prev);
+      if (next.has(nodeId)) {
+        next.delete(nodeId);
+      } else {
+        next.add(nodeId);
+      }
+      return next;
+    });
+  };
+
+  const statusColors: Record<string, string> = {
+    idle: 'bg-green-500',
+    busy: 'bg-yellow-500',
+    offline: 'bg-gray-400',
+  };
+
+  const statusLabels: Record<string, { ja: string; en: string }> = {
+    idle: { ja: '待機中', en: 'Idle' },
+    busy: { ja: '処理中', en: 'Busy' },
+    offline: { ja: 'オフライン', en: 'Offline' },
+  };
+
+  // Agent tooltip component
+  const AgentTooltip = ({ agentId, agentName, status, currentTask }: {
+    agentId: string;
+    agentName: string;
+    status: string;
+    currentTask?: { id: string; title: string } | null;
+  }) => (
+    <div className="absolute z-50 left-full ml-2 top-0 w-64 p-3 bg-gray-900 dark:bg-gray-800 text-white rounded-lg shadow-xl border border-gray-700 text-sm">
+      <div className="flex items-center gap-2 mb-2">
+        <span className={`w-2 h-2 rounded-full ${statusColors[status.toLowerCase()] || statusColors.offline}`} />
+        <span className="font-medium">{agentName}</span>
+      </div>
+      <div className="space-y-1 text-gray-300">
+        <p><span className="text-gray-500">{locale === 'ja' ? 'ステータス' : 'Status'}:</span> {statusLabels[status.toLowerCase()]?.[locale] || status}</p>
+        {currentTask ? (
+          <p><span className="text-gray-500">{locale === 'ja' ? '実行中タスク' : 'Current Task'}:</span> {currentTask.title}</p>
+        ) : (
+          <p className="text-gray-500 italic">{locale === 'ja' ? 'タスクなし' : 'No active task'}</p>
+        )}
+      </div>
+      {/* Arrow */}
+      <div className="absolute left-0 top-3 -translate-x-full">
+        <div className="border-8 border-transparent border-r-gray-900 dark:border-r-gray-800" />
+      </div>
+    </div>
+  );
+
+  // Tree node component
+  const TreeNode = ({
+    id,
+    name,
+    role,
+    icon,
+    status,
+    gradient,
+    children,
+    level = 0,
+    description,
+    badge,
+  }: {
+    id: string;
+    name: string;
+    role: string;
+    icon: string;
+    status: string;
+    gradient: string;
+    children?: React.ReactNode;
+    level?: number;
+    description?: string;
+    badge?: { text: string; color: string };
+  }) => {
+    const isExpanded = expandedNodes.has(id);
+    const isSelected = selectedAgentId === id;
+    const hasChildren = !!children;
+    const currentTask = getAgentCurrentTask(id);
+    const isHovered = hoveredAgent === id;
+
+    return (
+      <div className="relative">
+        {/* Connection line */}
+        {level > 0 && (
+          <div
+            className="absolute left-6 -top-3 w-px h-3 bg-gray-300 dark:bg-gray-600"
+            style={{ marginLeft: (level - 1) * 24 }}
+          />
+        )}
+
+        <div
+          className="relative"
+          style={{ marginLeft: level * 24 }}
+        >
+          {/* Horizontal connector */}
+          {level > 0 && (
+            <div className="absolute left-0 top-6 w-4 h-px bg-gray-300 dark:bg-gray-600 -translate-x-4" />
+          )}
+
+          <div
+            className={`relative flex items-center gap-2 p-2 rounded-lg cursor-pointer transition-all ${
+              isSelected
+                ? 'bg-blue-50 dark:bg-blue-900/30 ring-2 ring-blue-500'
+                : 'hover:bg-gray-100 dark:hover:bg-gray-800'
+            }`}
+            onClick={() => onSelectAgent?.(id)}
+            onMouseEnter={() => setHoveredAgent(id)}
+            onMouseLeave={() => setHoveredAgent(null)}
+          >
+            {/* Expand/collapse button */}
+            {hasChildren && (
+              <button
+                onClick={(e) => { e.stopPropagation(); toggleNode(id); }}
+                className="w-5 h-5 flex items-center justify-center text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+              >
+                <svg
+                  className={`w-4 h-4 transition-transform ${isExpanded ? 'rotate-90' : ''}`}
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                </svg>
+              </button>
+            )}
+            {!hasChildren && <div className="w-5" />}
+
+            {/* Avatar */}
+            <div className={`relative w-10 h-10 rounded-full bg-gradient-to-br ${gradient} flex items-center justify-center text-white text-lg shadow-md flex-shrink-0`}>
+              {icon}
+              {/* Status indicator */}
+              <span className={`absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-white dark:border-gray-900 ${statusColors[status.toLowerCase()] || statusColors.offline}`} />
+            </div>
+
+            {/* Info */}
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2">
+                <h4 className="font-medium text-gray-900 dark:text-white truncate">{name}</h4>
+                {badge && (
+                  <span className={`px-1.5 py-0.5 text-xs font-medium rounded ${badge.color}`}>
+                    {badge.text}
+                  </span>
+                )}
+              </div>
+              <p className="text-xs text-gray-500 dark:text-gray-400 truncate">
+                {description || role}
+              </p>
+              {currentTask && (
+                <p className="text-xs text-blue-600 dark:text-blue-400 truncate mt-0.5">
+                  🔄 {currentTask.title}
+                </p>
+              )}
+            </div>
+
+            {/* Selection indicator */}
+            {isSelected && (
+              <span className="text-blue-500 text-lg">✓</span>
+            )}
+
+            {/* Tooltip */}
+            {isHovered && (
+              <AgentTooltip
+                agentId={id}
+                agentName={name}
+                status={status}
+                currentTask={currentTask}
+              />
+            )}
+          </div>
+
+          {/* Children */}
+          {hasChildren && isExpanded && (
+            <div className="relative mt-1">
+              {/* Vertical connector line */}
+              <div
+                className="absolute left-6 top-0 w-px bg-gray-300 dark:bg-gray-600"
+                style={{ height: 'calc(100% - 12px)' }}
+              />
+              {children}
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  };
+
+  return (
+    <div className="p-4 overflow-y-auto h-full">
+      <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">
+        {locale === 'ja' ? 'エージェントツリー' : 'Agent Tree'}
+      </h3>
+
+      {/* Tree Structure */}
+      <div className="space-y-1">
+        {/* Manager - Root Node */}
+        <TreeNode
+          id="manager"
+          name={locale === 'ja' ? 'マネージャー' : 'Manager'}
+          role="Manager"
+          icon="👔"
+          status="idle"
+          gradient="from-amber-500 to-orange-500"
+          description={locale === 'ja' ? 'タスク管理・エージェント統括' : 'Task & Agent Orchestration'}
+          badge={{ text: locale === 'ja' ? '統括' : 'Lead', color: 'bg-amber-100 text-amber-700 dark:bg-amber-900/50 dark:text-amber-300' }}
+        >
+          {/* AI Coach - Child of Manager */}
+          <TreeNode
+            id="coach"
+            name="AI Coach"
+            role="Coach"
+            icon="🤖"
+            status="idle"
+            gradient="from-purple-500 to-indigo-500"
+            level={1}
+            description={locale === 'ja' ? '習慣・目標のアドバイザー' : 'Habit & Goal Advisor'}
+            badge={{ text: locale === 'ja' ? '常駐' : 'On', color: 'bg-green-100 text-green-700 dark:bg-green-900/50 dark:text-green-300' }}
+          />
+
+          {/* MCP Agents - Children of Manager */}
+          {allAgents.map(agent => {
+            const roleGradients: Record<string, string> = {
+              manager: 'from-amber-500 to-orange-500',
+              developer: 'from-blue-500 to-cyan-500',
+              reviewer: 'from-purple-500 to-pink-500',
+              tester: 'from-green-500 to-emerald-500',
+              architect: 'from-indigo-500 to-violet-500',
+              devops: 'from-orange-500 to-red-500',
+              analyst: 'from-cyan-500 to-teal-500',
+              coach: 'from-purple-500 to-indigo-500',
+            };
+
+            return (
+              <TreeNode
+                key={agent.id}
+                id={agent.id}
+                name={agent.name}
+                role={agent.role}
+                icon={ROLE_ICONS[agent.role.toLowerCase()] || '🤖'}
+                status={agent.status}
+                gradient={roleGradients[agent.role.toLowerCase()] || 'from-gray-500 to-gray-600'}
+                level={1}
+              />
+            );
+          })}
+        </TreeNode>
+      </div>
+
+      {/* Empty state for MCP agents */}
+      {allAgents.length === 0 && (
+        <div className="mt-4 text-center text-muted-foreground py-6 border-2 border-dashed border-border rounded-lg">
+          <span className="text-2xl mb-2 block">🔌</span>
+          <p className="text-sm font-medium">{locale === 'ja' ? 'MCPエージェント未接続' : 'No MCP agents connected'}</p>
+          <p className="text-xs mt-1">{locale === 'ja' ? '設定からMCPサーバーに接続' : 'Connect via settings'}</p>
+        </div>
+      )}
+
+      {/* Legend */}
+      <div className="mt-6 pt-4 border-t border-border">
+        <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">
+          {locale === 'ja' ? 'ステータス凡例' : 'Status Legend'}
+        </h4>
+        <div className="flex flex-wrap gap-3 text-xs">
+          <div className="flex items-center gap-1.5">
+            <span className="w-2.5 h-2.5 rounded-full bg-green-500" />
+            <span className="text-muted-foreground">{locale === 'ja' ? '待機中' : 'Idle'}</span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <span className="w-2.5 h-2.5 rounded-full bg-yellow-500" />
+            <span className="text-muted-foreground">{locale === 'ja' ? '処理中' : 'Busy'}</span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <span className="w-2.5 h-2.5 rounded-full bg-muted-foreground" />
+            <span className="text-muted-foreground">{locale === 'ja' ? 'オフライン' : 'Offline'}</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+interface HistoryViewProps {
+  messages: GroupChatMessage[];
+  locale: 'ja' | 'en';
+}
+
+function HistoryView({ messages, locale }: HistoryViewProps) {
+  // Group messages by date
+  const groupedByDate = messages.reduce((acc, msg) => {
+    const dateKey = msg.timestamp.toLocaleDateString(locale === 'ja' ? 'ja-JP' : 'en-US');
+    if (!acc[dateKey]) acc[dateKey] = [];
+    acc[dateKey].push(msg);
+    return acc;
+  }, {} as Record<string, GroupChatMessage[]>);
+
+  const dates = Object.keys(groupedByDate).reverse();
+
+  return (
+    <div className="p-4 space-y-4 overflow-y-auto h-full">
+      {dates.map(date => (
+        <div key={date}>
+          <h3 className="text-sm font-medium text-muted-foreground mb-2">
+            📅 {date}
+          </h3>
+          <div className="space-y-2">
+            {groupedByDate[date].slice(-5).map(msg => (
+              <div
+                key={msg.id}
+                className="p-3 bg-muted rounded-lg border border-border"
+              >
+                <div className="flex items-center gap-2 mb-1">
+                  <span>{msg.senderIcon || '💬'}</span>
+                  <span className="text-sm font-medium text-foreground">{msg.senderName}</span>
+                  <span className="text-xs text-muted-foreground">{formatTime(msg.timestamp)}</span>
+                </div>
+                <p className="text-sm text-muted-foreground line-clamp-2">{msg.content}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      ))}
+
+      {messages.length === 0 && (
+        <div className="text-center text-muted-foreground py-8">
+          <span className="text-3xl mb-2 block">📜</span>
+          <p>{locale === 'ja' ? '履歴はありません' : 'No history'}</p>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function formatTime(date: Date): string {
+  return date.toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' });
+}
+
+export default MOCSection;

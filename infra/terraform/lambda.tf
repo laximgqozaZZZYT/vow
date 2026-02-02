@@ -189,6 +189,10 @@ resource "aws_lambda_function" "hono_api" {
       
       # CORS
       CORS_ORIGINS = jsonencode(var.cors_origins)
+
+      # DynamoDB Tables
+      AGENT_SESSIONS_TABLE   = aws_dynamodb_table.agent_sessions.name
+      MCP_CONNECTIONS_TABLE  = aws_dynamodb_table.mcp_connections.name
     }
   }
 

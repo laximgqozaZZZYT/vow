@@ -9,11 +9,14 @@ const ENABLE_AI_COACH = process.env.NEXT_PUBLIC_ENABLE_AI_COACH === 'true';
 // Feature flag for Multi-Agent Dashboard
 const ENABLE_MULTI_AGENT = process.env.NEXT_PUBLIC_ENABLE_MULTI_AGENT === 'true';
 
+// Feature flag for MOC (Multi-agent Orchestration Center)
+const ENABLE_MOC = process.env.NEXT_PUBLIC_ENABLE_MOC === 'true';
+
 export interface TabConfig {
   id: string;
   label: string;
   labelJa: string;
-  iconType: 'board' | 'next' | 'activity' | 'calendar' | 'statistics' | 'diary' | 'stickies' | 'mindmap' | 'notices' | 'coach' | 'agents';
+  iconType: 'board' | 'next' | 'activity' | 'calendar' | 'statistics' | 'diary' | 'stickies' | 'mindmap' | 'notices' | 'coach' | 'agents' | 'moc';
   supportsFullView?: boolean;
   /** Alias IDs that should be treated as equivalent to this tab (for backward compatibility) */
   aliases?: string[];
@@ -35,8 +38,11 @@ const ALL_TAB_CONFIGS: TabConfig[] = [
   { id: 'stickies', label: 'Notes', labelJa: 'メモ', iconType: 'stickies', enabled: true },
   { id: 'mindmap', label: 'Map', labelJa: 'マップ', iconType: 'mindmap', supportsFullView: true, enabled: true },
   { id: 'notices', label: 'Alerts', labelJa: '通知', iconType: 'notices', enabled: true },
-  { id: 'coach', label: 'Coach', labelJa: 'コーチ', iconType: 'coach', enabled: ENABLE_AI_COACH },
-  { id: 'agents', label: 'Agents', labelJa: 'エージェント', iconType: 'agents', enabled: ENABLE_MULTI_AGENT, requiresPremium: true, adminOnly: true },
+  // AI Coach and Agents tabs are temporarily hidden (use MOC instead)
+  // Source code is preserved for future use
+  { id: 'coach', label: 'Coach', labelJa: 'コーチ', iconType: 'coach', enabled: false /* ENABLE_AI_COACH - temporarily disabled */ },
+  { id: 'agents', label: 'Agents', labelJa: 'エージェント', iconType: 'agents', enabled: false /* ENABLE_MULTI_AGENT - temporarily disabled */, requiresPremium: true, adminOnly: true },
+  { id: 'moc', label: 'MOC', labelJa: 'MOC', iconType: 'moc', enabled: ENABLE_MOC },
 ];
 
 // Filter tabs based on feature flags
@@ -82,6 +88,10 @@ export function getVisibleTabs(pageSections: string[], userContext?: TabUserCont
     }
     // Always include agents tab if it's enabled (feature flag) and user has access
     if (tab.id === 'agents' && tab.enabled) {
+      return true;
+    }
+    // Always include moc tab if it's enabled (feature flag) and user has access
+    if (tab.id === 'moc' && tab.enabled) {
       return true;
     }
     return normalizedSections.includes(tab.id);

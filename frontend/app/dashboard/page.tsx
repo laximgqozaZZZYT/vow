@@ -18,6 +18,7 @@ import MindmapSection from './components/Section.Mindmap';
 import NoticeSection from './components/Section.Notice';
 import CoachSection from './components/Section.Coach';
 import AgentsSection from './components/Section.Agents';
+import MOCSection from './components/Section.MOC';
 
 // Extracted components
 import DashboardHeader from './components/Layout.Header';
@@ -51,7 +52,7 @@ export default function DashboardPage() {
   const [selectedGoal, setSelectedGoal] = useState<string | null>(null);
   
   // 認証状態を取得
-  const { isAuthed, isGuest, migrationStatus, isAdmin, isPremium } = useAuth();
+  const { isAuthed, isGuest, migrationStatus, isAdmin, isPremium, authToken } = useAuth();
 
   // Check for guest data migration on page load
   useEffect(() => {
@@ -568,6 +569,7 @@ export default function DashboardPage() {
         handleMoveHabit={handleMoveHabit}
         isAdmin={isAdmin}
         isPremium={isPremium}
+        authToken={authToken}
       />
     </HandednessProvider>
     </LocaleProvider>
@@ -685,6 +687,16 @@ const MobileTabIcon = ({ type, isActive }: { type: string; isActive: boolean }) 
           <circle cx="12" cy="15" r="1" />
         </svg>
       );
+    case 'moc':
+      // MOC icon - chat bubble with AI/robot elements
+      return (
+        <svg {...iconProps}>
+          <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z" />
+          <circle cx="12" cy="11" r="1" />
+          <circle cx="8" cy="11" r="1" />
+          <circle cx="16" cy="11" r="1" />
+        </svg>
+      );
     default:
       return null;
   }
@@ -781,13 +793,15 @@ function DashboardLayout(props: any) {
     handleMoveHabit,
     isAdmin,
     isPremium,
+    authToken,
   } = props;
 
   // Tab navigation state
   const visibleTabs = getVisibleTabs(pageSections, { isAdmin, isPremium });
+  const visibleTabIds = visibleTabs.map(t => t.id);
   const { activeTab, setActiveTab, isFullView, toggleFullView, exitFullView, isCollapsed, toggleCollapse } = useTabNavigation(
     'board', // Always start with Board tab
-    pageSections
+    visibleTabIds // Use visible tabs (includes feature-flagged tabs like 'moc')
   );
   const currentTabConfig = getTabById(activeTab);
   const supportsFullView = currentTabConfig?.supportsFullView ?? false;
@@ -800,7 +814,7 @@ function DashboardLayout(props: any) {
     switch (normalizedTab) {
       case 'board':
         return (
-          <BoardSection 
+          <BoardSection
             habits={habits}
             activities={activities}
             stickies={stickies}
@@ -824,6 +838,24 @@ function DashboardLayout(props: any) {
             }}
             onNewSticky={handleStickyCreate}
             onManageTags={() => setOpenManageTags(true)}
+            onRegisterAsHabit={async (data) => {
+              const createdHabit = await createHabit(data);
+              return createdHabit;
+            }}
+            onRegisterAsGoal={async (payload) => {
+              const createdGoal = await createGoal(payload);
+              return createdGoal;
+            }}
+            onDataChange={async () => {
+              try {
+                const gs = await api.getGoals();
+                setGoals(gs || []);
+                const hs = await api.getHabits();
+                setHabits(hs || []);
+              } catch (e) {
+                console.error('Failed to reload data', e);
+              }
+            }}
           />
         );
       case 'activity':
@@ -948,6 +980,30 @@ function DashboardLayout(props: any) {
             onOpenSettings={() => {
               // TODO: Navigate to Settings with Multi-Agent tab
               debug.log('[Dashboard] Opening agents settings...');
+            }}
+          />
+        );
+      case 'moc':
+        return (
+          <MOCSection
+            goals={goals}
+            habits={habits}
+            authToken={authToken ?? undefined}
+            onHabitCreated={async () => {
+              try {
+                const hs = await api.getHabits();
+                setHabits(hs || []);
+              } catch (e) {
+                console.error('Failed to reload habits', e);
+              }
+            }}
+            onGoalCreated={async () => {
+              try {
+                const gs = await api.getGoals();
+                setGoals(gs || []);
+              } catch (e) {
+                console.error('Failed to reload goals', e);
+              }
             }}
           />
         );

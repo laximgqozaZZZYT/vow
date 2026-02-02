@@ -9,10 +9,20 @@
  * @module Widget.AgentTooltip
  */
 
-import { useState, useEffect, useRef, useCallback, memo } from 'react';
+import { useState, useEffect, useRef, useCallback, memo, createContext, useContext } from 'react';
 import type { Agent, AgentTask } from '../types/agent.types';
 import { ROLE_CONFIG, STATUS_CONFIG, TASK_STATUS_CONFIG } from '../types/agent.types';
-import { MOCK_TASKS } from '../mocks/mockAgentData';
+
+// Context for sharing tasks data with tooltip
+const TasksContext = createContext<AgentTask[]>([]);
+
+export function TasksProvider({ tasks, children }: { tasks: AgentTask[]; children: React.ReactNode }) {
+  return <TasksContext.Provider value={tasks}>{children}</TasksContext.Provider>;
+}
+
+function useTasks(): AgentTask[] {
+  return useContext(TasksContext);
+}
 
 export interface AgentTooltipProps {
   /** The agent to display information for */
@@ -42,12 +52,9 @@ function formatTime(dateStr: string): string {
 
 /**
  * Calculate progress percentage for a task
- * This is a mock implementation - in production would use actual task data
+ * Based on task status - in production could use actual progress data
  */
-function getTaskProgress(taskId: string | null): number {
-  if (!taskId) return 0;
-  // Mock progress based on task status
-  const task = MOCK_TASKS.find(t => t.id === taskId);
+function getTaskProgress(task: AgentTask | null): number {
   if (!task) return 0;
   switch (task.status) {
     case 'pending':
@@ -55,7 +62,7 @@ function getTaskProgress(taskId: string | null): number {
     case 'assigned':
       return 10;
     case 'in_progress':
-      return 65; // Mock value
+      return 50; // Would come from actual task progress in production
     case 'completed':
       return 100;
     case 'failed':
@@ -66,11 +73,11 @@ function getTaskProgress(taskId: string | null): number {
 }
 
 /**
- * Get task details
+ * Get task details from tasks array
  */
-function getTaskDetails(taskId: string | null): AgentTask | null {
+function getTaskDetails(taskId: string | null, tasks: AgentTask[]): AgentTask | null {
   if (!taskId) return null;
-  return MOCK_TASKS.find(t => t.id === taskId) || null;
+  return tasks.find(t => t.id === taskId) || null;
 }
 
 /**
@@ -228,12 +235,15 @@ function AgentTooltipComponent({
     return () => window.removeEventListener('resize', handleResize);
   }, [visible, calculatePosition]);
 
+  // Get tasks from context
+  const tasks = useTasks();
+
   if (!visible) return null;
 
   const roleConfig = ROLE_CONFIG[agent.role];
   const statusConfig = STATUS_CONFIG[agent.status];
-  const currentTask = getTaskDetails(agent.currentTaskId);
-  const progress = getTaskProgress(agent.currentTaskId);
+  const currentTask = getTaskDetails(agent.currentTaskId, tasks);
+  const progress = getTaskProgress(currentTask);
 
   return (
     <div
