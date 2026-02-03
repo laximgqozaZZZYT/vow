@@ -187,18 +187,19 @@ download_source() {
         curl -fsSL "$TARBALL_URL" -o "${temp_dir}/mcp-server.tar.gz"
         tar -xzf "${temp_dir}/mcp-server.tar.gz" -C "${temp_dir}"
         cp -r "${temp_dir}"/*/* "${install_dir}/" 2>/dev/null || cp -r "${temp_dir}"/* "${install_dir}/"
-    elif command_exists git && [ -n "$REPO_URL" ] && [[ "$REPO_URL" != *"YOUR_REPO"* ]]; then
-        # Clone from git
-        log_info "Cloning from: $REPO_URL"
-        git clone --depth 1 "$REPO_URL" "${temp_dir}/repo"
+        rm -rf "${temp_dir}"
+    elif [ -n "$MCP_REPO_URL" ] && command_exists git; then
+        # Clone from dedicated MCP repository (if specified)
+        log_info "Cloning from: $MCP_REPO_URL"
+        git clone --depth 1 "$MCP_REPO_URL" "${temp_dir}/repo"
         cp -r "${temp_dir}/repo/"* "${install_dir}/"
+        rm -rf "${temp_dir}"
     else
-        # Create files from embedded content
+        # Create files from embedded content (default - most reliable)
         log_info "Creating files from embedded templates..."
         create_embedded_files "${install_dir}"
     fi
 
-    rm -rf "${temp_dir}"
     log_info "Source files ready"
 }
 
