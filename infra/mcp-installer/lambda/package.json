@@ -1,0 +1,16 @@
+{
+  "name": "mcp-installer-lambda",
+  "version": "1.0.0",
+  "description": "Lambda function to serve MCP Task Server installer",
+  "main": "index.js",
+  "scripts": {
+    "build": "tsc",
+    "package": "npm run build && cp install.sh dist/ && cd dist && zip -r ../mcp-installer.zip ."
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "@types/aws-lambda": "^8.10.145",
+    "@types/node": "^22.0.0",
+    "typescript": "^5.7.0"
+  }
+}
