@@ -72,7 +72,7 @@ export interface AgentResponse {
  */
 export interface ToolCallResult {
   toolName: string;
-  input: unknown;
+  input: Record<string, unknown>;
   output: unknown;
   success: boolean;
   durationMs?: number;
