@@ -23,7 +23,17 @@ import type {
   McpServer,
   MultiAgentConfig,
   LegacyMultiAgentConfig,
+  ChatAgentSettings,
 } from '../types/agent.types';
+
+// Default chat agent settings
+const DEFAULT_CHAT_AGENT_SETTINGS: ChatAgentSettings = {
+  useMcpAgent: false,
+  mcpServerId: undefined,
+  mcpAgentId: undefined,
+  fallbackToApi: true,
+  selectionMode: 'manual',
+};
 
 // Default configuration
 const DEFAULT_CONFIG: MultiAgentConfig = {
@@ -31,6 +41,7 @@ const DEFAULT_CONFIG: MultiAgentConfig = {
   showInDashboard: true,
   notifyOnTaskComplete: true,
   notifyOnAgentOffline: true,
+  chatAgentSettings: DEFAULT_CHAT_AGENT_SETTINGS,
 };
 
 // Storage key for config (localStorage fallback)
@@ -95,6 +106,10 @@ export interface UseMultiAgentServerReturn {
   config: MultiAgentConfig;
   updateConfig: (updates: Partial<MultiAgentConfig>) => void;
 
+  // Chat agent settings
+  chatAgentSettings: ChatAgentSettings;
+  updateChatAgentSettings: (updates: Partial<ChatAgentSettings>) => void;
+
   // Server management
   addServer: (server: Omit<McpServer, 'id'>) => string;
   updateServer: (serverId: string, updates: Partial<McpServer>) => void;
@@ -124,6 +139,11 @@ export interface UseMultiAgentServerReturn {
   refreshData: () => Promise<void>;
   createTask: (serverId: string, task: Partial<AgentTask> & { assignTo?: string }) => Promise<AgentTask | null>;
   assignTask: (serverId: string, taskId: string, agentId: string) => Promise<boolean>;
+  sendMessageToMcpAgent: (serverId: string, agentId: string, message: string) => Promise<string | null>;
+
+  // Priority-based server selection
+  getServersByPriority: () => McpServer[];
+  getSelectedServerForChat: () => McpServer | null;
 
   // Deprecated compatibility (for existing code that expects single server)
   /** @deprecated Use connectServer instead */
@@ -184,9 +204,25 @@ function loadConfigFromLocalStorage(): MultiAgentConfig {
       const parsed = JSON.parse(stored);
       // Check for legacy format
       if (isLegacyConfig(parsed)) {
-        return migrateLegacyConfig(parsed);
+        const migrated = migrateLegacyConfig(parsed);
+        console.log('[useMultiAgentServer] Migrated legacy config, servers:', migrated.servers.map(s => ({
+          id: s.id,
+          name: s.name,
+          url: s.serverUrl,
+          tokenMatch: s.serverToken === 'mcp-multi-agent-token-f75a6267',
+        })));
+        return migrated;
       }
-      return { ...DEFAULT_CONFIG, ...parsed };
+      const config = { ...DEFAULT_CONFIG, ...parsed };
+      // Debug: log what tokens are loaded from localStorage
+      console.log('[useMultiAgentServer] Loaded config from localStorage, servers:', config.servers.map((s: McpServer) => ({
+        id: s.id,
+        name: s.name,
+        url: s.serverUrl,
+        tokenMatch: s.serverToken === 'mcp-multi-agent-token-f75a6267',
+        tokenPreview: s.serverToken ? `${s.serverToken.slice(0, 8)}...${s.serverToken.slice(-8)}` : 'none',
+      })));
+      return config;
     }
   } catch (e) {
     console.error('[useMultiAgentServer] Failed to load config from localStorage:', e);
@@ -209,18 +245,30 @@ function saveConfigToLocalStorage(config: MultiAgentConfig): void {
 
 /**
  * Load config from backend API (DynamoDB)
+ * Falls back to localStorage if backend is unavailable
  */
 async function loadConfigFromBackend(authToken: string | null): Promise<MultiAgentConfig> {
+  // If no auth token or backend URL, fall back to localStorage silently
   if (!authToken || !BACKEND_API_URL) {
+    if (process.env.NODE_ENV === 'development' && !BACKEND_API_URL) {
+      console.debug('[useMultiAgentServer] BACKEND_API_URL not configured, using localStorage');
+    }
     return loadConfigFromLocalStorage();
   }
+
+  // Create an AbortController for timeout handling
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
 
   try {
     const response = await fetch(`${BACKEND_API_URL}/api/mcp-connections`, {
       headers: {
         'Authorization': `Bearer ${authToken}`,
       },
+      signal: controller.signal,
     });
+
+    clearTimeout(timeoutId);
 
     if (response.ok) {
       const result = await response.json();
@@ -255,9 +303,34 @@ async function loadConfigFromBackend(authToken: string | null): Promise<MultiAge
           servers: serversWithTokens,
         };
       }
+    } else if (response.status === 401) {
+      // Authentication error - token might be expired, fall back silently
+      console.debug('[useMultiAgentServer] Auth token expired or invalid, using localStorage');
+    } else {
+      // Other HTTP errors - log only in development
+      if (process.env.NODE_ENV === 'development') {
+        console.warn(`[useMultiAgentServer] Backend returned ${response.status}, using localStorage fallback`);
+      }
     }
   } catch (e) {
-    console.error('[useMultiAgentServer] Failed to load config from backend:', e);
+    clearTimeout(timeoutId);
+
+    // Handle different error types gracefully
+    if (e instanceof Error) {
+      if (e.name === 'AbortError') {
+        // Timeout - backend is slow or unreachable
+        console.debug('[useMultiAgentServer] Backend request timed out, using localStorage');
+      } else if (e.message === 'Failed to fetch' || e.name === 'TypeError') {
+        // Network error - backend is unreachable (CORS, network down, etc.)
+        // Only log in development to avoid console spam in production
+        if (process.env.NODE_ENV === 'development') {
+          console.debug('[useMultiAgentServer] Backend unreachable, using localStorage fallback');
+        }
+      } else {
+        // Other errors - log for debugging
+        console.warn('[useMultiAgentServer] Failed to load config from backend:', e.message);
+      }
+    }
   }
 
   return loadConfigFromLocalStorage();
@@ -265,26 +338,53 @@ async function loadConfigFromBackend(authToken: string | null): Promise<MultiAge
 
 /**
  * Save config to backend API (DynamoDB)
+ * Always saves to localStorage as primary fallback
  */
 async function saveConfigToBackend(config: MultiAgentConfig, authToken: string | null): Promise<void> {
-  // Always save to localStorage as fallback
+  // Always save to localStorage as fallback (this is the primary storage for tokens)
   saveConfigToLocalStorage(config);
 
+  // Skip backend save if no auth token or backend URL
   if (!authToken || !BACKEND_API_URL) {
     return;
   }
 
+  // Create an AbortController for timeout handling
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
+
   try {
-    await fetch(`${BACKEND_API_URL}/api/mcp-connections`, {
+    const response = await fetch(`${BACKEND_API_URL}/api/mcp-connections`, {
       method: 'PUT',
       headers: {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${authToken}`,
       },
       body: JSON.stringify(config),
+      signal: controller.signal,
     });
+
+    clearTimeout(timeoutId);
+
+    if (!response.ok && process.env.NODE_ENV === 'development') {
+      console.warn(`[useMultiAgentServer] Failed to save config to backend: ${response.status}`);
+    }
   } catch (e) {
-    console.error('[useMultiAgentServer] Failed to save config to backend:', e);
+    clearTimeout(timeoutId);
+
+    // Handle errors gracefully - localStorage save already succeeded
+    if (e instanceof Error) {
+      if (e.name === 'AbortError') {
+        console.debug('[useMultiAgentServer] Backend save timed out, config saved to localStorage only');
+      } else if (e.message === 'Failed to fetch' || e.name === 'TypeError') {
+        // Network error - only log in development
+        if (process.env.NODE_ENV === 'development') {
+          console.debug('[useMultiAgentServer] Backend unreachable, config saved to localStorage only');
+        }
+      } else {
+        console.warn('[useMultiAgentServer] Failed to save config to backend:', e.message);
+      }
+    }
   }
 }
 
@@ -303,11 +403,21 @@ export function useMultiAgentServer(options?: UseMultiAgentServerOptions): UseMu
   const eventSourcesRef = useRef<Map<string, EventSource>>(new Map());
   const reconnectTimeoutsRef = useRef<Map<string, NodeJS.Timeout>>(new Map());
   const authTokenRef = useRef(authToken);
+  const configRef = useRef(config);
+  // Track pending connection promises for waitForConnection
+  const connectionPromisesRef = useRef<Map<string, { resolve: () => void; reject: (err: Error) => void }>>(new Map());
+  // Track servers that have successfully connected (to avoid stale closure in onerror)
+  const connectedServersRef = useRef<Set<string>>(new Set());
 
   // Update authToken ref
   useEffect(() => {
     authTokenRef.current = authToken;
   }, [authToken]);
+
+  // Keep configRef in sync with config state
+  useEffect(() => {
+    configRef.current = config;
+  }, [config]);
 
   // Load config on mount or when authToken changes
   useEffect(() => {
@@ -335,8 +445,14 @@ export function useMultiAgentServer(options?: UseMultiAgentServerOptions): UseMu
       // Auto-connect enabled servers
       for (const server of loaded.servers) {
         if (server.enabled && server.autoConnect && server.serverUrl && server.serverToken) {
+          // Reset retry counter for fresh connections
+          const retryKey = `retry_${server.id}`;
+          (window as unknown as Record<string, number>)[retryKey] = 0;
+
           setTimeout(() => {
-            connectToServer(server);
+            connectToServer(server).catch(err => {
+              console.warn(`[useMultiAgentServer] Auto-connect failed for ${server.name}:`, err.message);
+            });
           }, 500);
         }
       }
@@ -410,15 +526,33 @@ export function useMultiAgentServer(options?: UseMultiAgentServerOptions): UseMu
       existingES.close();
     }
 
+    // Debug logging
+    console.log('[useMultiAgentServer] Connecting SSE:', {
+      serverId: server.id,
+      serverName: server.name,
+      serverUrl: server.serverUrl,
+      hasToken: !!server.serverToken,
+      tokenLength: server.serverToken?.length,
+    });
+
     const url = `${server.serverUrl}/events?token=${encodeURIComponent(server.serverToken)}`;
+    console.log('[useMultiAgentServer] SSE URL:', url);
     const eventSource = new EventSource(url);
 
     eventSource.onopen = () => {
       console.log(`[useMultiAgentServer] SSE connected to ${server.name}`);
+      // Track this server as successfully connected (for onerror handler)
+      connectedServersRef.current.add(server.id);
       updateConnectionState(server.id, {
         connectionState: 'connected',
         error: null,
       });
+      // Resolve any pending connection promise
+      const pending = connectionPromisesRef.current.get(server.id);
+      if (pending) {
+        pending.resolve();
+        connectionPromisesRef.current.delete(server.id);
+      }
     };
 
     eventSource.onmessage = (event) => {
@@ -434,6 +568,12 @@ export function useMultiAgentServer(options?: UseMultiAgentServerOptions): UseMu
           const eventData = (sseEvent.data || {}) as Record<string, unknown>;
 
           switch (sseEvent.type) {
+            case 'connected': {
+              // Server acknowledged connection - this is expected, just log it
+              console.log(`[useMultiAgentServer] SSE acknowledged by ${server.name}`);
+              break;
+            }
+
             case 'agent_registered': {
               const agent = sseEvent.data as Agent;
               const existingIdx = updated.agents.findIndex(a => a.id === agent.id);
@@ -503,43 +643,82 @@ export function useMultiAgentServer(options?: UseMultiAgentServerOptions): UseMu
           return newMap;
         });
       } catch (e) {
-        console.error(`[useMultiAgentServer] SSE parse error for ${server.name}:`, e);
+        console.warn(`[useMultiAgentServer] SSE parse error for ${server.name}:`, e);
       }
     };
 
     eventSource.onerror = () => {
-      console.error(`[useMultiAgentServer] SSE error for ${server.name}`);
-      updateConnectionState(server.id, {
-        connectionState: 'error',
-        error: 'Connection lost. Attempting to reconnect...',
-      });
+      // Check if we've ever successfully connected (using ref to avoid stale closure)
+      const wasConnected = connectedServersRef.current.has(server.id);
+
+      // Only log if we weren't already connected (avoid noise for reconnection attempts)
+      if (!wasConnected) {
+        console.debug(`[useMultiAgentServer] SSE connection issue for ${server.name}`);
+      }
 
       eventSource.close();
       eventSourcesRef.current.delete(server.id);
 
-      // Attempt reconnection
+      // Reject any pending connection promise (only on initial connection)
+      const pending = connectionPromisesRef.current.get(server.id);
+      if (pending) {
+        pending.reject(new Error('SSE connection failed'));
+        connectionPromisesRef.current.delete(server.id);
+      }
+
+      // Track retry count to avoid infinite retries
+      const retryKey = `retry_${server.id}`;
+      const retryCount = (window as unknown as Record<string, number>)[retryKey] || 0;
+      const maxRetries = 3;
+
+      if (retryCount >= maxRetries) {
+        // Only show error state after max retries
+        updateConnectionState(server.id, {
+          connectionState: 'error',
+          error: 'Server unavailable. Click to retry.',
+        });
+        return;
+      }
+
+      // If we were connected, keep showing as connected while reconnecting silently
+      // If we weren't connected, show connecting state
+      if (!wasConnected) {
+        updateConnectionState(server.id, {
+          connectionState: 'connecting',
+          error: null,
+        });
+      }
+
+      (window as unknown as Record<string, number>)[retryKey] = retryCount + 1;
+
+      // Attempt reconnection with exponential backoff
       const existingTimeout = reconnectTimeoutsRef.current.get(server.id);
       if (existingTimeout) {
         clearTimeout(existingTimeout);
       }
 
+      const backoffTime = Math.min(3000 * Math.pow(1.5, retryCount), 15000);
       const timeout = setTimeout(() => {
-        const currentServer = config.servers.find(s => s.id === server.id);
+        // Use configRef to get the latest config
+        const currentServer = configRef.current.servers.find(s => s.id === server.id);
         if (currentServer?.enabled && currentServer.autoConnect) {
-          connectToServer(currentServer);
+          connectToServer(currentServer).catch(() => {
+            // Silently handle reconnection failures
+          });
         }
-      }, 5000);
+      }, backoffTime);
 
       reconnectTimeoutsRef.current.set(server.id, timeout);
     };
 
     eventSourcesRef.current.set(server.id, eventSource);
-  }, [apiRequest, config.servers, updateConnectionState]);
+  }, [apiRequest, updateConnectionState]);
 
   /**
    * Connect to a specific server
+   * Returns a promise that resolves when the SSE connection is established
    */
-  const connectToServer = useCallback(async (server: McpServer) => {
+  const connectToServer = useCallback(async (server: McpServer): Promise<void> => {
     updateConnectionState(server.id, {
       connectionState: 'connecting',
       error: null,
@@ -565,25 +744,62 @@ export function useMultiAgentServer(options?: UseMultiAgentServerOptions): UseMu
         stats: (statsData as DashboardStats) || null,
       });
 
+      // Create a promise that resolves when SSE connection is established
+      const connectionPromise = new Promise<void>((resolve, reject) => {
+        // Set a timeout to avoid hanging forever
+        const timeout = setTimeout(() => {
+          connectionPromisesRef.current.delete(server.id);
+          reject(new Error('SSE connection timeout'));
+        }, 10000);
+
+        connectionPromisesRef.current.set(server.id, {
+          resolve: () => {
+            clearTimeout(timeout);
+            resolve();
+          },
+          reject: (err) => {
+            clearTimeout(timeout);
+            reject(err);
+          },
+        });
+      });
+
       // Connect SSE
       connectSSE(server);
+
+      // Wait for the SSE connection to be established (or fail)
+      await connectionPromise;
     } catch (e: unknown) {
-      console.error(`[useMultiAgentServer] Connection failed for ${server.name}:`, e);
+      const errorMessage = e instanceof Error ? e.message : 'Failed to connect to server';
+
+      // Only warn in development, not error (since server might not be running)
+      if (process.env.NODE_ENV === 'development') {
+        console.warn(`[useMultiAgentServer] Connection failed for ${server.name}:`, errorMessage);
+      }
+
       updateConnectionState(server.id, {
         connectionState: 'error',
-        error: e instanceof Error ? e.message : 'Failed to connect to server',
+        error: errorMessage,
       });
+
+      // Re-throw only for non-SSE errors (health check failed, network errors, etc.)
+      // SSE connection failures are handled by the retry mechanism and shouldn't propagate
+      if (errorMessage !== 'SSE connection failed' && errorMessage !== 'SSE connection timeout') {
+        throw e;
+      }
     }
   }, [apiRequest, connectSSE, updateConnectionState]);
 
   /**
    * Public: Connect to a specific server by ID
+   * Uses configRef to always access the latest config (avoids stale closure issue)
    */
-  const connectServer = useCallback(async (serverId: string) => {
-    const server = config.servers.find(s => s.id === serverId);
+  const connectServer = useCallback(async (serverId: string): Promise<void> => {
+    // Use configRef to get the latest config (handles async state updates after addServer)
+    const server = configRef.current.servers.find(s => s.id === serverId);
     if (!server) {
-      console.error(`[useMultiAgentServer] Server not found: ${serverId}`);
-      return;
+      console.error(`[useMultiAgentServer] Server not found: ${serverId}. Available servers:`, configRef.current.servers.map(s => s.id));
+      throw new Error(`Server not found: ${serverId}`);
     }
 
     if (!server.serverUrl || !server.serverToken) {
@@ -591,11 +807,15 @@ export function useMultiAgentServer(options?: UseMultiAgentServerOptions): UseMu
         connectionState: 'error',
         error: 'Server URL and token are required',
       });
-      return;
+      throw new Error('Server URL and token are required');
     }
 
+    // Reset retry counter for manual connection attempts
+    const retryKey = `retry_${serverId}`;
+    (window as unknown as Record<string, number>)[retryKey] = 0;
+
     await connectToServer(server);
-  }, [config.servers, connectToServer, updateConnectionState]);
+  }, [connectToServer, updateConnectionState]);
 
   /**
    * Public: Disconnect from a specific server
@@ -624,7 +844,13 @@ export function useMultiAgentServer(options?: UseMultiAgentServerOptions): UseMu
    */
   const connectAllEnabled = useCallback(async () => {
     const enabledServers = config.servers.filter(s => s.enabled && s.serverUrl && s.serverToken);
-    await Promise.all(enabledServers.map(s => connectToServer(s)));
+    const results = await Promise.allSettled(enabledServers.map(s => connectToServer(s)));
+    // Log any failures
+    results.forEach((result, index) => {
+      if (result.status === 'rejected') {
+        console.warn(`[useMultiAgentServer] Failed to connect to ${enabledServers[index].name}:`, result.reason?.message);
+      }
+    });
   }, [config.servers, connectToServer]);
 
   /**
@@ -636,6 +862,7 @@ export function useMultiAgentServer(options?: UseMultiAgentServerOptions): UseMu
 
   /**
    * Public: Add a new server
+   * Note: Also updates configRef synchronously so connectServer can find it immediately
    */
   const addServer = useCallback((serverData: Omit<McpServer, 'id'>): string => {
     const newServer: McpServer = {
@@ -643,13 +870,21 @@ export function useMultiAgentServer(options?: UseMultiAgentServerOptions): UseMu
       id: crypto.randomUUID(),
     };
 
+    // Update configRef synchronously so connectServer can find the server immediately
+    // This solves the async state update timing issue
+    const newConfig = {
+      ...configRef.current,
+      servers: [...configRef.current.servers, newServer],
+    };
+    configRef.current = newConfig;
+
     setConfig(prev => {
-      const newConfig = {
+      const updatedConfig = {
         ...prev,
         servers: [...prev.servers, newServer],
       };
-      saveConfigToBackend(newConfig, authTokenRef.current);
-      return newConfig;
+      saveConfigToBackend(updatedConfig, authTokenRef.current);
+      return updatedConfig;
     });
 
     // Initialize connection state
@@ -675,6 +910,17 @@ export function useMultiAgentServer(options?: UseMultiAgentServerOptions): UseMu
    * Public: Update an existing server
    */
   const updateServer = useCallback((serverId: string, updates: Partial<McpServer>) => {
+    console.log('[useMultiAgentServer] updateServer called:', {
+      serverId,
+      updates: {
+        ...updates,
+        // Mask token for logging but show if it matches expected
+        serverToken: updates.serverToken
+          ? `${updates.serverToken.slice(0, 8)}... (matches expected: ${updates.serverToken === 'mcp-multi-agent-token-f75a6267'})`
+          : undefined,
+      },
+    });
+
     setConfig(prev => {
       const newConfig = {
         ...prev,
@@ -682,6 +928,10 @@ export function useMultiAgentServer(options?: UseMultiAgentServerOptions): UseMu
           s.id === serverId ? { ...s, ...updates } : s
         ),
       };
+
+      // Synchronize configRef immediately for any code that needs current value
+      configRef.current = newConfig;
+
       saveConfigToBackend(newConfig, authTokenRef.current);
 
       // Update connection state name if changed
@@ -818,6 +1068,51 @@ export function useMultiAgentServer(options?: UseMultiAgentServerOptions): UseMu
   }, [config.servers, apiRequest]);
 
   /**
+   * Public: Update chat agent settings
+   */
+  const updateChatAgentSettings = useCallback((updates: Partial<ChatAgentSettings>) => {
+    setConfig(prev => {
+      const newSettings = {
+        ...DEFAULT_CHAT_AGENT_SETTINGS,
+        ...prev.chatAgentSettings,
+        ...updates,
+      };
+      const newConfig = { ...prev, chatAgentSettings: newSettings };
+      saveConfigToBackend(newConfig, authTokenRef.current);
+      return newConfig;
+    });
+  }, []);
+
+  /**
+   * Public: Send message to MCP agent and get response
+   * This is a simplified chat endpoint for MCP agents
+   */
+  const sendMessageToMcpAgent = useCallback(async (
+    serverId: string,
+    agentId: string,
+    message: string
+  ): Promise<string | null> => {
+    const server = config.servers.find(s => s.id === serverId);
+    if (!server) {
+      console.error(`[useMultiAgentServer] Server not found: ${serverId}`);
+      return null;
+    }
+
+    try {
+      // Try to send chat message to MCP agent
+      // MCP server should have a /agents/:agentId/chat endpoint
+      const result = await apiRequest(server, `/agents/${agentId}/chat`, {
+        method: 'POST',
+        body: JSON.stringify({ message }),
+      });
+      return (result as { response?: string })?.response || null;
+    } catch (e) {
+      console.error(`[useMultiAgentServer] Send message to MCP agent failed:`, e);
+      return null;
+    }
+  }, [config.servers, apiRequest]);
+
+  /**
    * Public: Get server state by ID
    */
   const getServerState = useCallback((serverId: string): ServerConnection | undefined => {
@@ -870,22 +1165,22 @@ export function useMultiAgentServer(options?: UseMultiAgentServerOptions): UseMu
 
     if (connectedStats.length === 0) return null;
 
-    // Aggregate stats
+    // Aggregate stats with null safety
     return {
       timestamp: new Date().toISOString(),
       tasks: {
-        total: connectedStats.reduce((sum, s) => sum + s.tasks.total, 0),
-        pending: connectedStats.reduce((sum, s) => sum + s.tasks.pending, 0),
-        assigned: connectedStats.reduce((sum, s) => sum + s.tasks.assigned, 0),
-        in_progress: connectedStats.reduce((sum, s) => sum + s.tasks.in_progress, 0),
-        completed: connectedStats.reduce((sum, s) => sum + s.tasks.completed, 0),
-        failed: connectedStats.reduce((sum, s) => sum + s.tasks.failed, 0),
+        total: connectedStats.reduce((sum, s) => sum + (s.tasks?.total ?? 0), 0),
+        pending: connectedStats.reduce((sum, s) => sum + (s.tasks?.pending ?? 0), 0),
+        assigned: connectedStats.reduce((sum, s) => sum + (s.tasks?.assigned ?? 0), 0),
+        in_progress: connectedStats.reduce((sum, s) => sum + (s.tasks?.in_progress ?? 0), 0),
+        completed: connectedStats.reduce((sum, s) => sum + (s.tasks?.completed ?? 0), 0),
+        failed: connectedStats.reduce((sum, s) => sum + (s.tasks?.failed ?? 0), 0),
       },
       agents: {
-        total: connectedStats.reduce((sum, s) => sum + s.agents.total, 0),
-        idle: connectedStats.reduce((sum, s) => sum + s.agents.idle, 0),
-        busy: connectedStats.reduce((sum, s) => sum + s.agents.busy, 0),
-        offline: connectedStats.reduce((sum, s) => sum + s.agents.offline, 0),
+        total: connectedStats.reduce((sum, s) => sum + (s.agents?.total ?? 0), 0),
+        idle: connectedStats.reduce((sum, s) => sum + (s.agents?.idle ?? 0), 0),
+        busy: connectedStats.reduce((sum, s) => sum + (s.agents?.busy ?? 0), 0),
+        offline: connectedStats.reduce((sum, s) => sum + (s.agents?.offline ?? 0), 0),
         byRole: {},
         byMachine: {},
       },
@@ -917,10 +1212,75 @@ export function useMultiAgentServer(options?: UseMultiAgentServerOptions): UseMu
     disconnectAll();
   }, [disconnectAll]);
 
+  // Chat agent settings derived from config
+  const chatAgentSettings = useMemo((): ChatAgentSettings => {
+    return config.chatAgentSettings || DEFAULT_CHAT_AGENT_SETTINGS;
+  }, [config.chatAgentSettings]);
+
+  /**
+   * Get servers sorted by priority (lowest number = highest priority)
+   */
+  const getServersByPriority = useCallback((): McpServer[] => {
+    return [...config.servers]
+      .filter(s => s.enabled)
+      .sort((a, b) => (a.priority ?? 5) - (b.priority ?? 5));
+  }, [config.servers]);
+
+  /**
+   * Get the selected server for chat based on selection mode
+   * Returns the server to use for chat, or null if none available
+   */
+  const getSelectedServerForChat = useCallback((): McpServer | null => {
+    const settings = config.chatAgentSettings || DEFAULT_CHAT_AGENT_SETTINGS;
+
+    if (!settings.useMcpAgent) return null;
+
+    const mode = settings.selectionMode || 'manual';
+
+    if (mode === 'manual') {
+      // Manual selection - use the explicitly selected server
+      if (settings.mcpServerId) {
+        return config.servers.find(s => s.id === settings.mcpServerId) || null;
+      }
+      return null;
+    }
+
+    if (mode === 'priority') {
+      // Auto-select highest priority connected server
+      const sorted = getServersByPriority();
+      for (const server of sorted) {
+        const conn = connections.get(server.id);
+        if (conn?.connectionState === 'connected') {
+          return server;
+        }
+      }
+      return null;
+    }
+
+    if (mode === 'failover') {
+      // Try servers in priority order until one is connected
+      const sorted = getServersByPriority();
+      for (const server of sorted) {
+        const conn = connections.get(server.id);
+        if (conn?.connectionState === 'connected') {
+          return server;
+        }
+      }
+      // If no connected server, return highest priority for connection attempt
+      return sorted[0] || null;
+    }
+
+    return null;
+  }, [config.servers, config.chatAgentSettings, connections, getServersByPriority]);
+
   return {
     // Config
     config,
     updateConfig,
+
+    // Chat agent settings
+    chatAgentSettings,
+    updateChatAgentSettings,
 
     // Server management
     addServer,
@@ -951,6 +1311,11 @@ export function useMultiAgentServer(options?: UseMultiAgentServerOptions): UseMu
     refreshData,
     createTask,
     assignTask,
+    sendMessageToMcpAgent,
+
+    // Priority-based server selection
+    getServersByPriority,
+    getSelectedServerForChat,
 
     // Deprecated compatibility
     connect,

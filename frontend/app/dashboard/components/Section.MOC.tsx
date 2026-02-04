@@ -9,11 +9,19 @@
 
 'use client';
 
-import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import { useMultiAgentServer, type ServerConnection } from '../hooks/useMultiAgentServer';
 import { useMastraAgent, type MastraMessage } from '../hooks/useMastraAgent';
-import { useMultiAgentChat, type AgentChatResponse, type MultiAgentMessage } from '../hooks/useMultiAgentChat';
-import type { Goal, Habit } from '../types';
+import { useMcpChat } from '../hooks/useMcpChat';
+import type { Goal, Habit, Sticky, Tag } from '../types';
+import type { ChatAgentSettings, McpServer } from '../types/agent.types';
+import api from '../../../lib/api';
+import { HabitModal } from './Modal.Habit';
+import { GoalModal } from './Modal.Goal';
+import { StickyModal } from './Modal.Sticky';
+import { AgentDetailModal, BUILTIN_AGENTS, ROLE_ICONS as AGENT_ROLE_ICONS, type AgentConfig } from './Modal.AgentDetail';
+import { IssueModal, type ConversationData, type ConversationMessage } from './Modal.Issue';
+import ReactMarkdown from 'react-markdown';
 
 // Tab types
 type TabId = 'chat' | 'tasks' | 'agents' | 'history';
@@ -34,6 +42,9 @@ const TABS: TabConfig[] = [
 ];
 
 // Message types for group chat
+/** Button type for suggestions */
+export type SuggestionButtonType = 'habit' | 'goal' | 'stickyn' | 'reply';
+
 export interface GroupChatMessage {
   id: string;
   senderId: string;
@@ -47,16 +58,45 @@ export interface GroupChatMessage {
   taskTitle?: string;
   suggestion?: {
     type: 'habit' | 'goal';
+    /** Button type determines which modal to open */
+    suggestionType?: SuggestionButtonType;
     data: Record<string, unknown>;
     actions: Array<{ id: string; label: string; variant: 'primary' | 'secondary' | 'ghost' }>;
   };
+  /** Multiple suggestions from tool calls - all items should be displayed as buttons */
+  suggestions?: Array<{
+    type: 'habit' | 'goal';
+    /** Button type determines which modal to open */
+    suggestionType?: SuggestionButtonType;
+    data: Record<string, unknown>;
+    actions: Array<{ id: string; label: string; variant: 'primary' | 'secondary' | 'ghost' }>;
+  }>;
+  /** Quick reply buttons for category selection etc. */
+  quickReplies?: Array<{
+    id: string;
+    label: string;
+    value: string;
+    icon?: string;
+  }>;
+  /** Selection type for quick replies (habit_category, goal_category, or difficulty) */
+  selectionType?: 'habit_category' | 'goal_category' | 'difficulty';
+  /** Follow-up action buttons (more specific, easier, harder, improvement-related) */
+  followUpActions?: Array<{
+    id: string;
+    label: string;
+    action: 'more_specific' | 'easier' | 'harder' | 'different' | 'more_suggestions' | 'different_habit';
+    category?: string;
+  }>;
 }
 
 interface MOCSectionProps {
   goals?: Goal[];
   habits?: Habit[];
+  stickies?: Sticky[];
+  tags?: Tag[];
   onHabitCreated?: (habit: Habit) => void;
   onGoalCreated?: (goal: Goal) => void;
+  onStickyCreated?: (sticky: Sticky) => void;
   locale?: 'ja' | 'en';
   authToken?: string;
 }
@@ -130,15 +170,18 @@ const ROLE_ICONS: Record<string, string> = {
 export function MOCSection({
   goals = [],
   habits = [],
+  stickies = [],
+  tags = [],
   onHabitCreated,
   onGoalCreated,
+  onStickyCreated,
   locale = 'ja',
   authToken,
 }: MOCSectionProps) {
   const [activeTab, setActiveTab] = useState<TabId>('chat');
   const [messages, setMessages] = useState<GroupChatMessage[]>([]);
   const [inputValue, setInputValue] = useState('');
-  const [selectedAgent, setSelectedAgent] = useState<string>('manager'); // Manager is the default entry point
+  // selectedAgent state removed - manager-only mode is now default
 
   // Suggestion states for tracking action status
   const [suggestionStates, setSuggestionStates] = useState<Record<string, SuggestionState>>({});
@@ -152,7 +195,59 @@ export function MOCSection({
   const [historySearch, setHistorySearch] = useState('');
 
   // Multi-agent aggregation state
-  const [aggregationSession, setAggregationSession] = useState<AggregationSession | null>(null);
+  // aggregationSession removed - using simple mastraAgent approach
+
+  // Modal states for creating habits/goals from suggestions
+  const [habitModalOpen, setHabitModalOpen] = useState(false);
+  const [habitModalInitial, setHabitModalInitial] = useState<{
+    name?: string;
+    type?: 'do' | 'avoid';
+    goalId?: string;
+  } | undefined>(undefined);
+  const [goalModalOpen, setGoalModalOpen] = useState(false);
+  const [goalModalInitial, setGoalModalInitial] = useState<{
+    name?: string;
+    parentId?: string | null;
+  } | undefined>(undefined);
+
+  // Sticky modal states for creating stickies from suggestions
+  const [stickyModalOpen, setStickyModalOpen] = useState(false);
+  const [stickyModalInitial, setStickyModalInitial] = useState<Sticky | null>(null);
+
+  // Agent detail modal state
+  const [agentDetailModalOpen, setAgentDetailModalOpen] = useState(false);
+  const [selectedAgentForDetail, setSelectedAgentForDetail] = useState<AgentConfig | null>(null);
+  const [agentDetailModalMode, setAgentDetailModalMode] = useState<'view' | 'edit' | 'create'>('view');
+
+  // Help modal state
+  const [showHelpModal, setShowHelpModal] = useState(false);
+
+  // Issue modal state
+  const [showIssueModal, setShowIssueModal] = useState(false);
+
+  // Chat agent settings modal state
+  const [showChatAgentSettingsModal, setShowChatAgentSettingsModal] = useState(false);
+
+  // Custom agents state with localStorage persistence
+  const [customAgents, setCustomAgents] = useState<AgentConfig[]>(() => {
+    if (typeof window === 'undefined') return [];
+    try {
+      const stored = localStorage.getItem('vow_custom_agents');
+      return stored ? JSON.parse(stored) : [];
+    } catch {
+      return [];
+    }
+  });
+
+  // Persist custom agents to localStorage
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('vow_custom_agents', JSON.stringify(customAgents));
+    }
+  }, [customAgents]);
+
+  // Track if initial suggestions have been shown
+  const [hasShownInitialSuggestions, setHasShownInitialSuggestions] = useState(false);
 
   // Multi-agent server hook
   const server = useMultiAgentServer({ authToken });
@@ -215,49 +310,105 @@ export function MOCSection({
     return agents;
   }, [server.agents, locale]);
 
-  // Mastra agent hook for AI Coach
-  const coachAgent = useMastraAgent({
+  // Mastra agent hook - default AI chat
+  const mastraAgent = useMastraAgent({
     authToken,
     enableStreaming: true,
   });
 
-  // Multi-agent chat hook for Manager mode
-  const multiAgentChat = useMultiAgentChat({
-    authToken,
+  // Get the selected MCP server for chat
+  const selectedMcpServer = useMemo(() => {
+    const settings = server.chatAgentSettings;
+    console.log('[MOC] Resolving MCP server:', {
+      useMcpAgent: settings.useMcpAgent,
+      mcpServerId: settings.mcpServerId,
+      availableServers: server.config.servers.map(s => ({
+        id: s.id,
+        name: s.name,
+        url: s.serverUrl,
+        // Show token debug info to track synchronization
+        tokenMatch: s.serverToken === 'mcp-multi-agent-token-f75a6267',
+        tokenPreview: s.serverToken ? `${s.serverToken.slice(0, 8)}...` : 'none',
+      })),
+      connections: Array.from(server.connections.entries()).map(([id, conn]) => ({
+        id,
+        state: conn.connectionState,
+      })),
+    });
+
+    if (!settings.useMcpAgent) return null;
+
+    // If specific server is selected
+    if (settings.mcpServerId) {
+      const found = server.config.servers.find(s => s.id === settings.mcpServerId);
+      console.log('[MOC] Found server by ID:', found?.name, found?.serverUrl);
+      return found || null;
+    }
+
+    // Auto-select first connected server
+    const connectedServerIds = Array.from(server.connections.entries())
+      .filter(([_, conn]) => conn.connectionState === 'connected')
+      .map(([id]) => id);
+
+    console.log('[MOC] Connected server IDs:', connectedServerIds);
+
+    if (connectedServerIds.length > 0) {
+      return server.config.servers.find(s => s.id === connectedServerIds[0]) || null;
+    }
+
+    return null;
+  }, [server.chatAgentSettings, server.config.servers, server.connections]);
+
+  // Get the selected MCP agent ID
+  const selectedMcpAgentId = useMemo(() => {
+    const settings = server.chatAgentSettings;
+    if (!settings.useMcpAgent || !selectedMcpServer) return undefined;
+
+    // If specific agent is selected
+    if (settings.mcpAgentId) {
+      return settings.mcpAgentId;
+    }
+
+    // Auto-select first available agent on the selected server
+    const serverAgents = server.agents.filter(a => a.serverId === selectedMcpServer.id);
+    return serverAgents[0]?.id;
+  }, [server.chatAgentSettings, selectedMcpServer, server.agents]);
+
+  // MCP chat hook - no automatic fallback, let user see errors and retry
+  const mcpChat = useMcpChat({
+    server: selectedMcpServer,
+    agentId: selectedMcpAgentId,
+    settings: server.chatAgentSettings,
     enableStreaming: true,
-    locale,
-    onAgentResponse: (response) => {
-      // Add individual agent response to messages
-      const agentMessage: GroupChatMessage = {
-        id: `agent-${response.agentId}-${Date.now()}`,
-        senderId: response.agentId,
-        senderName: response.agentName,
-        senderType: 'agent',
-        senderRole: getAgentRole(response.agentId),
-        senderIcon: getAgentIcon(response.agentId),
-        content: response.content,
-        timestamp: response.timestamp,
-      };
-      setMessages(prev => [...prev, agentMessage]);
-    },
-    onSummary: (summary) => {
-      // Add manager summary to messages
-      const summaryMessage: GroupChatMessage = {
-        id: `manager-summary-${Date.now()}`,
-        senderId: 'manager',
-        senderName: locale === 'ja' ? 'マネージャー' : 'Manager',
-        senderType: 'agent',
-        senderRole: 'Manager',
-        senderIcon: ROLE_ICONS.manager,
-        content: summary,
-        timestamp: new Date(),
-      };
-      setMessages(prev => [...prev, summaryMessage]);
-    },
+    // Don't use onFallback - it causes permanent switch to OpenAI
+    // Instead, show errors to user and let them retry
     onError: (error) => {
-      console.error('Multi-agent chat error:', error);
+      console.error('[MOCSection] MCP chat error:', error);
     },
   });
+
+  // Determine which agent to use for chat
+  // Simple logic: use MCP if enabled and server is available
+  const shouldUseMcpAgent = useMemo(() => {
+    const settings = server.chatAgentSettings;
+    const result = settings.useMcpAgent && selectedMcpServer !== null;
+
+    // Debug logging
+    console.log('[MOC] Agent routing check:', {
+      useMcpAgent: settings.useMcpAgent,
+      hasSelectedMcpServer: !!selectedMcpServer,
+      selectedMcpServerUrl: selectedMcpServer?.serverUrl,
+      result,
+    });
+
+    return result;
+  }, [server.chatAgentSettings, selectedMcpServer]);
+
+  // Get the active chat agent (either mastraAgent or mcpChat)
+  const activeAgent = shouldUseMcpAgent ? mcpChat : mastraAgent;
+
+  // Log which agent is active
+  console.log('[MOC] Active agent:', shouldUseMcpAgent ? 'MCP Chat (Claude Code)' : 'Mastra (OpenAI)');
 
   // Helper to get agent role from ID
   const getAgentRole = (agentId: string): string => {
@@ -327,12 +478,9 @@ export function MOCSection({
     });
   }, [server.connections, messages]);
 
-  // Handle sending message
+  // Handle sending message - use active agent (MCP or Mastra based on settings)
   const handleSendMessage = useCallback(async () => {
-    if (!inputValue.trim()) return;
-
-    // Find selected agent info
-    const targetAgent = availableAgents.find(a => a.id === selectedAgent);
+    if (!inputValue.trim() || activeAgent.isStreaming) return;
 
     const userMessage: GroupChatMessage = {
       id: `user-${Date.now()}`,
@@ -353,244 +501,190 @@ export function MOCSection({
       textareaRef.current.style.height = 'auto';
     }
 
-    if (selectedAgent === 'manager') {
-      // Manager orchestrates multiple Mastra agents using the new multi-agent API
-      const sessionId = `agg-${Date.now()}`;
-
-      // Show "collecting responses" message
-      setMessages(prev => [...prev, {
-        id: `manager-collecting-${sessionId}`,
-        senderId: 'manager',
-        senderName: locale === 'ja' ? 'マネージャー' : 'Manager',
-        senderType: 'agent',
-        senderRole: 'Manager',
-        senderIcon: ROLE_ICONS.manager,
-        content: locale === 'ja'
-          ? '📡 Mastraマルチエージェントに問い合わせ中...'
-          : '📡 Querying Mastra multi-agent system...',
-        timestamp: new Date(),
-      }]);
-
-      // Initialize aggregation session for UI tracking
-      const newSession: AggregationSession = {
-        id: sessionId,
-        userQuery: messageText,
-        responses: [
-          { agentId: 'habit-coach', agentName: 'Habit Coach', agentRole: 'Habit Coach', response: '', status: 'pending', timestamp: new Date() },
-          { agentId: 'goal-planner', agentName: 'Goal Planner', agentRole: 'Goal Planner', response: '', status: 'pending', timestamp: new Date() },
-          { agentId: 'progress-tracker', agentName: 'Progress Tracker', agentRole: 'Progress Tracker', response: '', status: 'pending', timestamp: new Date() },
-        ],
-        status: 'collecting',
-        startedAt: new Date(),
-      };
-      setAggregationSession(newSession);
-
-      try {
-        // Use the new multi-agent chat API
-        await multiAgentChat.sendMessage(messageText);
-
-        // Update session status when complete
-        setAggregationSession(prev => prev ? { ...prev, status: 'complete' } : null);
-      } catch (error) {
-        console.error('Failed to query multi-agent system:', error);
-        setAggregationSession(prev => prev ? { ...prev, status: 'error' } : null);
-        setMessages(prev => [...prev, {
-          id: `error-${Date.now()}`,
-          senderId: 'system',
-          senderName: 'System',
-          senderType: 'system',
-          senderIcon: ROLE_ICONS.system,
-          content: locale === 'ja' ? '❌ マルチエージェントへの問い合わせに失敗しました' : '❌ Failed to query multi-agent system',
-          timestamp: new Date(),
-        }]);
-      }
-    } else if (selectedAgent === 'coach' || targetAgent?.type === 'coach') {
-      // Send to AI Coach (habit/goal specialist)
-      try {
-        await coachAgent.sendMessage(messageText);
-      } catch (error) {
-        console.error('Failed to send message to coach:', error);
-        setMessages(prev => [...prev, {
-          id: `error-${Date.now()}`,
-          senderId: 'system',
-          senderName: 'System',
-          senderType: 'system',
-          senderIcon: ROLE_ICONS.system,
-          content: locale === 'ja' ? '❌ コーチへのメッセージ送信に失敗しました' : '❌ Failed to send message to coach',
-          timestamp: new Date(),
-        }]);
-      }
-    } else if (selectedAgent === 'broadcast') {
-      // Broadcast to all MCP agents - create unassigned task
-      const enabledServers = server.config.servers.filter(s => s.enabled);
-      if (enabledServers.length > 0) {
-        try {
-          const task = await server.createTask(enabledServers[0].id, {
-            title: messageText.slice(0, 100),
-            description: messageText,
-            priority: 'normal',
-          });
-
-          if (task) {
-            setMessages(prev => [...prev, {
-              id: `task-broadcast-${Date.now()}`,
-              senderId: 'system',
-              senderName: 'System',
-              senderType: 'system',
-              senderIcon: '📢',
-              content: locale === 'ja'
-                ? `📋 タスクを作成しました（エージェントが自動的に引き受けます）`
-                : `📋 Task created (agents will pick it up)`,
-              timestamp: new Date(),
-              taskId: task.id,
-              taskTitle: task.title,
-            }]);
-          }
-        } catch (error) {
-          console.error('Failed to broadcast task:', error);
-          setMessages(prev => [...prev, {
-            id: `error-${Date.now()}`,
-            senderId: 'system',
-            senderName: 'System',
-            senderType: 'system',
-            senderIcon: ROLE_ICONS.system,
-            content: locale === 'ja' ? '❌ タスクの作成に失敗しました' : '❌ Failed to create task',
-            timestamp: new Date(),
-          }]);
-        }
-      }
-    } else if (targetAgent?.type === 'mcp-agent' && targetAgent.serverId) {
-      // Send to specific MCP agent (create task and assign)
-      try {
-        const task = await server.createTask(targetAgent.serverId, {
-          title: messageText.slice(0, 100),
-          description: messageText,
-          priority: 'normal',
-        });
-
-        if (task) {
-          // Assign task to specific agent
-          await server.assignTask(targetAgent.serverId, task.id, targetAgent.id);
-
-          // Add confirmation message
-          setMessages(prev => [...prev, {
-            id: `task-created-${Date.now()}`,
-            senderId: 'system',
-            senderName: 'System',
-            senderType: 'system',
-            senderIcon: ROLE_ICONS.system,
-            content: locale === 'ja'
-              ? `📋 タスクを ${targetAgent.name} に割り当てました`
-              : `📋 Task assigned to ${targetAgent.name}`,
-            timestamp: new Date(),
-            taskId: task.id,
-            taskTitle: task.title,
-          }]);
-        }
-      } catch (error) {
-        console.error('Failed to create/assign task:', error);
-        setMessages(prev => [...prev, {
-          id: `error-${Date.now()}`,
-          senderId: 'system',
-          senderName: 'System',
-          senderType: 'system',
-          senderIcon: ROLE_ICONS.system,
-          content: locale === 'ja' ? '❌ タスクの作成に失敗しました' : '❌ Failed to create task',
-          timestamp: new Date(),
-        }]);
-      }
-    } else {
-      // No valid target - show error
+    try {
+      // Use active agent (MCP or Mastra based on settings)
+      console.log(`[MOCSection] Sending message via ${shouldUseMcpAgent ? 'MCP agent' : 'Mastra agent'}`);
+      await activeAgent.sendMessage(messageText);
+    } catch (error) {
+      console.error('Failed to send message:', error);
       setMessages(prev => [...prev, {
         id: `error-${Date.now()}`,
         senderId: 'system',
         senderName: 'System',
         senderType: 'system',
         senderIcon: ROLE_ICONS.system,
-        content: locale === 'ja' ? '⚠️ エージェントが選択されていません' : '⚠️ No agent selected',
+        content: locale === 'ja' ? '❌ AIへの問い合わせに失敗しました' : '❌ Failed to query AI',
         timestamp: new Date(),
       }]);
     }
-  }, [inputValue, selectedAgent, availableAgents, coachAgent, multiAgentChat, server, locale]);
+  }, [inputValue, activeAgent, shouldUseMcpAgent, locale]);
 
-  // Convert coach/manager messages to group chat format and update aggregation
+  // Convert active agent messages to group chat format with suggestion support
+  // Using a single batch update to avoid race conditions with multiple setMessages calls
   useEffect(() => {
-    coachAgent.messages.forEach(msg => {
-      if (msg.role === 'assistant') {
-        const existingMsg = messages.find(m => m.id === `ai-${msg.id}`);
-        if (!existingMsg) {
-          // Determine if this was a manager or coach response based on the preceding user message
-          const userMsgIndex = coachAgent.messages.findIndex(m => m.id === msg.id) - 1;
-          const precedingUserMsg = userMsgIndex >= 0 ? coachAgent.messages[userMsgIndex] : null;
-          const isManagerMode = precedingUserMsg?.content?.startsWith('[Manager Mode]');
+    console.log('[MOC useEffect] Processing activeAgent.messages:', {
+      agentType: shouldUseMcpAgent ? 'MCP' : 'Mastra',
+      count: activeAgent.messages.length,
+      messages: activeAgent.messages.map(m => ({
+        id: m.id,
+        role: m.role,
+        status: m.status,
+        hasToolCalls: !!m.toolCalls?.length,
+        toolCallCount: m.toolCalls?.length ?? 0,
+        toolNames: m.toolCalls?.map(tc => tc.toolName) ?? [],
+      })),
+    });
 
-          // If in aggregation mode, update the session instead of adding individual message
-          if (isManagerMode && aggregationSession && aggregationSession.status === 'collecting') {
-            setAggregationSession(prev => {
-              if (!prev) return null;
-              const updatedResponses = prev.responses.map(r =>
-                r.agentId === 'coach'
-                  ? { ...r, status: 'complete' as const, response: msg.content, timestamp: new Date() }
-                  : r
-              );
+    // Collect all updates in a single batch to avoid race conditions
+    setMessages(prev => {
+      let updated = [...prev];
+      let hasChanges = false;
 
-              // Check if all responses are collected
-              const allComplete = updatedResponses.every(r => r.status === 'complete' || r.status === 'error');
+      activeAgent.messages.forEach(msg => {
+        // Process assistant messages (streaming or complete)
+        if (msg.role === 'assistant' && (msg.content || msg.status === 'streaming')) {
+          const messageId = `ai-${msg.id}`;
 
-              if (allComplete) {
-                // Generate summary
-                const successfulResponses = updatedResponses.filter(r => r.status === 'complete' && r.response);
-                const summary = generateManagerSummary(prev.userQuery, successfulResponses, locale);
+          // Only parse toolCalls when message is complete (toolCalls are added in 'complete' event)
+          const isComplete = msg.status === 'complete';
+          const suggestions = isComplete && msg.toolCalls?.length ? parseSuggestions(msg) : undefined;
+          const quickRepliesResult = isComplete && msg.toolCalls?.length ? parseQuickReplies(msg) : undefined;
+          const quickReplies = quickRepliesResult?.quickReplies;
+          const selectionType = quickRepliesResult?.selectionType;
+          const followUpActions = isComplete && msg.toolCalls?.length ? parseFollowUpActions(msg) : undefined;
 
-                // Add the summary message
-                setMessages(prevMsgs => [...prevMsgs, {
-                  id: `manager-summary-${prev.id}`,
-                  senderId: 'manager',
-                  senderName: locale === 'ja' ? 'マネージャー' : 'Manager',
-                  senderType: 'agent',
-                  senderRole: 'Manager',
-                  senderIcon: ROLE_ICONS.manager,
-                  content: summary,
-                  timestamp: new Date(),
-                  suggestion: msg.toolCalls?.length ? parseSuggestion(msg) : undefined,
-                }]);
+          // Debug logging for toolCalls and suggestions
+          if (isComplete && msg.toolCalls?.length) {
+            console.log('[MOC] Message complete with toolCalls:', {
+              messageId: msg.id,
+              toolCallCount: msg.toolCalls.length,
+              toolNames: msg.toolCalls.map(tc => tc.toolName),
+              toolOutputs: msg.toolCalls.map(tc => ({ name: tc.toolName, output: tc.output })),
+              parsedSuggestions: suggestions,
+              parsedQuickReplies: quickReplies,
+              parsedFollowUpActions: followUpActions,
+            });
+          }
 
-                return { ...prev, responses: updatedResponses, status: 'complete', summary };
-              }
+          const existingIdx = updated.findIndex(m => m.id === messageId);
 
-              return { ...prev, responses: updatedResponses };
+          if (existingIdx === -1) {
+            // Add new message (may be streaming or complete)
+            hasChanges = true;
+            updated.push({
+              id: messageId,
+              senderId: 'ai',
+              senderName: 'AI',
+              senderType: 'coach' as const,
+              senderRole: 'Coach',
+              senderIcon: '🤖',
+              content: msg.content || '',
+              timestamp: msg.timestamp || new Date(),
+              suggestions,
+              suggestion: suggestions?.[0],
+              quickReplies,
+              selectionType,
+              followUpActions,
             });
           } else {
-            // Normal mode: add message directly
-            const newMessage: GroupChatMessage = {
-              id: `ai-${msg.id}`,
-              senderId: isManagerMode ? 'manager' : 'coach',
-              senderName: isManagerMode ? (locale === 'ja' ? 'マネージャー' : 'Manager') : 'AI Coach',
-              senderType: isManagerMode ? 'agent' : 'coach',
-              senderRole: isManagerMode ? 'Manager' : 'Coach',
-              senderIcon: isManagerMode ? ROLE_ICONS.manager : ROLE_ICONS.coach,
-              content: msg.content,
-              timestamp: msg.timestamp || new Date(),
-              suggestion: msg.toolCalls?.length ? parseSuggestion(msg) : undefined,
-            };
-            setMessages(prev => [...prev, newMessage]);
+            const existingMsg = updated[existingIdx];
+
+            // Check if update is needed
+            const hasNewSuggestions = suggestions && suggestions.length > 0 &&
+              (!existingMsg.suggestions || existingMsg.suggestions.length === 0);
+            const hasNewQuickReplies = quickReplies && quickReplies.length > 0 &&
+              (!existingMsg.quickReplies || existingMsg.quickReplies.length === 0);
+            const hasNewFollowUpActions = followUpActions && followUpActions.length > 0 &&
+              (!existingMsg.followUpActions || existingMsg.followUpActions.length === 0);
+            const contentChanged = existingMsg.content !== msg.content;
+
+            console.log('[MOC] Update check for message:', {
+              messageId,
+              isComplete,
+              hasNewSuggestions,
+              suggestionsCount: suggestions?.length ?? 0,
+              existingSuggestionsCount: existingMsg.suggestions?.length ?? 0,
+              hasNewQuickReplies,
+              quickRepliesCount: quickReplies?.length ?? 0,
+              existingQuickRepliesCount: existingMsg.quickReplies?.length ?? 0,
+              contentChanged,
+              willUpdate: hasNewSuggestions || hasNewQuickReplies || hasNewFollowUpActions || contentChanged,
+            });
+
+            if (hasNewSuggestions || hasNewQuickReplies || hasNewFollowUpActions || contentChanged) {
+              hasChanges = true;
+              updated[existingIdx] = {
+                ...existingMsg,
+                suggestions: suggestions || existingMsg.suggestions,
+                suggestion: suggestions?.[0] || existingMsg.suggestion,
+                quickReplies: quickReplies || existingMsg.quickReplies,
+                selectionType: selectionType || existingMsg.selectionType,
+                followUpActions: followUpActions || existingMsg.followUpActions,
+                content: msg.content || existingMsg.content
+              };
+            }
           }
         }
-      }
+      });
+
+      return hasChanges ? updated : prev;
     });
-  }, [coachAgent.messages, messages, locale, aggregationSession]);
+  }, [activeAgent.messages, shouldUseMcpAgent]); // Depend on activeAgent.messages
 
-  // Quick actions
-  const quickActions = [
-    { id: 'status', label: '📊 Status', command: '現在のステータスを教えて' },
-    { id: 'tasks', label: '📋 Tasks', command: '進行中のタスクを確認して' },
-    { id: 'advice', label: '💡 Advice', command: '習慣について提案して' },
-    { id: 'analyze', label: '📈 Analyze', command: '習慣の達成率を分析して' },
-  ];
+  // Quick actions - enhanced to match AICoaching section features
+  const quickActions = useMemo(() => {
+    const baseActions = [
+      { id: 'add-habit', label: locale === 'ja' ? '➕ 習慣追加' : '➕ Add Habit', command: locale === 'ja' ? '新しい習慣を追加したい' : 'I want to add a new habit' },
+      { id: 'set-goal', label: locale === 'ja' ? '🎯 ゴール設定' : '🎯 Set Goal', command: locale === 'ja' ? 'ゴールを設定したい' : 'I want to set a goal' },
+      { id: 'check-progress', label: locale === 'ja' ? '📊 進捗確認' : '📊 Check Progress', command: locale === 'ja' ? '習慣の進捗を確認したい' : 'I want to check my habit progress' },
+      { id: 'get-advice', label: locale === 'ja' ? '💡 アドバイス' : '💡 Get Advice', command: locale === 'ja' ? '習慣を続けるコツを教えて' : 'Give me tips for sticking to habits' },
+      { id: 'improve-habit', label: locale === 'ja' ? '🔧 習慣を改善' : '🔧 Improve Habit', command: locale === 'ja' ? '習慣を改善したい' : 'I want to improve my habits' },
+      { id: 'analyze', label: locale === 'ja' ? '📈 分析' : '📈 Analyze', command: locale === 'ja' ? '習慣の達成率を分析して' : 'Analyze my habit completion rates' },
+    ];
 
-  const handleQuickAction = (command: string) => {
-    setInputValue(command);
-  };
+    // Add contextual actions based on user data
+    const contextualActions: { id: string; label: string; command: string }[] = [];
+
+    // Check for habits without levels
+    const unassessedHabits = (habits || []).filter(h => h.level === null || h.level === undefined);
+    if (unassessedHabits.length > 0) {
+      contextualActions.push({
+        id: 'assess-levels',
+        label: locale === 'ja' ? `📐 ${unassessedHabits.length}件のレベル設定` : `📐 Set ${unassessedHabits.length} levels`,
+        command: locale === 'ja' ? '既存の習慣のレベル設定をして下さい' : 'Please help me set levels for my existing habits',
+      });
+    }
+
+    // Check for goals without habits
+    const goalsWithoutHabits = (goals || []).filter(g => {
+      const goalHabits = (habits || []).filter(h => h.goalId === g.id);
+      return goalHabits.length === 0;
+    });
+    if (goalsWithoutHabits.length > 0) {
+      contextualActions.push({
+        id: 'suggest-for-goal',
+        label: locale === 'ja' ? `🎯 「${goalsWithoutHabits[0]?.name}」の習慣提案` : `🎯 Suggest for "${goalsWithoutHabits[0]?.name}"`,
+        command: locale === 'ja' ? `「${goalsWithoutHabits[0]?.name}」というゴールに向けた習慣を提案して` : `Suggest habits for my goal "${goalsWithoutHabits[0]?.name}"`,
+      });
+    }
+
+    return [...contextualActions, ...baseActions].slice(0, 6);
+  }, [locale, habits, goals]);
+
+  const handleQuickAction = useCallback((command: string) => {
+    // Auto-send the quick action message (reply-type behavior)
+    const userMessage: GroupChatMessage = {
+      id: `user-${Date.now()}`,
+      senderId: 'user',
+      senderName: 'You',
+      senderType: 'user',
+      senderIcon: ROLE_ICONS.user,
+      content: command,
+      timestamp: new Date(),
+    };
+    setMessages(prev => [...prev, userMessage]);
+    activeAgent.sendMessage(command);
+  }, [activeAgent]);
 
   // Handle suggestion actions (accept, snooze, dismiss)
   const handleSuggestionAction = useCallback(async (
@@ -606,63 +700,107 @@ export function MOCSection({
 
     try {
       if (actionId === 'accept') {
-        // Create habit or goal based on suggestion type
-        if (suggestion.type === 'habit') {
-          const habitData = {
-            name: (suggestion.data.name as string) || 'New Habit',
-            goalId: (suggestion.data.goalId as string) || goals[0]?.id || '',
-            type: (suggestion.data.type as 'do' | 'avoid') || 'do',
-            duration: suggestion.data.duration as number | undefined,
-            notes: suggestion.data.reason as string | undefined,
-          };
+        // Determine which modal to open based on suggestionType
+        const suggestionType = suggestion.suggestionType || (suggestion.type === 'goal' ? 'goal' : 'habit');
 
-          // Import and call API
-          const { createHabit } = await import('@/lib/api');
-          const newHabit = await createHabit(habitData);
+        switch (suggestionType) {
+          case 'habit':
+            // Open habit modal with pre-filled data
+            openHabitModal({
+              name: (suggestion.data.name as string) || '',
+              type: (suggestion.data.type as 'do' | 'avoid') || 'do',
+              goalId: (suggestion.data.goalId as string) || goals[0]?.id || null,
+            });
 
-          if (newHabit && onHabitCreated) {
-            onHabitCreated(newHabit as Habit);
-          }
+            setMessages(prev => [...prev, {
+              id: `system-${Date.now()}`,
+              senderId: 'system',
+              senderName: 'System',
+              senderType: 'system',
+              senderIcon: ROLE_ICONS.system,
+              content: locale === 'ja'
+                ? `📝 「${suggestion.data.name || 'New Habit'}」の詳細を確認してください`
+                : `📝 Please review the details for "${suggestion.data.name || 'New Habit'}"`,
+              timestamp: new Date(),
+            }]);
+            break;
 
-          // Add success message
-          setMessages(prev => [...prev, {
-            id: `system-${Date.now()}`,
-            senderId: 'system',
-            senderName: 'System',
-            senderType: 'system',
-            senderIcon: ROLE_ICONS.system,
-            content: locale === 'ja'
-              ? `✅ 習慣「${habitData.name}」を作成しました`
-              : `✅ Created habit "${habitData.name}"`,
-            timestamp: new Date(),
-          }]);
-        } else {
-          // Create goal
-          const goalData = {
-            name: (suggestion.data.name as string) || 'New Goal',
-            details: suggestion.data.reason as string | undefined,
-            dueDate: suggestion.data.dueDate as string | undefined,
-          };
+          case 'goal':
+            // Open goal modal with pre-filled data
+            openGoalModal({
+              name: (suggestion.data.name as string) || '',
+              parentId: null,
+            });
 
-          const { createGoal } = await import('@/lib/api');
-          const newGoal = await createGoal(goalData);
+            setMessages(prev => [...prev, {
+              id: `system-${Date.now()}`,
+              senderId: 'system',
+              senderName: 'System',
+              senderType: 'system',
+              senderIcon: ROLE_ICONS.system,
+              content: locale === 'ja'
+                ? `🎯 「${suggestion.data.name || 'New Goal'}」の詳細を確認してください`
+                : `🎯 Please review the details for "${suggestion.data.name || 'New Goal'}"`,
+              timestamp: new Date(),
+            }]);
+            break;
 
-          if (newGoal && onGoalCreated) {
-            onGoalCreated(newGoal as Goal);
-          }
+          case 'stickyn':
+            // Open Sticky'n modal with pre-filled data
+            openStickyModal({
+              name: (suggestion.data.name as string) || '',
+              description: (suggestion.data.description as string) || (suggestion.data.rationale as string) || '',
+              habitId: (suggestion.data.habitId as string) || null,
+            });
 
-          // Add success message
-          setMessages(prev => [...prev, {
-            id: `system-${Date.now()}`,
-            senderId: 'system',
-            senderName: 'System',
-            senderType: 'system',
-            senderIcon: ROLE_ICONS.system,
-            content: locale === 'ja'
-              ? `✅ 目標「${goalData.name}」を作成しました`
-              : `✅ Created goal "${goalData.name}"`,
-            timestamp: new Date(),
-          }]);
+            setMessages(prev => [...prev, {
+              id: `system-${Date.now()}`,
+              senderId: 'system',
+              senderName: 'System',
+              senderType: 'system',
+              senderIcon: ROLE_ICONS.system,
+              content: locale === 'ja'
+                ? `📌 「${suggestion.data.name || 'New Sticky'}」の詳細を確認してください`
+                : `📌 Please review the details for "${suggestion.data.name || 'New Sticky'}"`,
+              timestamp: new Date(),
+            }]);
+            break;
+
+          case 'reply':
+            // Send the suggestion content as a message automatically
+            const replyContent = (suggestion.data.name as string) || (suggestion.data.content as string) || '';
+            if (replyContent) {
+              // Add user message to chat
+              const userMessage: GroupChatMessage = {
+                id: `user-${Date.now()}`,
+                senderId: 'user',
+                senderName: 'You',
+                senderType: 'user',
+                senderIcon: ROLE_ICONS.user,
+                content: replyContent,
+                timestamp: new Date(),
+              };
+              setMessages(prev => [...prev, userMessage]);
+
+              // Send to AI
+              activeAgent.sendMessage(replyContent);
+            }
+            break;
+
+          default:
+            // Fallback to habit/goal based on type
+            if (suggestion.type === 'habit') {
+              openHabitModal({
+                name: (suggestion.data.name as string) || '',
+                type: (suggestion.data.type as 'do' | 'avoid') || 'do',
+                goalId: (suggestion.data.goalId as string) || goals[0]?.id || null,
+              });
+            } else {
+              openGoalModal({
+                name: (suggestion.data.name as string) || '',
+                parentId: null,
+              });
+            }
         }
 
         setSuggestionStates(prev => ({
@@ -745,6 +883,136 @@ export function MOCSection({
     }
   }, [goals, locale, onHabitCreated, onGoalCreated]);
 
+  // Handle quick reply click (category selection)
+  // Determines appropriate message based on selectionType from the last message with quickReplies
+  const handleQuickReplyClick = useCallback((value: string, label: string) => {
+    // Find the last message with quickReplies to get its selectionType
+    const lastMessageWithQuickReplies = [...messages].reverse().find(m => m.quickReplies && m.quickReplies.length > 0);
+    const selectionType = lastMessageWithQuickReplies?.selectionType;
+
+    console.log('[handleQuickReplyClick] Click with context:', {
+      value,
+      label,
+      selectionType,
+      lastMessageId: lastMessageWithQuickReplies?.id,
+    });
+
+    // Determine the appropriate message based on selectionType
+    let categoryMessage: string;
+    if (selectionType === 'goal_category') {
+      // Goal category selected - request goal suggestions
+      categoryMessage = locale === 'ja'
+        ? `${label}の目標を提案して`
+        : `Suggest ${label} goals`;
+    } else {
+      // Habit category or default - request habit suggestions
+      categoryMessage = locale === 'ja'
+        ? `${label}の習慣を提案して`
+        : `Suggest ${label} habits`;
+    }
+
+    // Add user message
+    setMessages(prev => [...prev, {
+      id: `user-${Date.now()}`,
+      senderId: 'user',
+      senderName: 'You',
+      senderType: 'user',
+      senderIcon: '👤',
+      content: label,
+      timestamp: new Date(),
+    }]);
+
+    // Send to AI (active agent)
+    activeAgent.sendMessage(categoryMessage);
+  }, [locale, activeAgent, messages]);
+
+  // Handle follow-up action click (more specific, easier, harder, improvement-related)
+  const handleFollowUpActionClick = useCallback((action: string, category?: string) => {
+    const actionLabels: Record<string, { ja: string; en: string }> = {
+      more_specific: { ja: 'もっと具体的に', en: 'More specific' },
+      easier: { ja: 'もっとやさしく', en: 'Easier' },
+      harder: { ja: 'もっとむずかしく', en: 'Harder' },
+      different: { ja: '別のジャンル', en: 'Different category' },
+      more_suggestions: { ja: '他の改善案を見る', en: 'See more suggestions' },
+      different_habit: { ja: '別の習慣を改善', en: 'Improve different habit' },
+    };
+
+    const label = actionLabels[action]?.[locale] || action;
+
+    // Get previous suggestion names to exclude (for different/varied results)
+    const previousSuggestionNames: string[] = [];
+    // Look at recent messages with suggestions to get names to exclude
+    for (let i = messages.length - 1; i >= 0 && i >= messages.length - 5; i--) {
+      const msg = messages[i];
+      // Check single suggestion
+      if (msg.suggestion?.data?.name) {
+        previousSuggestionNames.push(msg.suggestion.data.name as string);
+      }
+      // Check multiple suggestions array
+      if (msg.suggestions && Array.isArray(msg.suggestions)) {
+        for (const s of msg.suggestions) {
+          if (s.data?.name) {
+            previousSuggestionNames.push(s.data.name as string);
+          }
+        }
+      }
+    }
+
+    // Add user message
+    setMessages(prev => [...prev, {
+      id: `user-${Date.now()}`,
+      senderId: 'user',
+      senderName: 'You',
+      senderType: 'user',
+      senderIcon: '👤',
+      content: label,
+      timestamp: new Date(),
+    }]);
+
+    // Build message for AI with context about previous suggestions
+    const excludeContext = previousSuggestionNames.length > 0
+      ? (locale === 'ja'
+        ? `（${previousSuggestionNames.join('、')}以外で）`
+        : ` (excluding: ${previousSuggestionNames.join(', ')})`)
+      : '';
+
+    // Get the category from the last suggestion message
+    const categoryContext = category || '';
+
+    let aiMessage = '';
+    if (action === 'more_specific') {
+      aiMessage = locale === 'ja'
+        ? `${categoryContext}の習慣をもっと具体的に提案して${excludeContext}`
+        : `Suggest more specific ${categoryContext} habits${excludeContext}`;
+    } else if (action === 'easier') {
+      // Include category to ensure refine_suggestions is called correctly
+      aiMessage = locale === 'ja'
+        ? `${categoryContext ? categoryContext + 'の' : ''}もっと簡単な習慣を提案して（refine_suggestionsを使って）${excludeContext}`
+        : `Suggest easier ${categoryContext} habits (use refine_suggestions)${excludeContext}`;
+    } else if (action === 'harder') {
+      // Include category to ensure refine_suggestions is called correctly
+      aiMessage = locale === 'ja'
+        ? `${categoryContext ? categoryContext + 'の' : ''}もっと難しい習慣を提案して（refine_suggestionsを使って）${excludeContext}`
+        : `Suggest more challenging ${categoryContext} habits (use refine_suggestions)${excludeContext}`;
+    } else if (action === 'different') {
+      aiMessage = locale === 'ja'
+        ? `別のジャンルの習慣を提案して${excludeContext}`
+        : `Suggest habits from a different category${excludeContext}`;
+    } else if (action === 'more_suggestions') {
+      // Request more improvement suggestions for the same habit
+      aiMessage = locale === 'ja'
+        ? `他の改善案を提案して${excludeContext}`
+        : `Suggest more improvement ideas${excludeContext}`;
+    } else if (action === 'different_habit') {
+      // Request to select a different habit for improvement
+      aiMessage = locale === 'ja'
+        ? '別の習慣を改善したい'
+        : 'I want to improve a different habit';
+    }
+
+    activeAgent.sendMessage(aiMessage);
+  }, [locale, activeAgent, messages]);
+
   // Handle task status change
   const handleTaskStatusChange = useCallback(async (
     task: TaskWithDetail,
@@ -776,10 +1044,141 @@ export function MOCSection({
 
   // Handle retry for failed messages
   const handleRetry = useCallback(() => {
-    if (coachAgent.error) {
-      coachAgent.retry();
+    if (activeAgent.error) {
+      activeAgent.retry();
     }
-  }, [coachAgent]);
+  }, [activeAgent]);
+
+  // Modal handlers for creating habits/goals
+  const openHabitModal = useCallback((data: {
+    name?: string;
+    type?: 'do' | 'avoid';
+    goalId?: string | null;
+  }) => {
+    setHabitModalInitial({
+      name: data.name || '',
+      type: data.type || 'do',
+      goalId: data.goalId || (goals.length > 0 ? goals[0].id : undefined),
+    });
+    setHabitModalOpen(true);
+  }, [goals]);
+
+  const openGoalModal = useCallback((data: {
+    name?: string;
+    parentId?: string | null;
+  }) => {
+    setGoalModalInitial({
+      name: data.name || '',
+      parentId: data.parentId || null,
+    });
+    setGoalModalOpen(true);
+  }, []);
+
+  const openStickyModal = useCallback((data: {
+    name?: string;
+    description?: string;
+    habitId?: string | null;
+  }) => {
+    // Create a partial Sticky object for initial values
+    // Use correct property names from Sticky interface
+    setStickyModalInitial({
+      id: '',
+      name: data.name || '',
+      description: data.description || '',
+      completed: false,
+      displayOrder: 0,
+      parentStickyId: null,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      // Store habitId in habits array if provided
+      habits: data.habitId ? [{ id: data.habitId } as Habit] : undefined,
+    } as Sticky);
+    setStickyModalOpen(true);
+  }, []);
+
+  const handleHabitCreated = useCallback(async (payload: { name: string; goalId?: string; type: 'do' | 'avoid'; timings?: any[]; workloadUnit?: string; workloadTotal?: number; workloadTotalEnd?: number; workloadPerCount?: number; notes?: string; relatedHabitIds?: string[] }) => {
+    // Call API to create habit in database
+    console.log('[handleHabitCreated] Creating habit with payload:', payload);
+
+    const createdHabit = await api.createHabit(payload);
+    console.log('[handleHabitCreated] API response:', createdHabit);
+
+    // Verify the habit was actually created
+    if (!createdHabit || !createdHabit.id) {
+      console.error('[handleHabitCreated] Failed to create habit - no valid response');
+      throw new Error('Failed to create habit: No valid response from API');
+    }
+
+    // Add success message
+    setMessages(prev => [...prev, {
+      id: `system-${Date.now()}`,
+      senderId: 'system',
+      senderName: 'System',
+      senderType: 'system',
+      senderIcon: ROLE_ICONS.system,
+      content: locale === 'ja'
+        ? `✅ 習慣「${payload.name}」を作成しました！`
+        : `✅ Created habit "${payload.name}"!`,
+      timestamp: new Date(),
+    }]);
+
+    // Notify parent component about the created habit
+    if (onHabitCreated) {
+      console.log('[handleHabitCreated] Notifying parent component');
+      onHabitCreated(createdHabit);
+    }
+  }, [locale, onHabitCreated]);
+
+  const handleGoalCreated = useCallback(async (payload: { name: string; parentId?: string | null }) => {
+    // Call API to create goal in database
+    // Note: Error handling and modal closing is done in Modal.Goal.tsx
+    const createdGoal = await api.createGoal(payload);
+
+    // Add success message
+    setMessages(prev => [...prev, {
+      id: `system-${Date.now()}`,
+      senderId: 'system',
+      senderName: 'System',
+      senderType: 'system',
+      senderIcon: ROLE_ICONS.system,
+      content: locale === 'ja'
+        ? `✅ ゴール「${payload.name}」を作成しました！`
+        : `✅ Created goal "${payload.name}"!`,
+      timestamp: new Date(),
+    }]);
+
+    // Notify parent component about the created goal
+    if (onGoalCreated && createdGoal) {
+      onGoalCreated(createdGoal);
+    }
+  }, [locale, onGoalCreated]);
+
+  const handleStickyCreated = useCallback(async (payload: { name: string; description?: string; parentStickyId?: string | null }) => {
+    // Call API to create sticky in database
+    // Note: Error handling and modal closing is done in Modal.Sticky.tsx
+    const createdSticky = await api.createSticky(payload);
+
+    // Add success message
+    setMessages(prev => [...prev, {
+      id: `system-${Date.now()}`,
+      senderId: 'system',
+      senderName: 'System',
+      senderType: 'system',
+      senderIcon: ROLE_ICONS.system,
+      content: locale === 'ja'
+        ? `✅ Sticky'n「${payload.name}」を作成しました！`
+        : `✅ Created Sticky'n "${payload.name}"!`,
+      timestamp: new Date(),
+    }]);
+
+    // Notify parent component about the created sticky
+    if (onStickyCreated && createdSticky) {
+      onStickyCreated(createdSticky);
+    }
+
+    // Return the created sticky for relation updates
+    return createdSticky;
+  }, [locale, onStickyCreated]);
 
   // Tab badges
   const tabsWithBadges = TABS.map(tab => ({
@@ -824,17 +1223,29 @@ export function MOCSection({
             </div>
           </div>
         </div>
-        {/* Settings button - placeholder for future config modal */}
-        <button
-          onClick={() => console.log('Settings clicked - config modal not yet implemented')}
-          className="p-2 text-muted-foreground hover:text-foreground rounded-lg hover:bg-muted transition-colors"
-          title={locale === 'ja' ? '設定' : 'Settings'}
-        >
-          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-          </svg>
-        </button>
+        <div className="flex items-center gap-1">
+          {/* Help button - shows AI Coach response flow diagram */}
+          <button
+            onClick={() => setShowHelpModal(true)}
+            className="p-2 text-muted-foreground hover:text-foreground rounded-lg hover:bg-muted transition-colors"
+            title={locale === 'ja' ? 'AIコーチ回答フロー' : 'AI Coach Response Flow'}
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+          </button>
+          {/* Settings button - opens chat agent settings modal */}
+          <button
+            onClick={() => setShowChatAgentSettingsModal(true)}
+            className="p-2 text-muted-foreground hover:text-foreground rounded-lg hover:bg-muted transition-colors"
+            title={locale === 'ja' ? 'チャットエージェント設定' : 'Chat Agent Settings'}
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+            </svg>
+          </button>
+        </div>
       </header>
 
       {/* Tab Bar - Sleek design */}
@@ -872,12 +1283,14 @@ export function MOCSection({
             <div className="flex-1 overflow-y-auto min-h-0">
               <GroupChatView
                 messages={messages}
-                isLoading={coachAgent.isStreaming}
+                isLoading={activeAgent.isStreaming}
                 locale={locale}
                 messagesEndRef={messagesEndRef}
                 suggestionStates={suggestionStates}
                 onSuggestionAction={handleSuggestionAction}
-                error={coachAgent.error}
+                onQuickReplyClick={handleQuickReplyClick}
+                onFollowUpActionClick={handleFollowUpActionClick}
+                error={activeAgent.error}
                 onRetry={handleRetry}
               />
             </div>
@@ -889,18 +1302,27 @@ export function MOCSection({
                 paddingBottom: 'env(safe-area-inset-bottom, 0px)',
               }}
             >
-              {/* Quick Actions - only when no messages */}
+              {/* Initial Suggestions - only when no messages */}
               {messages.length === 0 && (
                 <div className="px-4 pt-3">
-                  <p className="text-xs text-muted-foreground mb-2">
-                    {locale === 'ja' ? 'クイックアクション' : 'Quick Actions'}
-                  </p>
-                  <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">
+                  <div className="text-center mb-3">
+                    <p className="text-sm font-medium text-foreground">
+                      {locale === 'ja' ? 'ようこそ！何をお手伝いしましょうか？' : 'Welcome! How can I help you?'}
+                    </p>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      {locale === 'ja' ? '以下から選択するか、メッセージを入力してください' : 'Choose from below or type a message'}
+                    </p>
+                  </div>
+                  <div className="flex flex-wrap gap-2 justify-center pb-2">
                     {quickActions.map(action => (
                       <button
                         key={action.id}
                         onClick={() => handleQuickAction(action.command)}
-                        className="flex-shrink-0 px-3 py-2 text-sm bg-muted border border-border rounded-xl hover:bg-muted/80 text-foreground transition-all hover:shadow-sm"
+                        className={`flex-shrink-0 px-3 py-2 text-sm rounded-xl transition-all hover:shadow-md ${
+                          action.id === 'multi-agent-dev'
+                            ? 'bg-gradient-to-r from-purple-500 to-indigo-500 text-white hover:from-purple-600 hover:to-indigo-600 font-medium'
+                            : 'bg-muted border border-border hover:bg-muted/80 text-foreground'
+                        }`}
                       >
                         {action.label}
                       </button>
@@ -908,44 +1330,6 @@ export function MOCSection({
                   </div>
                 </div>
               )}
-
-              {/* Agent Selector Pills */}
-              <div className="px-4 pt-2">
-                <div className="flex gap-1.5 overflow-x-auto pb-2 scrollbar-hide">
-                  {availableAgents.map(agent => {
-                    const isSelected = selectedAgent === agent.id;
-                    const isOffline = agent.status === 'offline';
-
-                    return (
-                      <button
-                        key={agent.id}
-                        onClick={() => setSelectedAgent(agent.id)}
-                        disabled={isOffline}
-                        className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-full text-xs font-medium transition-all flex-shrink-0 ${
-                          isSelected
-                            ? 'bg-primary text-primary-foreground shadow-md ring-2 ring-primary/30 ring-offset-1 ring-offset-background scale-105'
-                            : isOffline
-                            ? 'bg-muted text-muted-foreground/50 cursor-not-allowed opacity-60'
-                            : 'bg-muted text-muted-foreground hover:bg-muted/80 hover:text-foreground hover:scale-102'
-                        }`}
-                      >
-                        <span className={isSelected ? 'animate-pulse' : ''}>{agent.icon}</span>
-                        <span className="max-w-[80px] truncate">{agent.name}</span>
-                        {agent.type === 'mcp-agent' && agent.id !== 'broadcast' && (
-                          <span className={`w-1.5 h-1.5 rounded-full ${
-                            agent.status === 'idle' ? 'bg-green-400' :
-                            agent.status === 'busy' ? 'bg-yellow-400 animate-pulse' :
-                            'bg-muted-foreground'
-                          }`} />
-                        )}
-                        {isOffline && (
-                          <span className="text-[10px] text-muted-foreground/70">offline</span>
-                        )}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
 
               {/* Input Container */}
               <div className="px-4 pb-3 md:pb-4">
@@ -966,23 +1350,34 @@ export function MOCSection({
                         handleSendMessage();
                       }
                     }}
-                    placeholder={`${availableAgents.find(a => a.id === selectedAgent)?.name || 'Manager'} ${locale === 'ja' ? 'にメッセージ...' : '- Message...'}`}
+                    placeholder={locale === 'ja' ? 'AIにメッセージ...' : 'Message AI...'}
                     rows={1}
                     className="flex-1 px-3 py-2 bg-transparent text-sm text-foreground placeholder-muted-foreground focus:outline-none resize-none max-h-[120px]"
                     style={{ minHeight: '40px' }}
                   />
 
+                  {/* Issue Report Button */}
+                  <button
+                    onClick={() => setShowIssueModal(true)}
+                    className="flex-shrink-0 w-10 h-10 rounded-xl flex items-center justify-center transition-all bg-muted text-muted-foreground hover:bg-orange-100 hover:text-orange-600 dark:hover:bg-orange-900/30 dark:hover:text-orange-400"
+                    title={locale === 'ja' ? 'Issue を報告' : 'Report Issue'}
+                  >
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                    </svg>
+                  </button>
+
                   {/* Send Button */}
                   <button
                     onClick={handleSendMessage}
-                    disabled={!inputValue.trim() || coachAgent.isStreaming}
+                    disabled={!inputValue.trim() || activeAgent.isStreaming}
                     className={`flex-shrink-0 w-10 h-10 rounded-xl flex items-center justify-center transition-all ${
-                      inputValue.trim() && !coachAgent.isStreaming
+                      inputValue.trim() && !activeAgent.isStreaming
                         ? 'bg-primary text-primary-foreground shadow-sm hover:bg-primary/90'
                         : 'bg-muted text-muted-foreground cursor-not-allowed'
                     }`}
                   >
-                    {coachAgent.isStreaming ? (
+                    {activeAgent.isStreaming ? (
                       <svg className="w-5 h-5 animate-spin" fill="none" viewBox="0 0 24 24">
                         <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                         <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
@@ -1018,11 +1413,64 @@ export function MOCSection({
               <AgentListView
                 connections={server.connections}
                 locale={locale}
+                customAgents={customAgents}
                 onSelectAgent={(agentId) => {
-                  setSelectedAgent(agentId);
-                  setActiveTab('chat');
+                  // Open agent detail modal
+                  const builtInAgent = BUILTIN_AGENTS[agentId];
+                  if (builtInAgent) {
+                    setSelectedAgentForDetail(builtInAgent);
+                    setAgentDetailModalMode('view');
+                    setAgentDetailModalOpen(true);
+                  } else {
+                    // Check custom agents first
+                    const customAgent = customAgents.find(a => a.id === agentId);
+                    if (customAgent) {
+                      setSelectedAgentForDetail(customAgent);
+                      setAgentDetailModalMode('view');
+                      setAgentDetailModalOpen(true);
+                    } else {
+                      // MCP agent - create config from connection data
+                      const allAgents = Array.from(server.connections.values()).flatMap(c => c.agents || []);
+                      const mcpAgent = allAgents.find(a => a.id === agentId);
+                      if (mcpAgent) {
+                        const mcpConfig: AgentConfig = {
+                          id: mcpAgent.id,
+                          name: mcpAgent.name,
+                          role: mcpAgent.role,
+                          description: `MCP Agent - ${mcpAgent.role}`,
+                          icon: ROLE_ICONS[mcpAgent.role.toLowerCase()] || '🤖',
+                          status: mcpAgent.status || 'offline',
+                          systemPrompt: locale === 'ja'
+                            ? 'MCPエージェントのシステムプロンプトは接続先で管理されています。'
+                            : 'MCP agent system prompt is managed by the connected server.',
+                          model: 'MCP Server',
+                          tools: [],
+                          capabilities: mcpAgent.capabilities || [],
+                          isBuiltIn: false,
+                        };
+                        setSelectedAgentForDetail(mcpConfig);
+                        setAgentDetailModalMode('view');
+                        setAgentDetailModalOpen(true);
+                      }
+                    }
+                  }
                 }}
-                selectedAgentId={selectedAgent}
+                onAddAgent={() => {
+                  setSelectedAgentForDetail(null);
+                  setAgentDetailModalMode('create');
+                  setAgentDetailModalOpen(true);
+                }}
+                onEditAgent={(agentId) => {
+                  const customAgent = customAgents.find(a => a.id === agentId);
+                  if (customAgent) {
+                    setSelectedAgentForDetail(customAgent);
+                    setAgentDetailModalMode('edit');
+                    setAgentDetailModalOpen(true);
+                  }
+                }}
+                onDeleteAgent={(agentId) => {
+                  setCustomAgents(prev => prev.filter(a => a.id !== agentId));
+                }}
               />
             )}
             {activeTab === 'history' && (
@@ -1034,7 +1482,877 @@ export function MOCSection({
           </div>
         )}
       </div>
+
+      {/* Modals for creating habits/goals from suggestions */}
+      <HabitModal
+        open={habitModalOpen}
+        onClose={() => {
+          setHabitModalOpen(false);
+          setHabitModalInitial(undefined);
+        }}
+        habit={null}
+        onCreate={handleHabitCreated}
+        initial={habitModalInitial}
+        categories={goals}
+      />
+
+      <GoalModal
+        open={goalModalOpen}
+        onClose={() => {
+          setGoalModalOpen(false);
+          setGoalModalInitial(undefined);
+        }}
+        goal={null}
+        onCreate={handleGoalCreated}
+        initial={goalModalInitial}
+        goals={goals}
+        habits={habits}
+      />
+
+      <StickyModal
+        open={stickyModalOpen}
+        onClose={() => {
+          setStickyModalOpen(false);
+          setStickyModalInitial(null);
+        }}
+        sticky={stickyModalInitial}
+        stickies={stickies}
+        onCreate={handleStickyCreated}
+        goals={goals}
+        habits={habits}
+        tags={tags}
+      />
+
+      <AgentDetailModal
+        open={agentDetailModalOpen}
+        onClose={() => {
+          setAgentDetailModalOpen(false);
+          setSelectedAgentForDetail(null);
+          setAgentDetailModalMode('view');
+        }}
+        agent={selectedAgentForDetail}
+        locale={locale}
+        mode={agentDetailModalMode}
+        availableParents={customAgents}
+        onSave={(agentId, updates) => {
+          // Handle saving agent config updates
+          if (agentDetailModalMode === 'create') {
+            // Create new custom agent
+            const newAgent = updates as AgentConfig;
+            setCustomAgents(prev => [...prev, newAgent]);
+          } else {
+            // Update existing custom agent
+            setCustomAgents(prev =>
+              prev.map(a => a.id === agentId ? { ...a, ...updates } : a)
+            );
+          }
+        }}
+        onDelete={(agentId) => {
+          setCustomAgents(prev => prev.filter(a => a.id !== agentId));
+        }}
+      />
+
+      {/* Issue Report Modal */}
+      <IssueModal
+        open={showIssueModal}
+        onClose={() => setShowIssueModal(false)}
+        onSubmit={(data) => {
+          // Show success message in chat
+          setMessages(prev => [...prev, {
+            id: `system-${Date.now()}`,
+            senderId: 'system',
+            senderName: 'System',
+            senderType: 'system',
+            senderIcon: ROLE_ICONS.system,
+            content: locale === 'ja'
+              ? `Issue "${data.title}" を作成しました。ご報告ありがとうございます。`
+              : `Issue "${data.title}" has been created. Thank you for your report.`,
+            timestamp: new Date(),
+          }]);
+        }}
+        conversationId={undefined}
+        messageIds={messages.map(m => m.id)}
+        conversationData={{
+          messages: messages.map((m): ConversationMessage => ({
+            role: m.senderType === 'user' ? 'user' : 'assistant',
+            content: m.content,
+            timestamp: m.timestamp.toISOString(),
+            toolCalls: m.suggestion ? [{ type: 'suggestion', data: m.suggestion }] : undefined,
+          }))
+        }}
+        locale={locale}
+      />
+
+      {/* AI Coach Response Flow Help Modal */}
+      {showHelpModal && (
+        <div className="fixed inset-0 z-[10001] flex items-start justify-center pt-4 sm:pt-8 bg-background/80 backdrop-blur-sm p-4">
+          <div className="w-full max-w-3xl rounded-xl border border-border bg-card shadow-lg text-card-foreground flex flex-col max-h-[95vh] sm:max-h-[90vh]">
+            {/* Header */}
+            <div className="flex items-center justify-between p-4 border-b border-border">
+              <h2 className="text-lg sm:text-xl font-semibold">
+                {locale === 'ja' ? 'AIコーチ 回答フロー' : 'AI Coach Response Flow'}
+              </h2>
+              <button
+                onClick={() => setShowHelpModal(false)}
+                className="text-muted-foreground hover:text-foreground text-xl p-2 min-w-[44px] min-h-[44px] flex items-center justify-center transition-colors"
+                aria-label="Close"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Scrollable content */}
+            <div className="flex-1 overflow-auto p-4 space-y-6">
+              {/* Overview */}
+              <div>
+                <h3 className="text-sm font-semibold text-muted-foreground mb-2">
+                  {locale === 'ja' ? '概要' : 'Overview'}
+                </h3>
+                <p className="text-sm text-foreground">
+                  {locale === 'ja'
+                    ? 'VOW AIコーチは、テキストベースの質問の代わりにインタラクティブなUI要素（ボタン）を使用します。'
+                    : 'The VOW AI Coach uses interactive UI elements (buttons) instead of text-based questions.'}
+                </p>
+              </div>
+
+              {/* Response Flow Diagram */}
+              <div>
+                <h3 className="text-sm font-semibold text-muted-foreground mb-3">
+                  {locale === 'ja' ? '回答フロー図' : 'Response Flow Diagram'}
+                </h3>
+                <div className="bg-muted/30 rounded-lg p-4 font-mono text-xs overflow-x-auto">
+                  <pre className="whitespace-pre text-foreground">{`User Request
+    |
+    +-> "${locale === 'ja' ? '習慣の進捗を確認したい' : 'Check habit progress'}"
+    |       |
+    |       +-> show_habit_selection() -> User's habits as buttons
+    |               |
+    |               +-> User selects habit -> check_progress(habitId)
+    |
+    +-> "${locale === 'ja' ? '目標の進捗を見たい' : 'Check goal progress'}"
+    |       |
+    |       +-> show_goal_selection() -> User's goals as buttons
+    |               |
+    |               +-> User selects goal -> check_progress(goalId)
+    |
+    +-> "${locale === 'ja' ? '新しい習慣を始めたい' : 'Start new habit'}"
+    |       |
+    |       +-> show_category_selection(selectionType: "habit_category")
+    |               |
+    |               +-> User selects category -> suggest_habits(category)
+    |                       |
+    |                       +-> Returns suggestions + followUpActions
+    |
+    +-> "${locale === 'ja' ? 'ゴールを設定したい' : 'Set a goal'}"
+            |
+            +-> show_category_selection(selectionType: "goal_category")
+                    |
+                    +-> User selects category -> suggest_goals(category)
+                            |
+                            +-> Returns suggestions + followUpActions`}</pre>
+                </div>
+              </div>
+
+              {/* Tool Usage Rules */}
+              <div>
+                <h3 className="text-sm font-semibold text-muted-foreground mb-3">
+                  {locale === 'ja' ? 'ツール使用ルール' : 'Tool Usage Rules'}
+                </h3>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm border-collapse">
+                    <thead>
+                      <tr className="border-b border-border">
+                        <th className="text-left py-2 px-3 font-medium text-muted-foreground">
+                          {locale === 'ja' ? 'ユーザーリクエスト' : 'User Request'}
+                        </th>
+                        <th className="text-left py-2 px-3 font-medium text-muted-foreground">
+                          {locale === 'ja' ? '呼び出すツール' : 'Tool to Call'}
+                        </th>
+                        <th className="text-left py-2 px-3 font-medium text-muted-foreground">
+                          selectionType
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr className="border-b border-border/50">
+                        <td className="py-2 px-3">{locale === 'ja' ? '習慣の進捗を確認したい' : 'Check habit progress'}</td>
+                        <td className="py-2 px-3 font-mono text-xs">show_habit_selection</td>
+                        <td className="py-2 px-3 text-muted-foreground">N/A</td>
+                      </tr>
+                      <tr className="border-b border-border/50">
+                        <td className="py-2 px-3">{locale === 'ja' ? '目標の進捗を見たい' : 'Check goal progress'}</td>
+                        <td className="py-2 px-3 font-mono text-xs">show_goal_selection</td>
+                        <td className="py-2 px-3 text-muted-foreground">N/A</td>
+                      </tr>
+                      <tr className="border-b border-border/50">
+                        <td className="py-2 px-3">{locale === 'ja' ? '新しい習慣を始めたい' : 'Start new habit'}</td>
+                        <td className="py-2 px-3 font-mono text-xs">show_category_selection</td>
+                        <td className="py-2 px-3 font-mono text-xs">habit_category</td>
+                      </tr>
+                      <tr className="border-b border-border/50">
+                        <td className="py-2 px-3">{locale === 'ja' ? 'ゴールを設定したい' : 'Set a goal'}</td>
+                        <td className="py-2 px-3 font-mono text-xs">show_category_selection</td>
+                        <td className="py-2 px-3 font-mono text-xs">goal_category</td>
+                      </tr>
+                      <tr className="border-b border-border/50">
+                        <td className="py-2 px-3">{locale === 'ja' ? '健康な習慣を提案して' : 'Suggest healthy habits'}</td>
+                        <td className="py-2 px-3 font-mono text-xs">suggest_habits</td>
+                        <td className="py-2 px-3 text-muted-foreground">N/A (category: health)</td>
+                      </tr>
+                      <tr>
+                        <td className="py-2 px-3">{locale === 'ja' ? 'キャリア目標を提案して' : 'Suggest career goals'}</td>
+                        <td className="py-2 px-3 font-mono text-xs">suggest_goals</td>
+                        <td className="py-2 px-3 text-muted-foreground">N/A (category: career)</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              {/* After Category Selection */}
+              <div>
+                <h3 className="text-sm font-semibold text-muted-foreground mb-3">
+                  {locale === 'ja' ? 'カテゴリ選択後' : 'After Category Selection'}
+                </h3>
+                <div className="bg-amber-500/10 border border-amber-500/20 rounded-lg p-3 mb-3">
+                  <p className="text-sm text-amber-700 dark:text-amber-400 font-medium">
+                    {locale === 'ja'
+                      ? '重要: 元のリクエストに基づいて正しいsuggestツールを使用してください'
+                      : 'CRITICAL: Use the correct suggest tool based on the original request'}
+                  </p>
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm border-collapse">
+                    <thead>
+                      <tr className="border-b border-border">
+                        <th className="text-left py-2 px-3 font-medium text-muted-foreground">
+                          {locale === 'ja' ? '元のリクエスト' : 'Original Request'}
+                        </th>
+                        <th className="text-left py-2 px-3 font-medium text-muted-foreground">
+                          {locale === 'ja' ? '選択されたカテゴリ' : 'Category Selected'}
+                        </th>
+                        <th className="text-left py-2 px-3 font-medium text-muted-foreground">
+                          {locale === 'ja' ? '呼び出すツール' : 'Tool to Call'}
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr className="border-b border-border/50">
+                        <td className="py-2 px-3">{locale === 'ja' ? '新しい習慣を始めたい' : 'Start new habit'}</td>
+                        <td className="py-2 px-3">health, learning, etc.</td>
+                        <td className="py-2 px-3 font-mono text-xs font-bold text-green-600 dark:text-green-400">suggest_habits</td>
+                      </tr>
+                      <tr>
+                        <td className="py-2 px-3">{locale === 'ja' ? 'ゴールを設定したい' : 'Set a goal'}</td>
+                        <td className="py-2 px-3">career, finance, etc.</td>
+                        <td className="py-2 px-3 font-mono text-xs font-bold text-green-600 dark:text-green-400">suggest_goals</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              {/* Follow-Up Actions */}
+              <div>
+                <h3 className="text-sm font-semibold text-muted-foreground mb-3">
+                  {locale === 'ja' ? 'フォローアップアクション' : 'Follow-Up Actions'}
+                </h3>
+                <p className="text-sm text-foreground mb-3">
+                  {locale === 'ja'
+                    ? 'suggest_habitsとsuggest_goalsはfollowUpActionsを返します:'
+                    : 'Both suggest_habits and suggest_goals return followUpActions:'}
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  <span className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-muted rounded-full text-sm">
+                    <span>🔍</span>
+                    <span>{locale === 'ja' ? 'もっと具体的に' : 'More specific'}</span>
+                  </span>
+                  <span className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-muted rounded-full text-sm">
+                    <span>🌱</span>
+                    <span>{locale === 'ja' ? 'もっとやさしく' : 'Easier'}</span>
+                  </span>
+                  <span className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-muted rounded-full text-sm">
+                    <span>🔥</span>
+                    <span>{locale === 'ja' ? 'もっとむずかしく' : 'Harder'}</span>
+                  </span>
+                  <span className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-muted rounded-full text-sm">
+                    <span>🔄</span>
+                    <span>{locale === 'ja' ? '他には？' : 'Different'}</span>
+                  </span>
+                </div>
+              </div>
+
+              {/* Prohibited Patterns */}
+              <div>
+                <h3 className="text-sm font-semibold text-muted-foreground mb-3">
+                  {locale === 'ja' ? '禁止パターン' : 'Prohibited Patterns'}
+                </h3>
+                <div className="bg-red-500/10 border border-red-500/20 rounded-lg p-4 space-y-2">
+                  <div className="flex items-start gap-2 text-sm">
+                    <span className="text-red-500 flex-shrink-0">✕</span>
+                    <span className="text-red-700 dark:text-red-400">
+                      {locale === 'ja'
+                        ? '「どの習慣ですか？」とテキストで質問 → show_habit_selectionを使用'
+                        : 'Ask "Which habit?" with text → use show_habit_selection instead'}
+                    </span>
+                  </div>
+                  <div className="flex items-start gap-2 text-sm">
+                    <span className="text-red-500 flex-shrink-0">✕</span>
+                    <span className="text-red-700 dark:text-red-400">
+                      {locale === 'ja'
+                        ? '「習慣のIDを教えてください」と質問 → 選択ボタンを使用'
+                        : 'Ask "Tell me the habit ID" → use selection buttons instead'}
+                    </span>
+                  </div>
+                  <div className="flex items-start gap-2 text-sm">
+                    <span className="text-red-500 flex-shrink-0">✕</span>
+                    <span className="text-red-700 dark:text-red-400">
+                      {locale === 'ja'
+                        ? 'goal_category選択後にsuggest_habitsを呼び出す'
+                        : 'Call suggest_habits after goal_category selection'}
+                    </span>
+                  </div>
+                  <div className="flex items-start gap-2 text-sm">
+                    <span className="text-red-500 flex-shrink-0">✕</span>
+                    <span className="text-red-700 dark:text-red-400">
+                      {locale === 'ja'
+                        ? 'habit_category選択後にsuggest_goalsを呼び出す'
+                        : 'Call suggest_goals after habit_category selection'}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div className="flex items-center justify-end p-4 border-t border-border">
+              <button
+                onClick={() => setShowHelpModal(false)}
+                className="px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:opacity-90 transition-opacity min-h-[44px]"
+              >
+                {locale === 'ja' ? '閉じる' : 'Close'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Chat Agent Settings Modal */}
+      {showChatAgentSettingsModal && (
+        <ChatAgentSettingsModal
+          isOpen={showChatAgentSettingsModal}
+          onClose={() => setShowChatAgentSettingsModal(false)}
+          settings={server.chatAgentSettings}
+          onUpdateSettings={server.updateChatAgentSettings}
+          servers={server.config.servers}
+          connections={server.connections}
+          agents={server.agents}
+          locale={locale}
+          onAddServer={server.addServer}
+          onUpdateServer={server.updateServer}
+          onConnectServer={server.connectServer}
+        />
+      )}
     </section>
+  );
+}
+
+/**
+ * Chat Agent Settings Modal Component
+ */
+interface ChatAgentSettingsModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  settings: ChatAgentSettings;
+  onUpdateSettings: (updates: Partial<ChatAgentSettings>) => void;
+  servers: { id: string; name: string; serverUrl: string; enabled: boolean; serverToken: string; autoConnect: boolean }[];
+  connections: Map<string, ServerConnection>;
+  agents: { id: string; name: string; role: string; serverId: string; serverName: string }[];
+  locale: 'ja' | 'en';
+  onAddServer: (server: Omit<McpServer, 'id'>) => string;
+  onUpdateServer: (serverId: string, updates: Partial<McpServer>) => void;
+  onConnectServer: (serverId: string) => Promise<void>;
+}
+
+function ChatAgentSettingsModal({
+  isOpen,
+  onClose,
+  settings,
+  onUpdateSettings,
+  servers,
+  connections,
+  agents,
+  locale,
+  onAddServer,
+  onUpdateServer,
+  onConnectServer,
+}: ChatAgentSettingsModalProps) {
+  const [isSettingUp, setIsSettingUp] = useState(false);
+  const [setupError, setSetupError] = useState<string | null>(null);
+  const [setupSuccess, setSetupSuccess] = useState(false);
+  const [showGuide, setShowGuide] = useState(false);
+  const [guideContent, setGuideContent] = useState<string | null>(null);
+  const [guideLoading, setGuideLoading] = useState(false);
+  if (!isOpen) return null;
+
+  // Get connected servers
+  const connectedServers = servers.filter(s => {
+    const conn = connections.get(s.id);
+    return conn?.connectionState === 'connected';
+  });
+
+  // Get available agents for selected server
+  const availableAgents = settings.mcpServerId
+    ? agents.filter(a => a.serverId === settings.mcpServerId)
+    : agents;
+
+  const hasConnectedServers = connectedServers.length > 0;
+
+  return (
+    <div className="fixed inset-0 z-[10001] flex items-start justify-center pt-4 sm:pt-8 bg-background/80 backdrop-blur-sm p-4">
+      <div className="w-full max-w-md rounded-xl border border-border bg-card shadow-lg text-card-foreground flex flex-col max-h-[95vh] sm:max-h-[90vh]">
+        {/* Header */}
+        <div className="flex items-center justify-between p-4 border-b border-border">
+          <h2 className="text-lg font-semibold">
+            {locale === 'ja' ? 'チャットエージェント設定' : 'Chat Agent Settings'}
+          </h2>
+          <button
+            onClick={onClose}
+            className="text-muted-foreground hover:text-foreground text-xl p-2 min-w-[44px] min-h-[44px] flex items-center justify-center transition-colors"
+            aria-label="Close"
+          >
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M18 6L6 18M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+
+        {/* Content */}
+        <div className="flex-1 overflow-auto p-4 space-y-6">
+          {/* MCP Agent Toggle */}
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <div>
+                <label className="text-sm font-medium">
+                  {locale === 'ja' ? 'MCPエージェントを使用' : 'Use MCP Agent'}
+                </label>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  {locale === 'ja'
+                    ? 'MCPサーバ接続時、チャットにMCPエージェントを使用します'
+                    : 'Use MCP agents for chat when connected to MCP servers'}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => onUpdateSettings({ useMcpAgent: !settings.useMcpAgent })}
+                disabled={!hasConnectedServers}
+                className={`
+                  relative w-11 h-6 rounded-full transition-colors
+                  ${settings.useMcpAgent && hasConnectedServers ? 'bg-primary' : 'bg-muted'}
+                  ${!hasConnectedServers ? 'opacity-50 cursor-not-allowed' : ''}
+                `}
+              >
+                <span
+                  className={`
+                    absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full transition-transform shadow
+                    ${settings.useMcpAgent && hasConnectedServers ? 'translate-x-5' : ''}
+                  `}
+                />
+              </button>
+            </div>
+
+            {!hasConnectedServers && (
+              <div className="p-3 bg-amber-500/10 border border-amber-500/20 rounded-lg">
+                <p className="text-xs text-amber-700 dark:text-amber-300">
+                  {locale === 'ja'
+                    ? 'MCPサーバに接続されていません。サーバに接続してからこの機能を有効にしてください。'
+                    : 'No MCP servers connected. Please connect to a server to enable this feature.'}
+                </p>
+              </div>
+            )}
+
+            {/* Quick Setup: Local Claude Code */}
+            {!hasConnectedServers && (
+              <div className="p-4 bg-primary/5 border border-primary/20 rounded-lg space-y-3">
+                <div className="flex items-center gap-2">
+                  <span className="text-lg">🚀</span>
+                  <h4 className="text-sm font-medium">
+                    {locale === 'ja' ? 'クイックセットアップ' : 'Quick Setup'}
+                  </h4>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  {locale === 'ja'
+                    ? 'ローカルで動作するClaude Code MCPサーバに接続します。ワンクリックでチャットにClaude Codeを使用できるようになります。'
+                    : 'Connect to a locally running Claude Code MCP server. Enable Claude Code for chat with one click.'}
+                </p>
+
+                {setupError && (
+                  <div className="p-2 bg-destructive/10 border border-destructive/20 rounded text-xs text-destructive">
+                    {setupError}
+                  </div>
+                )}
+
+                {setupSuccess && (
+                  <div className="p-2 bg-green-500/10 border border-green-500/20 rounded text-xs text-green-700 dark:text-green-300">
+                    {locale === 'ja'
+                      ? '✅ 接続成功！Claude Codeチャットが有効になりました。モーダルを閉じてチャットをお試しください。'
+                      : '✅ Connected! Claude Code chat is now enabled. Close the modal and try chatting.'}
+                  </div>
+                )}
+
+                <button
+                  onClick={async () => {
+                    setIsSettingUp(true);
+                    setSetupError(null);
+                    setSetupSuccess(false);
+
+                    try {
+                      // Check if local server already exists (check both localhost and 127.0.0.1)
+                      // Use 127.0.0.1 to avoid IPv6 issues (server only listens on IPv4)
+                      const localServerUrl = 'http://127.0.0.1:3456';
+                      const existingServer = servers.find(s =>
+                        s.serverUrl === localServerUrl || s.serverUrl === 'http://localhost:3456'
+                      );
+
+                      let serverId: string;
+
+                      const expectedToken = 'mcp-multi-agent-token-f75a6267';
+
+                      if (existingServer) {
+                        // Use existing server but update token and URL
+                        serverId = existingServer.id;
+                        console.log('[Quick Setup] Updating existing server:', serverId);
+                        onUpdateServer(existingServer.id, {
+                          serverUrl: localServerUrl,
+                          serverToken: expectedToken,
+                        });
+                        // Wait for React state to propagate (state updates are async)
+                        await new Promise(resolve => setTimeout(resolve, 100));
+                      } else {
+                        // Add new server for local Claude Code
+                        const newServerData = {
+                          name: 'Local Claude Code',
+                          serverUrl: localServerUrl,
+                          serverToken: expectedToken,
+                          enabled: true,
+                          autoConnect: true,
+                        };
+                        // addServer now updates configRef synchronously, so no delay needed
+                        serverId = onAddServer(newServerData);
+                        console.log('[Quick Setup] Added new server:', serverId);
+                      }
+
+                      // Connect to the server (now waits for SSE connection to be established)
+                      console.log('[Quick Setup] Connecting to server:', serverId);
+                      await onConnectServer(serverId);
+
+                      // Update settings to use MCP agent
+                      onUpdateSettings({
+                        useMcpAgent: true,
+                        mcpServerId: serverId,
+                        fallbackToApi: true,
+                      });
+
+                      setSetupSuccess(true);
+                    } catch (error) {
+                      setSetupError(
+                        locale === 'ja'
+                          ? `接続に失敗しました: ${error instanceof Error ? error.message : 'Unknown error'}. MCPサーバが127.0.0.1:3456で稼働しているか確認してください。`
+                          : `Connection failed: ${error instanceof Error ? error.message : 'Unknown error'}. Make sure the MCP server is running on 127.0.0.1:3456.`
+                      );
+                    } finally {
+                      setIsSettingUp(false);
+                    }
+                  }}
+                  disabled={isSettingUp}
+                  className={`
+                    w-full px-4 py-2.5 rounded-lg text-sm font-medium flex items-center justify-center gap-2
+                    ${isSettingUp
+                      ? 'bg-primary/50 text-primary-foreground cursor-not-allowed'
+                      : 'bg-primary text-primary-foreground hover:opacity-90'
+                    }
+                    transition-all min-h-[44px]
+                  `}
+                >
+                  {isSettingUp ? (
+                    <>
+                      <span className="animate-spin">⏳</span>
+                      {locale === 'ja' ? '接続中...' : 'Connecting...'}
+                    </>
+                  ) : (
+                    <>
+                      <span>🤖</span>
+                      {locale === 'ja' ? 'ローカルClaude Codeに接続' : 'Connect to Local Claude Code'}
+                    </>
+                  )}
+                </button>
+
+                <p className="text-xs text-muted-foreground text-center">
+                  {locale === 'ja'
+                    ? '※ MCPサーバが http://localhost:3456 で稼働している必要があります'
+                    : '※ MCP server must be running at http://localhost:3456'}
+                </p>
+              </div>
+            )}
+          </div>
+
+          {/* Server Selection Mode */}
+          {settings.useMcpAgent && hasConnectedServers && (
+            <div className="space-y-2">
+              <label className="text-sm font-medium">
+                {locale === 'ja' ? 'サーバ選択モード' : 'Server Selection Mode'}
+              </label>
+              <select
+                value={settings.selectionMode || 'manual'}
+                onChange={(e) => onUpdateSettings({
+                  selectionMode: e.target.value as 'manual' | 'priority' | 'failover',
+                  mcpServerId: e.target.value !== 'manual' ? undefined : settings.mcpServerId,
+                  mcpAgentId: undefined,
+                })}
+                className="w-full px-3 py-2 bg-muted border border-border rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-primary"
+              >
+                <option value="manual">{locale === 'ja' ? '手動選択' : 'Manual Selection'}</option>
+                <option value="priority">{locale === 'ja' ? '優先順位自動選択' : 'Auto (by Priority)'}</option>
+                <option value="failover">{locale === 'ja' ? 'フェイルオーバー' : 'Failover Chain'}</option>
+              </select>
+              <p className="text-xs text-muted-foreground">
+                {settings.selectionMode === 'priority' ? (
+                  locale === 'ja'
+                    ? '優先度の高い（数字の小さい）接続サーバを自動選択'
+                    : 'Automatically selects the highest priority (lowest number) connected server'
+                ) : settings.selectionMode === 'failover' ? (
+                  locale === 'ja'
+                    ? '優先順位に従ってフェイルオーバー（接続失敗時に次のサーバを試行）'
+                    : 'Fails over to next server in priority order when connection fails'
+                ) : (
+                  locale === 'ja'
+                    ? '使用するサーバを手動で選択'
+                    : 'Manually select which server to use'
+                )}
+              </p>
+            </div>
+          )}
+
+          {/* Server Selection (Manual Mode) */}
+          {settings.useMcpAgent && hasConnectedServers && (settings.selectionMode || 'manual') === 'manual' && (
+            <div className="space-y-2">
+              <label className="text-sm font-medium">
+                {locale === 'ja' ? 'MCPサーバ' : 'MCP Server'}
+              </label>
+              <select
+                value={settings.mcpServerId || ''}
+                onChange={(e) => onUpdateSettings({
+                  mcpServerId: e.target.value || undefined,
+                  mcpAgentId: undefined, // Reset agent when server changes
+                })}
+                className="w-full px-3 py-2 bg-muted border border-border rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-primary"
+              >
+                <option value="">{locale === 'ja' ? '自動選択' : 'Auto select'}</option>
+                {connectedServers
+                  .sort((a, b) => ((a as McpServer).priority ?? 5) - ((b as McpServer).priority ?? 5))
+                  .map(server => (
+                    <option key={server.id} value={server.id}>
+                      [{(server as McpServer).priority ?? 5}] {server.name}
+                    </option>
+                  ))}
+              </select>
+            </div>
+          )}
+
+          {/* Priority Server List (Priority/Failover Mode) */}
+          {settings.useMcpAgent && hasConnectedServers && (settings.selectionMode === 'priority' || settings.selectionMode === 'failover') && (
+            <div className="space-y-2">
+              <label className="text-sm font-medium">
+                {locale === 'ja' ? 'サーバ優先順位' : 'Server Priority'}
+              </label>
+              <div className="space-y-1 max-h-32 overflow-y-auto">
+                {connectedServers
+                  .sort((a, b) => ((a as McpServer).priority ?? 5) - ((b as McpServer).priority ?? 5))
+                  .map((server, idx) => (
+                    <div
+                      key={server.id}
+                      className={`flex items-center gap-2 px-3 py-1.5 rounded text-sm ${
+                        idx === 0 ? 'bg-primary/10 border border-primary/20' : 'bg-muted/50'
+                      }`}
+                    >
+                      <span className="w-6 h-6 flex items-center justify-center bg-primary/20 rounded text-xs font-medium">
+                        {(server as McpServer).priority ?? 5}
+                      </span>
+                      <span className="flex-1 truncate">{server.name}</span>
+                      {idx === 0 && (
+                        <span className="text-xs text-primary font-medium">
+                          {locale === 'ja' ? '使用中' : 'Active'}
+                        </span>
+                      )}
+                    </div>
+                  ))}
+              </div>
+              <p className="text-xs text-muted-foreground">
+                {locale === 'ja'
+                  ? '※ 優先度はサーバ設定で変更できます'
+                  : '※ Priority can be changed in server settings'}
+              </p>
+            </div>
+          )}
+
+          {/* Agent Selection */}
+          {settings.useMcpAgent && hasConnectedServers && availableAgents.length > 0 && (
+            <div className="space-y-2">
+              <label className="text-sm font-medium">
+                {locale === 'ja' ? 'エージェント' : 'Agent'}
+              </label>
+              <select
+                value={settings.mcpAgentId || ''}
+                onChange={(e) => onUpdateSettings({ mcpAgentId: e.target.value || undefined })}
+                className="w-full px-3 py-2 bg-muted border border-border rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-primary"
+              >
+                <option value="">{locale === 'ja' ? '自動選択（最初のエージェント）' : 'Auto select (first agent)'}</option>
+                {availableAgents.map(agent => (
+                  <option key={agent.id} value={agent.id}>
+                    {agent.name} ({agent.role}) - {agent.serverName}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          {/* Fallback Setting */}
+          {settings.useMcpAgent && (
+            <div className="space-y-3 pt-4 border-t border-border">
+              <div className="flex items-center justify-between">
+                <div>
+                  <label className="text-sm font-medium">
+                    {locale === 'ja' ? 'フォールバック' : 'Fallback'}
+                  </label>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    {locale === 'ja'
+                      ? 'MCP接続失敗時、デフォルトAIに切り替え'
+                      : 'Switch to default AI when MCP connection fails'}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => onUpdateSettings({ fallbackToApi: !settings.fallbackToApi })}
+                  className={`
+                    relative w-11 h-6 rounded-full transition-colors
+                    ${settings.fallbackToApi ? 'bg-primary' : 'bg-muted'}
+                  `}
+                >
+                  <span
+                    className={`
+                      absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full transition-transform shadow
+                      ${settings.fallbackToApi ? 'translate-x-5' : ''}
+                    `}
+                  />
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Current Status Info */}
+          <div className="pt-4 border-t border-border">
+            <h3 className="text-sm font-medium mb-2">
+              {locale === 'ja' ? '現在の状態' : 'Current Status'}
+            </h3>
+            <div className="space-y-2 text-xs">
+              <div className="flex items-center justify-between">
+                <span className="text-muted-foreground">
+                  {locale === 'ja' ? 'チャットエージェント' : 'Chat Agent'}
+                </span>
+                <span className={`font-medium ${settings.useMcpAgent && hasConnectedServers ? 'text-green-600 dark:text-green-400' : 'text-muted-foreground'}`}>
+                  {settings.useMcpAgent && hasConnectedServers
+                    ? (locale === 'ja' ? 'MCPエージェント' : 'MCP Agent')
+                    : (locale === 'ja' ? 'デフォルトAI' : 'Default AI')}
+                </span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-muted-foreground">
+                  {locale === 'ja' ? '接続サーバ数' : 'Connected Servers'}
+                </span>
+                <span className="font-medium">{connectedServers.length}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-muted-foreground">
+                  {locale === 'ja' ? '利用可能エージェント' : 'Available Agents'}
+                </span>
+                <span className="font-medium">{availableAgents.length}</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Help & Documentation */}
+          <div className="pt-4 border-t border-border">
+            <button
+              onClick={() => {
+                if (!showGuide) {
+                  setShowGuide(true);
+                  if (!guideContent) {
+                    setGuideLoading(true);
+                    fetch('/docs/claude-code-chat-setup.md')
+                      .then(res => res.text())
+                      .then(text => {
+                        setGuideContent(text);
+                        setGuideLoading(false);
+                      })
+                      .catch(() => {
+                        setGuideContent(locale === 'ja'
+                          ? 'ドキュメントの読み込みに失敗しました。'
+                          : 'Failed to load documentation.');
+                        setGuideLoading(false);
+                      });
+                  }
+                } else {
+                  setShowGuide(false);
+                }
+              }}
+              className="flex items-center gap-2 text-sm text-primary hover:underline"
+            >
+              <span>{showGuide ? '📖' : '📘'}</span>
+              <span>
+                {showGuide
+                  ? (locale === 'ja' ? 'ガイドを閉じる' : 'Close Guide')
+                  : (locale === 'ja' ? 'セットアップガイドを表示' : 'Show Setup Guide')}
+              </span>
+              <svg
+                className={`w-4 h-4 transition-transform ${showGuide ? 'rotate-180' : ''}`}
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+              </svg>
+            </button>
+
+            {showGuide && (
+              <div className="mt-3">
+                {guideLoading ? (
+                  <div className="flex items-center justify-center py-8">
+                    <span className="animate-spin text-xl">⏳</span>
+                    <span className="ml-2 text-sm text-muted-foreground">
+                      {locale === 'ja' ? '読み込み中...' : 'Loading...'}
+                    </span>
+                  </div>
+                ) : guideContent ? (
+                  <div className="max-h-64 overflow-y-auto pr-2 prose prose-sm dark:prose-invert prose-headings:text-foreground prose-p:text-muted-foreground prose-strong:text-foreground prose-code:text-primary prose-code:bg-muted prose-code:px-1 prose-code:py-0.5 prose-code:rounded prose-pre:bg-muted prose-pre:text-foreground prose-a:text-primary prose-li:text-muted-foreground prose-table:text-sm prose-th:text-foreground prose-td:text-muted-foreground">
+                    <ReactMarkdown>{guideContent}</ReactMarkdown>
+                  </div>
+                ) : null}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Footer */}
+        <div className="flex items-center justify-end p-4 border-t border-border">
+          <button
+            onClick={onClose}
+            className="px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:opacity-90 transition-opacity min-h-[44px]"
+          >
+            {locale === 'ja' ? '閉じる' : 'Close'}
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -1057,19 +2375,525 @@ function formatActivityContent(activity: { eventType: string; details?: Record<s
   }
 }
 
-function parseSuggestion(msg: MastraMessage): GroupChatMessage['suggestion'] | undefined {
+/**
+ * Parse ALL suggestions from ALL tool calls (returns array of suggestions)
+ * This ensures all suggestions from multiple tool calls are displayed as buttons
+ */
+function parseSuggestions(msg: MastraMessage): GroupChatMessage['suggestions'] | undefined {
   // Parse tool calls for suggestions
   if (!msg.toolCalls?.length) return undefined;
 
-  const suggestionCall = msg.toolCalls.find(tc =>
-    tc.toolName === 'suggest_goals' || tc.toolName === 'create_habit_suggestion'
+  // Look for goal or habit suggestion tools
+  // Note: refine_suggestions returns habit suggestions (with modified difficulty/specificity)
+  // Note: suggest_habit_improvements returns improvements for existing habits
+  const goalToolNames = ['suggest_goals', 'create_goal_suggestion', 'recommend_goals', 'create_smart_goal'];
+  const habitToolNames = ['suggest_habits', 'create_habit_suggestion', 'recommend_habits', 'generate_baby_steps', 'refine_suggestions', 'suggest_habit_improvements'];
+
+  const defaultActions = [
+    { id: 'accept', label: '✅ 採用', variant: 'primary' as const },
+    { id: 'snooze', label: '⏭️ 後で', variant: 'secondary' as const },
+    { id: 'dismiss', label: '❌ 不要', variant: 'ghost' as const },
+  ];
+
+  // Aggregate suggestions from ALL tool calls
+  const allSuggestions: NonNullable<GroupChatMessage['suggestions']> = [];
+
+  const hasGoalTool = msg.toolCalls.some(tc => tc.toolName === 'suggest_goals');
+  const hasHabitTool = msg.toolCalls.some(tc => tc.toolName === 'suggest_habits');
+  const hasRefineTool = msg.toolCalls.some(tc => tc.toolName === 'refine_suggestions');
+
+  console.log('[parseSuggestions] Processing toolCalls:', {
+    count: msg.toolCalls.length,
+    toolNames: msg.toolCalls.map(tc => tc.toolName),
+    hasGoalTool,
+    hasHabitTool,
+    hasRefineTool,
+  });
+
+  // Specific debug for suggest_goals
+  if (hasGoalTool) {
+    const goalToolCall = msg.toolCalls.find(tc => tc.toolName === 'suggest_goals');
+    console.log('[parseSuggestions] GOAL TOOL FOUND - Full details:', {
+      toolName: goalToolCall?.toolName,
+      input: goalToolCall?.input,
+      output: goalToolCall?.output,
+      success: goalToolCall?.success,
+      durationMs: goalToolCall?.durationMs,
+    });
+  }
+
+  // Specific debug for refine_suggestions (adjustment results)
+  if (hasRefineTool) {
+    const refineToolCall = msg.toolCalls.find(tc => tc.toolName === 'refine_suggestions');
+    console.log('[parseSuggestions] REFINE TOOL FOUND - Full details:', {
+      toolName: refineToolCall?.toolName,
+      input: refineToolCall?.input,
+      output: refineToolCall?.output,
+      success: refineToolCall?.success,
+      durationMs: refineToolCall?.durationMs,
+    });
+  }
+
+  for (const toolCall of msg.toolCalls) {
+    const isGoalTool = goalToolNames.includes(toolCall.toolName);
+    const isHabitTool = habitToolNames.includes(toolCall.toolName);
+
+    console.log('[parseSuggestions] Processing toolCall:', {
+      toolName: toolCall.toolName,
+      isGoalTool,
+      isHabitTool,
+      hasOutput: !!toolCall.output,
+      outputType: typeof toolCall.output,
+      output: toolCall.output,
+      success: toolCall.success,
+    });
+
+    if (!isGoalTool && !isHabitTool) continue;
+
+    // Skip failed tool calls
+    if (toolCall.success === false) {
+      console.warn('[parseSuggestions] Skipping failed tool call:', toolCall.toolName, toolCall.error);
+      continue;
+    }
+
+    const isGoal = isGoalTool;
+
+    // Parse output - handle both object and stringified JSON
+    // Also handle null explicitly since null || input would incorrectly use input
+    let output: Record<string, unknown> | undefined;
+    if (toolCall.output === null || toolCall.output === undefined) {
+      console.log('[parseSuggestions] toolCall.output is null/undefined for', toolCall.toolName);
+      output = undefined;
+    } else if (typeof toolCall.output === 'string') {
+      try {
+        output = JSON.parse(toolCall.output);
+        console.log('[parseSuggestions] Parsed stringified output for', toolCall.toolName);
+      } catch {
+        console.warn('[parseSuggestions] Failed to parse stringified output for', toolCall.toolName);
+        output = undefined;
+      }
+    } else if (typeof toolCall.output === 'object') {
+      output = toolCall.output as Record<string, unknown>;
+      console.log('[parseSuggestions] Using object output for', toolCall.toolName, '- keys:', Object.keys(output));
+    } else {
+      console.warn('[parseSuggestions] Unexpected output type for', toolCall.toolName, ':', typeof toolCall.output);
+      output = undefined;
+    }
+
+    // Parse input - handle both object and stringified JSON
+    let input: Record<string, unknown>;
+    if (typeof toolCall.input === 'string') {
+      try {
+        input = JSON.parse(toolCall.input);
+      } catch {
+        input = {};
+      }
+    } else {
+      input = (toolCall.input as Record<string, unknown>) || {};
+    }
+
+    const data = output || input;
+
+    console.log('[parseSuggestions] data for', toolCall.toolName, ':', {
+      data,
+      dataType: typeof data,
+      hasSuggestions: !!data?.suggestions,
+      suggestionsIsArray: Array.isArray(data?.suggestions),
+      suggestionsLength: Array.isArray(data?.suggestions) ? data.suggestions.length : 0,
+    });
+
+    // Safeguard: check if data is valid
+    if (!data || typeof data !== 'object') {
+      console.warn('[parseSuggestions] Invalid data for', toolCall.toolName, '- data is', data);
+      continue;
+    }
+
+    // Handle array of suggestions
+    if (data.suggestions && Array.isArray(data.suggestions) && data.suggestions.length > 0) {
+      console.log('[parseSuggestions] Found suggestions array for', toolCall.toolName, ':',
+        data.suggestions.map((s: Record<string, unknown>) => ({
+          name: s.name,
+          suggestionType: s.suggestionType,
+        }))
+      );
+
+      data.suggestions.forEach((suggestion: Record<string, unknown>) => {
+        // Extract suggestionType from tool output, default based on tool type
+        const suggestionType = (suggestion.suggestionType as SuggestionButtonType)
+          || (isGoal ? 'goal' : 'habit');
+
+        console.log('[parseSuggestions] Adding suggestion:', {
+          name: suggestion.name,
+          type: isGoal ? 'goal' : 'habit',
+          suggestionType,
+        });
+
+        allSuggestions.push({
+          type: isGoal ? 'goal' as const : 'habit' as const,
+          suggestionType,
+          data: suggestion,
+          actions: defaultActions,
+        });
+      });
+      continue;
+    }
+
+    // Handle SMART goal tool output
+    if (data.smartGoal || data.refinedGoal) {
+      allSuggestions.push({
+        type: 'goal' as const,
+        suggestionType: 'goal',
+        data: {
+          name: data.refinedGoal || 'New Goal',
+          description: JSON.stringify(data.smartGoal),
+          ...data,
+        },
+        actions: defaultActions,
+      });
+      continue;
+    }
+
+    // Handle baby steps tool output - each step becomes a suggestion
+    if (data.steps && Array.isArray(data.steps)) {
+      data.steps.forEach((step: Record<string, unknown>) => {
+        allSuggestions.push({
+          type: 'habit' as const,
+          suggestionType: 'habit',
+          data: {
+            name: step?.action || 'New Habit',
+            description: `Level ${step?.level}: ${step?.duration}`,
+            ...step,
+          },
+          actions: defaultActions,
+        });
+      });
+      continue;
+    }
+
+    // Handle habit improvements tool output - each improvement becomes a reply-type suggestion
+    if (data.improvements && Array.isArray(data.improvements) && data.improvements.length > 0) {
+      console.log('[parseSuggestions] Found improvements array for suggest_habit_improvements:',
+        data.improvements.map((imp: Record<string, unknown>) => ({
+          title: imp.title,
+          suggestionType: imp.suggestionType || 'reply',
+        }))
+      );
+
+      data.improvements.forEach((improvement: Record<string, unknown>) => {
+        // Improvements are displayed as reply-type buttons that apply the improvement
+        const suggestionType = (improvement.suggestionType as SuggestionButtonType) || 'reply';
+
+        console.log('[parseSuggestions] Adding improvement:', {
+          title: improvement.title,
+          category: improvement.category,
+          suggestionType,
+        });
+
+        allSuggestions.push({
+          type: 'habit' as const,
+          suggestionType,
+          data: {
+            name: improvement.title || 'Improvement',
+            description: improvement.description,
+            rationale: improvement.rationale,
+            category: improvement.category,
+            impact: improvement.impact,
+            effort: improvement.effort,
+            actionSteps: improvement.actionSteps,
+            habitId: (data.habit as Record<string, unknown>)?.id,
+            habitName: (data.habit as Record<string, unknown>)?.name,
+            ...improvement,
+          },
+          actions: [
+            { id: 'apply', label: '✅ 適用', variant: 'primary' as const },
+            { id: 'snooze', label: '⏭️ 後で', variant: 'secondary' as const },
+            { id: 'dismiss', label: '❌ 不要', variant: 'ghost' as const },
+          ],
+        });
+      });
+      continue;
+    }
+
+    // Single suggestion object
+    if (data.name) {
+      const suggestionType = (data.suggestionType as SuggestionButtonType)
+        || (isGoal ? 'goal' : 'habit');
+
+      allSuggestions.push({
+        type: isGoal ? 'goal' as const : 'habit' as const,
+        suggestionType,
+        data: data,
+        actions: defaultActions,
+      });
+    }
+  }
+
+  console.log('[parseSuggestions] Final result:', {
+    count: allSuggestions.length,
+    suggestions: allSuggestions.map(s => ({
+      type: s.type,
+      suggestionType: s.suggestionType,
+      name: s.data?.name,
+    })),
+  });
+
+  return allSuggestions.length > 0 ? allSuggestions : undefined;
+}
+
+// Legacy function for backward compatibility
+function parseSuggestion(msg: MastraMessage): GroupChatMessage['suggestion'] | undefined {
+  const suggestions = parseSuggestions(msg);
+  return suggestions?.[0];
+}
+
+/**
+ * Parse quick replies from show_category_selection, show_habit_selection, show_goal_selection tool output
+ * Also handles suggest_habit_improvements which returns quickReplies for habit selection when no habitId is provided
+ * Returns both the quickReplies array and the selectionType
+ */
+function parseQuickReplies(msg: MastraMessage): { quickReplies: GroupChatMessage['quickReplies']; selectionType?: GroupChatMessage['selectionType'] } | undefined {
+  if (!msg.toolCalls?.length) {
+    console.log('[parseQuickReplies] No toolCalls found');
+    return undefined;
+  }
+
+  // Look for selection tools (category, habit, goal) and tools that return quickReplies
+  const selectionToolNames = [
+    'show_category_selection',
+    'show_habit_selection',
+    'show_goal_selection',
+  ];
+
+  // Tools that may also return quickReplies in their output
+  const toolsWithQuickReplies = [
+    'suggest_habit_improvements', // Returns habit selection when no habitId provided
+  ];
+
+  console.log('[parseQuickReplies] Searching for selection tools in:', msg.toolCalls.map(tc => ({
+    name: tc.toolName,
+    isSelectionTool: selectionToolNames.includes(tc.toolName),
+    hasQuickReplies: toolsWithQuickReplies.includes(tc.toolName),
+    hasOutput: !!tc.output,
+    outputType: typeof tc.output,
+    outputKeys: tc.output && typeof tc.output === 'object' ? Object.keys(tc.output as object) : [],
+  })));
+
+  // First try to find a dedicated selection tool
+  let selectionTool = msg.toolCalls.find(tc =>
+    selectionToolNames.includes(tc.toolName)
+  );
+
+  // If not found, look for tools that might have quickReplies in their output
+  if (!selectionTool) {
+    selectionTool = msg.toolCalls.find(tc => {
+      if (!toolsWithQuickReplies.includes(tc.toolName)) return false;
+      const output = tc.output as Record<string, unknown> | undefined;
+      return output?.quickReplies && Array.isArray(output.quickReplies) && output.quickReplies.length > 0;
+    });
+  }
+
+  if (!selectionTool) {
+    console.log('[parseQuickReplies] No selection tool found among:', msg.toolCalls.map(tc => tc.toolName));
+    return undefined;
+  }
+
+  console.log('[parseQuickReplies] Found selection tool:', {
+    toolName: selectionTool.toolName,
+    outputType: typeof selectionTool.output,
+    output: selectionTool.output,
+    success: selectionTool.success,
+  });
+
+  const output = selectionTool.output as Record<string, unknown> | undefined;
+
+  // Extract selectionType from the output (for show_category_selection)
+  let selectionType: GroupChatMessage['selectionType'] | undefined;
+  if (output?.selectionType && typeof output.selectionType === 'string') {
+    const validTypes = ['habit_category', 'goal_category', 'difficulty'] as const;
+    if (validTypes.includes(output.selectionType as typeof validTypes[number])) {
+      selectionType = output.selectionType as typeof validTypes[number];
+      console.log('[parseQuickReplies] Found selectionType:', selectionType);
+    }
+  }
+
+  // Handle case where output might be nested or have different structure
+  let quickRepliesData: unknown[] | undefined;
+
+  if (output?.quickReplies && Array.isArray(output.quickReplies)) {
+    quickRepliesData = output.quickReplies as unknown[];
+  } else if (output && typeof output === 'object') {
+    // Try to find quickReplies in nested structure
+    const outputObj = output as Record<string, unknown>;
+    for (const key of Object.keys(outputObj)) {
+      const value = outputObj[key];
+      if (Array.isArray(value) && value.length > 0 && typeof value[0] === 'object' && 'id' in (value[0] as object) && 'label' in (value[0] as object)) {
+        console.log('[parseQuickReplies] Found quickReplies in nested key:', key);
+        quickRepliesData = value as unknown[];
+        break;
+      }
+    }
+  }
+
+  if (!quickRepliesData || quickRepliesData.length === 0) {
+    console.log('[parseQuickReplies] No quickReplies found in output:', {
+      hasOutput: !!output,
+      outputKeys: output ? Object.keys(output) : [],
+      quickRepliesField: output?.quickReplies,
+      isArray: Array.isArray(output?.quickReplies),
+    });
+    return undefined;
+  }
+
+  console.log('[parseQuickReplies] Successfully extracted quickReplies:', quickRepliesData);
+
+  const quickReplies = quickRepliesData.map((reply: unknown) => {
+    const r = reply as Record<string, unknown>;
+    return {
+      id: String(r.id || ''),
+      label: String(r.label || ''),
+      value: String(r.value || ''),
+      icon: r.icon ? String(r.icon) : undefined,
+    };
+  });
+
+  return { quickReplies, selectionType };
+}
+
+/**
+ * Parse follow-up actions from refine_suggestions, suggest_habits, or suggest_goals tool output
+ */
+function parseFollowUpActions(msg: MastraMessage): GroupChatMessage['followUpActions'] | undefined {
+  if (!msg.toolCalls?.length) return undefined;
+
+  // Look for tools that may have followUpActions
+  const toolsWithFollowUp = [
+    'refine_suggestions',
+    'suggest_habits',
+    'suggest_goals',
+    'suggest_habit_improvements', // Improvement tool has followUpActions like 'more_suggestions', 'different_habit'
+  ];
+
+  const toolWithFollowUp = msg.toolCalls.find(tc =>
+    toolsWithFollowUp.includes(tc.toolName)
+  );
+
+  if (!toolWithFollowUp) return undefined;
+
+  const output = toolWithFollowUp.output as Record<string, unknown> | undefined;
+  if (!output?.followUpActions || !Array.isArray(output.followUpActions)) return undefined;
+
+  return output.followUpActions.map((action: Record<string, unknown>) => ({
+    id: String(action.id || ''),
+    label: String(action.label || ''),
+    action: action.action as 'more_specific' | 'easier' | 'harder' | 'different' | 'more_suggestions' | 'different_habit',
+    category: action.category ? String(action.category) : undefined,
+  }));
+}
+
+/**
+ * Parse suggestions from multi-agent tool calls
+ * This handles the format from useMultiAgentChat hook
+ */
+function parseMultiAgentSuggestion(
+  toolCalls: Array<{
+    toolName: string;
+    toolCallId?: string;
+    args?: unknown;
+    result?: unknown;
+  }>
+): GroupChatMessage['suggestion'] | undefined {
+  if (!toolCalls?.length) return undefined;
+
+  // Look for goal or habit suggestion tools
+  const goalToolNames = ['suggest_goals', 'create_goal_suggestion', 'recommend_goals', 'create_smart_goal', 'prioritize_goals', 'breakdown_milestones'];
+  const habitToolNames = ['suggest_habits', 'create_habit_suggestion', 'recommend_habits', 'generate_baby_steps', 'analyze_habits'];
+
+  const suggestionCall = toolCalls.find(tc =>
+    goalToolNames.includes(tc.toolName) || habitToolNames.includes(tc.toolName)
   );
 
   if (!suggestionCall) return undefined;
 
+  const isGoal = goalToolNames.includes(suggestionCall.toolName);
+
+  // Extract data from result or args
+  const resultData = suggestionCall.result as Record<string, unknown> | undefined;
+  const argsData = suggestionCall.args as Record<string, unknown> | undefined;
+  const data = resultData || argsData || {};
+
+  // Handle various response formats
+  let suggestionData: Record<string, unknown> = {};
+
+  // Handle suggestions array (from suggest_habits, suggest_goals)
+  if (data.suggestions && Array.isArray(data.suggestions) && data.suggestions.length > 0) {
+    suggestionData = data.suggestions[0] as Record<string, unknown>;
+  }
+  // Handle SMART goal output
+  else if (data.smartGoal || data.refinedGoal) {
+    suggestionData = {
+      name: data.refinedGoal || 'New Goal',
+      description: typeof data.smartGoal === 'object'
+        ? Object.entries(data.smartGoal as Record<string, string>).map(([k, v]) => `${k}: ${v}`).join('\n')
+        : String(data.smartGoal),
+      ...data,
+    };
+  }
+  // Handle prioritized goals output
+  else if (data.prioritizedGoals && Array.isArray(data.prioritizedGoals) && data.prioritizedGoals.length > 0) {
+    const firstGoal = data.prioritizedGoals[0] as Record<string, unknown>;
+    suggestionData = {
+      name: firstGoal.goalId || 'Goal',
+      description: firstGoal.reason || '',
+      priority: firstGoal.priority,
+      recommendedFocus: firstGoal.recommendedFocus,
+      ...firstGoal,
+    };
+  }
+  // Handle milestones output
+  else if (data.milestones && Array.isArray(data.milestones) && data.milestones.length > 0) {
+    const firstMilestone = data.milestones[0] as Record<string, unknown>;
+    suggestionData = {
+      name: firstMilestone.title || 'Milestone',
+      description: firstMilestone.description || '',
+      targetDate: firstMilestone.targetDate,
+      ...firstMilestone,
+    };
+  }
+  // Handle baby steps output
+  else if (data.steps && Array.isArray(data.steps) && data.steps.length > 0) {
+    const firstStep = data.steps[0] as Record<string, unknown>;
+    suggestionData = {
+      name: firstStep.action || 'Baby Step',
+      description: `Level ${firstStep.level}: ${firstStep.duration}`,
+      tips: firstStep.tips,
+      ...firstStep,
+    };
+  }
+  // Handle analysis output (insights as suggestions)
+  else if (data.insights && Array.isArray(data.insights) && data.insights.length > 0) {
+    suggestionData = {
+      name: 'Analysis Result',
+      description: (data.insights as string[]).join('\n'),
+      completionRate: data.completionRate,
+      patterns: data.patterns,
+      ...data,
+    };
+  }
+  // Direct suggestion object
+  else if (data.name) {
+    suggestionData = data;
+  }
+  // Fallback
+  else {
+    suggestionData = data;
+  }
+
+  // Only return if we have meaningful data
+  if (Object.keys(suggestionData).length === 0) return undefined;
+
   return {
-    type: suggestionCall.toolName === 'suggest_goals' ? 'goal' : 'habit',
-    data: suggestionCall.input as Record<string, unknown>,
+    type: isGoal ? 'goal' : 'habit',
+    data: suggestionData,
     actions: [
       { id: 'accept', label: '✅ 採用', variant: 'primary' },
       { id: 'snooze', label: '⏭️ 後で', variant: 'secondary' },
@@ -1129,11 +2953,13 @@ interface GroupChatViewProps {
   messagesEndRef?: React.RefObject<HTMLDivElement | null>;
   suggestionStates?: Record<string, SuggestionState>;
   onSuggestionAction?: (messageId: string, actionId: string, suggestion: NonNullable<GroupChatMessage['suggestion']>) => void;
+  onQuickReplyClick?: (value: string, label: string) => void;
+  onFollowUpActionClick?: (action: string, category?: string) => void;
   error?: Error | null;
   onRetry?: () => void;
 }
 
-function GroupChatView({ messages, isLoading, locale, messagesEndRef, suggestionStates, onSuggestionAction, error, onRetry }: GroupChatViewProps) {
+function GroupChatView({ messages, isLoading, locale, messagesEndRef, suggestionStates, onSuggestionAction, onQuickReplyClick, onFollowUpActionClick, error, onRetry }: GroupChatViewProps) {
   return (
     <div className="flex flex-col min-h-full p-4 space-y-4">
       {messages.length === 0 ? (
@@ -1171,7 +2997,10 @@ function GroupChatView({ messages, isLoading, locale, messagesEndRef, suggestion
               isFirstInGroup={index === 0 || messages[index - 1]?.senderId !== msg.senderId}
               isLastInGroup={index === messages.length - 1 || messages[index + 1]?.senderId !== msg.senderId}
               suggestionState={suggestionStates?.[msg.id]}
+              suggestionStates={suggestionStates}
               onSuggestionAction={onSuggestionAction}
+              onQuickReplyClick={onQuickReplyClick}
+              onFollowUpActionClick={onFollowUpActionClick}
             />
           ))}
         </>
@@ -1255,10 +3084,13 @@ interface ChatMessageBubbleProps {
   isFirstInGroup?: boolean;
   isLastInGroup?: boolean;
   suggestionState?: SuggestionState;
+  suggestionStates?: Record<string, SuggestionState>;
   onSuggestionAction?: (messageId: string, actionId: string, suggestion: NonNullable<GroupChatMessage['suggestion']>) => void;
+  onQuickReplyClick?: (value: string, label: string) => void;
+  onFollowUpActionClick?: (action: string, category?: string) => void;
 }
 
-function ChatMessageBubble({ message, locale, isFirstInGroup = true, isLastInGroup = true, suggestionState, onSuggestionAction }: ChatMessageBubbleProps) {
+function ChatMessageBubble({ message, locale, isFirstInGroup = true, isLastInGroup = true, suggestionState, suggestionStates, onSuggestionAction, onQuickReplyClick, onFollowUpActionClick }: ChatMessageBubbleProps) {
   const isUser = message.senderType === 'user';
 
   // Sender type specific styling with gradients
@@ -1361,8 +3193,23 @@ function ChatMessageBubble({ message, locale, isFirstInGroup = true, isLastInGro
           </span>
         )}
 
-        {/* Suggestion Card */}
-        {message.suggestion && (
+        {/* Suggestion Cards - render ALL suggestions */}
+        {message.suggestions && message.suggestions.length > 0 && (
+          <div className="flex flex-col gap-2 mt-2">
+            {message.suggestions.map((suggestion, index) => (
+              <SuggestionCard
+                key={`${message.id}-suggestion-${index}`}
+                messageId={`${message.id}-${index}`}
+                suggestion={suggestion}
+                locale={locale}
+                state={suggestionStates?.[`${message.id}-${index}`]}
+                onAction={onSuggestionAction}
+              />
+            ))}
+          </div>
+        )}
+        {/* Fallback for legacy single suggestion */}
+        {!message.suggestions?.length && message.suggestion && (
           <SuggestionCard
             messageId={message.id}
             suggestion={message.suggestion}
@@ -1370,6 +3217,37 @@ function ChatMessageBubble({ message, locale, isFirstInGroup = true, isLastInGro
             state={suggestionState}
             onAction={onSuggestionAction}
           />
+        )}
+
+        {/* Quick Reply Buttons for category selection */}
+        {message.quickReplies && message.quickReplies.length > 0 && (
+          <div className="flex flex-wrap gap-2 mt-3">
+            {message.quickReplies.map((reply) => (
+              <button
+                key={reply.id}
+                onClick={() => onQuickReplyClick?.(reply.value, reply.label)}
+                className="px-3 py-2 text-sm rounded-lg bg-primary/10 hover:bg-primary/20 text-primary border border-primary/20 transition-colors flex items-center gap-1.5"
+              >
+                {reply.icon && <span>{reply.icon}</span>}
+                <span>{reply.label}</span>
+              </button>
+            ))}
+          </div>
+        )}
+
+        {/* Follow-up Action Buttons (more specific, easier, harder) */}
+        {message.followUpActions && message.followUpActions.length > 0 && (
+          <div className="flex flex-wrap gap-2 mt-3">
+            {message.followUpActions.map((action) => (
+              <button
+                key={action.id}
+                onClick={() => onFollowUpActionClick?.(action.action, action.category)}
+                className="px-3 py-1.5 text-xs rounded-lg bg-muted hover:bg-muted/80 text-muted-foreground transition-colors"
+              >
+                {action.label}
+              </button>
+            ))}
+          </div>
         )}
       </div>
     </div>
@@ -1386,8 +3264,24 @@ interface SuggestionCardProps {
 
 function SuggestionCard({ messageId, suggestion, locale, state, onAction }: SuggestionCardProps) {
   const data = suggestion.data;
-  const isHabit = suggestion.type === 'habit';
+  const suggestionType = suggestion.suggestionType || (suggestion.type === 'goal' ? 'goal' : 'habit');
   const status = state?.status || 'pending';
+
+  // Icons and labels based on suggestion type
+  const typeConfig: Record<SuggestionButtonType, { icon: string; label: { ja: string; en: string }; color: string }> = {
+    habit: { icon: '📝', label: { ja: 'Habit', en: 'Habit' }, color: 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300' },
+    goal: { icon: '🎯', label: { ja: 'Goal', en: 'Goal' }, color: 'bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300' },
+    stickyn: { icon: '📌', label: { ja: "Sticky'n", en: "Sticky'n" }, color: 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-300' },
+    reply: { icon: '💬', label: { ja: '回答', en: 'Reply' }, color: 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300' },
+  };
+
+  const config = typeConfig[suggestionType] || typeConfig.habit;
+
+  // Handle clicking the card to open the modal (same as accept action)
+  const handleCardClick = () => {
+    if (status === 'loading') return;
+    onAction?.(messageId, 'accept', suggestion);
+  };
 
   // If already processed, show status
   if (status === 'accepted' || status === 'snoozed' || status === 'dismissed') {
@@ -1425,60 +3319,114 @@ function SuggestionCard({ messageId, suggestion, locale, state, onAction }: Sugg
   }
 
   return (
-    <div className="mt-2 p-3 bg-card border border-border rounded-lg shadow-sm max-w-sm">
-      <div className="flex items-start gap-2 mb-2">
-        <span className="text-lg">{isHabit ? '📝' : '🎯'}</span>
-        <div>
-          <h4 className="font-medium text-foreground">
-            {(data.name as string) || (locale === 'ja' ? '提案' : 'Suggestion')}
-          </h4>
-          {typeof data.frequency === 'string' && data.frequency && (
-            <p className="text-xs text-muted-foreground">
-              {locale === 'ja' ? '頻度' : 'Frequency'}: {data.frequency}
-            </p>
-          )}
+    <div className="mt-2 bg-card border border-border rounded-lg shadow-sm max-w-sm overflow-hidden">
+      {/* Clickable card content - opens modal for review/edit */}
+      <button
+        type="button"
+        onClick={handleCardClick}
+        disabled={status === 'loading'}
+        className="w-full p-3 text-left hover:bg-muted/50 transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+        aria-label={locale === 'ja' ? '提案の詳細を確認' : 'Review suggestion details'}
+      >
+        <div className="flex items-start gap-2 mb-2">
+          <span className="text-lg">{config.icon}</span>
+          <div className="flex-1">
+            <div className="flex items-center gap-2 mb-1">
+              <h4 className="font-medium text-foreground">
+                {(data.name as string) || (locale === 'ja' ? '提案' : 'Suggestion')}
+              </h4>
+              {/* Type badge */}
+              <span className={`px-1.5 py-0.5 text-xs rounded ${config.color}`}>
+                {config.label[locale]}
+              </span>
+            </div>
+            {/* Frequency */}
+            {typeof data.frequency === 'string' && data.frequency && (
+              <p className="text-xs text-muted-foreground">
+                {locale === 'ja' ? '頻度' : 'Frequency'}: {data.frequency}
+              </p>
+            )}
+            {/* Estimated time per execution */}
+            {typeof data.estimatedTime === 'string' && data.estimatedTime && (
+              <p className="text-xs text-muted-foreground">
+                {locale === 'ja' ? '所要時間' : 'Time'}: {data.estimatedTime}
+              </p>
+            )}
+            {/* Estimated duration to achieve/establish */}
+            {typeof data.estimatedDuration === 'string' && data.estimatedDuration && (
+              <p className="text-xs text-muted-foreground font-medium">
+                {locale === 'ja' ? '達成目安' : 'Duration'}: {data.estimatedDuration}
+              </p>
+            )}
+          </div>
+          {/* Arrow indicator to show clickability */}
+          <svg className="w-5 h-5 text-muted-foreground flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+          </svg>
         </div>
-      </div>
-      {typeof data.reason === 'string' && data.reason && (
-        <p className="text-sm text-muted-foreground mb-3">
-          {'💡 '}{data.reason}
-        </p>
-      )}
+        {/* Description */}
+        {typeof data.description === 'string' && data.description && (
+          <p className="text-sm text-muted-foreground mb-2">
+            {data.description}
+          </p>
+        )}
+        {/* Rationale */}
+        {typeof data.rationale === 'string' && data.rationale && (
+          <p className="text-sm text-muted-foreground">
+            {'💡 '}{data.rationale}
+          </p>
+        )}
+        {/* Legacy reason field */}
+        {typeof data.reason === 'string' && data.reason && !data.rationale && (
+          <p className="text-sm text-muted-foreground">
+            {'💡 '}{data.reason}
+          </p>
+        )}
+
+        {/* Loading indicator */}
+        {status === 'loading' && (
+          <div className="flex items-center gap-2 mt-2 text-primary">
+            <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+            </svg>
+            <span className="text-sm">{locale === 'ja' ? '処理中...' : 'Processing...'}</span>
+          </div>
+        )}
+      </button>
 
       {/* Error message */}
       {status === 'error' && state?.error && (
-        <p className="text-xs text-red-600 dark:text-red-400 mb-2">
-          ⚠️ {state.error}
+        <p className="px-3 pb-2 text-xs text-red-600 dark:text-red-400">
+          {state.error}
         </p>
       )}
 
-      <div className="flex gap-2">
-        {suggestion.actions.map(action => (
-          <button
-            key={action.id}
-            onClick={() => onAction?.(messageId, action.id, suggestion)}
-            disabled={status === 'loading'}
-            className={`px-3 py-1.5 text-sm rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
-              action.variant === 'primary'
-                ? 'bg-primary text-primary-foreground hover:bg-primary/90'
-                : action.variant === 'secondary'
-                ? 'bg-muted text-foreground hover:bg-muted/80'
-                : 'text-muted-foreground hover:text-foreground'
-            }`}
-          >
-            {status === 'loading' && action.variant === 'primary' ? (
-              <span className="flex items-center gap-1">
-                <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                </svg>
-                {locale === 'ja' ? '処理中...' : 'Processing...'}
-              </span>
-            ) : (
-              action.label
-            )}
-          </button>
-        ))}
+      {/* Secondary action buttons (snooze/dismiss) - separated from clickable area */}
+      <div className="flex gap-2 px-3 pb-3 pt-1 border-t border-border/50">
+        {suggestion.actions
+          .filter(action => action.variant !== 'primary') // Exclude primary (accept) button since clicking card does that
+          .map(action => (
+            <button
+              key={action.id}
+              onClick={(e) => {
+                e.stopPropagation();
+                onAction?.(messageId, action.id, suggestion);
+              }}
+              disabled={status === 'loading'}
+              className={`px-3 py-1.5 text-sm rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
+                action.variant === 'secondary'
+                  ? 'bg-muted text-foreground hover:bg-muted/80'
+                  : 'text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              {action.label}
+            </button>
+          ))}
+        {/* Hint text for clicking the card */}
+        <span className="ml-auto text-xs text-muted-foreground self-center">
+          {locale === 'ja' ? 'タップで詳細確認' : 'Tap to review'}
+        </span>
       </div>
     </div>
   );
@@ -1793,13 +3741,17 @@ function TaskDetailModal({ task, locale, onClose, onStatusChange }: TaskDetailMo
 interface AgentListViewProps {
   connections: Map<string, ServerConnection>;
   locale: 'ja' | 'en';
+  customAgents?: AgentConfig[];
   onSelectAgent?: (agentId: string) => void;
-  selectedAgentId?: string;
+  onAddAgent?: () => void;
+  onEditAgent?: (agentId: string) => void;
+  onDeleteAgent?: (agentId: string) => void;
 }
 
-function AgentListView({ connections, locale, onSelectAgent, selectedAgentId }: AgentListViewProps) {
-  const allAgents = Array.from(connections.values()).flatMap(c => c.agents || []);
+function AgentListView({ connections, locale, customAgents = [], onSelectAgent, onAddAgent, onEditAgent, onDeleteAgent }: AgentListViewProps) {
+  const allMcpAgents = Array.from(connections.values()).flatMap(c => c.agents || []);
   const allTasks = Array.from(connections.values()).flatMap(c => c.tasks || []);
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
 
   // Get current task for an agent
   const getAgentCurrentTask = (agentId: string) => {
@@ -1872,6 +3824,7 @@ function AgentListView({ connections, locale, onSelectAgent, selectedAgentId }: 
     level = 0,
     description,
     badge,
+    isBuiltIn = true,
   }: {
     id: string;
     name: string;
@@ -1883,12 +3836,13 @@ function AgentListView({ connections, locale, onSelectAgent, selectedAgentId }: 
     level?: number;
     description?: string;
     badge?: { text: string; color: string };
+    isBuiltIn?: boolean;
   }) => {
     const isExpanded = expandedNodes.has(id);
-    const isSelected = selectedAgentId === id;
     const hasChildren = !!children;
     const currentTask = getAgentCurrentTask(id);
     const isHovered = hoveredAgent === id;
+    const isConfirmingDelete = confirmDeleteId === id;
 
     return (
       <div className="relative">
@@ -1910,14 +3864,10 @@ function AgentListView({ connections, locale, onSelectAgent, selectedAgentId }: 
           )}
 
           <div
-            className={`relative flex items-center gap-2 p-2 rounded-lg cursor-pointer transition-all ${
-              isSelected
-                ? 'bg-blue-50 dark:bg-blue-900/30 ring-2 ring-blue-500'
-                : 'hover:bg-gray-100 dark:hover:bg-gray-800'
-            }`}
+            className="group relative flex items-center gap-2 p-2 rounded-lg cursor-pointer transition-all hover:bg-gray-100 dark:hover:bg-gray-800"
             onClick={() => onSelectAgent?.(id)}
             onMouseEnter={() => setHoveredAgent(id)}
-            onMouseLeave={() => setHoveredAgent(null)}
+            onMouseLeave={() => { setHoveredAgent(null); setConfirmDeleteId(null); }}
           >
             {/* Expand/collapse button */}
             {hasChildren && (
@@ -1953,24 +3903,70 @@ function AgentListView({ connections, locale, onSelectAgent, selectedAgentId }: 
                     {badge.text}
                   </span>
                 )}
+                {!isBuiltIn && (
+                  <span className="px-1.5 py-0.5 text-xs font-medium rounded bg-green-100 text-green-700 dark:bg-green-900/50 dark:text-green-300">
+                    {locale === 'ja' ? 'カスタム' : 'Custom'}
+                  </span>
+                )}
               </div>
               <p className="text-xs text-gray-500 dark:text-gray-400 truncate">
                 {description || role}
               </p>
               {currentTask && (
                 <p className="text-xs text-blue-600 dark:text-blue-400 truncate mt-0.5">
-                  🔄 {currentTask.title}
+                  {currentTask.title}
                 </p>
               )}
             </div>
 
-            {/* Selection indicator */}
-            {isSelected && (
-              <span className="text-blue-500 text-lg">✓</span>
-            )}
+            {/* Action buttons - show on hover */}
+            <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+              {/* Edit button (only for custom agents) */}
+              {!isBuiltIn && onEditAgent && (
+                <button
+                  onClick={(e) => { e.stopPropagation(); onEditAgent(id); }}
+                  className="p-1.5 text-gray-400 hover:text-purple-600 dark:hover:text-purple-400 rounded hover:bg-purple-50 dark:hover:bg-purple-900/20 transition-colors"
+                  title={locale === 'ja' ? '編集' : 'Edit'}
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                  </svg>
+                </button>
+              )}
+              {/* Delete button (only for custom agents) */}
+              {!isBuiltIn && onDeleteAgent && (
+                isConfirmingDelete ? (
+                  <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
+                    <button
+                      onClick={() => { onDeleteAgent(id); setConfirmDeleteId(null); }}
+                      className="px-2 py-1 text-xs font-medium text-white bg-red-600 hover:bg-red-700 rounded transition-colors"
+                    >
+                      {locale === 'ja' ? '削除' : 'Delete'}
+                    </button>
+                    <button
+                      onClick={() => setConfirmDeleteId(null)}
+                      className="px-2 py-1 text-xs font-medium text-gray-600 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-200 transition-colors"
+                    >
+                      {locale === 'ja' ? 'X' : 'X'}
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    onClick={(e) => { e.stopPropagation(); setConfirmDeleteId(id); }}
+                    className="p-1.5 text-gray-400 hover:text-red-600 dark:hover:text-red-400 rounded hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
+                    title={locale === 'ja' ? '削除' : 'Delete'}
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                    </svg>
+                  </button>
+                )
+              )}
+            </div>
 
             {/* Tooltip */}
-            {isHovered && (
+            {isHovered && !isConfirmingDelete && (
               <AgentTooltip
                 agentId={id}
                 agentName={name}
@@ -1996,11 +3992,44 @@ function AgentListView({ connections, locale, onSelectAgent, selectedAgentId }: 
     );
   };
 
+  // Role gradients for agents
+  const roleGradients: Record<string, string> = {
+    manager: 'from-amber-500 to-orange-500',
+    developer: 'from-blue-500 to-cyan-500',
+    reviewer: 'from-purple-500 to-pink-500',
+    tester: 'from-green-500 to-emerald-500',
+    architect: 'from-indigo-500 to-violet-500',
+    devops: 'from-orange-500 to-red-500',
+    analyst: 'from-cyan-500 to-teal-500',
+    coach: 'from-purple-500 to-indigo-500',
+    planner: 'from-indigo-500 to-blue-500',
+    custom: 'from-pink-500 to-rose-500',
+  };
+
+  // Group custom agents by parent
+  const getChildAgents = (parentId: string) => {
+    return customAgents.filter(a => a.parentAgentId === parentId);
+  };
+
   return (
     <div className="p-4 overflow-y-auto h-full">
-      <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">
-        {locale === 'ja' ? 'エージェントツリー' : 'Agent Tree'}
-      </h3>
+      {/* Header with Add button */}
+      <div className="flex items-center justify-between mb-3">
+        <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+          {locale === 'ja' ? 'エージェントツリー' : 'Agent Tree'}
+        </h3>
+        {onAddAgent && (
+          <button
+            onClick={onAddAgent}
+            className="flex items-center gap-1 px-2 py-1 text-xs font-medium text-purple-600 hover:text-purple-700 dark:text-purple-400 dark:hover:text-purple-300 border border-purple-300 dark:border-purple-600 rounded-lg hover:bg-purple-50 dark:hover:bg-purple-900/20 transition-colors"
+          >
+            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+            </svg>
+            {locale === 'ja' ? '追加' : 'Add'}
+          </button>
+        )}
+      </div>
 
       {/* Tree Structure */}
       <div className="space-y-1">
@@ -2014,6 +4043,7 @@ function AgentListView({ connections, locale, onSelectAgent, selectedAgentId }: 
           gradient="from-amber-500 to-orange-500"
           description={locale === 'ja' ? 'タスク管理・エージェント統括' : 'Task & Agent Orchestration'}
           badge={{ text: locale === 'ja' ? '統括' : 'Lead', color: 'bg-amber-100 text-amber-700 dark:bg-amber-900/50 dark:text-amber-300' }}
+          isBuiltIn={true}
         >
           {/* AI Coach - Child of Manager */}
           <TreeNode
@@ -2026,39 +4056,83 @@ function AgentListView({ connections, locale, onSelectAgent, selectedAgentId }: 
             level={1}
             description={locale === 'ja' ? '習慣・目標のアドバイザー' : 'Habit & Goal Advisor'}
             badge={{ text: locale === 'ja' ? '常駐' : 'On', color: 'bg-green-100 text-green-700 dark:bg-green-900/50 dark:text-green-300' }}
+            isBuiltIn={true}
           />
 
-          {/* MCP Agents - Children of Manager */}
-          {allAgents.map(agent => {
-            const roleGradients: Record<string, string> = {
-              manager: 'from-amber-500 to-orange-500',
-              developer: 'from-blue-500 to-cyan-500',
-              reviewer: 'from-purple-500 to-pink-500',
-              tester: 'from-green-500 to-emerald-500',
-              architect: 'from-indigo-500 to-violet-500',
-              devops: 'from-orange-500 to-red-500',
-              analyst: 'from-cyan-500 to-teal-500',
-              coach: 'from-purple-500 to-indigo-500',
-            };
+          {/* Habit Coach */}
+          <TreeNode
+            id="habit-coach"
+            name="Habit Coach"
+            role="Coach"
+            icon="🎯"
+            status="idle"
+            gradient="from-blue-500 to-indigo-500"
+            level={1}
+            description={locale === 'ja' ? '習慣形成の専門家' : 'Habit Formation Expert'}
+            isBuiltIn={true}
+          />
 
-            return (
-              <TreeNode
-                key={agent.id}
-                id={agent.id}
-                name={agent.name}
-                role={agent.role}
-                icon={ROLE_ICONS[agent.role.toLowerCase()] || '🤖'}
-                status={agent.status}
-                gradient={roleGradients[agent.role.toLowerCase()] || 'from-gray-500 to-gray-600'}
-                level={1}
-              />
-            );
-          })}
+          {/* Goal Planner */}
+          <TreeNode
+            id="goal-planner"
+            name="Goal Planner"
+            role="Planner"
+            icon="📋"
+            status="idle"
+            gradient="from-indigo-500 to-blue-500"
+            level={1}
+            description={locale === 'ja' ? '目標設定・計画の専門家' : 'Goal & Planning Expert'}
+            isBuiltIn={true}
+          />
+
+          {/* Progress Tracker */}
+          <TreeNode
+            id="progress-tracker"
+            name="Progress Tracker"
+            role="Analyst"
+            icon="📊"
+            status="idle"
+            gradient="from-cyan-500 to-teal-500"
+            level={1}
+            description={locale === 'ja' ? '進捗追跡・分析の専門家' : 'Progress Tracking Expert'}
+            isBuiltIn={true}
+          />
+
+          {/* Custom Agents under Manager */}
+          {getChildAgents('manager').map(agent => (
+            <TreeNode
+              key={agent.id}
+              id={agent.id}
+              name={agent.name}
+              role={agent.role}
+              icon={agent.icon}
+              status={agent.status}
+              gradient={roleGradients[agent.role.toLowerCase()] || roleGradients.custom}
+              level={1}
+              description={agent.description}
+              isBuiltIn={false}
+            />
+          ))}
+
+          {/* MCP Agents - Children of Manager */}
+          {allMcpAgents.map(agent => (
+            <TreeNode
+              key={agent.id}
+              id={agent.id}
+              name={agent.name}
+              role={agent.role}
+              icon={ROLE_ICONS[agent.role.toLowerCase()] || '🤖'}
+              status={agent.status}
+              gradient={roleGradients[agent.role.toLowerCase()] || 'from-gray-500 to-gray-600'}
+              level={1}
+              isBuiltIn={false}
+            />
+          ))}
         </TreeNode>
       </div>
 
       {/* Empty state for MCP agents */}
-      {allAgents.length === 0 && (
+      {allMcpAgents.length === 0 && customAgents.length === 0 && (
         <div className="mt-4 text-center text-muted-foreground py-6 border-2 border-dashed border-border rounded-lg">
           <span className="text-2xl mb-2 block">🔌</span>
           <p className="text-sm font-medium">{locale === 'ja' ? 'MCPエージェント未接続' : 'No MCP agents connected'}</p>
@@ -2086,6 +4160,514 @@ function AgentListView({ connections, locale, onSelectAgent, selectedAgentId }: 
           </div>
         </div>
       </div>
+
+      {/* Remote Agent Setup */}
+      <RemoteAgentInstaller locale={locale} />
+
+      {/* Remote Agent Setup Guide */}
+      <RemoteAgentGuide locale={locale} />
+
+      {/* Remote Task Execution */}
+      <RemoteTaskExecutor locale={locale} />
+    </div>
+  );
+}
+
+// Remote Agent Installer Component
+function RemoteAgentInstaller({ locale }: { locale: 'ja' | 'en' }) {
+  const [isExpanded, setIsExpanded] = useState(false);
+  const [installerConfig, setInstallerConfig] = useState<{
+    serverUrl?: string;
+    downloadUrl?: string;
+    quickInstallCommand?: string;
+    hasToken?: boolean;
+  } | null>(null);
+  const [token, setToken] = useState<string>('');
+  const [isLoadingToken, setIsLoadingToken] = useState(false);
+  const [isCopied, setIsCopied] = useState<'command' | 'token' | null>(null);
+
+  // Fetch installer config on expand
+  useEffect(() => {
+    if (isExpanded && !installerConfig) {
+      // Try to fetch from API, fall back to default MCP server config
+      fetch('/api/mcp-installer/config')
+        .then(res => {
+          if (!res.ok) {
+            throw new Error('API not available');
+          }
+          return res.json();
+        })
+        .then(data => setInstallerConfig(data))
+        .catch(() => {
+          // Use default local MCP server config
+          setInstallerConfig({
+            serverUrl: 'http://localhost:3456',
+            downloadUrl: 'https://raw.githubusercontent.com/example/mcp-installer/main/install.sh',
+            quickInstallCommand: 'curl -sSL ... | bash',
+            hasToken: true,
+          });
+        });
+    }
+  }, [isExpanded, installerConfig]);
+
+  const handleShowToken = async () => {
+    setIsLoadingToken(true);
+    try {
+      const res = await fetch('/api/mcp-installer/token');
+      if (!res.ok) {
+        throw new Error('API not available');
+      }
+      const data = await res.json();
+      if (data.token) {
+        setToken(data.token);
+      }
+    } catch {
+      // Use default token for local MCP server
+      setToken('mcp-multi-agent-token-f75a6267');
+    } finally {
+      setIsLoadingToken(false);
+    }
+  };
+
+  const copyToClipboard = async (text: string, type: 'command' | 'token') => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setIsCopied(type);
+      setTimeout(() => setIsCopied(null), 2000);
+    } catch (err) {
+      console.error('Failed to copy:', err);
+    }
+  };
+
+  return (
+    <div className="mt-6 pt-4 border-t border-border">
+      <button
+        onClick={() => setIsExpanded(!isExpanded)}
+        className="flex items-center justify-between w-full text-left group"
+      >
+        <div className="flex items-center gap-2">
+          <span className="text-lg">🌐</span>
+          <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+            {locale === 'ja' ? 'リモートエージェント追加' : 'Remote Agent Setup'}
+          </h4>
+        </div>
+        <svg
+          className={`w-4 h-4 text-muted-foreground transition-transform ${isExpanded ? 'rotate-180' : ''}`}
+          fill="none"
+          stroke="currentColor"
+          viewBox="0 0 24 24"
+        >
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+        </svg>
+      </button>
+
+      {isExpanded && (
+        <div className="mt-3 space-y-3 text-sm">
+          <p className="text-muted-foreground text-xs">
+            {locale === 'ja'
+              ? '別マシンでClaude Codeを実行し、このプロジェクトのMCPサーバーに接続できます。'
+              : 'Run Claude Code on another machine and connect to this project\'s MCP server.'}
+          </p>
+
+          {installerConfig ? (
+            <>
+              {/* Server URL */}
+              <div className="p-2 bg-muted/50 rounded-lg">
+                <div className="text-xs text-muted-foreground mb-1">
+                  {locale === 'ja' ? 'タスクサーバーURL' : 'Task Server URL'}
+                </div>
+                <code className="text-xs font-mono text-foreground">{installerConfig.serverUrl}</code>
+              </div>
+
+              {/* Quick Install Command */}
+              <div className="p-2 bg-muted/50 rounded-lg">
+                <div className="flex items-center justify-between mb-1">
+                  <div className="text-xs text-muted-foreground">
+                    {locale === 'ja' ? 'ワンライナーインストール' : 'Quick Install'}
+                  </div>
+                  <button
+                    onClick={() => copyToClipboard(
+                      `curl -sSL ${installerConfig.downloadUrl} -o install.sh && chmod +x install.sh && ./install.sh --server-url ${installerConfig.serverUrl} --token ${token || 'YOUR_TOKEN'}`,
+                      'command'
+                    )}
+                    className="text-xs text-purple-600 hover:text-purple-700 dark:text-purple-400"
+                  >
+                    {isCopied === 'command' ? (locale === 'ja' ? 'コピー済み!' : 'Copied!') : (locale === 'ja' ? 'コピー' : 'Copy')}
+                  </button>
+                </div>
+                <code className="text-xs font-mono text-foreground break-all block">
+                  curl -sSL {installerConfig.downloadUrl} -o install.sh && ./install.sh --server-url {installerConfig.serverUrl} --token YOUR_TOKEN
+                </code>
+              </div>
+
+              {/* Token Section */}
+              <div className="p-2 bg-muted/50 rounded-lg">
+                <div className="flex items-center justify-between mb-1">
+                  <div className="text-xs text-muted-foreground">
+                    {locale === 'ja' ? '認証トークン' : 'Auth Token'}
+                  </div>
+                  {!token ? (
+                    <button
+                      onClick={handleShowToken}
+                      disabled={isLoadingToken}
+                      className="text-xs text-purple-600 hover:text-purple-700 dark:text-purple-400 disabled:opacity-50"
+                    >
+                      {isLoadingToken
+                        ? (locale === 'ja' ? '取得中...' : 'Loading...')
+                        : (locale === 'ja' ? 'トークンを表示' : 'Show Token')}
+                    </button>
+                  ) : (
+                    <button
+                      onClick={() => copyToClipboard(token, 'token')}
+                      className="text-xs text-purple-600 hover:text-purple-700 dark:text-purple-400"
+                    >
+                      {isCopied === 'token' ? (locale === 'ja' ? 'コピー済み!' : 'Copied!') : (locale === 'ja' ? 'コピー' : 'Copy')}
+                    </button>
+                  )}
+                </div>
+                {token ? (
+                  <code className="text-xs font-mono text-foreground break-all block">{token}</code>
+                ) : (
+                  <p className="text-xs text-muted-foreground italic">
+                    {locale === 'ja' ? 'クリックして表示' : 'Click to reveal'}
+                  </p>
+                )}
+              </div>
+
+              {/* Download Button */}
+              <a
+                href={installerConfig.downloadUrl}
+                download="install.sh"
+                className="flex items-center justify-center gap-2 w-full py-2 px-3 bg-purple-600 hover:bg-purple-700 text-white text-xs font-medium rounded-lg transition-colors"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                </svg>
+                {locale === 'ja' ? 'インストーラーをダウンロード' : 'Download Installer'}
+              </a>
+            </>
+          ) : (
+            <div className="flex items-center justify-center py-4">
+              <div className="animate-spin w-5 h-5 border-2 border-purple-500 border-t-transparent rounded-full" />
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Remote Agent Setup Guide Component
+function RemoteAgentGuide({ locale }: { locale: 'ja' | 'en' }) {
+  const [isExpanded, setIsExpanded] = useState(false);
+  const [content, setContent] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+
+  // Fetch documentation on expand
+  useEffect(() => {
+    if (isExpanded && !content) {
+      setIsLoading(true);
+      fetch('/docs/remote-mcp-agent-setup.md')
+        .then(res => res.text())
+        .then(text => setContent(text))
+        .catch(err => {
+          console.error('Failed to fetch documentation:', err);
+          setContent(locale === 'ja'
+            ? 'ドキュメントの読み込みに失敗しました。'
+            : 'Failed to load documentation.');
+        })
+        .finally(() => setIsLoading(false));
+    }
+  }, [isExpanded, content, locale]);
+
+  return (
+    <div className="mt-4 pt-4 border-t border-border">
+      <button
+        onClick={() => setIsExpanded(!isExpanded)}
+        className="flex items-center justify-between w-full text-left group"
+      >
+        <div className="flex items-center gap-2">
+          <span className="text-lg">📖</span>
+          <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+            {locale === 'ja' ? 'セットアップガイド' : 'Setup Guide'}
+          </h4>
+        </div>
+        <svg
+          className={`w-4 h-4 text-muted-foreground transition-transform ${isExpanded ? 'rotate-180' : ''}`}
+          fill="none"
+          stroke="currentColor"
+          viewBox="0 0 24 24"
+        >
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+        </svg>
+      </button>
+
+      {isExpanded && (
+        <div className="mt-3">
+          {isLoading ? (
+            <div className="flex items-center justify-center py-8">
+              <div className="animate-spin w-5 h-5 border-2 border-purple-500 border-t-transparent rounded-full" />
+            </div>
+          ) : content ? (
+            <div className="max-h-96 overflow-y-auto pr-2 prose prose-sm dark:prose-invert prose-headings:text-foreground prose-p:text-muted-foreground prose-li:text-muted-foreground prose-code:text-purple-600 dark:prose-code:text-purple-400 prose-code:bg-muted prose-code:px-1 prose-code:py-0.5 prose-code:rounded prose-pre:bg-gray-900 prose-pre:text-gray-100 prose-a:text-purple-600 dark:prose-a:text-purple-400 prose-table:text-xs prose-th:bg-muted prose-th:border prose-th:border-border prose-th:px-2 prose-th:py-1 prose-td:border prose-td:border-border prose-td:px-2 prose-td:py-1 max-w-none text-xs">
+              <ReactMarkdown>{content}</ReactMarkdown>
+            </div>
+          ) : (
+            <p className="text-xs text-muted-foreground">
+              {locale === 'ja' ? 'ドキュメントを読み込み中...' : 'Loading documentation...'}
+            </p>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Remote Task Executor Component
+function RemoteTaskExecutor({ locale }: { locale: 'ja' | 'en' }) {
+  const [isExpanded, setIsExpanded] = useState(false);
+  const [prompt, setPrompt] = useState('');
+  const [workingDir, setWorkingDir] = useState('/home/ubuntu/Downloads/vow');
+  const [isExecuting, setIsExecuting] = useState(false);
+  const [taskId, setTaskId] = useState<string | null>(null);
+  const [output, setOutput] = useState<string[]>([]);
+  const [errors, setErrors] = useState<string[]>([]);
+  const [status, setStatus] = useState<string | null>(null);
+  const [exitCode, setExitCode] = useState<number | null>(null);
+  const outputRef = useRef<HTMLDivElement>(null);
+
+  const executeTask = async () => {
+    if (!prompt.trim()) return;
+
+    setIsExecuting(true);
+    setOutput([]);
+    setErrors([]);
+    setStatus('pending');
+    setExitCode(null);
+
+    try {
+      // Create the remote task
+      const res = await fetch('/api/agents/remote-task', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          prompt: prompt.trim(),
+          workingDirectory: workingDir,
+          timeoutMs: 30 * 60 * 1000, // 30 minutes
+        }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        setErrors([data.error || 'Failed to create task']);
+        setIsExecuting(false);
+        setStatus('failed');
+        return;
+      }
+
+      setTaskId(data.data.taskId);
+
+      // Connect to SSE stream for output
+      const eventSource = new EventSource(`/api/agents/remote-task/${data.data.taskId}/output`);
+
+      eventSource.onmessage = (event) => {
+        try {
+          const msg = JSON.parse(event.data);
+
+          if (msg.type === 'output') {
+            setOutput(prev => [...prev, msg.data]);
+          } else if (msg.type === 'error') {
+            setErrors(prev => [...prev, msg.data]);
+          } else if (msg.type === 'status') {
+            setStatus(msg.status || msg.data);
+          } else if (msg.type === 'exit') {
+            setExitCode(msg.code);
+            setStatus(msg.status || 'completed');
+            setIsExecuting(false);
+            eventSource.close();
+          }
+        } catch {
+          // Ignore parse errors
+        }
+      };
+
+      eventSource.onerror = () => {
+        setIsExecuting(false);
+        eventSource.close();
+      };
+
+    } catch (err) {
+      setErrors([`Error: ${(err as Error).message}`]);
+      setIsExecuting(false);
+      setStatus('failed');
+    }
+  };
+
+  const cancelTask = async () => {
+    if (!taskId) return;
+
+    try {
+      await fetch(`/api/agents/remote-task/${taskId}/cancel`, {
+        method: 'POST',
+      });
+    } catch (err) {
+      console.error('Failed to cancel task:', err);
+    }
+  };
+
+  // Auto-scroll output
+  useEffect(() => {
+    if (outputRef.current) {
+      outputRef.current.scrollTop = outputRef.current.scrollHeight;
+    }
+  }, [output, errors]);
+
+  const statusColors: Record<string, string> = {
+    pending: 'bg-gray-500',
+    running: 'bg-blue-500',
+    completed: 'bg-green-500',
+    failed: 'bg-red-500',
+    cancelled: 'bg-yellow-500',
+    timeout: 'bg-orange-500',
+  };
+
+  const statusLabels: Record<string, { ja: string; en: string }> = {
+    pending: { ja: '待機中', en: 'Pending' },
+    running: { ja: '実行中', en: 'Running' },
+    completed: { ja: '完了', en: 'Completed' },
+    failed: { ja: '失敗', en: 'Failed' },
+    cancelled: { ja: 'キャンセル', en: 'Cancelled' },
+    timeout: { ja: 'タイムアウト', en: 'Timeout' },
+  };
+
+  return (
+    <div className="mt-4 pt-4 border-t border-border">
+      <button
+        onClick={() => setIsExpanded(!isExpanded)}
+        className="flex items-center justify-between w-full text-left group"
+      >
+        <div className="flex items-center gap-2">
+          <span className="text-lg">⚡</span>
+          <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+            {locale === 'ja' ? 'リモートタスク実行' : 'Remote Task Execution'}
+          </h4>
+        </div>
+        <svg
+          className={`w-4 h-4 text-muted-foreground transition-transform ${isExpanded ? 'rotate-180' : ''}`}
+          fill="none"
+          stroke="currentColor"
+          viewBox="0 0 24 24"
+        >
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+        </svg>
+      </button>
+
+      {isExpanded && (
+        <div className="mt-3 space-y-3">
+          <p className="text-muted-foreground text-xs">
+            {locale === 'ja'
+              ? 'Claude Codeを使用してタスクをリモート実行します。'
+              : 'Execute tasks remotely using Claude Code.'}
+          </p>
+
+          {/* Working Directory */}
+          <div>
+            <label className="text-xs text-muted-foreground block mb-1">
+              {locale === 'ja' ? '作業ディレクトリ' : 'Working Directory'}
+            </label>
+            <input
+              type="text"
+              value={workingDir}
+              onChange={(e) => setWorkingDir(e.target.value)}
+              className="w-full px-2 py-1.5 text-xs font-mono bg-muted/50 border border-border rounded-md focus:outline-none focus:ring-1 focus:ring-purple-500"
+              placeholder="/home/ubuntu/Downloads/vow"
+              disabled={isExecuting}
+            />
+          </div>
+
+          {/* Prompt Input */}
+          <div>
+            <label className="text-xs text-muted-foreground block mb-1">
+              {locale === 'ja' ? 'タスク内容' : 'Task Prompt'}
+            </label>
+            <textarea
+              value={prompt}
+              onChange={(e) => setPrompt(e.target.value)}
+              className="w-full px-2 py-1.5 text-xs bg-muted/50 border border-border rounded-md focus:outline-none focus:ring-1 focus:ring-purple-500 resize-none"
+              rows={4}
+              placeholder={locale === 'ja' ? 'タスク内容を入力...' : 'Enter task prompt...'}
+              disabled={isExecuting}
+            />
+          </div>
+
+          {/* Execute / Cancel Buttons */}
+          <div className="flex gap-2">
+            {!isExecuting ? (
+              <button
+                onClick={executeTask}
+                disabled={!prompt.trim()}
+                className="flex-1 py-2 px-3 bg-purple-600 hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed text-white text-xs font-medium rounded-lg transition-colors flex items-center justify-center gap-2"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                {locale === 'ja' ? '実行' : 'Execute'}
+              </button>
+            ) : (
+              <button
+                onClick={cancelTask}
+                className="flex-1 py-2 px-3 bg-red-600 hover:bg-red-700 text-white text-xs font-medium rounded-lg transition-colors flex items-center justify-center gap-2"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+                {locale === 'ja' ? 'キャンセル' : 'Cancel'}
+              </button>
+            )}
+          </div>
+
+          {/* Status Display */}
+          {status && (
+            <div className="flex items-center gap-2 text-xs">
+              <span className={`w-2 h-2 rounded-full ${statusColors[status] || 'bg-gray-500'} ${status === 'running' ? 'animate-pulse' : ''}`} />
+              <span>{statusLabels[status]?.[locale] || status}</span>
+              {exitCode !== null && (
+                <span className="text-muted-foreground ml-2">
+                  ({locale === 'ja' ? '終了コード' : 'Exit code'}: {exitCode})
+                </span>
+              )}
+            </div>
+          )}
+
+          {/* Output Display */}
+          {(output.length > 0 || errors.length > 0) && (
+            <div
+              ref={outputRef}
+              className="h-48 overflow-y-auto bg-gray-900 text-gray-100 rounded-lg p-2 font-mono text-xs"
+            >
+              {output.map((line, i) => (
+                <div key={`out-${i}`} className="whitespace-pre-wrap break-all">
+                  {line}
+                </div>
+              ))}
+              {errors.map((line, i) => (
+                <div key={`err-${i}`} className="whitespace-pre-wrap break-all text-red-400">
+                  {line}
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Task ID */}
+          {taskId && (
+            <div className="text-xs text-muted-foreground">
+              Task ID: <code className="font-mono text-foreground">{taskId}</code>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }

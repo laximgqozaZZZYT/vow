@@ -42,6 +42,16 @@ const mcpServerSchema = z.object({
   serverToken: z.string().optional().or(z.literal('')),
   enabled: z.boolean().default(false),
   autoConnect: z.boolean().default(true),
+  priority: z.number().int().min(1).max(10).default(5),
+});
+
+// Chat agent settings schema
+const chatAgentSettingsSchema = z.object({
+  useMcpAgent: z.boolean().default(false),
+  mcpServerId: z.string().optional(),
+  mcpAgentId: z.string().optional(),
+  fallbackToApi: z.boolean().default(true),
+  selectionMode: z.enum(['manual', 'priority', 'failover']).default('manual'),
 });
 
 // New multi-server config schema
@@ -50,6 +60,7 @@ const mcpConnectionSchema = z.object({
   showInDashboard: z.boolean().default(true),
   notifyOnTaskComplete: z.boolean().default(true),
   notifyOnAgentOffline: z.boolean().default(true),
+  chatAgentSettings: chatAgentSettingsSchema.optional(),
 });
 
 // Legacy single-server schema (for migration)

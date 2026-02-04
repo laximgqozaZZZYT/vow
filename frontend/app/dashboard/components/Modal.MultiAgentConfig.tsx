@@ -55,6 +55,7 @@ function ServerEditForm({
     serverToken: '',
     enabled: true,
     autoConnect: true,
+    priority: 5,
     ...server,
   });
   const [showToken, setShowToken] = useState(false);
@@ -81,6 +82,7 @@ function ServerEditForm({
       serverToken: localServer.serverToken || '',
       enabled: localServer.enabled ?? true,
       autoConnect: localServer.autoConnect ?? true,
+      priority: localServer.priority ?? 5,
     });
   };
 
@@ -203,6 +205,26 @@ function ServerEditForm({
               `}
             />
           </button>
+        </label>
+
+        <label className="flex items-center justify-between">
+          <div>
+            <span className="text-sm">優先度</span>
+            <p className="text-xs text-muted-foreground">1=最高, 10=最低</p>
+          </div>
+          <div className="flex items-center gap-2">
+            <input
+              type="range"
+              min="1"
+              max="10"
+              value={localServer.priority ?? 5}
+              onChange={(e) => setLocalServer(prev => ({ ...prev, priority: parseInt(e.target.value) }))}
+              className="w-20 h-2 bg-muted rounded-lg appearance-none cursor-pointer accent-primary"
+            />
+            <span className="w-6 text-center text-sm font-medium bg-primary/10 rounded px-1">
+              {localServer.priority ?? 5}
+            </span>
+          </div>
         </label>
       </div>
 

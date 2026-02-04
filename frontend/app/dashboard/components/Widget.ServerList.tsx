@@ -68,6 +68,11 @@ function ServerItem({
 
   return (
     <div className="flex items-center gap-3 p-3 rounded-lg border border-border bg-card hover:bg-muted/30 transition-colors">
+      {/* Priority Badge */}
+      <div className="flex-shrink-0 w-6 h-6 flex items-center justify-center bg-primary/10 rounded text-xs font-medium text-primary" title={`優先度: ${server.priority ?? 5}`}>
+        {server.priority ?? 5}
+      </div>
+
       {/* Server Info */}
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2">
@@ -192,17 +197,19 @@ function ServerListComponent({
         </div>
       ) : (
         <div className="space-y-2">
-          {servers.map((server) => (
-            <ServerItem
-              key={server.id}
-              server={server}
-              connection={connections.get(server.id)}
-              onEdit={() => onEdit(server.id)}
-              onRemove={() => onRemove(server.id)}
-              onConnect={() => onConnect(server.id)}
-              onDisconnect={() => onDisconnect(server.id)}
-            />
-          ))}
+          {[...servers]
+            .sort((a, b) => (a.priority ?? 5) - (b.priority ?? 5))
+            .map((server) => (
+              <ServerItem
+                key={server.id}
+                server={server}
+                connection={connections.get(server.id)}
+                onEdit={() => onEdit(server.id)}
+                onRemove={() => onRemove(server.id)}
+                onConnect={() => onConnect(server.id)}
+                onDisconnect={() => onDisconnect(server.id)}
+              />
+            ))}
         </div>
       )}
 

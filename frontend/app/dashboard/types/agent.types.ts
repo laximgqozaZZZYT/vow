@@ -80,6 +80,7 @@ export interface AgentTask {
   createdBy: string;
   createdAt: string;
   updatedAt: string;
+  completedAt?: string | null;
   deadline: string | null;
 }
 
@@ -181,6 +182,23 @@ export interface McpServer {
   serverToken: string;           // Auth token
   enabled: boolean;              // Enable/disable without deleting
   autoConnect: boolean;          // Auto-connect on page load
+  priority?: number;             // Priority order (1=highest, 10=lowest, default: 5)
+}
+
+/**
+ * MCP Server selection mode
+ */
+export type McpServerSelectionMode = 'manual' | 'priority' | 'failover';
+
+/**
+ * Chat Agent Settings for switching between MCP and default AI
+ */
+export interface ChatAgentSettings {
+  useMcpAgent: boolean;          // Whether to use MCP agent for chat
+  mcpServerId?: string;          // Which MCP server to use (for manual mode)
+  mcpAgentId?: string;           // Which agent on the MCP server to use
+  fallbackToApi: boolean;        // Fall back to default API if MCP fails
+  selectionMode?: McpServerSelectionMode; // Server selection mode (default: 'manual')
 }
 
 /**
@@ -191,6 +209,7 @@ export interface MultiAgentConfig {
   showInDashboard: boolean;      // Global setting
   notifyOnTaskComplete: boolean; // Global setting
   notifyOnAgentOffline: boolean; // Global setting
+  chatAgentSettings?: ChatAgentSettings; // Chat agent switching settings
 }
 
 /**
