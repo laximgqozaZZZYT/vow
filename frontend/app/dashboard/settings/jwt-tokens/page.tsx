@@ -591,10 +591,10 @@ export default function JwtTokensPage() {
         </div>
 
         {/* Main content */}
-        <main className="flex-1 md:ml-64 p-6 mt-14 md:mt-0">
+        <main className="flex-1 md:ml-64 p-4 sm:p-6 mt-14 md:mt-0">
           <div className="max-w-2xl mx-auto">
             {/* Page Header */}
-            <div className="flex items-center justify-between mb-6">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
               <div>
                 <h2 className="text-xl font-semibold">JWT Tokens</h2>
                 <p className="text-muted-foreground text-sm">
@@ -604,7 +604,7 @@ export default function JwtTokensPage() {
               <button
                 onClick={handleOpenCreateModal}
                 disabled={tokens.length >= 10}
-                className="px-4 py-2 bg-primary text-primary-foreground rounded-md shadow-sm hover:opacity-90 focus-visible:outline-2 focus-visible:outline-primary transition-opacity flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="w-full sm:w-auto px-4 py-2 bg-primary text-primary-foreground rounded-md shadow-sm hover:opacity-90 focus-visible:outline-2 focus-visible:outline-primary transition-opacity flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <svg
                   xmlns="http://www.w3.org/2000/svg"
@@ -619,7 +619,7 @@ export default function JwtTokensPage() {
                 >
                   <path d="M12 5v14M5 12h14" />
                 </svg>
-                Create Token
+                <span className="whitespace-nowrap">Create Token</span>
               </button>
             </div>
 
@@ -717,86 +717,144 @@ export default function JwtTokensPage() {
               </div>
             )}
 
-            {/* Tokens List */}
+            {/* Tokens List - Card view on mobile, table on desktop */}
             {!isLoading && !error && tokens.length > 0 && (
-              <div className="bg-card border border-border rounded-lg overflow-hidden">
-                <div className="overflow-x-auto">
-                  <table className="w-full">
-                    <thead>
-                      <tr className="border-b border-border bg-muted/50">
-                        <th className="text-left p-4 text-small font-medium text-muted-foreground">
-                          Name
-                        </th>
-                        <th className="text-left p-4 text-small font-medium text-muted-foreground">
-                          Scopes
-                        </th>
-                        <th className="text-left p-4 text-small font-medium text-muted-foreground">
-                          Expires
-                        </th>
-                        <th className="text-left p-4 text-small font-medium text-muted-foreground">
-                          Last Used
-                        </th>
-                        <th className="text-right p-4 text-small font-medium text-muted-foreground">
-                          Actions
-                        </th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {tokens.map((token) => (
-                        <tr
-                          key={token.id}
-                          className="border-b border-border last:border-b-0 hover:bg-muted/30 transition-colors"
-                        >
-                          <td className="p-4">
-                            <span className="font-medium">{token.name}</span>
-                          </td>
-                          <td className="p-4">
-                            <div className="flex flex-wrap gap-1">
-                              {token.scopes.map((scope) => (
-                                <span
-                                  key={scope}
-                                  className="px-2 py-0.5 bg-muted rounded text-xs font-mono"
-                                >
-                                  {scope.split(':')[1]}
-                                </span>
-                              ))}
-                            </div>
-                          </td>
-                          <td className="p-4 text-small">
-                            {isExpired(token.expiresAt) ? (
-                              <span className="text-destructive">Expired</span>
-                            ) : (
-                              <span className="text-muted-foreground">
-                                {formatDate(token.expiresAt)}
+              <>
+                {/* Mobile card view */}
+                <div className="sm:hidden space-y-3">
+                  {tokens.map((token) => (
+                    <div
+                      key={token.id}
+                      className="bg-card border border-border rounded-lg p-4"
+                    >
+                      <div className="flex items-start justify-between mb-3">
+                        <div>
+                          <span className="font-medium block">{token.name}</span>
+                          <div className="flex flex-wrap gap-1 mt-1">
+                            {token.scopes.map((scope) => (
+                              <span
+                                key={scope}
+                                className="px-1.5 py-0.5 bg-muted rounded text-[10px] font-mono"
+                              >
+                                {scope.split(':')[1]}
                               </span>
-                            )}
-                          </td>
-                          <td className="p-4 text-small text-muted-foreground">
-                            {formatDate(token.lastUsedAt)}
-                          </td>
-                          <td className="p-4 text-right">
-                            <div className="flex items-center justify-end gap-2">
-                              <button
-                                onClick={() => handleOpenExtendModal(token)}
-                                disabled={isExpired(token.expiresAt)}
-                                className="px-3 py-1.5 text-small text-primary hover:bg-primary/10 rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                              >
-                                Extend
-                              </button>
-                              <button
-                                onClick={() => handleOpenRevokeModal(token)}
-                                className="px-3 py-1.5 text-small text-destructive hover:bg-destructive/10 rounded-md transition-colors"
-                              >
-                                Revoke
-                              </button>
-                            </div>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                            ))}
+                          </div>
+                        </div>
+                        <div className="flex gap-1">
+                          <button
+                            onClick={() => handleOpenExtendModal(token)}
+                            disabled={isExpired(token.expiresAt)}
+                            className="px-2 py-1 text-xs text-primary hover:bg-primary/10 rounded transition-colors disabled:opacity-50"
+                          >
+                            Extend
+                          </button>
+                          <button
+                            onClick={() => handleOpenRevokeModal(token)}
+                            className="px-2 py-1 text-xs text-destructive hover:bg-destructive/10 rounded transition-colors"
+                          >
+                            Revoke
+                          </button>
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-2 gap-2 text-xs text-muted-foreground">
+                        <div>
+                          <span className="block text-[10px] uppercase tracking-wide">Expires</span>
+                          {isExpired(token.expiresAt) ? (
+                            <span className="text-destructive">Expired</span>
+                          ) : (
+                            formatDate(token.expiresAt)
+                          )}
+                        </div>
+                        <div>
+                          <span className="block text-[10px] uppercase tracking-wide">Last Used</span>
+                          {formatDate(token.lastUsedAt)}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
                 </div>
-              </div>
+
+                {/* Desktop table view */}
+                <div className="hidden sm:block bg-card border border-border rounded-lg overflow-hidden">
+                  <div className="overflow-x-auto">
+                    <table className="w-full">
+                      <thead>
+                        <tr className="border-b border-border bg-muted/50">
+                          <th className="text-left p-3 lg:p-4 text-small font-medium text-muted-foreground">
+                            Name
+                          </th>
+                          <th className="text-left p-3 lg:p-4 text-small font-medium text-muted-foreground">
+                            Scopes
+                          </th>
+                          <th className="text-left p-3 lg:p-4 text-small font-medium text-muted-foreground">
+                            Expires
+                          </th>
+                          <th className="text-left p-3 lg:p-4 text-small font-medium text-muted-foreground hidden md:table-cell">
+                            Last Used
+                          </th>
+                          <th className="text-right p-3 lg:p-4 text-small font-medium text-muted-foreground">
+                            Actions
+                          </th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {tokens.map((token) => (
+                          <tr
+                            key={token.id}
+                            className="border-b border-border last:border-b-0 hover:bg-muted/30 transition-colors"
+                          >
+                            <td className="p-3 lg:p-4">
+                              <span className="font-medium">{token.name}</span>
+                            </td>
+                            <td className="p-3 lg:p-4">
+                              <div className="flex flex-wrap gap-1">
+                                {token.scopes.map((scope) => (
+                                  <span
+                                    key={scope}
+                                    className="px-2 py-0.5 bg-muted rounded text-xs font-mono"
+                                  >
+                                    {scope.split(':')[1]}
+                                  </span>
+                                ))}
+                              </div>
+                            </td>
+                            <td className="p-3 lg:p-4 text-small">
+                              {isExpired(token.expiresAt) ? (
+                                <span className="text-destructive">Expired</span>
+                              ) : (
+                                <span className="text-muted-foreground">
+                                  {formatDate(token.expiresAt)}
+                                </span>
+                              )}
+                            </td>
+                            <td className="p-3 lg:p-4 text-small text-muted-foreground hidden md:table-cell">
+                              {formatDate(token.lastUsedAt)}
+                            </td>
+                            <td className="p-3 lg:p-4 text-right">
+                              <div className="flex items-center justify-end gap-2">
+                                <button
+                                  onClick={() => handleOpenExtendModal(token)}
+                                  disabled={isExpired(token.expiresAt)}
+                                  className="px-3 py-1.5 text-small text-primary hover:bg-primary/10 rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                >
+                                  Extend
+                                </button>
+                                <button
+                                  onClick={() => handleOpenRevokeModal(token)}
+                                  className="px-3 py-1.5 text-small text-destructive hover:bg-destructive/10 rounded-md transition-colors"
+                                >
+                                  Revoke
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </>
             )}
 
             {/* Token Count Info */}
@@ -807,7 +865,7 @@ export default function JwtTokensPage() {
             )}
 
             {/* CLI Usage Guide */}
-            <div className="bg-card border border-border rounded-lg p-6 mt-8">
+            <div className="bg-card border border-border rounded-lg p-4 sm:p-6 mt-8">
               <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
                 <svg
                   xmlns="http://www.w3.org/2000/svg"

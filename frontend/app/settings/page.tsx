@@ -573,7 +573,7 @@ export default function SettingsPage() {
         </div>
 
         {/* Main content */}
-        <main className="flex-1 md:ml-64 p-6 mt-14 md:mt-0">
+        <main className="flex-1 md:ml-64 p-4 sm:p-6 mt-14 md:mt-0">
           <div className="max-w-2xl mx-auto">
             {activeSection === 'profile' && (
               <div className="space-y-6">
