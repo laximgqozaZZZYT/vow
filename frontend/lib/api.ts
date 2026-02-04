@@ -698,20 +698,37 @@ export async function claim() {
 const api = {
   // Generic HTTP methods for backend API calls
   get: async (path: string) => {
-    const url = `${process.env.NEXT_PUBLIC_BACKEND_API_URL || ''}${path}`;
+    const backendUrl = process.env.NEXT_PUBLIC_BACKEND_API_URL || '';
+
+    // Backend API URL が設定されていない場合のエラー
+    if (!backendUrl) {
+      throw new ApiError('Backend API URL not configured', path, { status: 500 });
+    }
+
+    const url = `${backendUrl}${path}`;
     const { supabase } = await import('./supabaseClient');
     const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-    
+
     if (supabase) {
       const { data: { session } } = await supabase.auth.getSession();
       if (session?.access_token) {
         headers.Authorization = `Bearer ${session.access_token}`;
       }
     }
-    
-    const res = await fetch(url, { method: 'GET', headers });
-    if (!res.ok) throw new ApiError(`HTTP ${res.status}`, url, { status: res.status });
-    return safeJsonParse(await res.text());
+
+    try {
+      const res = await fetch(url, { method: 'GET', headers });
+      if (!res.ok) throw new ApiError(`HTTP ${res.status}`, url, { status: res.status });
+      return safeJsonParse(await res.text());
+    } catch (error: any) {
+      // ネットワークエラー（CORS、接続失敗など）を適切に処理
+      if (error.name === 'ApiError') throw error;
+
+      // fetch() の TypeError (Failed to fetch) をキャッチ
+      const errorMessage = error?.message || 'Network request failed';
+      debug.log(`[api.get] Network error for ${url}:`, errorMessage);
+      throw new ApiError(`Network error: ${errorMessage}`, url, { status: 0 });
+    }
   },
   
   post: async (path: string, body?: any) => {

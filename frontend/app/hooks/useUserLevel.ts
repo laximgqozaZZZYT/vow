@@ -60,10 +60,10 @@ export function useUserLevel(userId: string | null): UseUserLevelResult {
       const data = await api.get(`/api/users/${userId}/level`);
       setUserLevel(data);
     } catch (err: any) {
-      // Check if it's a 404 error (user level not set yet) or 401 (not authenticated)
-      if (err?.status === 404 || err?.status === 401) {
-        // ユーザーレベルが未設定または認証エラーの場合はデフォルト値を設定
-        // 401は認証待ちの正常な状態なのでログを出さない
+      // Check if it's a 404 error (user level not set yet), 401 (not authenticated), or network error (status: 0)
+      if (err?.status === 404 || err?.status === 401 || err?.status === 0) {
+        // ユーザーレベルが未設定、認証エラー、またはネットワークエラーの場合はデフォルト値を設定
+        // 401は認証待ちの正常な状態、status:0はバックエンド未起動の正常な状態なのでログを出さない
         setUserLevel({
           userId,
           overallLevel: 0,
@@ -73,6 +73,11 @@ export function useUserLevel(userId: string | null): UseUserLevelResult {
           totalExperiencePoints: 0,
           lastCalculatedAt: null,
         });
+
+        // ネットワークエラーの場合のみデバッグログ出力
+        if (err?.status === 0) {
+          console.log('[useUserLevel] Backend API not available, using default values');
+        }
       } else {
         console.error('[useUserLevel] Error fetching user level:', err);
         setError(err?.message || 'ユーザーレベルの取得に失敗しました');
