@@ -814,11 +814,17 @@ async function main() {
 main().catch(console.error);
 INDEX_EOF
 
-    # Create management script
-    cat > "${install_dir}/mcp-server" << 'MGMT_EOF'
+    # Create management script (compatible with original setup_multi_agent.sh commands)
+    cat > "${install_dir}/setup_multi_agent.sh" << 'MGMT_EOF'
 #!/bin/bash
 #
 # MCP Server Management Script
+# Compatible with original command format:
+#   ./setup_multi_agent.sh start-server
+#   ./setup_multi_agent.sh stop-server
+#   ./setup_multi_agent.sh server-status
+#   ./setup_multi_agent.sh show-config
+#   ./setup_multi_agent.sh generate-token
 #
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -906,7 +912,40 @@ show_config() {
     echo "Config file: ${CONFIG_DIR}/server.env"
 }
 
+generate_token() {
+    if command -v openssl >/dev/null 2>&1; then
+        local new_token="mcp-$(openssl rand -hex 16)"
+    else
+        local new_token="mcp-$(cat /dev/urandom | tr -dc 'a-f0-9' | fold -w 32 | head -n 1)"
+    fi
+    echo "New token: ${new_token}"
+    echo ""
+    echo "To update the server token, edit:"
+    echo "  ${CONFIG_DIR}/server.env"
+    echo ""
+    echo "Then restart the server:"
+    echo "  $0 stop-server && $0 start-server"
+}
+
+# Command dispatch - support both old and new style commands
 case "$1" in
+    # Original command format (start-server, stop-server, etc.)
+    start-server)
+        start_server
+        ;;
+    stop-server)
+        stop_server
+        ;;
+    server-status)
+        status_server
+        ;;
+    show-config)
+        show_config
+        ;;
+    generate-token)
+        generate_token
+        ;;
+    # Also support short commands for convenience
     start)
         start_server
         ;;
@@ -928,12 +967,24 @@ case "$1" in
         show_config
         ;;
     *)
-        echo "Usage: $0 {start|stop|restart|status|logs|config}"
+        echo "Usage: $0 <command>"
+        echo ""
+        echo "Commands:"
+        echo "  start-server    Start the MCP server"
+        echo "  stop-server     Stop the MCP server"
+        echo "  server-status   Check server status"
+        echo "  show-config     Show server configuration"
+        echo "  generate-token  Generate a new auth token"
+        echo ""
+        echo "  (Short aliases: start, stop, restart, status, logs, config)"
         exit 1
         ;;
 esac
 MGMT_EOF
-    chmod +x "${install_dir}/mcp-server"
+    chmod +x "${install_dir}/setup_multi_agent.sh"
+
+    # Also create a symlink for backward compatibility
+    ln -sf "${install_dir}/setup_multi_agent.sh" "${install_dir}/mcp-server"
 }
 
 install_dependencies() {
@@ -1021,7 +1072,7 @@ print_success() {
     echo ""
     echo "  Quick Start:"
     echo "    1. Start the server:"
-    echo "       ${install_dir}/mcp-server start"
+    echo "       ${install_dir}/setup_multi_agent.sh start-server"
     echo ""
     echo "    2. Test the server:"
     echo "       curl http://localhost:${TASK_SERVER_PORT}/health"
@@ -1034,10 +1085,11 @@ print_success() {
     echo "    Token: ${TASK_SERVER_TOKEN}"
     echo ""
     echo "  Management Commands:"
-    echo "    ${install_dir}/mcp-server start    # Start server"
-    echo "    ${install_dir}/mcp-server stop     # Stop server"
-    echo "    ${install_dir}/mcp-server status   # Check status"
-    echo "    ${install_dir}/mcp-server logs     # View logs"
+    echo "    ${install_dir}/setup_multi_agent.sh start-server     # Start server"
+    echo "    ${install_dir}/setup_multi_agent.sh stop-server      # Stop server"
+    echo "    ${install_dir}/setup_multi_agent.sh server-status    # Check status"
+    echo "    ${install_dir}/setup_multi_agent.sh show-config      # Show config"
+    echo "    ${install_dir}/setup_multi_agent.sh generate-token   # New token"
     echo ""
     echo -e "${GREEN}============================================================${NC}"
 }
