@@ -152,7 +152,7 @@ export default function AIProviderSettings({ authToken }: AIProviderSettingsProp
   const providerTabs: CredentialType[] = ['openai', 'gemini', 'anthropic', 'codex'];
 
   return (
-    <div className="bg-card border border-border rounded-lg p-6">
+    <div className="bg-card border border-border rounded-lg p-4 sm:p-6">
       <div className="flex items-center gap-3 mb-4">
         <div className="w-10 h-10 bg-gradient-to-br from-emerald-500/20 to-blue-500/20 rounded-lg flex items-center justify-center">
           <svg className="w-5 h-5 text-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -166,7 +166,7 @@ export default function AIProviderSettings({ authToken }: AIProviderSettingsProp
       </div>
 
       {/* Provider Tabs */}
-      <div className="flex flex-wrap gap-2 mb-4 border-b border-border pb-4">
+      <div className="flex flex-wrap gap-1.5 sm:gap-2 mb-4 border-b border-border pb-4">
         {providerTabs.map((provider) => {
           const config = AI_PROVIDERS[provider];
           const cred = providerCredentials[provider];
@@ -176,7 +176,7 @@ export default function AIProviderSettings({ authToken }: AIProviderSettingsProp
             <button
               key={provider}
               onClick={() => setActiveProvider(provider)}
-              className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition-colors ${
+              className={`flex items-center gap-1.5 sm:gap-2 px-2 sm:px-3 py-1.5 sm:py-2 rounded-lg text-xs sm:text-sm transition-colors ${
                 isActive
                   ? 'bg-primary text-primary-foreground'
                   : 'bg-muted/50 hover:bg-muted text-foreground'
@@ -268,7 +268,7 @@ export default function AIProviderSettings({ authToken }: AIProviderSettingsProp
             placeholder={providerCredentials[activeProvider]?.exists ? '新しいキーで上書き' : 'APIキーを入力'}
             className="w-full px-3 py-2 bg-input border border-border rounded-md text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary"
           />
-          <p className="text-xs text-muted-foreground mt-1">
+          <p className="text-xs text-muted-foreground mt-1 break-words">
             {activeProvider === 'openai' && 'OpenAI Platformからキーを取得: platform.openai.com'}
             {activeProvider === 'gemini' && 'Google AI Studioからキーを取得: aistudio.google.com'}
             {activeProvider === 'anthropic' && 'Anthropic Consoleからキーを取得: console.anthropic.com'}
