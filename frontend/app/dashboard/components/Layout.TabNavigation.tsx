@@ -126,6 +126,21 @@ const TabIcon = ({ type, className = '' }: { type: TabConfig['iconType']; classN
           <circle cx="12" cy="15" r="1" />
         </svg>
       );
+    case 'moc':
+      // MOC icon (orchestration/sun-like)
+      return (
+        <svg {...iconProps}>
+          <circle cx="12" cy="12" r="3" />
+          <path d="M12 2v4" />
+          <path d="M12 18v4" />
+          <path d="m4.93 4.93 2.83 2.83" />
+          <path d="m16.24 16.24 2.83 2.83" />
+          <path d="M2 12h4" />
+          <path d="M18 12h4" />
+          <path d="m4.93 19.07 2.83-2.83" />
+          <path d="m16.24 7.76 2.83-2.83" />
+        </svg>
+      );
     default:
       return null;
   }

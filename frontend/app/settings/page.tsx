@@ -539,31 +539,33 @@ export default function SettingsPage() {
           </nav>
         </aside>
 
-        {/* Mobile navigation */}
+        {/* Mobile navigation - icons only to prevent overlap */}
         <div className="md:hidden fixed top-14 left-0 right-0 z-40 bg-card border-b border-border">
-          <div className="flex overflow-x-auto p-2 gap-2">
+          <div className="flex justify-around p-2">
             {sections.map((section) => (
               section.href ? (
                 <Link
                   key={section.id}
                   href={section.href}
-                  className="flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium whitespace-nowrap transition-colors text-muted-foreground hover:bg-accent"
+                  className="flex flex-col items-center justify-center p-2 rounded-md transition-colors text-muted-foreground hover:bg-accent hover:text-foreground"
+                  title={section.label}
                 >
                   {section.icon}
-                  {section.label}
+                  <span className="text-[10px] mt-0.5 truncate max-w-[48px]">{section.label}</span>
                 </Link>
               ) : (
                 <button
                   key={section.id}
                   onClick={() => setActiveSection(section.id)}
-                  className={`flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium whitespace-nowrap transition-colors ${
+                  className={`flex flex-col items-center justify-center p-2 rounded-md transition-colors ${
                     activeSection === section.id
                       ? 'bg-primary text-primary-foreground'
-                      : 'text-muted-foreground hover:bg-accent'
+                      : 'text-muted-foreground hover:bg-accent hover:text-foreground'
                   }`}
+                  title={section.label}
                 >
                   {section.icon}
-                  {section.label}
+                  <span className="text-[10px] mt-0.5 truncate max-w-[48px]">{section.label}</span>
                 </button>
               )
             ))}
