@@ -511,21 +511,28 @@ interface ChatMessage {
   content: string;
   timestamp: Date;
 }
-const chatHistories = new Map<string, ChatMessage[]>();
+interface SessionData {
+  history: ChatMessage[];
+  systemPrompt?: string; // Persist system prompt per session
+}
+const chatHistories = new Map<string, SessionData>();
 
 // Format conversation history into a prompt
-function formatChatPrompt(message: string, history: ChatMessage[], systemPrompt?: string): string {
+function formatChatPrompt(message: string, sessionData: SessionData, systemPrompt?: string): string {
   const parts: string[] = [];
 
-  // Add system prompt if provided (for AI Coach mode)
-  if (systemPrompt) {
-    parts.push(`System: ${systemPrompt}\n`);
+  // Use provided systemPrompt, or fall back to session's stored systemPrompt, or default
+  const effectiveSystemPrompt = systemPrompt || sessionData.systemPrompt;
+
+  if (effectiveSystemPrompt) {
+    parts.push(`System: ${effectiveSystemPrompt}\n`);
   } else {
     // Default system prompt
     parts.push('You are a helpful AI assistant. Respond conversationally and helpfully to the user\'s messages. Keep responses concise but informative.\n');
   }
 
   // Add conversation history (last 10 messages for context)
+  const history = sessionData.history;
   if (history && history.length > 0) {
     parts.push('Previous conversation:');
     for (const msg of history.slice(-10)) {
@@ -553,10 +560,10 @@ app.get('/agents/:agentId/chat', async (req, res) => {
     return res.status(400).json({ success: false, error: 'Message required' });
   }
 
-  // Get or create session history
-  let history = chatHistories.get(sessionId) || [];
+  // Get or create session data
+  let sessionData = chatHistories.get(sessionId) || { history: [] };
 
-  console.log(`[Chat] Session: ${sessionId}, History: ${history.length} messages, SystemPrompt: ${systemPrompt ? 'provided' : 'default'}`);
+  console.log(`[Chat] Session: ${sessionId}, History: ${sessionData.history.length} messages, SystemPrompt: ${systemPrompt ? 'provided' : 'default'}`);
 
   // Set up SSE for streaming response
   res.setHeader('Content-Type', 'text/event-stream');
@@ -568,13 +575,15 @@ app.get('/agents/:agentId/chat', async (req, res) => {
 
   try {
     // Build prompt with history and system prompt
-    const prompt = formatChatPrompt(message, history, systemPrompt);
+    const prompt = formatChatPrompt(message, sessionData, systemPrompt);
 
-    const claudeProcess: ChildProcess = spawn('claude', ['--print', prompt], {
+    // Use stdin to pass prompt (command line args fail with newlines/special chars)
+    const claudeProcess: ChildProcess = spawn('claude', ['--print'], {
       stdio: ['pipe', 'pipe', 'pipe'],
     });
 
-    // stdinを閉じないとClaude CLIがハングする
+    // Write prompt to stdin and close it
+    claudeProcess.stdin?.write(prompt);
     claudeProcess.stdin?.end();
 
     let fullResponse = '';
@@ -591,14 +600,97 @@ app.get('/agents/:agentId/chat', async (req, res) => {
 
     claudeProcess.on('close', (code: number | null) => {
       // Save conversation to history
-      history.push({ role: 'user', content: message, timestamp: new Date() });
-      history.push({ role: 'assistant', content: fullResponse.trim(), timestamp: new Date() });
+      sessionData.history.push({ role: 'user', content: message, timestamp: new Date() });
+      sessionData.history.push({ role: 'assistant', content: fullResponse.trim(), timestamp: new Date() });
 
       // Keep only last 20 messages
-      if (history.length > 20) {
-        history = history.slice(-20);
+      if (sessionData.history.length > 20) {
+        sessionData.history = sessionData.history.slice(-20);
       }
-      chatHistories.set(sessionId, history);
+      chatHistories.set(sessionId, sessionData);
+
+      res.write(`data: ${JSON.stringify({
+        type: 'complete',
+        content: fullResponse,
+        sessionId,
+        exitCode: code
+      })}\n\n`);
+      res.end();
+    });
+
+    claudeProcess.on('error', (err: Error) => {
+      res.write(`data: ${JSON.stringify({ type: 'error', error: err.message })}\n\n`);
+      res.end();
+    });
+
+    req.on('close', () => {
+      claudeProcess.kill();
+    });
+
+  } catch (err) {
+    const errorMessage = err instanceof Error ? err.message : 'Unknown error';
+    res.write(`data: ${JSON.stringify({ type: 'error', error: errorMessage })}\n\n`);
+    res.end();
+  }
+});
+
+// Chat endpoint (POST) - for long system prompts that exceed URL length limits
+app.post('/agents/:agentId/chat', async (req, res) => {
+  const { message, sessionId: reqSessionId, systemPrompt } = req.body;
+  const sessionId = reqSessionId || `chat-${uuidv4().slice(0, 8)}`;
+
+  if (!message || typeof message !== 'string') {
+    return res.status(400).json({ success: false, error: 'Message required' });
+  }
+
+  // Get or create session data
+  let sessionData = chatHistories.get(sessionId) || { history: [] };
+
+  console.log(`[Chat POST] Session: ${sessionId}, History: ${sessionData.history.length} messages, SystemPrompt: ${systemPrompt ? `provided (${systemPrompt.length} chars)` : 'default'}`);
+
+  // Set up SSE for streaming response
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+  res.setHeader('X-Accel-Buffering', 'no');
+
+  res.write(`data: ${JSON.stringify({ type: 'session', sessionId })}\n\n`);
+
+  try {
+    // Build prompt with history and system prompt
+    const prompt = formatChatPrompt(message, sessionData, systemPrompt);
+
+    // Use stdin to pass prompt (command line args fail with newlines/special chars)
+    const claudeProcess: ChildProcess = spawn('claude', ['--print'], {
+      stdio: ['pipe', 'pipe', 'pipe'],
+    });
+
+    // Write prompt to stdin and close it
+    claudeProcess.stdin?.write(prompt);
+    claudeProcess.stdin?.end();
+
+    let fullResponse = '';
+
+    claudeProcess.stdout?.on('data', (data: Buffer) => {
+      const text = data.toString();
+      fullResponse += text;
+      res.write(`data: ${JSON.stringify({ type: 'token', token: text })}\n\n`);
+    });
+
+    claudeProcess.stderr?.on('data', (data: Buffer) => {
+      console.error('[Chat POST] stderr:', data.toString());
+    });
+
+    claudeProcess.on('close', (code: number | null) => {
+      // Save conversation to history
+      sessionData.history.push({ role: 'user', content: message, timestamp: new Date() });
+      sessionData.history.push({ role: 'assistant', content: fullResponse.trim(), timestamp: new Date() });
+
+      // Keep only last 20 messages
+      if (sessionData.history.length > 20) {
+        sessionData.history = sessionData.history.slice(-20);
+      }
+      chatHistories.set(sessionId, sessionData);
 
       res.write(`data: ${JSON.stringify({
         type: 'complete',
@@ -667,8 +759,9 @@ app.listen(PORT, HOST, () => {
   console.log('    POST /tasks/:id/submit    - Submit result');
   console.log('');
   console.log('  Chat (Claude Code):');
-  console.log('    GET  /agents/:id/chat     - Chat via SSE (EventSource)');
-  console.log('      Query params: message, sessionId, systemPrompt');
+  console.log('    GET  /agents/:id/chat     - Chat via SSE (short prompts)');
+  console.log('    POST /agents/:id/chat     - Chat via SSE (long prompts)');
+  console.log('      Body: { message, sessionId?, systemPrompt? }');
   console.log('============================================================');
 });
 SERVER_EOF
