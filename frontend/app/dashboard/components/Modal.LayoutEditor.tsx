@@ -5,7 +5,7 @@ import { useLocale } from '@/contexts/LocaleContext'
 import { useHandedness } from '../contexts/HandednessContext'
 import { ModalHeaderButtons } from './Widget.StickyFooter'
 
-type SectionId = 'next' | 'activity' | 'calendar' | 'statics' | 'diary' | 'stickies' | 'mindmap' | 'notices' | 'coach' | 'agents'
+type SectionId = 'next' | 'activity' | 'calendar' | 'statics' | 'diary' | 'stickies' | 'mindmap' | 'notices' | 'coach' | 'agents' | 'moc'
 
 export default function EditLayoutModal({ open, onClose, sections, onChange, onAdd, onDelete }: { open: boolean; onClose: () => void; sections: SectionId[]; onChange: (s: SectionId[]) => void; onAdd: (id: SectionId) => void; onDelete: (id: SectionId) => void }) {
   const [local, setLocal] = React.useState<SectionId[]>(sections || [])
@@ -38,6 +38,7 @@ export default function EditLayoutModal({ open, onClose, sections, onChange, onA
     { id: 'notices', label: 'Notices' },
     { id: 'coach', label: 'AI Coach' },
     { id: 'agents', label: 'Agents' },
+    { id: 'moc', label: 'MOC' },
   ]
 
   return (
