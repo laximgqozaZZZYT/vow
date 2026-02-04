@@ -335,9 +335,23 @@ const tasks = new Map<string, Task>();
 const chatSessions = new Map<string, ChatSession>();
 const sseClients = new Map<string, Response>();
 
+// CORS configuration - allow all origins with credentials and custom headers
+// This is necessary for cross-origin requests from VOW frontend (Amplify)
+const corsOptions = {
+  origin: true, // Allow all origins (reflect request origin)
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'Accept', 'Cache-Control', 'X-Requested-With'],
+  exposedHeaders: ['Content-Type', 'Authorization'],
+  maxAge: 86400, // Cache preflight for 24 hours
+};
+
 // Middleware
-app.use(cors());
+app.use(cors(corsOptions));
 app.use(express.json());
+
+// Explicit OPTIONS handler for preflight requests
+app.options('*', cors(corsOptions));
 
 // Auth middleware
 const authMiddleware = (req: Request, res: Response, next: NextFunction) => {
@@ -517,6 +531,9 @@ app.get('/agents/:agentId/chat', async (req, res) => {
     const claudeProcess: ChildProcess = spawn('claude', ['--print', prompt], {
       stdio: ['pipe', 'pipe', 'pipe'],
     });
+
+    // stdinを閉じないとClaude CLIがハングする
+    claudeProcess.stdin?.end();
 
     let fullResponse = '';
 
