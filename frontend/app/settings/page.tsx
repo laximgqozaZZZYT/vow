@@ -573,8 +573,8 @@ export default function SettingsPage() {
         </div>
 
         {/* Main content */}
-        <main className="flex-1 md:ml-64 p-4 sm:p-6 mt-14 md:mt-0">
-          <div className="max-w-2xl mx-auto">
+        <main className="flex-1 md:ml-64 p-4 sm:p-6 mt-14 md:mt-0 overflow-x-hidden">
+          <div className="max-w-2xl mx-auto w-full">
             {activeSection === 'profile' && (
               <div className="space-y-6">
                 {/* User Level Section */}
@@ -1071,7 +1071,7 @@ export default function SettingsPage() {
                   )}
 
                   {/* MCP Server Configuration */}
-                  <div className="bg-card border border-border rounded-lg p-6 mb-6">
+                  <div className="bg-card border border-border rounded-lg p-4 sm:p-6 mb-6">
                     <div className="flex items-center gap-3 mb-4">
                       <div className="w-10 h-10 bg-primary/10 rounded-lg flex items-center justify-center">
                         <svg className="w-5 h-5 text-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1117,7 +1117,7 @@ export default function SettingsPage() {
                                   onDrop={(e) => handleDrop(e, server.id)}
                                   onDragEnd={handleDragEnd}
                                   onClick={() => handleStartEditServer(server)}
-                                  className={`flex items-center justify-between p-3 bg-muted/50 rounded-lg border transition-all cursor-pointer ${
+                                  className={`p-3 bg-muted/50 rounded-lg border transition-all cursor-pointer ${
                                     isDragging
                                       ? 'border-primary opacity-50'
                                       : editingServerId === server.id
@@ -1125,70 +1125,72 @@ export default function SettingsPage() {
                                         : 'border-border hover:border-primary/50 hover:bg-muted'
                                   }`}
                                 >
-                                  <div className="flex items-center gap-3">
-                                    {/* Drag handle */}
-                                    <div className="flex-shrink-0 text-muted-foreground cursor-grab active:cursor-grabbing">
-                                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8h16M4 16h16" />
-                                      </svg>
-                                    </div>
-                                    {/* Priority badge */}
-                                    <div className="flex-shrink-0 w-6 h-6 flex items-center justify-center bg-primary/10 rounded text-xs font-medium text-primary" title={`優先度: ${server.priority ?? 5}`}>
-                                      {server.priority ?? 5}
-                                    </div>
-                                    {/* Status indicator */}
-                                    <div className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${
-                                      isConnected ? 'bg-green-500' :
-                                      isConnecting ? 'bg-yellow-500 animate-pulse' :
-                                      hasError ? 'bg-red-500' :
-                                      'bg-gray-400'
-                                    }`} />
-                                    <div className="min-w-0">
-                                      <div className="flex items-center gap-2">
-                                        <span className="font-medium">{server.name}</span>
-                                        {!server.enabled && (
-                                          <span className="text-[10px] px-1.5 py-0.5 bg-muted text-muted-foreground rounded">
-                                            無効
-                                          </span>
+                                  <div className="flex items-start sm:items-center justify-between gap-2">
+                                    <div className="flex items-center gap-2 sm:gap-3 min-w-0 flex-1">
+                                      {/* Drag handle */}
+                                      <div className="flex-shrink-0 text-muted-foreground cursor-grab active:cursor-grabbing hidden sm:block">
+                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8h16M4 16h16" />
+                                        </svg>
+                                      </div>
+                                      {/* Priority badge */}
+                                      <div className="flex-shrink-0 w-6 h-6 flex items-center justify-center bg-primary/10 rounded text-xs font-medium text-primary" title={`優先度: ${server.priority ?? 5}`}>
+                                        {server.priority ?? 5}
+                                      </div>
+                                      {/* Status indicator */}
+                                      <div className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${
+                                        isConnected ? 'bg-green-500' :
+                                        isConnecting ? 'bg-yellow-500 animate-pulse' :
+                                        hasError ? 'bg-red-500' :
+                                        'bg-gray-400'
+                                      }`} />
+                                      <div className="min-w-0 flex-1">
+                                        <div className="flex items-center gap-2 flex-wrap">
+                                          <span className="font-medium text-sm">{server.name}</span>
+                                          {!server.enabled && (
+                                            <span className="text-[10px] px-1.5 py-0.5 bg-muted text-muted-foreground rounded">
+                                              無効
+                                            </span>
+                                          )}
+                                        </div>
+                                        <div className="text-xs text-muted-foreground truncate max-w-full sm:max-w-[200px]">
+                                          {server.serverUrl}
+                                        </div>
+                                        {hasError && connection?.error && (
+                                          <div className="text-xs text-destructive mt-1 break-words">
+                                            {connection.error}
+                                          </div>
                                         )}
                                       </div>
-                                      <div className="text-xs text-muted-foreground truncate max-w-[200px]">
-                                        {server.serverUrl}
-                                      </div>
-                                      {hasError && connection?.error && (
-                                        <div className="text-xs text-destructive mt-1">
-                                          {connection.error}
-                                        </div>
-                                      )}
                                     </div>
-                                  </div>
-                                  <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
-                                    <button
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        handleToggleServerConnection(server);
-                                      }}
-                                      disabled={isConnecting}
-                                      className={`px-3 py-1.5 text-xs rounded-md transition-colors ${
-                                        isConnected
-                                          ? 'bg-destructive/10 text-destructive hover:bg-destructive/20'
-                                          : 'bg-primary/10 text-primary hover:bg-primary/20'
-                                      } disabled:opacity-50`}
-                                    >
-                                      {isConnecting ? '接続中...' : isConnected ? '切断' : '接続'}
-                                    </button>
-                                    <button
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        handleDeleteServer(server.id);
-                                      }}
-                                      className="p-1.5 text-muted-foreground hover:text-destructive transition-colors"
-                                      title="削除"
-                                    >
-                                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                                      </svg>
-                                    </button>
+                                    <div className="flex items-center gap-1 sm:gap-2 flex-shrink-0" onClick={(e) => e.stopPropagation()}>
+                                      <button
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          handleToggleServerConnection(server);
+                                        }}
+                                        disabled={isConnecting}
+                                        className={`px-2 sm:px-3 py-1 sm:py-1.5 text-[10px] sm:text-xs rounded-md transition-colors ${
+                                          isConnected
+                                            ? 'bg-destructive/10 text-destructive hover:bg-destructive/20'
+                                            : 'bg-primary/10 text-primary hover:bg-primary/20'
+                                        } disabled:opacity-50`}
+                                      >
+                                        {isConnecting ? '...' : isConnected ? '切断' : '接続'}
+                                      </button>
+                                      <button
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          handleDeleteServer(server.id);
+                                        }}
+                                        className="p-1 sm:p-1.5 text-muted-foreground hover:text-destructive transition-colors"
+                                        title="削除"
+                                      >
+                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                        </svg>
+                                      </button>
+                                    </div>
                                   </div>
                                 </div>
                               );
@@ -1356,7 +1358,7 @@ export default function SettingsPage() {
                   </div>
 
                   {/* Chat Agent Settings */}
-                  <div className="bg-card border border-border rounded-lg p-6 mb-6">
+                  <div className="bg-card border border-border rounded-lg p-4 sm:p-6 mb-6">
                     <div className="flex items-center gap-3 mb-4">
                       <div className="w-10 h-10 bg-purple-500/10 rounded-lg flex items-center justify-center">
                         <svg className="w-5 h-5 text-purple-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">

@@ -591,8 +591,8 @@ export default function JwtTokensPage() {
         </div>
 
         {/* Main content */}
-        <main className="flex-1 md:ml-64 p-4 sm:p-6 mt-14 md:mt-0">
-          <div className="max-w-2xl mx-auto">
+        <main className="flex-1 md:ml-64 p-4 sm:p-6 mt-14 md:mt-0 overflow-x-hidden">
+          <div className="max-w-2xl mx-auto w-full">
             {/* Page Header */}
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
               <div>

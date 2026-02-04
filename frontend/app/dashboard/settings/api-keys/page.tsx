@@ -589,8 +589,8 @@ export default function ApiKeysPage() {
         </div>
 
         {/* Main content */}
-        <main className="flex-1 md:ml-64 p-4 sm:p-6 mt-14 md:mt-0">
-          <div className="max-w-2xl mx-auto">
+        <main className="flex-1 md:ml-64 p-4 sm:p-6 mt-14 md:mt-0 overflow-x-hidden">
+          <div className="max-w-2xl mx-auto w-full">
             {/* Page Header */}
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
               <div>
@@ -967,8 +967,10 @@ X-API-Key: your-api-key-here
           {/* Base URL Note */}
           <div className="mt-6 p-3 bg-muted/50 rounded-lg">
             <p className="text-xs text-muted-foreground">
-              <strong>Note:</strong> Replace <code className="px-1 bg-muted rounded">http://localhost:4000</code> with the production API URL when deploying.
-              Production URL: <code className="px-1 bg-muted rounded">https://lyry9riumg.execute-api.ap-northeast-1.amazonaws.com/development</code>
+              <strong>Note:</strong> Replace <code className="px-1 bg-muted rounded break-all">http://localhost:4000</code> with the production API URL when deploying.
+            </p>
+            <p className="text-xs text-muted-foreground mt-1">
+              Production URL: <code className="px-1 bg-muted rounded break-all text-[10px]">https://lyry9riumg.execute-api.ap-northeast-1.amazonaws.com/development</code>
             </p>
           </div>
         </div>
