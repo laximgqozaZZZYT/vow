@@ -519,10 +519,10 @@ function formatChatPrompt(message: string, history: ChatMessage[], systemPrompt?
 
   // Add system prompt if provided (for AI Coach mode)
   if (systemPrompt) {
-    parts.push(\`System: \${systemPrompt}\n\`);
+    parts.push(`System: ${systemPrompt}\n`);
   } else {
     // Default system prompt
-    parts.push('You are a helpful AI assistant. Respond conversationally and helpfully to the user\\'s messages. Keep responses concise but informative.\n');
+    parts.push('You are a helpful AI assistant. Respond conversationally and helpfully to the user\'s messages. Keep responses concise but informative.\n');
   }
 
   // Add conversation history (last 10 messages for context)
@@ -530,13 +530,13 @@ function formatChatPrompt(message: string, history: ChatMessage[], systemPrompt?
     parts.push('Previous conversation:');
     for (const msg of history.slice(-10)) {
       const role = msg.role === 'user' ? 'User' : msg.role === 'assistant' ? 'Assistant' : 'System';
-      parts.push(\`\${role}: \${msg.content}\`);
+      parts.push(`${role}: ${msg.content}`);
     }
     parts.push('');
   }
 
   // Add current message
-  parts.push(\`User: \${message}\`);
+  parts.push(`User: ${message}`);
   parts.push('');
   parts.push('Assistant:');
 
@@ -546,7 +546,7 @@ function formatChatPrompt(message: string, history: ChatMessage[], systemPrompt?
 // Chat endpoint - executes Claude Code with session memory and AI Coach support
 app.get('/agents/:agentId/chat', async (req, res) => {
   const message = req.query.message as string;
-  const sessionId = (req.query.sessionId as string) || \`chat-\${uuidv4().slice(0, 8)}\`;
+  const sessionId = (req.query.sessionId as string) || `chat-${uuidv4().slice(0, 8)}`;
   const systemPrompt = req.query.systemPrompt as string | undefined; // AI Coach system prompt
 
   if (!message || typeof message !== 'string') {
@@ -556,7 +556,7 @@ app.get('/agents/:agentId/chat', async (req, res) => {
   // Get or create session history
   let history = chatHistories.get(sessionId) || [];
 
-  console.log(\`[Chat] Session: \${sessionId}, History: \${history.length} messages, SystemPrompt: \${systemPrompt ? 'provided' : 'default'}\`);
+  console.log(`[Chat] Session: ${sessionId}, History: ${history.length} messages, SystemPrompt: ${systemPrompt ? 'provided' : 'default'}`);
 
   // Set up SSE for streaming response
   res.setHeader('Content-Type', 'text/event-stream');
@@ -564,7 +564,7 @@ app.get('/agents/:agentId/chat', async (req, res) => {
   res.setHeader('Connection', 'keep-alive');
   res.setHeader('X-Accel-Buffering', 'no');
 
-  res.write(\`data: \${JSON.stringify({ type: 'session', sessionId })}\n\n\`);
+  res.write(`data: ${JSON.stringify({ type: 'session', sessionId })}\n\n`);
 
   try {
     // Build prompt with history and system prompt
@@ -582,7 +582,7 @@ app.get('/agents/:agentId/chat', async (req, res) => {
     claudeProcess.stdout?.on('data', (data: Buffer) => {
       const text = data.toString();
       fullResponse += text;
-      res.write(\`data: \${JSON.stringify({ type: 'token', token: text })}\n\n\`);
+      res.write(`data: ${JSON.stringify({ type: 'token', token: text })}\n\n`);
     });
 
     claudeProcess.stderr?.on('data', (data: Buffer) => {
@@ -600,17 +600,17 @@ app.get('/agents/:agentId/chat', async (req, res) => {
       }
       chatHistories.set(sessionId, history);
 
-      res.write(\`data: \${JSON.stringify({
+      res.write(`data: ${JSON.stringify({
         type: 'complete',
         content: fullResponse,
         sessionId,
         exitCode: code
-      })}\n\n\`);
+      })}\n\n`);
       res.end();
     });
 
     claudeProcess.on('error', (err: Error) => {
-      res.write(\`data: \${JSON.stringify({ type: 'error', error: err.message })}\n\n\`);
+      res.write(`data: ${JSON.stringify({ type: 'error', error: err.message })}\n\n`);
       res.end();
     });
 
@@ -620,7 +620,7 @@ app.get('/agents/:agentId/chat', async (req, res) => {
 
   } catch (err) {
     const errorMessage = err instanceof Error ? err.message : 'Unknown error';
-    res.write(\`data: \${JSON.stringify({ type: 'error', error: errorMessage })}\n\n\`);
+    res.write(`data: ${JSON.stringify({ type: 'error', error: errorMessage })}\n\n`);
     res.end();
   }
 });
