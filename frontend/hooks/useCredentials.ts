@@ -9,7 +9,71 @@
 
 import { useState, useCallback, useEffect } from 'react';
 
-export type CredentialType = 'openai' | 'anthropic' | 'custom';
+export type CredentialType = 'openai' | 'anthropic' | 'gemini' | 'codex' | 'custom';
+
+/**
+ * AI Provider configuration for UI
+ */
+export interface AIProviderConfig {
+  id: CredentialType;
+  name: string;
+  nameJa: string;
+  defaultModel: string;
+  models: string[];
+  description: string;
+  descriptionJa: string;
+}
+
+/**
+ * Available AI providers configuration
+ */
+export const AI_PROVIDERS: Record<CredentialType, AIProviderConfig> = {
+  openai: {
+    id: 'openai',
+    name: 'OpenAI',
+    nameJa: 'OpenAI',
+    defaultModel: 'gpt-4o',
+    models: ['gpt-4o', 'gpt-4o-mini', 'gpt-4-turbo', 'gpt-4', 'gpt-3.5-turbo'],
+    description: 'GPT-4 and GPT-3.5 models for general AI tasks',
+    descriptionJa: '汎用AIタスク向けGPT-4/GPT-3.5モデル',
+  },
+  anthropic: {
+    id: 'anthropic',
+    name: 'Anthropic Claude',
+    nameJa: 'Anthropic Claude',
+    defaultModel: 'claude-sonnet-4-20250514',
+    models: ['claude-sonnet-4-20250514', 'claude-opus-4-20250514', 'claude-3-5-sonnet-20241022', 'claude-3-5-haiku-20241022'],
+    description: 'Claude models - great for analysis and coding',
+    descriptionJa: 'Claude モデル - 分析とコーディングに最適',
+  },
+  gemini: {
+    id: 'gemini',
+    name: 'Google Gemini',
+    nameJa: 'Google Gemini',
+    defaultModel: 'gemini-2.0-flash',
+    models: ['gemini-2.0-flash', 'gemini-2.0-flash-lite', 'gemini-1.5-pro', 'gemini-1.5-flash'],
+    description: 'Google Gemini models with multimodal capabilities',
+    descriptionJa: 'マルチモーダル対応のGoogle Geminiモデル',
+  },
+  codex: {
+    id: 'codex',
+    name: 'OpenAI Codex/o-series',
+    nameJa: 'OpenAI Codex/oシリーズ',
+    defaultModel: 'codex-mini-latest',
+    models: ['codex-mini-latest', 'o3-mini', 'o1-mini', 'o1'],
+    description: 'OpenAI reasoning models (o1, o3) and Codex',
+    descriptionJa: 'OpenAI推論モデル（o1、o3）とCodex',
+  },
+  custom: {
+    id: 'custom',
+    name: 'Custom Provider',
+    nameJa: 'カスタムプロバイダー',
+    defaultModel: '',
+    models: [],
+    description: 'Custom OpenAI-compatible API endpoint',
+    descriptionJa: 'OpenAI互換カスタムAPIエンドポイント',
+  },
+};
 
 export interface CredentialInfo {
   exists: boolean;
