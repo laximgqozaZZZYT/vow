@@ -23,7 +23,7 @@ set -e
 # Configuration
 # =============================================================================
 
-VERSION="1.0.0"
+VERSION="1.1.0"
 DEFAULT_INSTALL_DIR="${HOME}/.mcp-multi-agent"
 DEFAULT_PORT="3456"
 REPO_URL="${REPO_URL:-https://github.com/laximgqozaZZZYT/vow}"
@@ -505,14 +505,58 @@ app.post('/tasks/:id/submit', (req, res) => {
   res.json({ success: true, data: task });
 });
 
-// Chat endpoint - executes Claude Code
+// Chat history storage for session persistence
+interface ChatMessage {
+  role: 'user' | 'assistant' | 'system';
+  content: string;
+  timestamp: Date;
+}
+const chatHistories = new Map<string, ChatMessage[]>();
+
+// Format conversation history into a prompt
+function formatChatPrompt(message: string, history: ChatMessage[], systemPrompt?: string): string {
+  const parts: string[] = [];
+
+  // Add system prompt if provided (for AI Coach mode)
+  if (systemPrompt) {
+    parts.push(\`System: \${systemPrompt}\n\`);
+  } else {
+    // Default system prompt
+    parts.push('You are a helpful AI assistant. Respond conversationally and helpfully to the user\\'s messages. Keep responses concise but informative.\n');
+  }
+
+  // Add conversation history (last 10 messages for context)
+  if (history && history.length > 0) {
+    parts.push('Previous conversation:');
+    for (const msg of history.slice(-10)) {
+      const role = msg.role === 'user' ? 'User' : msg.role === 'assistant' ? 'Assistant' : 'System';
+      parts.push(\`\${role}: \${msg.content}\`);
+    }
+    parts.push('');
+  }
+
+  // Add current message
+  parts.push(\`User: \${message}\`);
+  parts.push('');
+  parts.push('Assistant:');
+
+  return parts.join('\n');
+}
+
+// Chat endpoint - executes Claude Code with session memory and AI Coach support
 app.get('/agents/:agentId/chat', async (req, res) => {
-  const { message } = req.query;
-  const sessionId = `chat-${uuidv4().slice(0, 8)}`;
+  const message = req.query.message as string;
+  const sessionId = (req.query.sessionId as string) || \`chat-\${uuidv4().slice(0, 8)}\`;
+  const systemPrompt = req.query.systemPrompt as string | undefined; // AI Coach system prompt
 
   if (!message || typeof message !== 'string') {
     return res.status(400).json({ success: false, error: 'Message required' });
   }
+
+  // Get or create session history
+  let history = chatHistories.get(sessionId) || [];
+
+  console.log(\`[Chat] Session: \${sessionId}, History: \${history.length} messages, SystemPrompt: \${systemPrompt ? 'provided' : 'default'}\`);
 
   // Set up SSE for streaming response
   res.setHeader('Content-Type', 'text/event-stream');
@@ -520,13 +564,11 @@ app.get('/agents/:agentId/chat', async (req, res) => {
   res.setHeader('Connection', 'keep-alive');
   res.setHeader('X-Accel-Buffering', 'no');
 
-  res.write(`data: ${JSON.stringify({ type: 'session', sessionId })}\n\n`);
+  res.write(\`data: \${JSON.stringify({ type: 'session', sessionId })}\n\n\`);
 
   try {
-    // Build Claude Code command
-    const systemPrompt = `You are a helpful AI assistant. Respond conversationally and helpfully to the user's messages. Keep responses concise but informative.`;
-
-    const prompt = `${systemPrompt}\n\nUser: ${message}\n\nAssistant:`;
+    // Build prompt with history and system prompt
+    const prompt = formatChatPrompt(message, history, systemPrompt);
 
     const claudeProcess: ChildProcess = spawn('claude', ['--print', prompt], {
       stdio: ['pipe', 'pipe', 'pipe'],
@@ -540,7 +582,7 @@ app.get('/agents/:agentId/chat', async (req, res) => {
     claudeProcess.stdout?.on('data', (data: Buffer) => {
       const text = data.toString();
       fullResponse += text;
-      res.write(`data: ${JSON.stringify({ type: 'token', token: text })}\n\n`);
+      res.write(\`data: \${JSON.stringify({ type: 'token', token: text })}\n\n\`);
     });
 
     claudeProcess.stderr?.on('data', (data: Buffer) => {
@@ -548,17 +590,27 @@ app.get('/agents/:agentId/chat', async (req, res) => {
     });
 
     claudeProcess.on('close', (code: number | null) => {
-      res.write(`data: ${JSON.stringify({
+      // Save conversation to history
+      history.push({ role: 'user', content: message, timestamp: new Date() });
+      history.push({ role: 'assistant', content: fullResponse.trim(), timestamp: new Date() });
+
+      // Keep only last 20 messages
+      if (history.length > 20) {
+        history = history.slice(-20);
+      }
+      chatHistories.set(sessionId, history);
+
+      res.write(\`data: \${JSON.stringify({
         type: 'complete',
         content: fullResponse,
         sessionId,
         exitCode: code
-      })}\n\n`);
+      })}\n\n\`);
       res.end();
     });
 
     claudeProcess.on('error', (err: Error) => {
-      res.write(`data: ${JSON.stringify({ type: 'error', error: err.message })}\n\n`);
+      res.write(\`data: \${JSON.stringify({ type: 'error', error: err.message })}\n\n\`);
       res.end();
     });
 
@@ -568,7 +620,7 @@ app.get('/agents/:agentId/chat', async (req, res) => {
 
   } catch (err) {
     const errorMessage = err instanceof Error ? err.message : 'Unknown error';
-    res.write(`data: ${JSON.stringify({ type: 'error', error: errorMessage })}\n\n`);
+    res.write(\`data: \${JSON.stringify({ type: 'error', error: errorMessage })}\n\n\`);
     res.end();
   }
 });
@@ -590,7 +642,7 @@ app.get('/dashboard', (_req, res) => {
 // Start server
 app.listen(PORT, HOST, () => {
   console.log('============================================================');
-  console.log('  Task Distribution Server v2.2 (Remote Execution + Chat)');
+  console.log('  Task Distribution Server v2.3 (Chat with Session Memory)');
   console.log('============================================================');
   console.log(`  Status:    Running`);
   console.log(`  Host:      ${HOST}`);
@@ -616,6 +668,7 @@ app.listen(PORT, HOST, () => {
   console.log('');
   console.log('  Chat (Claude Code):');
   console.log('    GET  /agents/:id/chat     - Chat via SSE (EventSource)');
+  console.log('      Query params: message, sessionId, systemPrompt');
   console.log('============================================================');
 });
 SERVER_EOF
