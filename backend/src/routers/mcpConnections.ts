@@ -103,6 +103,7 @@ function migrateLegacyConfig(legacy: z.infer<typeof legacyMcpConnectionSchema>):
       serverToken: legacy.serverToken || '',
       enabled: legacy.enabled,
       autoConnect: legacy.autoConnect,
+      priority: 5, // Default priority
     });
   }
 
@@ -281,6 +282,7 @@ export function createMcpConnectionsRouter(): Hono {
         showInDashboard: settings.showInDashboard,
         notifyOnTaskComplete: settings.notifyOnTaskComplete,
         notifyOnAgentOffline: settings.notifyOnAgentOffline,
+        chatAgentSettings: settings.chatAgentSettings,
         updatedAt: new Date().toISOString(),
       };
 

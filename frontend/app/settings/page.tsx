@@ -1,7 +1,8 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Suspense } from 'react';
 import Link from 'next/link';
+import { useSearchParams } from 'next/navigation';
 import { useSlackIntegration } from '@/hooks/useSlackIntegration';
 import { TIME_OPTIONS } from '@/lib/types/slack';
 import { useNotificationPreferences } from '../hooks/useNotificationPreferences';
@@ -15,12 +16,35 @@ import { useSkillLevels } from '@/hooks/useSkillLevels';
 import { useMultiAgentServer } from '../dashboard/hooks/useMultiAgentServer';
 import type { McpServer } from '../dashboard/types/agent.types';
 import { useCredentials } from '@/hooks/useCredentials';
+import AIProviderSettings from './components/AIProviderSettings';
 
 // Feature flags from environment variables
 // Default to false if not set (safer for production)
 const ENABLE_SUBSCRIPTION = process.env.NEXT_PUBLIC_ENABLE_SUBSCRIPTION === 'true';
 
-type SettingsSection = 'profile' | 'notifications' | 'integrations' | 'api-keys' | 'ai-config';
+type SettingsSection = 'profile' | 'notifications' | 'integrations' | 'api-keys' | 'jwt-tokens' | 'ai-config';
+
+/**
+ * Hook to read section from URL query parameter
+ */
+function useSectionFromUrl(setActiveSection: (section: SettingsSection) => void) {
+  const searchParams = useSearchParams();
+
+  useEffect(() => {
+    const section = searchParams.get('section');
+    if (section && ['profile', 'notifications', 'integrations', 'ai-config'].includes(section)) {
+      setActiveSection(section as SettingsSection);
+    }
+  }, [searchParams, setActiveSection]);
+}
+
+/**
+ * Component to handle URL search params reading (wrapped in Suspense)
+ */
+function SectionFromUrl({ setActiveSection }: { setActiveSection: (section: SettingsSection) => void }) {
+  useSectionFromUrl(setActiveSection);
+  return null;
+}
 
 export default function SettingsPage() {
   const [activeSection, setActiveSection] = useState<SettingsSection>('profile');
@@ -83,7 +107,7 @@ export default function SettingsPage() {
   const [authToken, setAuthToken] = useState<string | null>(null);
 
   // Multi-Agent Server hook for MCP configuration
-  const multiAgentServer = useMultiAgentServer({ authToken: userId ? undefined : null });
+  const multiAgentServer = useMultiAgentServer({ authToken });
 
   // Credentials hook for OpenAI API key
   const {
@@ -110,6 +134,16 @@ export default function SettingsPage() {
   const [newServerToken, setNewServerToken] = useState('');
   const [showAddServer, setShowAddServer] = useState(false);
   const [editingServerId, setEditingServerId] = useState<string | null>(null);
+
+  // Edit server form state
+  const [editServerName, setEditServerName] = useState('');
+  const [editServerUrl, setEditServerUrl] = useState('');
+  const [editServerToken, setEditServerToken] = useState('');
+  const [editServerEnabled, setEditServerEnabled] = useState(true);
+  const [editServerPriority, setEditServerPriority] = useState(5);
+
+  // Drag and drop state
+  const [draggedServerId, setDraggedServerId] = useState<string | null>(null);
 
   // Load AI config from backend
   useEffect(() => {
@@ -214,6 +248,98 @@ export default function SettingsPage() {
   const handleDeleteServer = (serverId: string) => {
     if (!confirm('このサーバーを削除してもよろしいですか？')) return;
     multiAgentServer.removeServer(serverId);
+    if (editingServerId === serverId) {
+      setEditingServerId(null);
+    }
+  };
+
+  // Start editing a server
+  const handleStartEditServer = (server: McpServer) => {
+    setEditingServerId(server.id);
+    setEditServerName(server.name);
+    setEditServerUrl(server.serverUrl || '');
+    setEditServerToken(''); // Don't show existing token
+    setEditServerEnabled(server.enabled);
+    setEditServerPriority(server.priority ?? 5);
+    setShowAddServer(false);
+  };
+
+  // Save edited server
+  const handleSaveEditServer = () => {
+    if (!editingServerId || !editServerName.trim() || !editServerUrl.trim()) {
+      setAiConfigError('サーバー名とURLは必須です');
+      return;
+    }
+
+    // Build updates object, only including serverToken if it was provided
+    const updates: Partial<McpServer> = {
+      name: editServerName.trim(),
+      serverUrl: editServerUrl.trim(),
+      enabled: editServerEnabled,
+      priority: editServerPriority,
+    };
+
+    // Only update token if user entered a new one
+    if (editServerToken.trim()) {
+      updates.serverToken = editServerToken.trim();
+    }
+
+    multiAgentServer.updateServer(editingServerId, updates);
+
+    setEditingServerId(null);
+    setAiConfigError(null);
+  };
+
+  // Cancel editing
+  const handleCancelEditServer = () => {
+    setEditingServerId(null);
+    setEditServerName('');
+    setEditServerUrl('');
+    setEditServerToken('');
+    setEditServerEnabled(true);
+    setEditServerPriority(5);
+  };
+
+  // Drag and drop handlers
+  const handleDragStart = (serverId: string) => {
+    setDraggedServerId(serverId);
+  };
+
+  const handleDragOver = (e: React.DragEvent, targetServerId: string) => {
+    e.preventDefault();
+    if (!draggedServerId || draggedServerId === targetServerId) return;
+  };
+
+  const handleDrop = (e: React.DragEvent, targetServerId: string) => {
+    e.preventDefault();
+    if (!draggedServerId || draggedServerId === targetServerId) return;
+
+    const servers = [...multiAgentServer.config.servers];
+    const sortedServers = servers.sort((a, b) => (a.priority ?? 5) - (b.priority ?? 5));
+
+    const draggedIndex = sortedServers.findIndex(s => s.id === draggedServerId);
+    const targetIndex = sortedServers.findIndex(s => s.id === targetServerId);
+
+    if (draggedIndex === -1 || targetIndex === -1) return;
+
+    // Reorder the array
+    const [draggedServer] = sortedServers.splice(draggedIndex, 1);
+    sortedServers.splice(targetIndex, 0, draggedServer);
+
+    // Update priorities based on new order - update all servers at once to avoid race conditions
+    const updatedServers = sortedServers.map((server, index) => ({
+      ...server,
+      priority: index + 1,
+    }));
+
+    // Use updateConfig to update all servers in a single operation
+    multiAgentServer.updateConfig({ servers: updatedServers });
+
+    setDraggedServerId(null);
+  };
+
+  const handleDragEnd = () => {
+    setDraggedServerId(null);
   };
 
   // Toggle server connection
@@ -335,6 +461,16 @@ export default function SettingsPage() {
       ),
     },
     {
+      id: 'jwt-tokens',
+      label: 'JWT Tokens',
+      href: '/dashboard/settings/jwt-tokens',
+      icon: (
+        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+        </svg>
+      ),
+    },
+    {
       id: 'ai-config',
       label: 'AI設定',
       icon: (
@@ -347,6 +483,11 @@ export default function SettingsPage() {
 
   return (
     <div className="min-h-screen bg-background">
+      {/* URL section parameter handler */}
+      <Suspense fallback={null}>
+        <SectionFromUrl setActiveSection={setActiveSection} />
+      </Suspense>
+
       {/* Header */}
       <header className="fixed inset-x-0 top-0 z-50 border-b border-border bg-background/90 backdrop-blur">
         <div className="flex h-14 items-center justify-between px-4 sm:px-6">
@@ -952,63 +1093,193 @@ export default function SettingsPage() {
                           <p className="text-xs mt-1">下のボタンからサーバーを追加してください</p>
                         </div>
                       ) : (
-                        multiAgentServer.config.servers.map((server) => {
-                          const connection = multiAgentServer.connections.get(server.id);
-                          const isConnected = connection?.connectionState === 'connected';
-                          const isConnecting = connection?.connectionState === 'connecting';
-                          const hasError = connection?.connectionState === 'error';
+                        <>
+                          <p className="text-xs text-muted-foreground mb-2">
+                            ドラッグ&ドロップで優先順位を変更できます。クリックで編集画面を開きます。
+                          </p>
+                          {[...multiAgentServer.config.servers]
+                            .sort((a, b) => (a.priority ?? 5) - (b.priority ?? 5))
+                            .map((server) => {
+                              const connection = multiAgentServer.connections.get(server.id);
+                              const isConnected = connection?.connectionState === 'connected';
+                              const isConnecting = connection?.connectionState === 'connecting';
+                              const hasError = connection?.connectionState === 'error';
+                              const isDragging = draggedServerId === server.id;
 
-                          return (
-                            <div
-                              key={server.id}
-                              className="flex items-center justify-between p-3 bg-muted/50 rounded-lg border border-border"
-                            >
-                              <div className="flex items-center gap-3">
-                                <div className={`w-2.5 h-2.5 rounded-full ${
-                                  isConnected ? 'bg-green-500' :
-                                  isConnecting ? 'bg-yellow-500 animate-pulse' :
-                                  hasError ? 'bg-red-500' :
-                                  'bg-gray-400'
-                                }`} />
-                                <div>
-                                  <div className="font-medium">{server.name}</div>
-                                  <div className="text-xs text-muted-foreground truncate max-w-[200px]">
-                                    {server.serverUrl}
-                                  </div>
-                                  {hasError && connection?.error && (
-                                    <div className="text-xs text-destructive mt-1">
-                                      {connection.error}
+                              return (
+                                <div
+                                  key={server.id}
+                                  draggable
+                                  onDragStart={() => handleDragStart(server.id)}
+                                  onDragOver={(e) => handleDragOver(e, server.id)}
+                                  onDrop={(e) => handleDrop(e, server.id)}
+                                  onDragEnd={handleDragEnd}
+                                  onClick={() => handleStartEditServer(server)}
+                                  className={`flex items-center justify-between p-3 bg-muted/50 rounded-lg border transition-all cursor-pointer ${
+                                    isDragging
+                                      ? 'border-primary opacity-50'
+                                      : editingServerId === server.id
+                                        ? 'border-primary bg-primary/5'
+                                        : 'border-border hover:border-primary/50 hover:bg-muted'
+                                  }`}
+                                >
+                                  <div className="flex items-center gap-3">
+                                    {/* Drag handle */}
+                                    <div className="flex-shrink-0 text-muted-foreground cursor-grab active:cursor-grabbing">
+                                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8h16M4 16h16" />
+                                      </svg>
                                     </div>
-                                  )}
+                                    {/* Priority badge */}
+                                    <div className="flex-shrink-0 w-6 h-6 flex items-center justify-center bg-primary/10 rounded text-xs font-medium text-primary" title={`優先度: ${server.priority ?? 5}`}>
+                                      {server.priority ?? 5}
+                                    </div>
+                                    {/* Status indicator */}
+                                    <div className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${
+                                      isConnected ? 'bg-green-500' :
+                                      isConnecting ? 'bg-yellow-500 animate-pulse' :
+                                      hasError ? 'bg-red-500' :
+                                      'bg-gray-400'
+                                    }`} />
+                                    <div className="min-w-0">
+                                      <div className="flex items-center gap-2">
+                                        <span className="font-medium">{server.name}</span>
+                                        {!server.enabled && (
+                                          <span className="text-[10px] px-1.5 py-0.5 bg-muted text-muted-foreground rounded">
+                                            無効
+                                          </span>
+                                        )}
+                                      </div>
+                                      <div className="text-xs text-muted-foreground truncate max-w-[200px]">
+                                        {server.serverUrl}
+                                      </div>
+                                      {hasError && connection?.error && (
+                                        <div className="text-xs text-destructive mt-1">
+                                          {connection.error}
+                                        </div>
+                                      )}
+                                    </div>
+                                  </div>
+                                  <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
+                                    <button
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        handleToggleServerConnection(server);
+                                      }}
+                                      disabled={isConnecting}
+                                      className={`px-3 py-1.5 text-xs rounded-md transition-colors ${
+                                        isConnected
+                                          ? 'bg-destructive/10 text-destructive hover:bg-destructive/20'
+                                          : 'bg-primary/10 text-primary hover:bg-primary/20'
+                                      } disabled:opacity-50`}
+                                    >
+                                      {isConnecting ? '接続中...' : isConnected ? '切断' : '接続'}
+                                    </button>
+                                    <button
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        handleDeleteServer(server.id);
+                                      }}
+                                      className="p-1.5 text-muted-foreground hover:text-destructive transition-colors"
+                                      title="削除"
+                                    >
+                                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                      </svg>
+                                    </button>
+                                  </div>
                                 </div>
-                              </div>
-                              <div className="flex items-center gap-2">
-                                <button
-                                  onClick={() => handleToggleServerConnection(server)}
-                                  disabled={isConnecting}
-                                  className={`px-3 py-1.5 text-xs rounded-md transition-colors ${
-                                    isConnected
-                                      ? 'bg-destructive/10 text-destructive hover:bg-destructive/20'
-                                      : 'bg-primary/10 text-primary hover:bg-primary/20'
-                                  } disabled:opacity-50`}
-                                >
-                                  {isConnecting ? '接続中...' : isConnected ? '切断' : '接続'}
-                                </button>
-                                <button
-                                  onClick={() => handleDeleteServer(server.id)}
-                                  className="p-1.5 text-muted-foreground hover:text-destructive transition-colors"
-                                  title="削除"
-                                >
-                                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                                  </svg>
-                                </button>
-                              </div>
-                            </div>
-                          );
-                        })
+                              );
+                            })}
+                        </>
                       )}
                     </div>
+
+                    {/* Edit Server Form */}
+                    {editingServerId && (
+                      <div className="border border-primary rounded-lg p-4 bg-primary/5 mb-4">
+                        <h4 className="font-medium mb-3 flex items-center gap-2">
+                          <svg className="w-4 h-4 text-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                          </svg>
+                          サーバーを編集
+                        </h4>
+                        <div className="space-y-3">
+                          <div>
+                            <label className="block text-sm font-medium mb-1">サーバー名</label>
+                            <input
+                              type="text"
+                              value={editServerName}
+                              onChange={(e) => setEditServerName(e.target.value)}
+                              placeholder="例: Production Server"
+                              className="w-full px-3 py-2 bg-input border border-border rounded-md text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-sm font-medium mb-1">サーバーURL</label>
+                            <input
+                              type="url"
+                              value={editServerUrl}
+                              onChange={(e) => setEditServerUrl(e.target.value)}
+                              placeholder="例: http://localhost:3456"
+                              className="w-full px-3 py-2 bg-input border border-border rounded-md text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-sm font-medium mb-1">認証トークン（変更する場合のみ入力）</label>
+                            <input
+                              type="password"
+                              value={editServerToken}
+                              onChange={(e) => setEditServerToken(e.target.value)}
+                              placeholder="新しいトークンを入力..."
+                              className="w-full px-3 py-2 bg-input border border-border rounded-md text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary"
+                            />
+                            <p className="text-xs text-muted-foreground mt-1">空欄の場合は既存のトークンを保持します</p>
+                          </div>
+                          <div>
+                            <label className="block text-sm font-medium mb-1">優先度 ({editServerPriority})</label>
+                            <input
+                              type="range"
+                              min="1"
+                              max="10"
+                              value={editServerPriority}
+                              onChange={(e) => setEditServerPriority(Number(e.target.value))}
+                              className="w-full"
+                            />
+                            <div className="flex justify-between text-xs text-muted-foreground">
+                              <span>1 (最高)</span>
+                              <span>10 (最低)</span>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <input
+                              type="checkbox"
+                              id="edit-server-enabled"
+                              checked={editServerEnabled}
+                              onChange={(e) => setEditServerEnabled(e.target.checked)}
+                              className="w-4 h-4 rounded border-border"
+                            />
+                            <label htmlFor="edit-server-enabled" className="text-sm">
+                              このサーバーを有効にする
+                            </label>
+                          </div>
+                          <div className="flex gap-2 pt-2">
+                            <button
+                              onClick={handleSaveEditServer}
+                              className="px-4 py-2 bg-primary text-primary-foreground rounded-md text-sm font-medium hover:bg-primary/90 transition-colors"
+                            >
+                              保存
+                            </button>
+                            <button
+                              onClick={handleCancelEditServer}
+                              className="px-4 py-2 text-foreground hover:bg-muted rounded-md text-sm transition-colors"
+                            >
+                              キャンセル
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    )}
 
                     {/* Add Server Form */}
                     {showAddServer ? (
@@ -1068,7 +1339,10 @@ export default function SettingsPage() {
                       </div>
                     ) : (
                       <button
-                        onClick={() => setShowAddServer(true)}
+                        onClick={() => {
+                          setShowAddServer(true);
+                          setEditingServerId(null); // Close edit form when adding new server
+                        }}
                         className="flex items-center gap-2 px-4 py-2 border border-dashed border-border rounded-lg text-muted-foreground hover:text-foreground hover:border-primary transition-colors w-full justify-center"
                       >
                         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1079,105 +1353,252 @@ export default function SettingsPage() {
                     )}
                   </div>
 
-                  {/* OpenAI API Configuration */}
+                  {/* Chat Agent Settings */}
                   <div className="bg-card border border-border rounded-lg p-6 mb-6">
                     <div className="flex items-center gap-3 mb-4">
-                      <div className="w-10 h-10 bg-emerald-500/10 rounded-lg flex items-center justify-center">
-                        <svg className="w-5 h-5 text-emerald-500" viewBox="0 0 24 24" fill="currentColor">
-                          <path d="M22.282 9.821a5.985 5.985 0 0 0-.516-4.91 6.046 6.046 0 0 0-6.51-2.9A6.065 6.065 0 0 0 4.981 4.18a5.985 5.985 0 0 0-3.998 2.9 6.046 6.046 0 0 0 .743 7.097 5.98 5.98 0 0 0 .51 4.911 6.051 6.051 0 0 0 6.515 2.9A5.985 5.985 0 0 0 13.26 24a6.056 6.056 0 0 0 5.772-4.206 5.99 5.99 0 0 0 3.997-2.9 6.056 6.056 0 0 0-.747-7.073zM13.26 22.43a4.476 4.476 0 0 1-2.876-1.04l.141-.081 4.779-2.758a.795.795 0 0 0 .392-.681v-6.737l2.02 1.168a.071.071 0 0 1 .038.052v5.583a4.504 4.504 0 0 1-4.494 4.494zM3.6 18.304a4.47 4.47 0 0 1-.535-3.014l.142.085 4.783 2.759a.771.771 0 0 0 .78 0l5.843-3.369v2.332a.08.08 0 0 1-.033.062L9.74 19.95a4.5 4.5 0 0 1-6.14-1.646zM2.34 7.896a4.485 4.485 0 0 1 2.366-1.973V11.6a.766.766 0 0 0 .388.676l5.815 3.355-2.02 1.168a.076.076 0 0 1-.071 0l-4.83-2.786A4.504 4.504 0 0 1 2.34 7.872zm16.597 3.855l-5.833-3.387L15.119 7.2a.076.076 0 0 1 .071 0l4.83 2.791a4.494 4.494 0 0 1-.676 8.105v-5.678a.79.79 0 0 0-.407-.667zm2.01-3.023l-.141-.085-4.774-2.782a.776.776 0 0 0-.785 0L9.409 9.23V6.897a.066.066 0 0 1 .028-.061l4.83-2.787a4.5 4.5 0 0 1 6.68 4.66zm-12.64 4.135l-2.02-1.164a.08.08 0 0 1-.038-.057V6.075a4.5 4.5 0 0 1 7.375-3.453l-.142.08L8.704 5.46a.795.795 0 0 0-.393.681zm1.097-2.365l2.602-1.5 2.607 1.5v2.999l-2.597 1.5-2.607-1.5z"/>
+                      <div className="w-10 h-10 bg-purple-500/10 rounded-lg flex items-center justify-center">
+                        <svg className="w-5 h-5 text-purple-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
                         </svg>
                       </div>
                       <div>
-                        <h3 className="font-medium">OpenAI API</h3>
-                        <p className="text-sm text-muted-foreground">GPTモデルを使用したAIエージェント</p>
+                        <h3 className="font-medium">チャットエージェント設定</h3>
+                        <p className="text-sm text-muted-foreground">MOCセクションでのチャット時に使用するエージェント</p>
                       </div>
                     </div>
 
-                    {/* Current credential status */}
-                    {credentialLoading ? (
-                      <div className="flex items-center gap-2 text-muted-foreground mb-4">
-                        <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
-                        読み込み中...
+                    {/* MCP Agent Toggle */}
+                    <div className="space-y-4">
+                      <div className="flex items-center justify-between p-3 bg-muted/30 rounded-lg">
+                        <div>
+                          <label className="text-sm font-medium">MCPエージェントを使用</label>
+                          <p className="text-xs text-muted-foreground mt-0.5">
+                            MCPサーバ接続時、チャットにMCPエージェントを使用します
+                          </p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const current = multiAgentServer.chatAgentSettings;
+                            multiAgentServer.updateChatAgentSettings({ useMcpAgent: !current.useMcpAgent });
+                          }}
+                          disabled={multiAgentServer.config.servers.length === 0}
+                          className={`
+                            relative w-11 h-6 rounded-full transition-colors
+                            ${multiAgentServer.chatAgentSettings.useMcpAgent ? 'bg-primary' : 'bg-muted-foreground/30'}
+                            ${multiAgentServer.config.servers.length === 0 ? 'opacity-50 cursor-not-allowed' : ''}
+                          `}
+                        >
+                          <span
+                            className={`
+                              absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full transition-transform shadow
+                              ${multiAgentServer.chatAgentSettings.useMcpAgent ? 'translate-x-5' : ''}
+                            `}
+                          />
+                        </button>
                       </div>
-                    ) : openaiCredential?.exists ? (
-                      <div className="mb-4 p-3 bg-green-500/10 border border-green-500/20 rounded-md">
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-2">
-                            <div className="w-2 h-2 bg-green-500 rounded-full" />
-                            <span className="text-sm text-green-700 dark:text-green-300">
-                              APIキーが設定されています
-                            </span>
+
+                      {multiAgentServer.config.servers.length === 0 && (
+                        <div className="p-3 bg-amber-500/10 border border-amber-500/20 rounded-lg">
+                          <p className="text-xs text-amber-700 dark:text-amber-300">
+                            MCPサーバが設定されていません。上記でサーバを追加してからこの機能を有効にしてください。
+                          </p>
+                        </div>
+                      )}
+
+                      {/* Server Selection Mode */}
+                      {multiAgentServer.chatAgentSettings.useMcpAgent && multiAgentServer.config.servers.length > 0 && (
+                        <div className="space-y-2">
+                          <label className="text-sm font-medium">サーバ選択モード</label>
+                          <select
+                            value={multiAgentServer.chatAgentSettings.selectionMode || 'manual'}
+                            onChange={(e) => {
+                              const mode = e.target.value as 'manual' | 'priority' | 'failover';
+                              multiAgentServer.updateChatAgentSettings({
+                                selectionMode: mode,
+                                mcpServerId: mode !== 'manual' ? undefined : multiAgentServer.chatAgentSettings.mcpServerId,
+                                mcpAgentId: undefined,
+                              });
+                            }}
+                            className="w-full px-3 py-2 bg-muted border border-border rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-primary"
+                          >
+                            <option value="manual">手動選択</option>
+                            <option value="priority">優先順位自動選択</option>
+                            <option value="failover">フェイルオーバー</option>
+                          </select>
+                          <p className="text-xs text-muted-foreground">
+                            {multiAgentServer.chatAgentSettings.selectionMode === 'priority'
+                              ? '優先度の高い（数字の小さい）接続サーバを自動選択'
+                              : multiAgentServer.chatAgentSettings.selectionMode === 'failover'
+                              ? '優先順位に従ってフェイルオーバー（接続失敗時に次のサーバを試行）'
+                              : '使用するサーバを手動で選択'}
+                          </p>
+                        </div>
+                      )}
+
+                      {/* Server Selection (Manual Mode) */}
+                      {multiAgentServer.chatAgentSettings.useMcpAgent &&
+                        multiAgentServer.config.servers.length > 0 &&
+                        (multiAgentServer.chatAgentSettings.selectionMode || 'manual') === 'manual' && (
+                        <div className="space-y-2">
+                          <label className="text-sm font-medium">MCPサーバ</label>
+                          <select
+                            value={multiAgentServer.chatAgentSettings.mcpServerId || ''}
+                            onChange={(e) => multiAgentServer.updateChatAgentSettings({
+                              mcpServerId: e.target.value || undefined,
+                              mcpAgentId: undefined,
+                            })}
+                            className="w-full px-3 py-2 bg-muted border border-border rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-primary"
+                          >
+                            <option value="">自動選択</option>
+                            {[...multiAgentServer.config.servers]
+                              .sort((a, b) => (a.priority ?? 5) - (b.priority ?? 5))
+                              .map(server => {
+                                const conn = multiAgentServer.connections.get(server.id);
+                                const isConnected = conn?.connectionState === 'connected';
+                                return (
+                                  <option key={server.id} value={server.id}>
+                                    [{server.priority ?? 5}] {server.name} {isConnected ? '✓' : '○'}
+                                  </option>
+                                );
+                              })}
+                          </select>
+                          <p className="text-xs text-muted-foreground">✓=接続中 ○=未接続</p>
+                        </div>
+                      )}
+
+                      {/* Priority Server List (Priority/Failover Mode) */}
+                      {multiAgentServer.chatAgentSettings.useMcpAgent &&
+                        multiAgentServer.config.servers.length > 0 &&
+                        (multiAgentServer.chatAgentSettings.selectionMode === 'priority' || multiAgentServer.chatAgentSettings.selectionMode === 'failover') && (
+                        <div className="space-y-2">
+                          <label className="text-sm font-medium">サーバ優先順位</label>
+                          <div className="space-y-1 max-h-32 overflow-y-auto">
+                            {[...multiAgentServer.config.servers]
+                              .sort((a, b) => (a.priority ?? 5) - (b.priority ?? 5))
+                              .map((server, idx) => {
+                                const conn = multiAgentServer.connections.get(server.id);
+                                const isConnected = conn?.connectionState === 'connected';
+                                return (
+                                  <div
+                                    key={server.id}
+                                    className={`flex items-center gap-2 px-3 py-1.5 rounded text-sm ${
+                                      idx === 0 ? 'bg-primary/10 border border-primary/20' : 'bg-muted/50'
+                                    }`}
+                                  >
+                                    <span className="w-6 h-6 flex items-center justify-center bg-primary/20 rounded text-xs font-medium">
+                                      {server.priority ?? 5}
+                                    </span>
+                                    <span className="flex-1 truncate">{server.name}</span>
+                                    <span className={`text-xs ${isConnected ? 'text-green-600' : 'text-muted-foreground'}`}>
+                                      {isConnected ? '接続中' : '未接続'}
+                                    </span>
+                                    {idx === 0 && isConnected && (
+                                      <span className="text-xs text-primary font-medium">使用中</span>
+                                    )}
+                                  </div>
+                                );
+                              })}
+                          </div>
+                          <p className="text-xs text-muted-foreground">
+                            ※ 優先度は上記のサーバ一覧で変更できます
+                          </p>
+                        </div>
+                      )}
+
+                      {/* Agent Selection */}
+                      {multiAgentServer.chatAgentSettings.useMcpAgent &&
+                        multiAgentServer.config.servers.length > 0 &&
+                        multiAgentServer.agents.length > 0 && (
+                        <div className="space-y-2">
+                          <label className="text-sm font-medium">エージェント</label>
+                          <select
+                            value={multiAgentServer.chatAgentSettings.mcpAgentId || ''}
+                            onChange={(e) => multiAgentServer.updateChatAgentSettings({ mcpAgentId: e.target.value || undefined })}
+                            className="w-full px-3 py-2 bg-muted border border-border rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-primary"
+                          >
+                            <option value="">自動選択（最初のエージェント）</option>
+                            {multiAgentServer.agents
+                              .filter(a => !multiAgentServer.chatAgentSettings.mcpServerId || a.serverId === multiAgentServer.chatAgentSettings.mcpServerId)
+                              .map(agent => (
+                                <option key={agent.id} value={agent.id}>
+                                  {agent.name} ({agent.role}) - {agent.serverName}
+                                </option>
+                              ))}
+                          </select>
+                        </div>
+                      )}
+
+                      {/* Fallback Setting */}
+                      {multiAgentServer.chatAgentSettings.useMcpAgent && (
+                        <div className="flex items-center justify-between p-3 bg-muted/30 rounded-lg border-t border-border mt-4">
+                          <div>
+                            <label className="text-sm font-medium">フォールバック</label>
+                            <p className="text-xs text-muted-foreground mt-0.5">
+                              MCP接続失敗時、デフォルトAIに切り替え
+                            </p>
                           </div>
                           <button
-                            onClick={handleDeleteOpenAICredential}
-                            disabled={credentialSaving}
-                            className="px-2 py-1 text-xs text-destructive hover:bg-destructive/10 rounded transition-colors"
+                            type="button"
+                            onClick={() => {
+                              multiAgentServer.updateChatAgentSettings({
+                                fallbackToApi: !multiAgentServer.chatAgentSettings.fallbackToApi
+                              });
+                            }}
+                            className={`
+                              relative w-11 h-6 rounded-full transition-colors
+                              ${multiAgentServer.chatAgentSettings.fallbackToApi ? 'bg-primary' : 'bg-muted-foreground/30'}
+                            `}
                           >
-                            削除
+                            <span
+                              className={`
+                                absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full transition-transform shadow
+                                ${multiAgentServer.chatAgentSettings.fallbackToApi ? 'translate-x-5' : ''}
+                              `}
+                            />
                           </button>
                         </div>
-                        <div className="mt-2 text-xs text-muted-foreground space-y-1">
-                          <div>キー: {openaiCredential.maskedKey}</div>
-                          {openaiCredential.model && <div>モデル: {openaiCredential.model}</div>}
-                          {openaiCredential.updatedAt && (
-                            <div>更新日: {new Date(openaiCredential.updatedAt).toLocaleString('ja-JP')}</div>
-                          )}
+                      )}
+
+                      {/* Current Status */}
+                      <div className="pt-4 mt-4 border-t border-border">
+                        <h4 className="text-sm font-medium mb-2">現在の状態</h4>
+                        <div className="space-y-1 text-xs">
+                          <div className="flex items-center justify-between">
+                            <span className="text-muted-foreground">チャットエージェント</span>
+                            <span className={`font-medium ${
+                              multiAgentServer.chatAgentSettings.useMcpAgent &&
+                              Array.from(multiAgentServer.connections.values()).some(c => c.connectionState === 'connected')
+                                ? 'text-green-600 dark:text-green-400'
+                                : 'text-muted-foreground'
+                            }`}>
+                              {multiAgentServer.chatAgentSettings.useMcpAgent &&
+                              Array.from(multiAgentServer.connections.values()).some(c => c.connectionState === 'connected')
+                                ? 'MCPエージェント'
+                                : 'デフォルトAI'}
+                            </span>
+                          </div>
+                          <div className="flex items-center justify-between">
+                            <span className="text-muted-foreground">登録サーバ数</span>
+                            <span className="font-medium">{multiAgentServer.config.servers.length}</span>
+                          </div>
+                          <div className="flex items-center justify-between">
+                            <span className="text-muted-foreground">接続サーバ数</span>
+                            <span className="font-medium">
+                              {Array.from(multiAgentServer.connections.values()).filter(c => c.connectionState === 'connected').length}
+                            </span>
+                          </div>
+                          <div className="flex items-center justify-between">
+                            <span className="text-muted-foreground">利用可能エージェント</span>
+                            <span className="font-medium">{multiAgentServer.agents.length}</span>
+                          </div>
                         </div>
-                      </div>
-                    ) : null}
-
-                    <div className="space-y-4">
-                      <div>
-                        <label className="block text-sm font-medium mb-1">
-                          {openaiCredential?.exists ? '新しいAPIキー（更新する場合）' : 'APIキー'}
-                        </label>
-                        <input
-                          type="password"
-                          value={openaiApiKey}
-                          onChange={(e) => setOpenaiApiKey(e.target.value)}
-                          placeholder="sk-..."
-                          className="w-full px-3 py-2 bg-input border border-border rounded-md text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary font-mono text-sm"
-                        />
-                        <p className="text-xs text-muted-foreground mt-1">
-                          APIキーはサーバーで暗号化（AES-256-GCM）されて保存されます
-                        </p>
-                      </div>
-
-                      <div>
-                        <label className="block text-sm font-medium mb-1">モデル</label>
-                        <select
-                          value={openaiModel}
-                          onChange={(e) => setOpenaiModel(e.target.value)}
-                          className="w-full px-3 py-2 bg-input border border-border rounded-md text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
-                        >
-                          <option value="gpt-4o">GPT-4o (推奨)</option>
-                          <option value="gpt-4o-mini">GPT-4o Mini</option>
-                          <option value="gpt-4-turbo">GPT-4 Turbo</option>
-                          <option value="gpt-4">GPT-4</option>
-                          <option value="gpt-3.5-turbo">GPT-3.5 Turbo</option>
-                        </select>
                       </div>
                     </div>
                   </div>
 
-                  {/* Save Button */}
-                  <button
-                    onClick={handleSaveAiConfig}
-                    disabled={aiConfigSaving}
-                    className="px-6 py-2 bg-primary text-primary-foreground rounded-md text-sm font-medium hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-                  >
-                    {aiConfigSaving ? (
-                      <>
-                        <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
-                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-                        </svg>
-                        保存中...
-                      </>
-                    ) : (
-                      '設定を保存'
-                    )}
-                  </button>
+                  {/* AI Provider API Keys Configuration */}
+                  <AIProviderSettings authToken={authToken} />
                 </div>
               </div>
             )}

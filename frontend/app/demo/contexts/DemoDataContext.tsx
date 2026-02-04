@@ -42,7 +42,7 @@ export interface DemoDataContextValue {
   animationState: DemoAnimationState;
   // Handlers (mock implementations for demo)
   onHabitAction: (habitId: string, action: HabitAction, amount?: number) => void;
-  onStickyCreate: () => Promise<Sticky>;
+  onStickyCreate: (payload?: { parentStickyId?: string }) => Promise<Sticky>;
   onStickyComplete: (stickyId: string) => void;
   // Animation state setters
   setAnimationState: React.Dispatch<React.SetStateAction<DemoAnimationState>>;
@@ -147,7 +147,7 @@ export function DemoDataProvider({ children, initialState }: DemoDataProviderPro
    * Mock handler for creating a new sticky
    * Creates a new sticky with default values
    */
-  const onStickyCreate = useCallback(async (): Promise<Sticky> => {
+  const onStickyCreate = useCallback(async (_payload?: { parentStickyId?: string }): Promise<Sticky> => {
     const newSticky: Sticky = {
       id: `demo-sticky-${Date.now()}`,
       name: '新しいメモ',

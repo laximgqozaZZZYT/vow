@@ -42,7 +42,7 @@ const ALL_TAB_CONFIGS: TabConfig[] = [
   // Source code is preserved for future use
   { id: 'coach', label: 'Coach', labelJa: 'コーチ', iconType: 'coach', enabled: false /* ENABLE_AI_COACH - temporarily disabled */ },
   { id: 'agents', label: 'Agents', labelJa: 'エージェント', iconType: 'agents', enabled: false /* ENABLE_MULTI_AGENT - temporarily disabled */, requiresPremium: true, adminOnly: true },
-  { id: 'moc', label: 'MOC', labelJa: 'MOC', iconType: 'moc', enabled: ENABLE_MOC },
+  { id: 'moc', label: 'MOC', labelJa: 'MOC', iconType: 'moc', enabled: ENABLE_MOC, requiresPremium: true },
 ];
 
 // Filter tabs based on feature flags
@@ -91,6 +91,7 @@ export function getVisibleTabs(pageSections: string[], userContext?: TabUserCont
       return true;
     }
     // Always include moc tab if it's enabled (feature flag) and user has access
+    // Note: premium check is already done above, so if we reach here, user has access
     if (tab.id === 'moc' && tab.enabled) {
       return true;
     }
