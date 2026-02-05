@@ -565,8 +565,8 @@ export function AIHubSection({
         agentType: 'mastra',
         toolCalls: msg.toolCalls?.map(tc => ({
           toolName: tc.toolName,
-          input: tc.input,
-          output: tc.output,
+          input: (tc.input || {}) as Record<string, unknown>,
+          output: (tc.output || {}) as Record<string, unknown>,
           success: tc.success,
           error: tc.error,
         })),

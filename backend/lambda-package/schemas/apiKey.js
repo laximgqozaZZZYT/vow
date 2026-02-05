@@ -30,6 +30,8 @@ export const apiKeyDbSchema = z.object({
     created_at: z.string().datetime(),
     /** Timestamp when the key was last used (null if never used) */
     last_used_at: z.string().datetime().nullable(),
+    /** Timestamp when the key expires (optional for legacy keys) */
+    expires_at: z.string().datetime().optional(),
     /** Timestamp when the key was revoked (null if active) */
     revoked_at: z.string().datetime().nullable(),
     /** Whether the key is currently active */
@@ -39,12 +41,27 @@ export const apiKeyDbSchema = z.object({
 // API Key Request Schemas
 // ============================================================================
 /**
+ * Available expiration periods for API keys.
+ * Security note: Longer expiration periods increase risk if key is compromised.
+ */
+export const API_KEY_EXPIRATION_OPTIONS = [7, 30, 90, 180, 365];
+/**
  * Schema for creating a new API key.
  * Requirements: 1.1 - API key generation request
  */
 export const createApiKeyRequestSchema = z.object({
     /** User-provided name for the API key */
     name: z.string().min(1).max(100),
+    /** Expiration in days (7, 30, 90, 180, or 365). Default: 365 days */
+    expirationDays: z.enum(['7', '30', '90', '180', '365']).optional().default('365').transform(val => parseInt(val, 10)),
+});
+/**
+ * Schema for extending API key expiration.
+ * Requirements: Security - Allow extending existing key expiration
+ */
+export const extendApiKeyRequestSchema = z.object({
+    /** Extension period in days (7, 30, 90, 180, or 365 days from now) */
+    extensionDays: z.enum(['7', '30', '90', '180', '365']).transform(val => parseInt(val, 10)),
 });
 // ============================================================================
 // API Key Response Schemas
@@ -64,6 +81,8 @@ export const apiKeyResponseSchema = z.object({
     createdAt: z.string().datetime(),
     /** Timestamp when the key was last used (null if never used) */
     lastUsedAt: z.string().datetime().nullable(),
+    /** Timestamp when the key expires */
+    expiresAt: z.string().datetime(),
     /** Whether the key is currently active */
     isActive: z.boolean(),
 });
@@ -82,6 +101,8 @@ export const createApiKeyResponseSchema = z.object({
     name: z.string(),
     /** Timestamp when the key was created */
     createdAt: z.string().datetime(),
+    /** Timestamp when the key expires */
+    expiresAt: z.string().datetime(),
 });
 // ============================================================================
 // Widget Request/Response Schemas

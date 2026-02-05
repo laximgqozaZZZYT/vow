@@ -32,6 +32,14 @@ import { userLevelRouter } from './routers/userLevel.js';
 import { createXPRecoveryRouter } from './routers/xpRecoveryRoutes.js';
 import { createLevelConfigRouter } from './routers/levelConfig.js';
 import { createMcpConnectionsRouter } from './routers/mcpConnections.js';
+import { createRagRouter } from './routers/rag.js';
+import { createAgentsRouter } from './routers/agents.js';
+import { createSuggestionsRouter } from './routers/suggestions.js';
+import { createConversationsRouter } from './routers/conversations.js';
+import { createCredentialsRouter } from './routers/credentials.js';
+import { createIssuesRouter } from './routers/issues.js';
+import { createMcpInstallerRouter } from './routers/mcpInstaller.js';
+import { cliTokenRouter } from './routers/cliTokens.js';
 // Error handling imports
 import { AppError, getUserFriendlyMessage } from './errors/index.js';
 import { getLogger } from './utils/logger.js';
@@ -52,15 +60,24 @@ export function createApp() {
     const app = new Hono();
     const settings = getSettings();
     // ---------------------------------------------------------------------------
-    // Exclude Widget API from JWT Authentication
+    // Exclude Widget API and Agent History API from JWT Authentication
     // ---------------------------------------------------------------------------
     // Widget endpoints use API key authentication instead of JWT
     // This must be done before the JWT middleware is applied
     addExcludedPath('/api/widgets');
+    // Agent CLI endpoints use API key authentication for external access
+    addExcludedPath('/api/agents/history');
+    addExcludedPath('/api/agents/cli');
     // Stripe webhook endpoint uses signature verification instead of JWT
     addExcludedPath('/api/subscription/webhooks/stripe');
     // Jobs endpoints use service key authentication instead of JWT
     addExcludedPath('/api/jobs');
+    // Issues CLI endpoint uses API key authentication for external access
+    addExcludedPath('/api/issues/cli');
+    // MCP installer endpoint is public (for remote machine downloads)
+    addExcludedPath('/api/mcp-installer');
+    // CLI token refresh endpoint uses refresh token for auth (not JWT)
+    addExcludedPath('/api/cli-tokens/refresh');
     // ---------------------------------------------------------------------------
     // Global Middleware
     // ---------------------------------------------------------------------------
@@ -170,6 +187,11 @@ export function createApp() {
     // Note: Uses JWT authentication for user management
     // Requirements: 1.1, 1.3, 1.4
     app.route('/api/api-keys', apiKeyRouter);
+    // CLI token management router - mounted at /api/cli-tokens
+    // Endpoints: /api/cli-tokens (GET, POST), /api/cli-tokens/:tokenId (DELETE),
+    //            /api/cli-tokens/refresh (POST - no JWT auth, uses refresh token)
+    // Note: JWT-based CLI authentication tokens for CLI tools
+    app.route('/api/cli-tokens', cliTokenRouter);
     // Subscription router - mounted at /api/subscription
     // Endpoints: /api/subscription/checkout, /api/subscription/status,
     //            /api/subscription/portal, /api/subscription/cancel,
@@ -239,6 +261,55 @@ export function createApp() {
     // Note: User-specific MCP server connection settings stored in DynamoDB
     const mcpConnectionsRouter = createMcpConnectionsRouter();
     app.route('/api/mcp-connections', mcpConnectionsRouter);
+    // RAG router - mounted at /api/rag
+    // Endpoints: POST /api/rag/search
+    // Note: Semantic search using embeddings for habits, goals, diary, activities
+    // Requirements: C-003 - RAG Search API
+    const ragRouter = createRagRouter();
+    app.route('/api/rag', ragRouter);
+    // Agents router - mounted at /api/agents
+    // Endpoints: POST /api/agents/chat, POST /api/agents/tasks,
+    //            GET /api/agents/status, POST /api/agents/workflow/:workflowId,
+    //            GET /api/agents/orchestration-log
+    // Note: Unified AI agents API (VowCoachAgent, TaskOrchestratorAgent, workflows)
+    // Requirements: B-005, B-006, B-007, B-008
+    const agentsRouter = createAgentsRouter();
+    app.route('/api/agents', agentsRouter);
+    // Suggestions router - mounted at /api/suggestions
+    // Endpoints: POST /api/suggestions, GET /api/suggestions,
+    //            PATCH /api/suggestions/:id, DELETE /api/suggestions/:id,
+    //            POST /api/suggestions/:id/snooze, GET /api/suggestions/stats
+    // Note: Deferred AI suggestions management (when user selects "Later")
+    // Requirements: MOC-001 (Suggestion save/restore)
+    const suggestionsRouter = createSuggestionsRouter();
+    app.route('/api/suggestions', suggestionsRouter);
+    // Conversations router - mounted at /api/conversations
+    // Endpoints: GET /api/conversations, GET /api/conversations/:id,
+    //            DELETE /api/conversations/:id, GET /api/conversations/:id/messages,
+    //            GET /api/conversations/stats
+    // Note: AI conversation history management (Premium feature)
+    // Requirements: MOC-002 (Conversation history persistence)
+    const conversationsRouter = createConversationsRouter();
+    app.route('/api/conversations', conversationsRouter);
+    // Credentials router - mounted at /api/credentials
+    // Endpoints: GET /api/credentials/:type, POST /api/credentials/:type,
+    //            DELETE /api/credentials/:type
+    // Note: Encrypted storage of user API credentials (OpenAI, etc.)
+    const credentialsRouter = createCredentialsRouter();
+    app.route('/api/credentials', credentialsRouter);
+    // Issues router - mounted at /api/issues
+    // Endpoints: POST /api/issues, GET /api/issues, GET /api/issues/cli,
+    //            GET /api/issues/:id, PATCH /api/issues/:id, DELETE /api/issues/:id,
+    //            GET /api/issues/stats
+    // Note: Issue reporting from chat interface with CLI access via API key
+    const issuesRouter = createIssuesRouter();
+    app.route('/api/issues', issuesRouter);
+    // MCP Installer router - mounted at /api/mcp-installer
+    // Endpoints: GET /api/mcp-installer/config, GET /api/mcp-installer/install.sh,
+    //            GET /api/mcp-installer/quick-install, GET /api/mcp-installer/token
+    // Note: Provides installer scripts for remote MCP agent setup
+    const mcpInstallerRouter = createMcpInstallerRouter();
+    app.route('/api/mcp-installer', mcpInstallerRouter);
     logger.info('Application initialized', {
         version: settings.appVersion,
         debug: settings.debug,

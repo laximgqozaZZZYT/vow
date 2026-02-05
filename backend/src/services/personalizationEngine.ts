@@ -8,6 +8,7 @@
 
 import { getLogger } from '../utils/logger.js';
 import { HabitRepository } from '../repositories/habitRepository.js';
+import { GoalRepository } from '../repositories/goalRepository.js';
 import { ActivityRepository } from '../repositories/activityRepository.js';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type {
@@ -32,10 +33,12 @@ const ANALYSIS_PERIOD_DAYS = 30;
  */
 export class PersonalizationEngine implements IPersonalizationEngine {
   private habitRepo: HabitRepository;
+  private goalRepo: GoalRepository;
   private activityRepo: ActivityRepository;
 
   constructor(supabase: SupabaseClient) {
     this.habitRepo = new HabitRepository(supabase);
+    this.goalRepo = new GoalRepository(supabase);
     this.activityRepo = new ActivityRepository(supabase);
   }
 
@@ -97,6 +100,10 @@ export class PersonalizationEngine implements IPersonalizationEngine {
         completionRates
       );
 
+      // ユーザーの既存目標を取得
+      const goals = await this.goalRepo.getByOwner('user', userId);
+      const activeGoals = goals.filter(g => g.status === 'active');
+
       const context: UserContext = {
         userId,
         activeHabitCount: activeHabits.length,
@@ -105,6 +112,7 @@ export class PersonalizationEngine implements IPersonalizationEngine {
         preferredFrequency,
         preferredTimeSlots,
         existingHabitNames: activeHabits.map(h => h.name),
+        existingGoalNames: activeGoals.map(g => g.name),
         anchorHabits,
         // THLI-24 レベルコンテキストを追加
         ...this.analyzeLevelContext(activeHabits),
@@ -304,6 +312,7 @@ export class PersonalizationEngine implements IPersonalizationEngine {
       preferredFrequency: 'daily',
       preferredTimeSlots: [],
       existingHabitNames: [],
+      existingGoalNames: [],
       anchorHabits: [],
     };
   }

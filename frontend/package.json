@@ -15,7 +15,12 @@
     "test:e2e": "playwright test",
     "test:e2e:ui": "playwright test --ui",
     "test:e2e:headed": "playwright test --headed",
-    "test:e2e:debug": "playwright test --debug"
+    "test:e2e:debug": "playwright test --debug",
+    "test:e2e:ci": "playwright test --reporter=list,json",
+    "test:e2e:report": "playwright show-report test-results/reports",
+    "test:e2e:auth": "playwright test e2e/auth-setup.ts --headed --project=chromium",
+    "test:e2e:moc": "playwright test e2e/tests/chat/moc-chat.spec.ts --project=chromium",
+    "test:e2e:moc:headed": "playwright test e2e/tests/chat/moc-chat.spec.ts --headed --project=chromium"
   },
   "dependencies": {
     "@fullcalendar/core": "^6.1.20",

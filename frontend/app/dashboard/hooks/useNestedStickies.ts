@@ -36,14 +36,34 @@ export function buildNestedTree(stickies: Sticky[]): Sticky[] {
     stickyMap.set(sticky.id, { ...sticky, children: [], depth: 0 });
   });
 
+  // 再帰的に深さを計算する関数
+  const calculateDepth = (stickyId: string, visited: Set<string> = new Set()): number => {
+    // 循環参照防止
+    if (visited.has(stickyId)) return 0;
+    visited.add(stickyId);
+
+    const sticky = stickyMap.get(stickyId);
+    if (!sticky) return 0;
+
+    if (!sticky.parentStickyId || !stickyMap.has(sticky.parentStickyId)) {
+      return 0;
+    }
+
+    return calculateDepth(sticky.parentStickyId, visited) + 1;
+  };
+
+  // 全てのStickyの深さを正しく計算
+  stickies.forEach(sticky => {
+    const current = stickyMap.get(sticky.id)!;
+    current.depth = calculateDepth(sticky.id);
+  });
+
   // 親子関係を構築
   stickies.forEach(sticky => {
     const current = stickyMap.get(sticky.id)!;
 
     if (sticky.parentStickyId && stickyMap.has(sticky.parentStickyId)) {
       const parent = stickyMap.get(sticky.parentStickyId)!;
-      // 深さを計算
-      current.depth = (parent.depth ?? 0) + 1;
       // 最大深さチェック
       if (current.depth! <= MAX_NESTING_DEPTH) {
         parent.children = parent.children || [];

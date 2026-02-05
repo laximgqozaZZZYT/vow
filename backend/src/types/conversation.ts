@@ -56,6 +56,7 @@ export type UserIntent =
   | 'analyze'
   | 'greeting'
   | 'confirmation'
+  | 'improve_habit'
   | 'general';
 
 /**

@@ -24,9 +24,17 @@ export interface QuickAction {
 
 /**
  * デフォルトのクイックアクション
- * AIコーチでよく使われる4つのアクションを定義
+ * AIコーチでよく使われる5つのアクションを定義
+ * Section.Coach.tsxと同期を保つこと
  */
 export const DEFAULT_QUICK_ACTIONS: QuickAction[] = [
+  {
+    id: 'assess-level',
+    label: 'レベル設定',
+    icon: '📈',
+    prompt: '既存の習慣のレベル設定をして下さい',
+    description: '習慣のレベルを設定します',
+  },
   {
     id: 'add-habit',
     label: '習慣を追加',
@@ -188,10 +196,10 @@ function ActionButton({
  *
  * よく使うアクションをアイコンボタンで表示。
  * 水平・グリッドレイアウトをサポート。
- * デフォルトで4つのアクション（習慣追加、ゴール設定、進捗確認、アドバイス）を提供。
+ * デフォルトで5つのアクション（レベル設定、習慣追加、ゴール設定、進捗確認、アドバイス）を提供。
  *
  * Requirements:
- * - 7.1: Display 4 default quick actions
+ * - 7.1: Display 5 default quick actions (synced with Section.Coach.tsx)
  * - 7.2: Use grid layout for quick actions
  * - 7.4: Button height SHALL be at least 48px
  */

@@ -14,6 +14,13 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import type { McpServer, ChatAgentSettings } from '../types/agent.types';
 import type { MastraMessage, UseMastraAgentReturn } from './useMastraAgent';
+import {
+  validateUserInput,
+  validateAIResponse,
+  sanitizeInput,
+  getViolationMessage,
+  logViolation,
+} from '../utils/chatGuardrails';
 
 /**
  * Hook options
@@ -29,6 +36,8 @@ export interface UseMcpChatOptions {
   enableStreaming?: boolean;
   /** Initial system message */
   systemMessage?: string;
+  /** User ID for user-specific session isolation */
+  userId?: string;
   /** Callback when a message is received */
   onMessage?: (message: MastraMessage) => void;
   /** Callback when an error occurs */
@@ -55,6 +64,7 @@ export function useMcpChat(options: UseMcpChatOptions): UseMastraAgentReturn {
     settings,
     enableStreaming = true,
     systemMessage,
+    userId,
     onMessage,
     onError,
     onFallback,
@@ -82,6 +92,49 @@ export function useMcpChat(options: UseMcpChatOptions): UseMastraAgentReturn {
   const lastUserMessageRef = useRef<string | null>(null);
   const eventSourceRef = useRef<EventSource | null>(null);
 
+  // Persist sessionId across messages AND page reloads for conversation memory
+  // Uses localStorage to maintain the same session across browser refreshes
+  // User-specific: session key includes userId for isolation between users
+  const getSessionStorageKey = (): string => {
+    if (userId) {
+      return `vow_mcp_session_${userId}`;
+    }
+    return 'vow_mcp_session_anonymous';
+  };
+
+  const getOrCreateSessionId = (): string => {
+    // Server-side rendering check
+    if (typeof window === 'undefined') {
+      return `mcp-session-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    }
+
+    const storageKey = getSessionStorageKey();
+
+    // Try to get existing sessionId from localStorage
+    const stored = localStorage.getItem(storageKey);
+    if (stored) {
+      console.log('[useMcpChat] Restored sessionId from localStorage:', { key: storageKey, sessionId: stored });
+      return stored;
+    }
+
+    // Create new sessionId and persist it
+    const newId = `mcp-session-${userId || 'anon'}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    localStorage.setItem(storageKey, newId);
+    console.log('[useMcpChat] Created new sessionId:', { key: storageKey, sessionId: newId, userId });
+    return newId;
+  };
+
+  const sessionIdRef = useRef<string>(getOrCreateSessionId());
+
+  // Update sessionId when userId changes (e.g., user logs in)
+  useEffect(() => {
+    const newSessionId = getOrCreateSessionId();
+    if (sessionIdRef.current !== newSessionId) {
+      console.log('[useMcpChat] userId changed, updating sessionId:', { oldId: sessionIdRef.current, newId: newSessionId, userId });
+      sessionIdRef.current = newSessionId;
+    }
+  }, [userId]);
+
   /**
    * Clean up SSE connection
    */
@@ -97,6 +150,24 @@ export function useMcpChat(options: UseMcpChatOptions): UseMastraAgentReturn {
    */
   const sendMessage = useCallback(async (message: string): Promise<void> => {
     if (!message.trim()) return;
+
+    // Guardrail: Sanitize and validate user input
+    const sanitizedMessage = sanitizeInput(message);
+    const validationResult = validateUserInput(sanitizedMessage);
+
+    if (!validationResult.allowed) {
+      logViolation(validationResult, {
+        agentType: 'MCP',
+        sessionId: server?.id,
+      });
+      const violationError = new Error(getViolationMessage(validationResult, 'ja'));
+      setError(violationError);
+      setConnectionState('error');
+      if (onError) {
+        onError(violationError);
+      }
+      return;
+    }
 
     // Check if server is configured
     if (!server || !server.serverUrl || !server.serverToken) {
@@ -117,28 +188,14 @@ export function useMcpChat(options: UseMcpChatOptions): UseMastraAgentReturn {
     // Some MCP servers only listen on IPv4, and localhost might resolve to IPv6 first
     const normalizedServerUrl = server.serverUrl.replace('://localhost:', '://127.0.0.1:');
 
-    // For local MCP servers, use the known correct token to avoid stale token issues
-    // This handles React state synchronization delays after Quick Setup
-    const KNOWN_LOCAL_TOKEN = 'mcp-multi-agent-token-f75a6267';
-    const isLocalServer = normalizedServerUrl.includes('127.0.0.1:3456') || normalizedServerUrl.includes('localhost:3456');
-    let effectiveToken = server.serverToken;
-
-    if (isLocalServer && server.serverToken !== KNOWN_LOCAL_TOKEN) {
-      console.warn('[useMcpChat] Token mismatch for local server, using known correct token', {
-        provided: server.serverToken?.slice(0, 8) + '...',
-        expected: KNOWN_LOCAL_TOKEN.slice(0, 8) + '...',
-      });
-      effectiveToken = KNOWN_LOCAL_TOKEN;
-    }
+    // Use the token from server configuration
+    const effectiveToken = server.serverToken;
 
     // Log full server config for debugging
     console.log('[useMcpChat] Using server:', {
       id: server.id,
       name: server.name,
-      serverUrl: server.serverUrl,
-      normalizedUrl: normalizedServerUrl,
-      isLocalServer,
-      tokenOverridden: effectiveToken !== server.serverToken,
+      serverUrl: normalizedServerUrl,
       tokenPreview: effectiveToken?.substring(0, 20) + '...',
     });
 
@@ -189,19 +246,24 @@ export function useMcpChat(options: UseMcpChatOptions): UseMastraAgentReturn {
         serverId: server.id,
         serverName: server.name,
         serverUrl: normalizedServerUrl,
-        isLocalServer,
-        originalToken: server.serverToken ? `${server.serverToken.slice(0, 8)}...` : 'none',
-        effectiveToken: effectiveToken ? `${effectiveToken.slice(0, 8)}...` : 'none',
-        tokenWasOverridden: effectiveToken !== server.serverToken,
+        token: effectiveToken ? `${effectiveToken.slice(0, 8)}...` : 'none',
         targetAgentId,
       });
 
       // Quick health check before attempting SSE
+      // Use AbortController with setTimeout for better mobile browser compatibility
+      // (AbortSignal.timeout is not supported in Safari < 16.4)
       try {
+        const healthController = new AbortController();
+        const healthTimeout = setTimeout(() => healthController.abort(), 5000);
+
         const healthResponse = await fetch(`${normalizedServerUrl}/health`, {
           method: 'GET',
-          signal: AbortSignal.timeout(5000),
+          signal: healthController.signal,
         });
+
+        clearTimeout(healthTimeout);
+
         if (!healthResponse.ok) {
           throw new Error(`Server health check failed: ${healthResponse.status}`);
         }
@@ -212,19 +274,33 @@ export function useMcpChat(options: UseMcpChatOptions): UseMastraAgentReturn {
       }
 
       if (enableStreaming) {
-        // Use fetch with ReadableStream for SSE (more reliable than EventSource)
-        const sseUrl = `${endpoint}?token=${encodeURIComponent(effectiveToken)}&message=${encodeURIComponent(message)}`;
-        console.log('[useMcpChat] SSE URL:', sseUrl.replace(effectiveToken, '***'));
+        // Use fetch with POST for SSE to support long systemPrompt in body
+        // (GET with URL params truncates Japanese systemPrompt due to URL length limits)
+        console.log('[useMcpChat] POST request:', {
+          endpoint,
+          sessionId: sessionIdRef.current,
+          systemPromptLength: systemMessage?.length ?? 0,
+          messagePreview: message.substring(0, 50),
+        });
 
         let fullContent = '';
+        let lastServerError: string | null = null; // Track error messages from server
         setConnectionState('streaming');
 
         try {
-          const response = await fetch(sseUrl, {
-            method: 'GET',
+          const response = await fetch(endpoint, {
+            method: 'POST',
             headers: {
+              'Content-Type': 'application/json',
               'Accept': 'text/event-stream',
+              'Authorization': `Bearer ${effectiveToken}`,
             },
+            body: JSON.stringify({
+              message: message,
+              sessionId: sessionIdRef.current,
+              systemPrompt: systemMessage,
+              userId: userId,
+            }),
             signal: abortControllerRef.current?.signal,
           });
 
@@ -239,6 +315,8 @@ export function useMcpChat(options: UseMcpChatOptions): UseMastraAgentReturn {
 
           const decoder = new TextDecoder();
           let buffer = '';
+          // Track current event type from SSE "event:" line
+          let currentEventType: string | null = null;
 
           while (true) {
             const { done, value } = await reader.read();
@@ -249,30 +327,118 @@ export function useMcpChat(options: UseMcpChatOptions): UseMastraAgentReturn {
             buffer = lines.pop() || ''; // Keep incomplete line in buffer
 
             for (const line of lines) {
-              if (line.startsWith('data: ')) {
-                const jsonStr = line.slice(6);
-                console.log('[useMcpChat] Received:', jsonStr.substring(0, 100));
+              const trimmedLine = line.trim();
+
+              // Parse SSE event type line (e.g., "event: token")
+              if (trimmedLine.startsWith('event:')) {
+                currentEventType = trimmedLine.slice(6).trim();
+                continue;
+              }
+
+              // Parse SSE data line (e.g., "data: {...}")
+              if (trimmedLine.startsWith('data:')) {
+                const jsonStr = trimmedLine.slice(5).trim();
+                console.log('[useMcpChat] Received:', { eventType: currentEventType, data: jsonStr.substring(0, 100) });
+
+                // Handle [DONE] marker
+                if (jsonStr === '[DONE]') {
+                  currentEventType = null;
+                  continue;
+                }
 
                 try {
                   const data = JSON.parse(jsonStr);
 
-                  if (data.type === 'token' || data.type === 'text') {
+                  // Determine effective event type: prefer SSE event: line, fallback to data.type
+                  const effectiveType = currentEventType || data.type;
+
+                  // Save sessionId from server for conversation memory persistence
+                  if ((effectiveType === 'session' || effectiveType === 'start') && data.sessionId) {
+                    console.log('[useMcpChat] Received sessionId from server:', data.sessionId);
+                    sessionIdRef.current = data.sessionId;
+                    // Also persist to localStorage for page reload recovery (user-specific key)
+                    if (typeof window !== 'undefined') {
+                      localStorage.setItem(getSessionStorageKey(), data.sessionId);
+                    }
+                  } else if (effectiveType === 'token' || effectiveType === 'text') {
                     const token = data.token || data.text || data.content || '';
-                    fullContent += token;
+                    if (token) {
+                      fullContent += token;
+
+                      setMessages(prev => prev.map(msg =>
+                        msg.id === assistantMessageId
+                          ? { ...msg, content: fullContent, status: 'streaming' as const }
+                          : msg
+                      ));
+                    }
+                  } else if (effectiveType === 'complete' || effectiveType === 'done') {
+                    // Update sessionId if provided in complete event
+                    if (data.sessionId) {
+                      sessionIdRef.current = data.sessionId;
+                      // Also persist to localStorage for page reload recovery (user-specific key)
+                      if (typeof window !== 'undefined') {
+                        localStorage.setItem(getSessionStorageKey(), data.sessionId);
+                      }
+                    }
+                    // Extract toolCalls from the complete event for button display
+                    const toolCalls = data.toolCalls as MastraMessage['toolCalls'];
+                    console.log('[useMcpChat] Complete event:', {
+                      sessionId: data.sessionId,
+                      hasToolCalls: !!toolCalls,
+                      toolCallCount: toolCalls?.length ?? 0,
+                      toolNames: toolCalls?.map((tc: { toolName: string }) => tc.toolName),
+                      // Enhanced debug: Show toolCalls output details
+                      toolCallOutputs: toolCalls?.map((tc: { toolName: string; output?: unknown }) => ({
+                        toolName: tc.toolName,
+                        hasOutput: tc.output !== null && tc.output !== undefined,
+                        outputType: typeof tc.output,
+                        outputKeys: tc.output && typeof tc.output === 'object' ? Object.keys(tc.output as object) : [],
+                        hasSuggestions: tc.output && typeof tc.output === 'object' && 'suggestions' in (tc.output as object),
+                        suggestionsCount: tc.output && typeof tc.output === 'object' && Array.isArray((tc.output as Record<string, unknown>).suggestions)
+                          ? ((tc.output as Record<string, unknown>).suggestions as unknown[]).length : 0,
+                      })),
+                      // Debug: Show full content length for text fallback
+                      contentLength: fullContent?.length ?? 0,
+                    });
 
                     setMessages(prev => prev.map(msg =>
                       msg.id === assistantMessageId
-                        ? { ...msg, content: fullContent, status: 'streaming' as const }
+                        ? {
+                            ...msg,
+                            content: fullContent || data.content || data.message || '',
+                            status: 'complete' as const,
+                            toolCalls,
+                          }
                         : msg
                     ));
-                  } else if (data.type === 'complete' || data.type === 'done') {
+                  } else if (effectiveType === 'error') {
+                    // Store the error message for later display instead of throwing
+                    lastServerError = data.error || data.message || 'Unknown error from MCP agent';
+                    console.error('[useMcpChat] Server error:', lastServerError);
+                    // Update message with error status
                     setMessages(prev => prev.map(msg =>
                       msg.id === assistantMessageId
-                        ? { ...msg, content: fullContent || data.content || '', status: 'complete' as const }
+                        ? { ...msg, content: lastServerError || 'エラーが発生しました', status: 'error' as const }
                         : msg
                     ));
-                  } else if (data.type === 'error') {
-                    throw new Error(data.error || 'Unknown error from MCP agent');
+                  } else {
+                    // Fallback: No explicit type - try to extract content from various field names
+                    // This handles cases where MCP server sends data without type field
+                    const content = data.token
+                      || data.text
+                      || data.content
+                      || data.delta?.content
+                      || data.choices?.[0]?.delta?.content
+                      || data.choices?.[0]?.message?.content;
+
+                    if (content) {
+                      fullContent += content;
+                      setMessages(prev => prev.map(msg =>
+                        msg.id === assistantMessageId
+                          ? { ...msg, content: fullContent, status: 'streaming' as const }
+                          : msg
+                      ));
+                    }
                   }
                 } catch (parseErr) {
                   // Not JSON, might be raw text
@@ -285,6 +451,9 @@ export function useMcpChat(options: UseMcpChatOptions): UseMastraAgentReturn {
                     ));
                   }
                 }
+
+                // Reset event type after processing data
+                currentEventType = null;
               }
             }
           }
@@ -293,22 +462,54 @@ export function useMcpChat(options: UseMcpChatOptions): UseMastraAgentReturn {
           setIsStreaming(false);
           setConnectionState('idle');
 
-          // If no content received, mark as complete with empty response
-          if (!fullContent) {
+          // If no content received, show appropriate message based on whether there was a server error
+          if (!fullContent && !lastServerError) {
+            // No error but also no content - likely a silent failure
+            const noResponseMessage = '応答がありませんでした。MCPサーバーの状態を確認してください。Claude CLIが正しく認証されているか確認してください。';
             setMessages(prev => prev.map(msg =>
               msg.id === assistantMessageId
-                ? { ...msg, content: '(No response)', status: 'complete' as const }
+                ? { ...msg, content: noResponseMessage, status: 'error' as const }
+                : msg
+            ));
+          } else if (fullContent) {
+            // Stream ended with content - ensure message is marked as complete
+            // This handles cases where MCP server doesn't send explicit 'complete' event
+            console.log('[useMcpChat] Stream ended with content, marking as complete');
+            setMessages(prev => prev.map(msg =>
+              msg.id === assistantMessageId && msg.status !== 'complete'
+                ? { ...msg, content: fullContent, status: 'complete' as const }
                 : msg
             ));
           }
+          // If there was a server error, it was already handled in the error event processing above
         } catch (streamErr) {
-          console.error('[useMcpChat] Stream error:', streamErr);
+          const errorMessage = streamErr instanceof Error ? streamErr.message : String(streamErr);
+          const isAbortError = errorMessage.includes('aborted') || errorMessage.includes('AbortError');
 
-          // If we have content, consider it complete
+          console.error('[useMcpChat] Stream error:', {
+            error: errorMessage,
+            isAbortError,
+            hasContent: !!fullContent,
+            contentLength: fullContent?.length ?? 0,
+          });
+
+          // If we have content, consider it complete even if stream was aborted
+          // This handles the "BodyStreamBuffer was aborted" error gracefully
           if (fullContent) {
+            console.log('[useMcpChat] Recovering from stream error with partial content');
             setMessages(prev => prev.map(msg =>
               msg.id === assistantMessageId
                 ? { ...msg, content: fullContent, status: 'complete' as const }
+                : msg
+            ));
+            setIsStreaming(false);
+            setConnectionState('idle');
+          } else if (isAbortError) {
+            // Abort error with no content - show cancelled message
+            console.log('[useMcpChat] Stream aborted with no content');
+            setMessages(prev => prev.map(msg =>
+              msg.id === assistantMessageId
+                ? { ...msg, status: 'complete' as const, content: msg.content || '(通信が中断されました)' }
                 : msg
             ));
             setIsStreaming(false);
@@ -402,10 +603,10 @@ export function useMcpChat(options: UseMcpChatOptions): UseMastraAgentReturn {
         onError(error);
       }
     }
-  }, [server, agentId, enableStreaming, settings, onMessage, onError, onFallback, cleanupSSE, messages]);
+  }, [server, agentId, enableStreaming, settings, systemMessage, onMessage, onError, onFallback, cleanupSSE, messages]);
 
   /**
-   * Clear conversation history
+   * Clear conversation history and start a new session
    */
   const clearMessages = useCallback(() => {
     setMessages(systemMessage ? [{
@@ -418,7 +619,17 @@ export function useMcpChat(options: UseMcpChatOptions): UseMastraAgentReturn {
     setError(null);
     setConnectionState('idle');
     lastUserMessageRef.current = null;
-  }, [systemMessage]);
+
+    // Reset sessionId to start a fresh conversation on the server (user-specific)
+    const newSessionId = `mcp-session-${userId || 'anon'}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    sessionIdRef.current = newSessionId;
+
+    // Update localStorage with new sessionId (user-specific key)
+    if (typeof window !== 'undefined') {
+      localStorage.setItem(getSessionStorageKey(), newSessionId);
+      console.log('[useMcpChat] Session cleared, new sessionId:', { sessionId: newSessionId, userId });
+    }
+  }, [systemMessage, userId]);
 
   /**
    * Clear error state

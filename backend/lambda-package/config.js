@@ -6,6 +6,18 @@
  *
  * Requirements: 9.3
  */
+// Load environment variables from .env.local or .env file in development
+import dotenv from 'dotenv';
+import { existsSync } from 'fs';
+import { resolve } from 'path';
+// Prefer .env.local over .env (matching Next.js convention)
+// Use override: true to ensure .env.local takes precedence over system environment variables
+const envLocalPath = resolve(process.cwd(), '.env.local');
+const envPath = resolve(process.cwd(), '.env');
+dotenv.config({
+    path: existsSync(envLocalPath) ? envLocalPath : envPath,
+    override: true,
+});
 import { z } from 'zod';
 /**
  * Environment variable schema with Zod validation.

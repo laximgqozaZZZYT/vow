@@ -299,6 +299,8 @@ export interface Sticky {
   parentStickyId?: string | null;  // 親Sticky'nのID
   depth?: number;                   // ネストの深さ (0-2)
   agentTaskId?: string | null;      // エージェントタスクとの紐付け
+  /** 使いまわし設定。trueの場合、関連する繰り返しHabit(Daily/Weekly/Monthly)の期間リセット時にcompletedがfalseに戻る */
+  isReusable?: boolean;
   tags?: Tag[];
   goals?: Goal[];
   habits?: Habit[];
@@ -312,6 +314,7 @@ export interface CreateStickyPayload {
   description?: string;
   displayOrder?: number;
   parentStickyId?: string | null;
+  isReusable?: boolean;
 }
 
 export interface StickySectionProps {
@@ -321,3 +324,28 @@ export interface StickySectionProps {
   onStickyComplete: (stickyId: string) => void;
   onStickyDelete: (stickyId: string) => void;
 }
+
+// Unified Chat Response Format
+export type {
+  UnifiedEntityType,
+  UnifiedOperationType,
+  UnifiedButtonType,
+  UnifiedUserInfo,
+  UnifiedHabitDetail,
+  UnifiedGoalDetail,
+  UnifiedStickyDetail,
+  UnifiedReplyDetail,
+  UnifiedButton,
+  UnifiedChatResponse,
+} from './unified-response';
+
+export {
+  isUnifiedResponse,
+  isHabitDetail,
+  isGoalDetail,
+  isStickyDetail,
+  isReplyDetail,
+  extractUnifiedResponseFromMarkdown,
+  getTypedDetail,
+} from './unified-response';
+

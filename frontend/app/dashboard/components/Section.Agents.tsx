@@ -1181,6 +1181,64 @@ export default function AgentsSection({ onOpenSettings }: AgentsSectionProps) {
                   </svg>
                   <span className="hidden sm:inline">New Task</span>
                 </button>
+                {/* Export Conversation History Button */}
+                <button
+                  onClick={() => {
+                    const exportData = {
+                      exportedAt: new Date().toISOString(),
+                      agents: agents.map(a => ({
+                        id: a.id,
+                        name: a.name,
+                        role: a.role,
+                        status: a.status,
+                        agentType: a.agentType,
+                      })),
+                      activities: activities.map(a => ({
+                        id: a.id,
+                        agentId: a.agentId,
+                        agentName: a.agentName,
+                        eventType: a.eventType,
+                        taskId: a.taskId,
+                        taskTitle: a.taskTitle,
+                        details: a.details,
+                        createdAt: a.createdAt,
+                      })),
+                      tasks: tasks.map(t => ({
+                        id: t.id,
+                        title: t.title,
+                        description: t.description,
+                        status: t.status,
+                        priority: t.priority,
+                        assignedTo: t.assignedTo,
+                        assignedAgentName: t.assignedAgentName,
+                        createdAt: t.createdAt,
+                        updatedAt: t.updatedAt,
+                        completedAt: t.completedAt,
+                        tags: t.tags,
+                      })),
+                    };
+                    const jsonString = JSON.stringify(exportData, null, 2);
+                    const blob = new Blob([jsonString], { type: 'application/json' });
+                    const url = URL.createObjectURL(blob);
+                    const link = document.createElement('a');
+                    const date = new Date().toISOString().split('T')[0];
+                    link.href = url;
+                    link.download = `agents-export-${date}.json`;
+                    document.body.appendChild(link);
+                    link.click();
+                    document.body.removeChild(link);
+                    URL.revokeObjectURL(url);
+                  }}
+                  className="flex items-center gap-1.5 px-2.5 py-1.5 bg-muted hover:bg-muted/80 rounded-md text-xs font-medium transition-colors text-muted-foreground hover:text-foreground"
+                  title="Export Conversation History as JSON"
+                >
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                    <polyline points="7 10 12 15 17 10" />
+                    <line x1="12" y1="15" x2="12" y2="3" />
+                  </svg>
+                  <span className="hidden sm:inline">Export</span>
+                </button>
                 <button
                   onClick={() => server.refreshData()}
                   className="p-2 rounded-md hover:bg-muted transition-colors text-muted-foreground hover:text-foreground"

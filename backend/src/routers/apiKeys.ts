@@ -20,24 +20,27 @@ import { getSettings, type Settings } from '../config.js';
 import { getLogger } from '../utils/logger.js';
 import { ApiKeyRepository } from '../repositories/apiKeyRepository.js';
 import { ApiKeyService, MaxKeysReachedError } from '../services/apiKeyService.js';
-import { createApiKeyRequestSchema } from '../schemas/apiKey.js';
+import { createApiKeyRequestSchema, extendApiKeyRequestSchema } from '../schemas/apiKey.js';
 
 const logger = getLogger('routers.apiKeys');
 
 /**
- * Get Supabase client instance.
- *
- * Creates a Supabase client using the anon key for server-side operations.
+ * Get Supabase client instance with service role key (bypasses RLS).
  *
  * @param settings - Application settings.
  * @returns Supabase client instance.
  * @throws Error if Supabase is not configured.
  */
-function getSupabaseClient(settings: Settings): SupabaseClient {
-  if (!settings.supabaseUrl || !settings.supabaseAnonKey) {
-    throw new Error('Supabase is not configured');
+function getSupabaseClientServiceRole(settings: Settings): SupabaseClient {
+  if (!settings.supabaseUrl || !settings.supabaseServiceRoleKey) {
+    throw new Error('Supabase service role is not configured');
   }
-  return createClient(settings.supabaseUrl, settings.supabaseAnonKey);
+  return createClient(settings.supabaseUrl, settings.supabaseServiceRoleKey, {
+    auth: {
+      autoRefreshToken: false,
+      persistSession: false,
+    },
+  });
 }
 
 /**
@@ -62,7 +65,8 @@ function createApiKeyService(supabase: SupabaseClient): ApiKeyService {
 export function createApiKeyRouter(): Hono {
   const router = new Hono();
   const settings = getSettings();
-  const supabase = getSupabaseClient(settings);
+  // Use service role client to bypass RLS for server-side operations
+  const supabase = getSupabaseClientServiceRole(settings);
 
   // ---------------------------------------------------------------------------
   // JWT Authentication Middleware
@@ -126,6 +130,7 @@ export function createApiKeyRouter(): Hono {
    *
    * Request body:
    * - name: string (1-100 characters) - User-provided name for the key
+   * - expirationDays: string (7, 30, 90, 180, or 365) - Expiration period in days (default: 365)
    *
    * @returns Created API key object including the full key (only shown once)
    */
@@ -152,15 +157,16 @@ export function createApiKeyRouter(): Hono {
         );
       }
 
-      const { name } = parseResult.data;
+      const { name, expirationDays } = parseResult.data;
 
       const apiKeyService = createApiKeyService(supabase);
-      const createdKey = await apiKeyService.createKey(userId, name);
+      const createdKey = await apiKeyService.createKey(userId, name, expirationDays);
 
       logger.info('Create API key request successful', {
         userId,
         keyId: createdKey.id,
         keyPrefix: createdKey.keyPrefix,
+        expirationDays,
       });
 
       return c.json(createdKey, 201);
@@ -187,6 +193,86 @@ export function createApiKeyRouter(): Hono {
         {
           error: 'INTERNAL_ERROR',
           message: 'Failed to create API key',
+        },
+        500
+      );
+    }
+  });
+
+  /**
+   * PATCH /:keyId/extend
+   *
+   * Extend the expiration of an API key for the authenticated user.
+   *
+   * Request body:
+   * - extensionDays: string (7, 30, 90, 180, or 365) - Extension period in days from now
+   *
+   * @param keyId - UUID of the API key to extend
+   * @returns Updated API key object
+   */
+  router.patch('/:keyId/extend', async (c: Context) => {
+    const userId = getUserId(c);
+    const keyId = c.req.param('keyId');
+    logger.info('Extend API key expiration request', { userId, keyId });
+
+    try {
+      // Parse and validate request body
+      const body = await c.req.json().catch(() => ({}));
+      const parseResult = extendApiKeyRequestSchema.safeParse(body);
+
+      if (!parseResult.success) {
+        logger.warning('Invalid extend API key request body', {
+          userId,
+          keyId,
+          errors: parseResult.error.errors,
+        });
+        return c.json(
+          {
+            error: 'VALIDATION_ERROR',
+            message: 'extensionDays is required (7, 30, 90, 180, or 365)',
+          },
+          400
+        );
+      }
+
+      const { extensionDays } = parseResult.data;
+
+      const apiKeyService = createApiKeyService(supabase);
+      const updatedKey = await apiKeyService.extendExpiration(userId, keyId, extensionDays);
+
+      if (!updatedKey) {
+        logger.warning('API key not found or not owned by user', {
+          userId,
+          keyId,
+        });
+        return c.json(
+          {
+            error: 'API_KEY_NOT_FOUND',
+            message: 'API key not found',
+          },
+          404
+        );
+      }
+
+      logger.info('Extend API key expiration request successful', {
+        userId,
+        keyId,
+        extensionDays,
+        newExpiresAt: updatedKey.expiresAt,
+      });
+
+      return c.json({ key: updatedKey });
+    } catch (error) {
+      logger.error(
+        'Extend API key expiration request failed',
+        error instanceof Error ? error : new Error(String(error)),
+        { userId, keyId }
+      );
+
+      return c.json(
+        {
+          error: 'INTERNAL_ERROR',
+          message: 'Failed to extend API key expiration',
         },
         500
       );

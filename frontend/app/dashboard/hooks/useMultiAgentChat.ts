@@ -14,12 +14,28 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 
 /**
+ * Tool call information
+ */
+export interface ToolCallInfo {
+  toolName: string;
+  toolCallId?: string;
+  args?: unknown;
+  result?: unknown;
+}
+
+/**
  * Individual agent response
  */
 export interface AgentChatResponse {
   agentId: string;
   agentName: string;
   content: string;
+  toolCalls?: ToolCallInfo[];
+  toolResults?: Array<{
+    toolCallId: string;
+    toolName: string;
+    result: unknown;
+  }>;
   timestamp: Date;
   durationMs: number;
   status: 'pending' | 'streaming' | 'complete' | 'error';
@@ -64,6 +80,8 @@ export interface UseMultiAgentChatOptions {
   includeAgents?: ('habit-coach' | 'goal-planner' | 'progress-tracker')[];
   /** Locale for responses */
   locale?: 'ja' | 'en';
+  /** Use manager only mode - no specialist agents unless explicitly needed (default: true) */
+  managerOnly?: boolean;
   /** Callback when agents respond */
   onAgentResponse?: (response: AgentChatResponse) => void;
   /** Callback when summary is ready */
@@ -112,6 +130,7 @@ export function useMultiAgentChat(options?: UseMultiAgentChatOptions): UseMultiA
     enableStreaming = true,
     includeAgents,
     locale = 'ja',
+    managerOnly = true, // Default to manager-only mode
     onAgentResponse,
     onSummary,
     onError,
@@ -212,6 +231,8 @@ export function useMultiAgentChat(options?: UseMultiAgentChatOptions): UseMultiA
                     agentId: parsed.agentId,
                     agentName: parsed.agentName,
                     content: parsed.content,
+                    toolCalls: parsed.toolCalls,
+                    toolResults: parsed.toolResults,
                     timestamp: new Date(),
                     durationMs: parsed.durationMs || 0,
                     status: 'complete',
@@ -322,12 +343,16 @@ export function useMultiAgentChat(options?: UseMultiAgentChatOptions): UseMultiA
       agentId: string;
       agentName: string;
       content: string;
+      toolCalls?: ToolCallInfo[];
+      toolResults?: Array<{ toolCallId: string; toolName: string; result: unknown }>;
       timestamp: string;
       durationMs: number;
     }) => ({
       agentId: r.agentId,
       agentName: r.agentName,
       content: r.content,
+      toolCalls: r.toolCalls,
+      toolResults: r.toolResults,
       timestamp: new Date(r.timestamp),
       durationMs: r.durationMs,
       status: 'complete' as const,
@@ -435,16 +460,41 @@ export function useMultiAgentChat(options?: UseMultiAgentChatOptions): UseMultiA
         headers['Authorization'] = `Bearer ${authTokenRef.current}`;
       }
 
+      // Build conversation history for context
+      const conversationHistory = messages
+        .filter(m => m.role === 'user' || m.role === 'assistant')
+        .map(m => ({
+          role: m.role,
+          content: m.content,
+        }));
+
+      // Detect previous intent from conversation history
+      let previousIntent: 'habit_related' | 'goal_related' | 'progress_related' | 'general' | 'mixed' | undefined;
+      if (conversationHistory.length > 0) {
+        const firstUserMessage = conversationHistory.find(m => m.role === 'user')?.content.toLowerCase() || '';
+        if (firstUserMessage.includes('目標') || firstUserMessage.includes('goal') || firstUserMessage.includes('ゴール')) {
+          previousIntent = 'goal_related';
+        } else if (firstUserMessage.includes('習慣') || firstUserMessage.includes('habit')) {
+          previousIntent = 'habit_related';
+        } else if (firstUserMessage.includes('進捗') || firstUserMessage.includes('progress')) {
+          previousIntent = 'progress_related';
+        }
+      }
+
       // Build request body
       const body: Record<string, unknown> = {
         message,
         sessionId,
         locale,
         streaming: enableStreaming,
+        managerOnly,
+        conversationHistory,
+        ...(previousIntent && { previousIntent }),
       };
 
       if (includeAgents && includeAgents.length > 0) {
         body.includeAgents = includeAgents;
+        body.managerOnly = false; // Disable manager-only if specific agents are requested
       }
 
       // Make request
@@ -503,7 +553,7 @@ export function useMultiAgentChat(options?: UseMultiAgentChatOptions): UseMultiA
       setIsProcessing(false);
       abortControllerRef.current = null;
     }
-  }, [endpoint, enableStreaming, includeAgents, locale, onAgentResponse, onSummary, onError]);
+  }, [endpoint, enableStreaming, includeAgents, locale, managerOnly, onAgentResponse, onSummary, onError]);
 
   /**
    * Clear conversation history

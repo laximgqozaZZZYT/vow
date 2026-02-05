@@ -26,7 +26,7 @@ export declare class ApiKeyRepository extends BaseRepository<ApiKeyDb> {
      * Find an API key by its hash.
      *
      * Used for validating API keys during authentication. Only returns
-     * active (non-revoked) keys.
+     * active (non-revoked) keys that haven't expired.
      *
      * Requirements: 1.2 - Store key hash with associated user ID
      *
@@ -38,7 +38,7 @@ export declare class ApiKeyRepository extends BaseRepository<ApiKeyDb> {
      * Find all active API keys for a user.
      *
      * Used for listing a user's API keys in the management UI.
-     * Only returns active (non-revoked) keys.
+     * Only returns active (non-revoked) keys that haven't expired.
      *
      * Requirements: 1.4 - Support listing active keys
      *
@@ -50,6 +50,7 @@ export declare class ApiKeyRepository extends BaseRepository<ApiKeyDb> {
      * Count active API keys for a user.
      *
      * Used to enforce the maximum API key limit per user.
+     * Only counts keys that are active and not expired.
      *
      * Requirements: 1.4 - Support key limit enforcement
      *
@@ -80,5 +81,26 @@ export declare class ApiKeyRepository extends BaseRepository<ApiKeyDb> {
      * @param id - The unique identifier of the API key.
      */
     updateLastUsed(id: string): Promise<void>;
+    /**
+     * Extend the expiration of an API key.
+     *
+     * Sets a new expiration date for an active API key.
+     * Only the owner can extend their own keys.
+     *
+     * @param id - The unique identifier of the API key.
+     * @param userId - The user ID (for ownership verification).
+     * @param newExpiresAt - The new expiration date.
+     * @returns The updated API key record if found, null otherwise.
+     */
+    extendExpiration(id: string, userId: string, newExpiresAt: string): Promise<ApiKeyDb | null>;
+    /**
+     * Delete expired API keys.
+     *
+     * Cleans up keys that have passed their expiration date.
+     * This is a maintenance operation that can be run periodically.
+     *
+     * @returns Number of keys deleted.
+     */
+    deleteExpiredKeys(): Promise<number>;
 }
 //# sourceMappingURL=apiKeyRepository.d.ts.map

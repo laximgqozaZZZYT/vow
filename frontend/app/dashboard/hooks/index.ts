@@ -64,3 +64,41 @@ export {
   type ExpandedHabitsState,
   type UseExpandedHabitsReturn
 } from './useExpandedHabits';
+
+// AI Assistant mode
+export {
+  useAIAssistantMode,
+  isValidAIAssistantMode,
+  STORAGE_KEY as AI_ASSISTANT_MODE_STORAGE_KEY,
+  DEFAULT_MODE as AI_ASSISTANT_DEFAULT_MODE,
+  type AIAssistantMode,
+  type UseAIAssistantModeReturn
+} from './useAIAssistantMode';
+
+// Suggestion management (ISS-20260204-017)
+export {
+  useSnoozedSuggestions,
+  formatRemainingTime,
+  type SnoozedSuggestion,
+  type SuggestionToSnooze,
+  type UseSnoozedSuggestionsReturn
+} from './useSnoozedSuggestions';
+
+export {
+  useSuggestionHistory,
+  formatHistoryDate,
+  getStatusLabel,
+  getStatusLabelJa,
+  type SuggestionHistoryStatus,
+  type SuggestionHistoryItem,
+  type SuggestionHistoryFilter,
+  type SuggestionForHistory,
+  type UseSuggestionHistoryReturn
+} from './useSuggestionHistory';
+
+export {
+  useBulkSelection,
+  useBulkSelectionIds,
+  type Selectable,
+  type UseBulkSelectionReturn
+} from './useBulkSelection';

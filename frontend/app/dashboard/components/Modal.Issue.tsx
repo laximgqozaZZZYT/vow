@@ -41,6 +41,22 @@ export interface IssueFormData {
   conversationData?: ConversationData;
 }
 
+/**
+ * Debug export data structure
+ */
+interface DebugExportData {
+  exportedAt: string;
+  userAgent: string;
+  url: string;
+  conversation: ConversationData | null;
+  consoleLogs: string[];
+  localStorage: Record<string, string>;
+  sessionInfo: {
+    conversationId?: string;
+    messageCount: number;
+  };
+}
+
 interface IssueModalProps {
   open: boolean;
   onClose: () => void;
@@ -98,6 +114,63 @@ export function IssueModal({
   const [success, setSuccess] = useState<{ issueId: string } | null>(null);
   const [includeConversation, setIncludeConversation] = useState(true);
   const [copied, setCopied] = useState(false);
+  const [exportDownloaded, setExportDownloaded] = useState(false);
+
+  /**
+   * Export conversation and debug data as JSON file
+   */
+  const handleExportDebugData = useCallback(() => {
+    try {
+      // Collect console logs from window if available
+      const consoleLogs: string[] = [];
+      if (typeof window !== 'undefined' && (window as unknown as { __consoleLogs?: string[] }).__consoleLogs) {
+        consoleLogs.push(...(window as unknown as { __consoleLogs: string[] }).__consoleLogs.slice(-200));
+      }
+
+      // Collect localStorage data (excluding sensitive info)
+      const localStorageData: Record<string, string> = {};
+      if (typeof window !== 'undefined' && window.localStorage) {
+        for (let i = 0; i < localStorage.length; i++) {
+          const key = localStorage.key(i);
+          if (key && !key.includes('token') && !key.includes('auth') && !key.includes('password')) {
+            const value = localStorage.getItem(key);
+            if (value && value.length < 10000) { // Skip large values
+              localStorageData[key] = value;
+            }
+          }
+        }
+      }
+
+      const exportData: DebugExportData = {
+        exportedAt: new Date().toISOString(),
+        userAgent: typeof navigator !== 'undefined' ? navigator.userAgent : 'unknown',
+        url: typeof window !== 'undefined' ? window.location.href : 'unknown',
+        conversation: conversationData || null,
+        consoleLogs,
+        localStorage: localStorageData,
+        sessionInfo: {
+          conversationId,
+          messageCount: conversationData?.messages?.length || 0,
+        },
+      };
+
+      // Create and download file
+      const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `vow-debug-export-${new Date().toISOString().slice(0, 19).replace(/[:-]/g, '')}.json`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+
+      setExportDownloaded(true);
+      setTimeout(() => setExportDownloaded(false), 3000);
+    } catch (err) {
+      console.error('Failed to export debug data:', err);
+    }
+  }, [conversationData, conversationId]);
 
   // Reset form when modal opens/closes
   useEffect(() => {
@@ -421,6 +494,43 @@ export function IssueModal({
               </label>
             </div>
           )}
+
+          {/* Debug Export Download */}
+          <div className="p-4 bg-blue-50 dark:bg-blue-900/20 rounded-xl border border-blue-200 dark:border-blue-800">
+            <div className="flex items-center justify-between">
+              <div className="flex-1">
+                <span className="text-sm font-medium text-blue-700 dark:text-blue-300">
+                  {locale === 'ja' ? 'デバッグ情報をエクスポート' : 'Export Debug Data'}
+                </span>
+                <span className="block text-xs text-blue-600 dark:text-blue-400 mt-0.5">
+                  {locale === 'ja'
+                    ? '会話履歴、コンソールログ、セッション情報を含むJSONファイル'
+                    : 'JSON file with conversation, console logs, and session info'}
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={handleExportDebugData}
+                className="flex items-center gap-2 px-3 py-2 text-sm font-medium bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors"
+              >
+                {exportDownloaded ? (
+                  <>
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                    </svg>
+                    <span>{locale === 'ja' ? 'DL完了' : 'Downloaded'}</span>
+                  </>
+                ) : (
+                  <>
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                    </svg>
+                    <span>{locale === 'ja' ? 'ダウンロード' : 'Download'}</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
         </div>
 
         {/* Footer */}

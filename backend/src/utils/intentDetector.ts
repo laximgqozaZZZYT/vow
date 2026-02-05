@@ -129,7 +129,21 @@ const ADVICE_PATTERNS = [
   /どうすれば/,
   /どうしたら/,
   /続ける.*方法/,
+];
+
+/**
+ * 習慣改善リクエストのパターン
+ */
+const IMPROVEMENT_PATTERNS = [
   /改善/,
+  /もっと良く/,
+  /効率.*上げ/,
+  /見直し/,
+  /最適化/,
+  /ブラッシュアップ/,
+  /improve/i,
+  /optimize/i,
+  /better/i,
 ];
 
 /**
@@ -237,6 +251,17 @@ export function detectIntent(message: string): IntentDetectionResult {
       return {
         intent: 'get_advice',
         confidence: 0.8,
+        matchedPattern: pattern.source,
+      };
+    }
+  }
+
+  // 改善リクエストをチェック
+  for (const pattern of IMPROVEMENT_PATTERNS) {
+    if (pattern.test(normalizedMessage)) {
+      return {
+        intent: 'improve_habit',
+        confidence: 0.85,
         matchedPattern: pattern.source,
       };
     }
@@ -350,4 +375,15 @@ export function isAnalysisRequest(message: string): boolean {
 export function isAdviceRequest(message: string): boolean {
   const result = detectIntent(message);
   return result.intent === 'get_advice';
+}
+
+/**
+ * メッセージが習慣改善リクエストかチェック
+ *
+ * @param message - ユーザーメッセージ
+ * @returns 習慣改善リクエストの場合はtrue
+ */
+export function isImprovementRequest(message: string): boolean {
+  const result = detectIntent(message);
+  return result.intent === 'improve_habit';
 }

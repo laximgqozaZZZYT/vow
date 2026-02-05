@@ -439,10 +439,12 @@ export class SupabaseDirectClient {
 
   async createHabit(payload: any) {
     if (!supabase) throw new Error('Supabase not configured');
-    
+
+    console.log('[createHabit] Starting habit creation:', payload);
     debug.log('[createHabit] Starting habit creation:', payload);
-    
+
     const { data: session } = await supabase.auth.getSession();
+    console.log('[createHabit] Session check:', session?.session?.user ? 'Authenticated' : 'Not authenticated');
     debug.log('[createHabit] Session check:', session?.session?.user ? 'Authenticated' : 'Not authenticated');
     
     // ゲストユーザーの場合はローカルストレージに保存
@@ -531,19 +533,21 @@ export class SupabaseDirectClient {
       updated_at: now
     };
     
+    console.log('[createHabit] Insert data:', insertData);
     debug.log('[createHabit] Insert data:', insertData);
-    
+
     const { data, error } = await supabase
       .from('habits')
       .insert(insertData)
       .select()
       .single();
-    
+
     if (error) {
       console.error('[createHabit] Supabase error:', error);
       throw error;
     }
-    
+
+    console.log('[createHabit] Success:', data);
     debug.log('[createHabit] Success:', data);
     
     const createdHabit = {
@@ -3013,6 +3017,7 @@ export class SupabaseDirectClient {
       completed: s.completed,
       completedAt: s.completed_at,
       displayOrder: s.display_order,
+      isReusable: s.is_reusable ?? false,
       createdAt: s.created_at,
       updatedAt: s.updated_at,
       habits: stickyHabitsMap[s.id] || [],
@@ -3036,13 +3041,14 @@ export class SupabaseDirectClient {
         completed: false,
         completedAt: null,
         displayOrder: payload.displayOrder ?? guestStickies.length,
+        isReusable: payload.isReusable ?? false,
         createdAt: now,
         updatedAt: now
       };
-      
+
       guestStickies.push(newSticky);
       localStorage.setItem('guest-stickies', JSON.stringify(guestStickies));
-      
+
       return newSticky;
     }
     
@@ -3053,14 +3059,15 @@ export class SupabaseDirectClient {
         description: payload.description || '',
         completed: false,
         display_order: payload.displayOrder ?? 0,
+        is_reusable: payload.isReusable ?? false,
         owner_type: 'user',
         owner_id: session.session.user.id
       })
       .select()
       .single();
-    
+
     if (error) throw error;
-    
+
     return {
       id: data.id,
       name: data.name,
@@ -3068,6 +3075,7 @@ export class SupabaseDirectClient {
       completed: data.completed,
       completedAt: data.completed_at,
       displayOrder: data.display_order,
+      isReusable: data.is_reusable ?? false,
       createdAt: data.created_at,
       updatedAt: data.updated_at
     };
@@ -3099,17 +3107,18 @@ export class SupabaseDirectClient {
         updatedSticky.completedAt = payload.completed ? now : null;
       }
       if (payload.displayOrder !== undefined) updatedSticky.displayOrder = payload.displayOrder;
-      
+      if (payload.isReusable !== undefined) updatedSticky.isReusable = payload.isReusable;
+
       guestStickies[stickyIndex] = updatedSticky;
       localStorage.setItem('guest-stickies', JSON.stringify(guestStickies));
-      
+
       return updatedSticky;
     }
-    
+
     const updateData: any = {
       updated_at: new Date().toISOString()
     };
-    
+
     if (payload.name !== undefined) updateData.name = payload.name;
     if (payload.description !== undefined) updateData.description = payload.description;
     if (payload.completed !== undefined) {
@@ -3117,6 +3126,7 @@ export class SupabaseDirectClient {
       updateData.completed_at = payload.completed ? new Date().toISOString() : null;
     }
     if (payload.displayOrder !== undefined) updateData.display_order = payload.displayOrder;
+    if (payload.isReusable !== undefined) updateData.is_reusable = payload.isReusable;
     
     const { data, error } = await supabase
       .from('stickies')
@@ -3136,6 +3146,7 @@ export class SupabaseDirectClient {
       completed: data.completed,
       completedAt: data.completed_at,
       displayOrder: data.display_order,
+      isReusable: data.is_reusable ?? false,
       createdAt: data.created_at,
       updatedAt: data.updated_at
     };

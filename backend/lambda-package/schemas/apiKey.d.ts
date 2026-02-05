@@ -27,6 +27,8 @@ export declare const apiKeyDbSchema: z.ZodObject<{
     created_at: z.ZodString;
     /** Timestamp when the key was last used (null if never used) */
     last_used_at: z.ZodNullable<z.ZodString>;
+    /** Timestamp when the key expires (optional for legacy keys) */
+    expires_at: z.ZodOptional<z.ZodString>;
     /** Timestamp when the key was revoked (null if active) */
     revoked_at: z.ZodNullable<z.ZodString>;
     /** Whether the key is currently active */
@@ -41,6 +43,7 @@ export declare const apiKeyDbSchema: z.ZodObject<{
     key_prefix: string;
     last_used_at: string | null;
     revoked_at: string | null;
+    expires_at?: string | undefined;
 }, {
     created_at: string;
     id: string;
@@ -51,8 +54,15 @@ export declare const apiKeyDbSchema: z.ZodObject<{
     key_prefix: string;
     last_used_at: string | null;
     revoked_at: string | null;
+    expires_at?: string | undefined;
 }>;
 export type ApiKeyDb = z.infer<typeof apiKeyDbSchema>;
+/**
+ * Available expiration periods for API keys.
+ * Security note: Longer expiration periods increase risk if key is compromised.
+ */
+export declare const API_KEY_EXPIRATION_OPTIONS: readonly [7, 30, 90, 180, 365];
+export type ApiKeyExpirationDays = (typeof API_KEY_EXPIRATION_OPTIONS)[number];
 /**
  * Schema for creating a new API key.
  * Requirements: 1.1 - API key generation request
@@ -60,12 +70,29 @@ export type ApiKeyDb = z.infer<typeof apiKeyDbSchema>;
 export declare const createApiKeyRequestSchema: z.ZodObject<{
     /** User-provided name for the API key */
     name: z.ZodString;
+    /** Expiration in days (7, 30, 90, 180, or 365). Default: 365 days */
+    expirationDays: z.ZodEffects<z.ZodDefault<z.ZodOptional<z.ZodEnum<["7", "30", "90", "180", "365"]>>>, number, "7" | "30" | "90" | "180" | "365" | undefined>;
 }, "strip", z.ZodTypeAny, {
     name: string;
+    expirationDays: number;
 }, {
     name: string;
+    expirationDays?: "7" | "30" | "90" | "180" | "365" | undefined;
 }>;
 export type CreateApiKeyRequest = z.infer<typeof createApiKeyRequestSchema>;
+/**
+ * Schema for extending API key expiration.
+ * Requirements: Security - Allow extending existing key expiration
+ */
+export declare const extendApiKeyRequestSchema: z.ZodObject<{
+    /** Extension period in days (7, 30, 90, 180, or 365 days from now) */
+    extensionDays: z.ZodEffects<z.ZodEnum<["7", "30", "90", "180", "365"]>, number, "7" | "30" | "90" | "180" | "365">;
+}, "strip", z.ZodTypeAny, {
+    extensionDays: number;
+}, {
+    extensionDays: "7" | "30" | "90" | "180" | "365";
+}>;
+export type ExtendApiKeyRequest = z.infer<typeof extendApiKeyRequestSchema>;
 /**
  * Schema for API key response (used when listing keys).
  * Requirements: 1.3 - Return masked values and creation dates
@@ -81,12 +108,15 @@ export declare const apiKeyResponseSchema: z.ZodObject<{
     createdAt: z.ZodString;
     /** Timestamp when the key was last used (null if never used) */
     lastUsedAt: z.ZodNullable<z.ZodString>;
+    /** Timestamp when the key expires */
+    expiresAt: z.ZodString;
     /** Whether the key is currently active */
     isActive: z.ZodBoolean;
 }, "strip", z.ZodTypeAny, {
     id: string;
     name: string;
     isActive: boolean;
+    expiresAt: string;
     keyPrefix: string;
     createdAt: string;
     lastUsedAt: string | null;
@@ -94,6 +124,7 @@ export declare const apiKeyResponseSchema: z.ZodObject<{
     id: string;
     name: string;
     isActive: boolean;
+    expiresAt: string;
     keyPrefix: string;
     createdAt: string;
     lastUsedAt: string | null;
@@ -114,15 +145,19 @@ export declare const createApiKeyResponseSchema: z.ZodObject<{
     name: z.ZodString;
     /** Timestamp when the key was created */
     createdAt: z.ZodString;
+    /** Timestamp when the key expires */
+    expiresAt: z.ZodString;
 }, "strip", z.ZodTypeAny, {
     id: string;
     name: string;
+    expiresAt: string;
     key: string;
     keyPrefix: string;
     createdAt: string;
 }, {
     id: string;
     name: string;
+    expiresAt: string;
     key: string;
     keyPrefix: string;
     createdAt: string;

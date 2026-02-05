@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import type { Metadata } from "next";
 import ActivityModal from './components/Modal.Activity';
 import api from '../../lib/api';
@@ -8,6 +8,7 @@ import { debug } from '../../lib/debug';
 import { HabitModal } from "./components/Modal.Habit";
 import { GoalModal } from "./components/Modal.Goal";
 import { StickyModal } from "./components/Modal.Sticky";
+import { useStickyReset } from './hooks/useStickyReset';
 import EditLayoutModal from './components/Modal.LayoutEditor';
 import RecurringHabitConfirmModal from './components/Modal.RecurringHabitConfirm';
 import ManageTagsModal from './components/Modal.ManageTags';
@@ -52,7 +53,7 @@ export default function DashboardPage() {
   const [selectedGoal, setSelectedGoal] = useState<string | null>(null);
   
   // 認証状態を取得
-  const { isAuthed, isGuest, migrationStatus, isAdmin, isPremium, authToken } = useAuth();
+  const { isAuthed, isGuest, migrationStatus, isAdmin, isPremium, authToken, userId } = useAuth();
 
   // Check for guest data migration on page load
   useEffect(() => {
@@ -410,6 +411,28 @@ export default function DashboardPage() {
     }
   };
 
+  // Reset handler for reusable Sticky'n items
+  const handleResetSticky = useCallback(async (stickyId: string) => {
+    try {
+      debug.log('[Dashboard] Resetting sticky:', stickyId);
+      const updatedSticky = await api.updateSticky(stickyId, {
+        completed: false,
+        completedAt: null
+      });
+      setStickies(prev => prev.map(s => s.id === stickyId ? updatedSticky : s));
+    } catch (error) {
+      console.error('[Dashboard] Failed to reset sticky:', error);
+    }
+  }, []);
+
+  // Use the sticky reset hook to auto-reset reusable stickies on period change
+  useStickyReset({
+    habits,
+    stickies,
+    onResetSticky: handleResetSticky,
+    enabled: true
+  });
+
   // Habit/Goal タグ変更ハンドラー
   const handleHabitTagsChange = async (habitId: string, tagIds: string[]) => {
     try {
@@ -570,6 +593,7 @@ export default function DashboardPage() {
         isAdmin={isAdmin}
         isPremium={isPremium}
         authToken={authToken}
+        userId={userId}
       />
     </HandednessProvider>
     </LocaleProvider>
@@ -794,6 +818,7 @@ function DashboardLayout(props: any) {
     isAdmin,
     isPremium,
     authToken,
+    userId,
   } = props;
 
   // Tab navigation state
@@ -989,6 +1014,7 @@ function DashboardLayout(props: any) {
             goals={goals}
             habits={habits}
             authToken={authToken ?? undefined}
+            userId={userId ?? undefined}
             onHabitCreated={async () => {
               try {
                 const hs = await api.getHabits();
@@ -1013,7 +1039,7 @@ function DashboardLayout(props: any) {
   };
 
   return (
-    <div className="flex flex-col md:flex-row min-h-screen md:min-h-screen bg-background text-foreground overflow-hidden max-w-[100vw]">
+    <div className="flex flex-col min-h-screen bg-background text-foreground max-w-[100vw] lg:h-screen lg:overflow-hidden">
         <DashboardHeader
           onToggleSidebar={() => setShowLeftPane((s: boolean) => !s)}
           showSidebar={showLeftPane}
@@ -1048,9 +1074,10 @@ function DashboardLayout(props: any) {
       />
 
   {/* Main content pane with left tab navigation */}
-  <main className="flex-1 min-w-0 pt-16 pb-20 md:pb-0 flex flex-col md:flex-row overflow-hidden">
-        {/* Left Tab Navigation - Desktop */}
-        <div className="hidden md:flex flex-col h-[calc(100vh-4rem)] sticky top-16">
+  {/* PC版でサイドバー表示時は左/右マージンを追加 */}
+  <main className={`flex-1 min-w-0 pt-16 pb-20 md:pb-0 flex flex-col md:flex-row lg:pt-0 lg:mt-16 lg:h-[calc(100vh-4rem)] lg:overflow-hidden transition-[margin] duration-200 ${showLeftPane ? (isLeftHanded ? 'lg:mr-80' : 'lg:ml-80') : ''}`}>
+        {/* Left Tab Navigation - Desktop - Uses full height of main container */}
+        <div className="hidden md:flex md:flex-shrink-0 md:flex-col lg:h-full">
           <TabNavigation
             tabs={visibleTabs}
             activeTab={activeTab}
@@ -1060,8 +1087,8 @@ function DashboardLayout(props: any) {
           />
         </div>
 
-        {/* Tab Content */}
-        <div className="flex-1 p-4 lg:p-6 min-w-0 overflow-hidden">
+        {/* Tab Content - Scrollable on PC, uses full height of main container */}
+        <div className="flex-1 p-4 lg:p-6 min-w-0 lg:overflow-y-auto lg:h-full">
           <TabContent
             activeTab={activeTab}
             isFullView={isFullView}
@@ -1159,9 +1186,9 @@ function DashboardLayout(props: any) {
       <HabitModal
         key={selectedHabit?.id ?? 'none'}
         open={openHabitModal}
-        onClose={async () => { 
-          setOpenHabitModal(false); 
-          setSelectedHabitId(null); 
+        onClose={async () => {
+          setOpenHabitModal(false);
+          setSelectedHabitId(null);
           // Reload habits to reflect any level changes
           try {
             const hs = await api.getHabits();
@@ -1172,24 +1199,27 @@ function DashboardLayout(props: any) {
         }}
         habit={selectedHabit as any}
         onUpdate={async (updated) => {
-          try { 
-            const u = await api.updateHabit(updated.id, updated); 
-            setHabits((s: any[]) => s.map(h => h.id === updated.id ? u : h)); 
-          } catch(e) { 
-            console.error(e); 
+          try {
+            const u = await api.updateHabit(updated.id, updated);
+            setHabits((s: any[]) => s.map(h => h.id === updated.id ? u : h));
+          } catch(e) {
+            console.error(e);
           }
         }}
-        onDelete={async (id) => { 
-          try { 
-            await api.deleteHabit(id); 
-            setHabits((s: any[]) => s.filter(h => h.id !== id)); 
-          } catch(e) { 
-            console.error(e); 
-          } 
+        onDelete={async (id) => {
+          try {
+            await api.deleteHabit(id);
+            setHabits((s: any[]) => s.filter(h => h.id !== id));
+          } catch(e) {
+            console.error(e);
+          }
         }}
         categories={goals}
         tags={tags}
         onTagsChange={handleHabitTagsChange}
+        stickies={stickies}
+        onStickyComplete={handleStickyComplete}
+        onStickyEdit={handleStickyEdit}
       />
 
       <HabitModal
@@ -1203,6 +1233,9 @@ function DashboardLayout(props: any) {
         categories={goals}
         tags={tags}
         onTagsChange={handleHabitTagsChange}
+        stickies={stickies}
+        onStickyComplete={handleStickyComplete}
+        onStickyEdit={handleStickyEdit}
       />
 
       <ActivityModal

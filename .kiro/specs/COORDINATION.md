@@ -1,5 +1,10 @@
 # VOW Project - Agent Coordination File
 
+> **Note**: このファイルはAI Agents統合スプリント専用です。
+> - MCP Remote統合スプリント: `/specs/COORDINATION.md`
+> - 全体ガイド: `/CLAUDE.md`
+> - タスク割り当てボード: `/.claude/coordination/BOARD.md`
+
 **Last Updated**: 2025-02-02T11:00:00Z
 **Updated By**: vow-spec-architect (Claude Code)
 

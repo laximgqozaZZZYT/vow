@@ -15,7 +15,7 @@ Integration専門エージェント。RAG Pipeline構築、MCP連携、パフォ
    - RLS (Row Level Security) パターンを確認
    - マイグレーション命名規則: `YYYYMMDDHHMMSS_description.sql`
 
-2. **MCP Task Server** (`/home/ubuntu/mcp-multi-agent/`)
+2. **MCP Task Server** (`/home/ubuntu/.mcp-multi-agent/`)
    - VOW外部のMCPサーバー
    - HTTP REST API + SSE
    - 認証: Bearer Token

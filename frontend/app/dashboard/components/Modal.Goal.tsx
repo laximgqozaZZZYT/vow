@@ -266,17 +266,23 @@ export function GoalModal({ open, onClose, goal, onUpdate, onDelete, onCreate, o
 
     if (!open) return null
 
-    function handleSave() {
+    async function handleSave() {
         setIsLoading(true)
         try {
             if (goal) {
                 const updated: Goal = { ...goal, name: name.trim() || 'Untitled', details: details.trim() || undefined, dueDate: dueDate ? formatLocalDate(dueDate) : undefined, parentId }
                 onUpdate && onUpdate(updated)
+                onClose()
             } else {
                 const payload = { name: name.trim() || 'Untitled', details: details.trim() || undefined, dueDate: dueDate ? formatLocalDate(dueDate) : undefined, parentId: parentId || null }
-                onCreate && onCreate(payload)
+                if (onCreate) {
+                    await onCreate(payload)
+                }
+                onClose()
             }
-            onClose()
+        } catch (error) {
+            console.error('[GoalModal] handleSave failed:', error)
+            // Don't close modal on error
         } finally {
             setIsLoading(false)
         }

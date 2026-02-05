@@ -108,6 +108,7 @@ export function StickyModal({
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [parentStickyId, setParentStickyId] = useState<string | null>(null);
+  const [isReusable, setIsReusable] = useState(false);
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [selectedGoals, setSelectedGoals] = useState<string[]>([]);
   const [selectedHabits, setSelectedHabits] = useState<string[]>([]);
@@ -126,11 +127,13 @@ export function StickyModal({
       setName(sticky.name || '');
       setDescription(sticky.description || '');
       setParentStickyId(sticky.parentStickyId || null);
+      setIsReusable(sticky.isReusable ?? false);
       loadRelations();
     } else if (open && !sticky) {
       setName('');
       setDescription('');
       setParentStickyId(initialParentId || null);
+      setIsReusable(false);
       setSelectedTags([]);
       setSelectedGoals([]);
       setSelectedHabits([]);
@@ -178,7 +181,8 @@ export function StickyModal({
       const payload = {
         name: name.trim(),
         description: description.trim(),
-        parentStickyId: parentStickyId
+        parentStickyId: parentStickyId,
+        isReusable: isReusable
       };
 
       if (sticky) {
@@ -508,6 +512,32 @@ export function StickyModal({
                 emptyMessage="No habits available"
               />
             </CollapsibleSection>
+          </div>
+
+          {/* 使いまわし設定 */}
+          <div className="flex items-center justify-between py-3 border-t border-border">
+            <div className="flex-1">
+              <label className="text-sm font-medium">使いまわし</label>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                繰り返しHabit(Daily/Weekly/Monthly)の期間リセット時に、このSticky'nも未完了に戻します
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setIsReusable(!isReusable)}
+              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                isReusable ? 'bg-primary' : 'bg-muted'
+              }`}
+              role="switch"
+              aria-checked={isReusable}
+              aria-label="使いまわし設定"
+            >
+              <span
+                className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                  isReusable ? 'translate-x-6' : 'translate-x-1'
+                }`}
+              />
+            </button>
           </div>
         </div>
 

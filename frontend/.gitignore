@@ -17,6 +17,8 @@
 /test-results/
 /test-results.json
 /test-results.xml
+/.auth/
+/playwright-report/
 
 # next.js
 /.next/

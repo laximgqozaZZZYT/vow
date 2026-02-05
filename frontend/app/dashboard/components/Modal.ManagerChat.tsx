@@ -11,6 +11,8 @@
  * - Agent progress and completion reports
  * - All participants visible in one chat stream
  *
+ * Now uses Widget.GroupChatTimeline for chat display.
+ *
  * @module Modal.ManagerChat
  */
 
@@ -28,6 +30,8 @@ import type {
 } from '../types/agent.types';
 import { ROLE_CONFIG } from '../types/agent.types';
 import type { ConnectionState } from '../hooks/useMultiAgentServer';
+import { GroupChatTimeline, convertToTimelineMessage } from './Widget.GroupChatTimeline';
+import type { TimelineChatMessage } from './Widget.GroupChatTimeline';
 
 interface ManagerChatModalProps {
   isOpen: boolean;
@@ -50,178 +54,8 @@ interface ManagerChatModalProps {
   focusTaskId?: string | null;
 }
 
-/**
- * Get avatar/icon for message sender
- * Each role gets a unique color for easy identification in group chat
- */
-function getAvatarConfig(role: ChatMessageRole, agentRole?: AgentRole): { icon: string; bgColor: string; textColor: string; borderColor: string } {
-  if (role === 'user') {
-    return { icon: '👤', bgColor: 'bg-blue-500', textColor: 'text-white', borderColor: 'border-blue-500' };
-  }
-  if (role === 'system') {
-    return { icon: '⚙️', bgColor: 'bg-gray-500', textColor: 'text-white', borderColor: 'border-gray-500' };
-  }
-  if (role === 'manager' || agentRole === 'manager') {
-    return { icon: '👔', bgColor: 'bg-purple-500', textColor: 'text-white', borderColor: 'border-purple-500' };
-  }
-  // Assign colors based on agent role for group chat distinction
-  if (agentRole) {
-    const roleColors: Record<string, { bgColor: string; borderColor: string }> = {
-      developer: { bgColor: 'bg-blue-400', borderColor: 'border-blue-400' },
-      reviewer: { bgColor: 'bg-orange-400', borderColor: 'border-orange-400' },
-      tester: { bgColor: 'bg-green-400', borderColor: 'border-green-400' },
-      architect: { bgColor: 'bg-indigo-400', borderColor: 'border-indigo-400' },
-      devops: { bgColor: 'bg-red-400', borderColor: 'border-red-400' },
-      documenter: { bgColor: 'bg-yellow-400', borderColor: 'border-yellow-400' },
-      analyst: { bgColor: 'bg-cyan-400', borderColor: 'border-cyan-400' },
-    };
-    const config = ROLE_CONFIG[agentRole];
-    const colors = roleColors[agentRole] || { bgColor: 'bg-gray-400', borderColor: 'border-gray-400' };
-    return { icon: config.icon, bgColor: colors.bgColor, textColor: 'text-white', borderColor: colors.borderColor };
-  }
-  return { icon: '🤖', bgColor: 'bg-gray-400', textColor: 'text-white', borderColor: 'border-gray-400' };
-}
-
-/**
- * Message type badge
- */
-function MessageTypeBadge({ type }: { type?: ChatMessageType }) {
-  if (!type || type === 'message') return null;
-
-  const config: Record<string, { label: string; color: string }> = {
-    task_assignment: { label: '割当', color: 'bg-blue-500/20 text-blue-500' },
-    progress_report: { label: '進捗', color: 'bg-yellow-500/20 text-yellow-500' },
-    completion_report: { label: '完了', color: 'bg-green-500/20 text-green-500' },
-    error_report: { label: 'エラー', color: 'bg-red-500/20 text-red-500' },
-    spec_draft: { label: 'SPEC', color: 'bg-purple-500/20 text-purple-500' },
-    instruction: { label: '指示', color: 'bg-cyan-500/20 text-cyan-500' },
-  };
-
-  const cfg = config[type];
-  if (!cfg) return null;
-
-  return (
-    <span className={`text-[10px] px-1.5 py-0.5 rounded ${cfg.color}`}>
-      {cfg.label}
-    </span>
-  );
-}
-
-/**
- * Message Bubble Component - Group Chat Style
- * All messages aligned left with sender identification
- */
-function MessageBubble({
-  message,
-  onAction,
-  isHighlighted = false,
-}: {
-  message: ChatMessage;
-  onAction?: (action: ChatAction) => void;
-  isHighlighted?: boolean;
-}) {
-  const isUser = message.role === 'user';
-  const isSystem = message.role === 'system';
-  const isManager = message.role === 'manager' || message.agentRole === 'manager';
-  const avatar = getAvatarConfig(message.role, message.agentRole);
-
-  const getSenderName = () => {
-    if (isUser) return 'You';
-    if (isSystem) return 'System';
-    if (message.agentName) return message.agentName;
-    if (message.role === 'manager') return 'Manager';
-    return 'Agent';
-  };
-
-  const getRoleLabel = () => {
-    if (isUser) return null;
-    if (isSystem) return null;
-    if (isManager) return 'Manager';
-    if (message.agentRole) return ROLE_CONFIG[message.agentRole]?.label || message.agentRole;
-    return null;
-  };
-
-  // Get bubble background based on role for visual distinction
-  const getBubbleStyle = () => {
-    if (isUser) {
-      return 'bg-blue-500/10 border-l-4 border-l-blue-500';
-    }
-    if (isSystem) {
-      return 'bg-muted/30 border-l-4 border-l-gray-400 italic';
-    }
-    if (isManager) {
-      return 'bg-purple-500/10 border-l-4 border-l-purple-500';
-    }
-    // Other agents get their role color
-    return `bg-muted border-l-4 ${avatar.borderColor}`;
-  };
-
-  return (
-    <div className={`flex gap-3 mb-4 group rounded-lg transition-colors ${isHighlighted ? 'bg-primary/5 -mx-2 px-2 py-1 ring-1 ring-primary/20' : ''}`}>
-      {/* Avatar */}
-      <div className={`shrink-0 w-9 h-9 rounded-full flex items-center justify-center text-sm shadow-sm ${avatar.bgColor} ${avatar.textColor}`}>
-        {avatar.icon}
-      </div>
-
-      {/* Content */}
-      <div className="flex-1 min-w-0">
-        {/* Sender info bar */}
-        <div className="flex items-center gap-2 mb-1">
-          <span className={`text-sm font-semibold ${isUser ? 'text-blue-600 dark:text-blue-400' : isManager ? 'text-purple-600 dark:text-purple-400' : 'text-foreground'}`}>
-            {getSenderName()}
-          </span>
-          {getRoleLabel() && !isUser && (
-            <span className="text-[10px] px-1.5 py-0.5 rounded bg-muted text-muted-foreground">
-              {getRoleLabel()}
-            </span>
-          )}
-          <MessageTypeBadge type={message.messageType} />
-          <span className="text-[10px] text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity">
-            {new Date(message.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-          </span>
-        </div>
-
-        {/* Message bubble */}
-        <div className={`rounded-lg px-3 py-2 ${getBubbleStyle()}`}>
-          {/* Task reference */}
-          {message.taskTitle && (
-            <div className="text-[10px] text-muted-foreground mb-1 flex items-center gap-1 bg-background/50 rounded px-1.5 py-0.5 w-fit">
-              <span>📋</span>
-              <span className="truncate max-w-[200px]">{message.taskTitle}</span>
-            </div>
-          )}
-
-          {/* Content */}
-          <div className="text-sm whitespace-pre-wrap">{message.content}</div>
-
-          {/* Actions */}
-          {message.actions && message.actions.length > 0 && (
-            <div className="flex flex-wrap gap-2 mt-2 pt-2 border-t border-border/50">
-              {message.actions.map((action) => (
-                <button
-                  key={action.id}
-                  onClick={() => onAction?.(action)}
-                  className={`
-                    text-xs px-2.5 py-1 rounded-md
-                    transition-colors
-                    ${action.type === 'approve'
-                      ? 'bg-green-500 hover:bg-green-600 text-white'
-                      : action.type === 'reject'
-                        ? 'bg-red-500 hover:bg-red-600 text-white'
-                        : 'bg-primary/10 hover:bg-primary/20 text-primary'
-                    }
-                  `}
-                >
-                  {action.label}
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
-      </div>
-    </div>
-  );
-}
+// Note: MessageBubble, MessageTypeBadge, and getAvatarConfig have been moved to Widget.GroupChatTimeline.tsx
+// This modal now uses the GroupChatTimeline component for rendering messages.
 
 /**
  * Session Selector Component
@@ -501,9 +335,8 @@ export default function ManagerChatModal({
   const [isLoading, setIsLoading] = useState(false);
   const [selectedAgentId, setSelectedAgentId] = useState<string | null>(null);
   const [filterByTask, setFilterByTask] = useState<string | null>(null);
-  const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
-  const focusMessageRef = useRef<HTMLDivElement>(null);
+  // Note: messagesEndRef and focusMessageRef are now handled internally by GroupChatTimeline
 
   // Initialize processedActivityIds from existing messages to prevent duplicates on reload
   const processedActivityIds = useRef<Set<string>>(new Set<string>());
@@ -574,10 +407,7 @@ export default function ManagerChatModal({
   useEffect(() => {
     if (focusTaskId && isOpen) {
       setFilterByTask(focusTaskId);
-      // Scroll to first message related to this task after a short delay
-      setTimeout(() => {
-        focusMessageRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      }, 100);
+      // Note: Scrolling is now handled internally by GroupChatTimeline via focusTaskId prop
     }
   }, [focusTaskId, isOpen]);
 
@@ -693,10 +523,25 @@ export default function ManagerChatModal({
     return filtered.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
   }, [messages, currentSessionId, filterByTask]);
 
-  // Scroll to bottom when messages change
-  useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  // Convert session messages to timeline format
+  const timelineMessages: TimelineChatMessage[] = useMemo(() => {
+    return sessionMessages.map(convertToTimelineMessage);
   }, [sessionMessages]);
+
+  // Handle action from timeline
+  const handleTimelineAction = useCallback((action: ChatAction, _message: TimelineChatMessage) => {
+    console.log('Timeline action clicked:', action);
+    const confirmMessage: ChatMessage = {
+      id: `msg-${Date.now()}`,
+      sessionId: currentSessionId,
+      role: 'system',
+      content: `アクション「${action.label}」を実行しました。`,
+      createdAt: new Date().toISOString(),
+    };
+    setMessages(prev => [...prev, confirmMessage]);
+  }, [currentSessionId]);
+
+  // Note: Auto-scroll is now handled by GroupChatTimeline component
 
   // Focus input when modal opens
   useEffect(() => {
@@ -824,17 +669,7 @@ export default function ManagerChatModal({
     }
   };
 
-  const handleAction = (action: ChatAction) => {
-    console.log('Action clicked:', action);
-    const confirmMessage: ChatMessage = {
-      id: `msg-${Date.now()}`,
-      sessionId: currentSessionId,
-      role: 'system',
-      content: `アクション「${action.label}」を実行しました。`,
-      createdAt: new Date().toISOString(),
-    };
-    setMessages(prev => [...prev, confirmMessage]);
-  };
+  // Note: handleAction has been replaced by handleTimelineAction above
 
   const handleNewSession = () => {
     const newSession: ChatSession = {
@@ -935,72 +770,17 @@ export default function ManagerChatModal({
           </div>
         )}
 
-        {/* Messages */}
-        <div className="flex-1 overflow-y-auto p-4">
-          {sessionMessages.length === 0 ? (
-            filterByTask ? (
-              <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
-                <div className="text-4xl mb-3">📋</div>
-                <p className="text-sm font-medium">このタスクに関連するメッセージはまだありません</p>
-                <p className="text-xs mt-1">タスクの進捗があればここに表示されます</p>
-                <button
-                  onClick={() => setFilterByTask(null)}
-                  className="mt-3 text-xs px-3 py-1.5 rounded bg-primary text-primary-foreground hover:bg-primary/90 transition-colors"
-                >
-                  全てのメッセージを表示
-                </button>
-              </div>
-            ) : (
-              <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
-                <div className="text-4xl mb-3">🤖</div>
-                <p className="text-sm font-medium">エージェントに指示を送信してください</p>
-                <p className="text-xs mt-1">Managerが一次対応し、必要に応じて他のエージェントに割り当てます</p>
-              </div>
-            )
-          ) : (
-            <>
-              {sessionMessages.map((message, index) => {
-                // First message for the focused task gets the ref
-                const isFirstFocusedMessage = filterByTask &&
-                  message.taskId === filterByTask &&
-                  !sessionMessages.slice(0, index).some(m => m.taskId === filterByTask);
-
-                return (
-                  <div
-                    key={message.id}
-                    ref={isFirstFocusedMessage ? focusMessageRef : undefined}
-                  >
-                    <MessageBubble
-                      message={message}
-                      onAction={handleAction}
-                      isHighlighted={filterByTask ? message.taskId === filterByTask : false}
-                    />
-                  </div>
-                );
-              })}
-              {isLoading && (
-                <div className="flex gap-3 mb-4">
-                  <div className={`shrink-0 w-9 h-9 rounded-full flex items-center justify-center text-sm shadow-sm ${getAvatarConfig(targetAgent?.role === 'manager' ? 'manager' : 'agent', targetAgent?.role).bgColor} ${getAvatarConfig(targetAgent?.role === 'manager' ? 'manager' : 'agent', targetAgent?.role).textColor}`}>
-                    {getAvatarConfig(targetAgent?.role === 'manager' ? 'manager' : 'agent', targetAgent?.role).icon}
-                  </div>
-                  <div className="flex-1">
-                    <div className="text-sm font-semibold text-muted-foreground mb-1">
-                      {targetAgent?.name || 'Agent'} is typing...
-                    </div>
-                    <div className="bg-muted rounded-lg px-4 py-3 w-fit border-l-4 border-l-gray-300">
-                      <div className="flex items-center gap-1.5">
-                        <div className="w-2 h-2 bg-muted-foreground/60 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
-                        <div className="w-2 h-2 bg-muted-foreground/60 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
-                        <div className="w-2 h-2 bg-muted-foreground/60 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              )}
-              <div ref={messagesEndRef} />
-            </>
-          )}
-        </div>
+        {/* Messages - Using GroupChatTimeline component */}
+        <GroupChatTimeline
+          messages={timelineMessages}
+          focusTaskId={filterByTask || undefined}
+          locale="ja"
+          showDateSeparators={true}
+          isLoading={isLoading}
+          loadingAgent={targetAgent ? { name: targetAgent.name, role: targetAgent.role } : undefined}
+          onActionClick={handleTimelineAction}
+          emptyMessage={filterByTask ? 'このタスクに関連するメッセージはまだありません' : undefined}
+        />
 
         {/* Quick Commands */}
         <QuickCommands onCommand={handleQuickCommand} />

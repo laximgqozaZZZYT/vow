@@ -31,7 +31,7 @@ export class ApiKeyRepository extends BaseRepository<ApiKeyDb> {
    * Find an API key by its hash.
    *
    * Used for validating API keys during authentication. Only returns
-   * active (non-revoked) keys.
+   * active (non-revoked) keys that haven't expired.
    *
    * Requirements: 1.2 - Store key hash with associated user ID
    *
@@ -39,6 +39,7 @@ export class ApiKeyRepository extends BaseRepository<ApiKeyDb> {
    * @returns The API key record if found and active, null otherwise.
    */
   async findByKeyHash(keyHash: string): Promise<ApiKeyDb | null> {
+    // First try with expiration check
     const { data, error } = await this.supabase
       .from(this.tableName)
       .select('*')
@@ -49,14 +50,24 @@ export class ApiKeyRepository extends BaseRepository<ApiKeyDb> {
     if (error || !data) {
       return null;
     }
-    return data as ApiKeyDb;
+
+    // Check expiration if expires_at exists
+    const apiKey = data as ApiKeyDb;
+    if (apiKey.expires_at) {
+      const expiresAt = new Date(apiKey.expires_at);
+      if (expiresAt <= new Date()) {
+        return null; // Key has expired
+      }
+    }
+
+    return apiKey;
   }
 
   /**
    * Find all active API keys for a user.
    *
    * Used for listing a user's API keys in the management UI.
-   * Only returns active (non-revoked) keys.
+   * Only returns active (non-revoked) keys that haven't expired.
    *
    * Requirements: 1.4 - Support listing active keys
    *
@@ -74,13 +85,22 @@ export class ApiKeyRepository extends BaseRepository<ApiKeyDb> {
     if (error || !data) {
       return [];
     }
-    return data as ApiKeyDb[];
+
+    // Filter out expired keys (backward compatible with keys without expires_at)
+    const now = new Date();
+    const keys = (data as ApiKeyDb[]).filter((key) => {
+      if (!key.expires_at) return true; // Legacy keys without expiration
+      return new Date(key.expires_at) > now;
+    });
+
+    return keys;
   }
 
   /**
    * Count active API keys for a user.
    *
    * Used to enforce the maximum API key limit per user.
+   * Only counts keys that are active and not expired.
    *
    * Requirements: 1.4 - Support key limit enforcement
    *
@@ -88,16 +108,9 @@ export class ApiKeyRepository extends BaseRepository<ApiKeyDb> {
    * @returns The count of active API keys for the user.
    */
   async countActiveByUserId(userId: string): Promise<number> {
-    const { count, error } = await this.supabase
-      .from(this.tableName)
-      .select('id', { count: 'exact', head: true })
-      .eq('user_id', userId)
-      .eq('is_active', true);
-
-    if (error || count === null) {
-      return 0;
-    }
-    return count;
+    // Use findActiveByUserId to get accurate count including expiration filtering
+    const keys = await this.findActiveByUserId(userId);
+    return keys.length;
   }
 
   /**
@@ -145,5 +158,55 @@ export class ApiKeyRepository extends BaseRepository<ApiKeyDb> {
         last_used_at: new Date().toISOString(),
       })
       .eq('id', id);
+  }
+
+  /**
+   * Extend the expiration of an API key.
+   *
+   * Sets a new expiration date for an active API key.
+   * Only the owner can extend their own keys.
+   *
+   * @param id - The unique identifier of the API key.
+   * @param userId - The user ID (for ownership verification).
+   * @param newExpiresAt - The new expiration date.
+   * @returns The updated API key record if found, null otherwise.
+   */
+  async extendExpiration(id: string, userId: string, newExpiresAt: string): Promise<ApiKeyDb | null> {
+    const { data, error } = await this.supabase
+      .from(this.tableName)
+      .update({
+        expires_at: newExpiresAt,
+      })
+      .eq('id', id)
+      .eq('user_id', userId)
+      .eq('is_active', true)
+      .select()
+      .single();
+
+    if (error || !data) {
+      return null;
+    }
+    return data as ApiKeyDb;
+  }
+
+  /**
+   * Delete expired API keys.
+   *
+   * Cleans up keys that have passed their expiration date.
+   * This is a maintenance operation that can be run periodically.
+   *
+   * @returns Number of keys deleted.
+   */
+  async deleteExpiredKeys(): Promise<number> {
+    const { data, error } = await this.supabase
+      .from(this.tableName)
+      .delete()
+      .lt('expires_at', new Date().toISOString())
+      .select('id');
+
+    if (error || !data) {
+      return 0;
+    }
+    return data.length;
   }
 }

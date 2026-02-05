@@ -89,10 +89,11 @@ export declare class ApiKeyService {
      *
      * @param userId - The unique identifier of the user.
      * @param name - User-provided name for the API key.
+     * @param expirationDays - Expiration period in days (7-365). Default: 365.
      * @returns The created API key details including the full key.
      * @throws MaxKeysReachedError if user already has 5 active keys.
      */
-    createKey(userId: string, name: string): Promise<CreateApiKeyResponse>;
+    createKey(userId: string, name: string, expirationDays?: number): Promise<CreateApiKeyResponse>;
     /**
      * Validate an API key and return the associated user ID.
      *
@@ -152,5 +153,26 @@ export declare class ApiKeyService {
      * @returns The count of active API keys for the user.
      */
     countActiveKeys(userId: string): Promise<number>;
+    /**
+     * Clean up expired API keys.
+     *
+     * Removes keys that have passed their expiration date.
+     *
+     * @returns Number of keys deleted.
+     */
+    cleanupExpiredKeys(): Promise<number>;
+    /**
+     * Extend the expiration of an API key.
+     *
+     * Allows a user to extend the expiration date of an active API key.
+     * The new expiration is calculated from the current date plus the
+     * specified number of days (7-365 days).
+     *
+     * @param userId - The unique identifier of the user (for ownership verification).
+     * @param keyId - The unique identifier of the API key to extend.
+     * @param extensionDays - Number of days to extend from now (7-365).
+     * @returns The updated API key response, or null if not found.
+     */
+    extendExpiration(userId: string, keyId: string, extensionDays: number): Promise<ApiKeyResponse | null>;
 }
 //# sourceMappingURL=apiKeyService.d.ts.map

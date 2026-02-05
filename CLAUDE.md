@@ -242,7 +242,7 @@ For large-scale parallel development with 10-20 Claude agents, use the MCP Task 
 
 # In each tmux pane, Claude starts automatically configured with MCP
 # Or start manually:
-claude --mcp-config /home/ubuntu/mcp-multi-agent/mcp-config.json
+claude --mcp-config /home/ubuntu/.mcp-multi-agent/mcp-config.json
 ```
 
 ### Agent Roles for VOW
@@ -276,7 +276,7 @@ export MACHINE_ID="remote-machine"
 curl -H "Authorization: Bearer $TASK_SERVER_TOKEN" $TASK_SERVER_URL/health
 
 # 4. Copy MCP config and start Claude
-scp host:/home/ubuntu/mcp-multi-agent/mcp-config.json ./
+scp host:/home/ubuntu/.mcp-multi-agent/mcp-config.json ./
 claude --mcp-config mcp-config.json
 ```
 
@@ -299,7 +299,7 @@ claude --mcp-config mcp-config.json
 
 ```bash
 # Server commands (from MCP directory)
-cd /home/ubuntu/mcp-multi-agent
+cd /home/ubuntu/.mcp-multi-agent
 
 ./setup_multi_agent.sh start-server    # Start server
 ./setup_multi_agent.sh server-status   # Check status
@@ -345,6 +345,66 @@ manager_dashboard            # マシン・信頼情報を含む詳細統計
 | basic | 5 | 基本ロールのみ |
 | elevated | 10 | 全ロール（manager除く） |
 | full | 20 | 完全アクセス |
+
+## Document Map (ドキュメント一覧)
+
+**Last Updated**: 2026-02-04
+
+> **重要**: MCPサーバーのパスは `/home/ubuntu/.mcp-multi-agent/` です（ドット付き）。
+> `/home/ubuntu/mcp-multi-agent/`（ドットなし）は間違いです。
+
+エージェントが参照すべきドキュメントの優先順位:
+
+### 1. 作業開始時に必読 (必須)
+| 優先度 | ドキュメント | 場所 | 説明 |
+|--------|--------------|------|------|
+| 1 | このファイル | `/CLAUDE.md` | プロジェクト全体ガイド・エントリポイント |
+| 2 | 調整ボード | `/.claude/coordination/BOARD.md` | 現在のタスク割り当て・エージェント状態 |
+
+### 2. スプリント・タスク確認 (作業に応じて)
+| ドキュメント | 場所 | 説明 | 更新頻度 |
+|--------------|------|------|----------|
+| AI統合スプリント | `/.kiro/specs/COORDINATION.md` | AI Agents統合関連（Coach Mode/Manager Mode） | 高 |
+| MCP統合スプリント | `/specs/COORDINATION.md` | MCP Remote統合関連（MOCセクション） | 高 |
+
+### 3. 機能仕様書 (担当機能のみ)
+| ディレクトリ | 説明 | 件数 |
+|--------------|------|------|
+| `/.kiro/specs/{feature}/` | 各機能の仕様書（requirements.md, design.md, tasks.md） | 約60件 |
+| `/specs/{feature}/` | 新規仕様書 | 増加中 |
+
+### 4. 運用・設定ガイド (参照用)
+| ドキュメント | 場所 | 説明 |
+|--------------|------|------|
+| エージェント運用 | `/docs/agent-operations.md` | QA/Issue巡回エージェント起動手順 |
+| MCPサーバー | `/home/ubuntu/.mcp-multi-agent/README.md` | MCPサーバー管理・起動方法 |
+| デプロイ | `/docs/DEPLOYMENT_GUIDE.md` | 本番デプロイ手順 |
+| セットアップ | `/docs/SETUP.md` | 開発環境構築 |
+
+### ドキュメント間の関係図
+
+```
+CLAUDE.md (このファイル)
+    │
+    ├── /.claude/coordination/BOARD.md ... タスク割り当て
+    │
+    ├── /.kiro/specs/COORDINATION.md ... AI Agents統合スプリント
+    │   └── /.kiro/specs/ai-agents-integration/ ... 詳細仕様
+    │
+    ├── /specs/COORDINATION.md ... MCP Remote統合スプリント
+    │   └── /specs/moc-mcp-remote-integration/ ... 詳細仕様
+    │
+    └── /docs/agent-operations.md ... 運用ガイド
+```
+
+### 正しいパス一覧
+
+| 用途 | 正しいパス |
+|------|-----------|
+| VOWプロジェクト | `/home/ubuntu/Downloads/vow/` |
+| MCPサーバー | `/home/ubuntu/.mcp-multi-agent/` |
+| MCP設定ファイル | `/home/ubuntu/.mcp-multi-agent/mcp-config.json` |
+| セットアップスクリプト | `/home/ubuntu/.mcp-multi-agent/setup_multi_agent.sh` |
 
 ## Getting Help
 

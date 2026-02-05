@@ -707,6 +707,38 @@ const COACH_TOOLS: ChatCompletionTool[] = [
       },
     },
   },
+  // === AI動的アドバイス生成ツール ===
+  {
+    type: 'function',
+    function: {
+      name: 'generate_advice',
+      description: '【重要】「アドバイスして」「おすすめは？」「どうすれば」「コツを教えて」などの漠然としたアドバイス要求には必ずこのツールを使用する。毎回AIで異なる、パーソナライズされたコーチングアドバイスを生成する。ユーザーの習慣データや状況に基づいてクリエイティブなアドバイスを提供する。',
+      parameters: {
+        type: 'object',
+        properties: {
+          adviceType: {
+            type: 'string',
+            enum: ['general', 'motivation', 'strategy', 'recovery', 'celebration'],
+            description: 'アドバイスの種類。general=一般的なコーチング、motivation=モチベーション向上、strategy=効果的な戦略、recovery=失敗からの立ち直り、celebration=成功の祝福。デフォルトはgeneral。',
+          },
+          focusArea: {
+            type: 'string',
+            description: 'フォーカスするエリア（習慣名、目標名、カテゴリなど）。省略可。',
+          },
+          userMood: {
+            type: 'string',
+            enum: ['positive', 'neutral', 'struggling', 'uncertain'],
+            description: 'ユーザーの気分。positive=ポジティブ、neutral=普通、struggling=苦戦中、uncertain=不安。会話から推測。',
+          },
+          creativityLevel: {
+            type: 'number',
+            description: '創造性レベル（1-3）。1=保守的、2=バランス、3=非常にクリエイティブ。デフォルトは2。',
+          },
+        },
+        required: [],
+      },
+    },
+  },
 ];
 
 // Import the spec-based helpers (guardrails and clarification logic)
@@ -800,9 +832,20 @@ interface AdjustmentSuggestion {
   priority: 'high' | 'medium' | 'low';
 }
 
+/** ツール呼び出し結果の型 */
+export interface ToolCallResult {
+  toolName: string;
+  input: Record<string, unknown>;
+  output: unknown;
+  success: boolean;
+  error?: string;
+  durationMs?: number;
+}
+
 export interface CoachResponse {
   message: string;
   toolsUsed: string[];
+  toolCalls?: ToolCallResult[]; // フロントエンドが期待するツール呼び出し詳細
   tokensUsed: number;
   data?: {
     analysis?: HabitAnalysis[];
@@ -1183,12 +1226,29 @@ export class AICoachService {
       // Check if clarification is needed (unless user wants to proceed)
       const clarification = needsClarification(userMessage);
       const shouldProceed = shouldProceedWithoutClarification(userMessage);
-      
+
       // Build context message for clarification needs
       let contextMessage = '';
       if (clarification.needed && !shouldProceed && conversationHistory.length === 0) {
-        // Only add clarification hint on first message if needed
-        contextMessage = `\n\n[システム注記: ユーザーの意図が曖昧な可能性があります。以下の点を確認することを検討してください: ${clarification.questions.join(', ')}。ただし、ユーザーが「それで進めて」などと言った場合は確認せずに進めてください。]`;
+        // 曖昧なリクエストには確認質問をボタン形式で表示
+        if (clarification.isAmbiguous) {
+          contextMessage = `\n\n【重要な指示】
+ユーザーのリクエストをより良く理解するため、確認質問を行ってください。
+必ず show_choice_buttons ツールを使って選択肢をボタン形式で表示してください。
+
+確認が必要な項目:
+${clarification.questions.map((q, i) => `${i + 1}. ${q}`).join('\n')}
+
+回答例:
+「〜を始めたいんですね！いいですね 💪
+より良い提案をするために教えてください。」
+→ show_choice_buttons で選択肢を表示
+
+※テキストの番号リストではなく、必ずボタンで選択肢を表示してください。`;
+        } else {
+          // 軽度の曖昧さの場合
+          contextMessage = `\n\n[システム注記: 以下の点を確認することを推奨します: ${clarification.questions.join(', ')}。ただし、ユーザーが「それで進めて」などと言った場合は確認せずに進めてください。]`;
+        }
       }
 
       const messages: ChatCompletionMessageParam[] = [
@@ -1201,6 +1261,7 @@ export class AICoachService {
       ];
 
       const toolsUsed: string[] = [];
+      const toolCalls: ToolCallResult[] = []; // フロントエンド用のツール呼び出し詳細
       const collectedData: NonNullable<CoachResponse['data']> = {};
       let totalTokens = 0;
 
@@ -1228,7 +1289,7 @@ export class AICoachService {
 
           for (const toolCall of choice.message.tool_calls) {
             if (toolCall.type !== 'function') continue;
-            
+
             const toolName = toolCall.function.name;
             let args: Record<string, unknown>;
             try {
@@ -1236,13 +1297,27 @@ export class AICoachService {
             } catch {
               args = {};
             }
-            
+
             toolsUsed.push(toolName);
             logger.info('Executing tool', { toolName, args, userId: this.userId });
 
             // Execute tool with error handling
+            const startTime = Date.now();
             const result = await this.executeToolSafely(toolName, args);
-            
+            const durationMs = Date.now() - startTime;
+
+            // ツール呼び出し結果をtoolCallsに追加（フロントエンド用）
+            const isError = result && typeof result === 'object' && 'error' in result && (result as Record<string, unknown>)['error'] === true;
+            const errorMessage = isError ? ((result as Record<string, unknown>)['fallbackMessage'] as string | undefined) : undefined;
+            toolCalls.push({
+              toolName,
+              input: args,
+              output: result,
+              success: !isError,
+              ...(errorMessage && { error: errorMessage }),
+              durationMs,
+            });
+
             // Store collected data
             this.storeToolResult(collectedData, toolName, result);
 
@@ -1257,6 +1332,7 @@ export class AICoachService {
           return {
             message: choice.message.content || 'すみません、応答を生成できませんでした。',
             toolsUsed,
+            toolCalls: toolCalls.length > 0 ? toolCalls : [],
             tokensUsed: totalTokens,
             data: Object.keys(collectedData).length > 0 ? collectedData : undefined,
           };
@@ -1277,6 +1353,7 @@ export class AICoachService {
       return {
         message: finalChoice?.message.content || 'すみません、応答を生成できませんでした。',
         toolsUsed,
+        toolCalls: toolCalls.length > 0 ? toolCalls : [],
         tokensUsed: totalTokens,
         data: Object.keys(collectedData).length > 0 ? collectedData : undefined,
       };

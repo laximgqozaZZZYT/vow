@@ -26,15 +26,16 @@ import { debug } from '../../../lib/debug'
 import StickyFooter, { ModalHeaderButtons } from './Widget.StickyFooter'
 import { useLocale } from '@/contexts/LocaleContext'
 import { type LevelVariables } from './Widget.LevelAssessmentSliders'
+import type { Sticky } from '../types'
 
 // Tab components and navigation
 import { TabNavigation, HABIT_MODAL_TABS } from './TabNavigation'
 import { useHabitModalTabs } from '../hooks/useHabitModalTabs'
 import { useSwipeGesture } from '../../hooks/useSwipeGesture'
-import { 
-  BasicTab, 
-  ExclusionTab, 
-  WorkloadTab, 
+import {
+  BasicTab,
+  ExclusionTab,
+  WorkloadTab,
   DetailTab,
   type Timing,
   type TimingType,
@@ -74,7 +75,7 @@ interface HabitModalProps {
   onUpdate?: (h: Habit) => void
   onDelete?: (id: string) => void
   onCreate?: (payload: CreateHabitPayload) => void
-  initial?: { 
+  initial?: {
     name?: string
     date?: string
     time?: string
@@ -86,6 +87,12 @@ interface HabitModalProps {
   categories?: { id: string; name: string }[]
   tags?: any[]
   onTagsChange?: (habitId: string, tagIds: string[]) => Promise<void>
+  /** All stickies for filtering related ones */
+  stickies?: Sticky[]
+  /** Callback when a sticky is toggled complete/incomplete */
+  onStickyComplete?: (stickyId: string) => void
+  /** Callback when a sticky is clicked for editing */
+  onStickyEdit?: (stickyId: string) => void
 }
 
 // ============================================================================
@@ -110,17 +117,20 @@ function minutesFromHHMM(s?: string): number | null {
 // Component
 // ============================================================================
 
-export function HabitModal({ 
-  open, 
-  onClose, 
-  habit, 
-  onUpdate, 
-  onDelete, 
-  onCreate, 
-  initial, 
-  categories: goals, 
-  tags, 
-  onTagsChange 
+export function HabitModal({
+  open,
+  onClose,
+  habit,
+  onUpdate,
+  onDelete,
+  onCreate,
+  initial,
+  categories: goals,
+  tags,
+  onTagsChange,
+  stickies,
+  onStickyComplete,
+  onStickyEdit,
 }: HabitModalProps) {
   const { t } = useLocale()
   
@@ -195,9 +205,15 @@ export function HabitModal({
   }, [timings, timingDurations, totalTimingMinutes, workloadTotal])
 
   const formState: HabitFormState = React.useMemo(() => ({
-    name, type, timings, notes, outdates, workloadUnit, workloadTotal, 
+    name, type, timings, notes, outdates, workloadUnit, workloadTotal,
     workloadTotalEnd, workloadPerCount, goalId, selectedTagIds,
   }), [name, type, timings, notes, outdates, workloadUnit, workloadTotal, workloadTotalEnd, workloadPerCount, goalId, selectedTagIds])
+
+  // Filter stickies that are related to this habit
+  const relatedStickies = React.useMemo(() => {
+    if (!stickies || !habit) return []
+    return stickies.filter(s => s.habits?.some(h => h.id === habit.id))
+  }, [stickies, habit])
 
   async function loadAllHabits() {
     try {
@@ -419,15 +435,21 @@ export function HabitModal({
     }
   }, [workloadTotal, workloadTotalEnd, workloadPerCount, clearTabError])
 
-  function handleSave() {
+  async function handleSave() {
+    console.log('[HabitModal] handleSave called')
+    console.log('[HabitModal] habit:', habit)
+    console.log('[HabitModal] name:', name)
+    console.log('[HabitModal] goalId:', goalId)
     debug.log('[HabitModal] handleSave called')
-    
+
     // Validate form data and update tab error indicators (Requirement 8.4)
     const { isValid, errors } = validateFormData()
+    console.log('[HabitModal] Validation result:', { isValid, errors })
     setTabErrors(errors)
-    
+
     // If validation fails, navigate to the first tab with errors
     if (!isValid) {
+      console.warn('[HabitModal] Validation failed:', errors)
       const tabOrder = ['basic', 'exclusion', 'workload', 'detail']
       const firstErrorTab = tabOrder.findIndex(tabId => errors[tabId])
       if (firstErrorTab !== -1) {
@@ -435,7 +457,7 @@ export function HabitModal({
       }
       return
     }
-    
+
     if (habit) {
       const updated: Habit = { ...habit, id: habit.id, goalId: goalId ?? habit.goalId, name: name.trim() || "Untitled", notes: notes.trim() || undefined, type, ...(workloadUnit ? { workloadUnit } as any : {}), ...(workloadTotal ? { workloadTotal: Number(workloadTotal) } as any : {}), ...(workloadTotalEnd ? { workloadTotalEnd: Number(workloadTotalEnd) } as any : {}), ...(Number(workloadPerCount) || 1 ? { workloadPerCount: Number(workloadPerCount) || 1 } as any : {}), timings: timings as any, outdates: outdates as any, updatedAt: new Date().toISOString() }
       const totalVal = (updated as any).workloadTotal ?? (updated as any).must ?? 0
@@ -452,7 +474,23 @@ export function HabitModal({
       const payload: CreateHabitPayload = { name: name.trim() || "Untitled", type, timings: finalTimings, workloadUnit: workloadUnit || undefined, workloadTotal: workloadTotal ? Number(workloadTotal) : undefined, workloadTotalEnd: workloadTotalEnd ? Number(workloadTotalEnd) : undefined, workloadPerCount: Number(workloadPerCount) || 1, notes: notes.trim() || undefined, relatedHabitIds: relations.length > 0 ? relations.map(r => r.relatedHabitId) : undefined }
       const resolvedGoalId = goalId ?? (goals && goals.length ? goals[0].id : undefined)
       if (resolvedGoalId) payload.goalId = resolvedGoalId
-      onCreate && onCreate(payload)
+      debug.log('[HabitModal] Creating new habit with payload:', payload)
+      console.log('[HabitModal] Creating new habit with payload:', payload)
+      console.log('[HabitModal] onCreate callback exists:', !!onCreate)
+      if (onCreate) {
+        try {
+          console.log('[HabitModal] Calling onCreate...')
+          await onCreate(payload)
+          console.log('[HabitModal] onCreate completed successfully')
+          debug.log('[HabitModal] onCreate completed successfully')
+        } catch (error) {
+          console.error('[HabitModal] onCreate failed:', error)
+          // Don't close modal on error - let the error be visible
+          return
+        }
+      } else {
+        console.warn('[HabitModal] No onCreate callback provided!')
+      }
       onClose()
     }
   }
@@ -514,6 +552,49 @@ export function HabitModal({
           <ExclusionTab isActive={activeTab === 1} outdates={outdates} onOutdatesChange={(newOutdates) => setOutdates(newOutdates)} />
           <WorkloadTab isActive={activeTab === 2} workloadUnit={workloadUnit} onWorkloadUnitChange={setWorkloadUnit} workloadPerCount={workloadPerCount} onWorkloadPerCountChange={setWorkloadPerCount} workloadTotal={workloadTotal} onWorkloadTotalChange={setWorkloadTotal} workloadTotalEnd={workloadTotalEnd} onWorkloadTotalEndChange={setWorkloadTotalEnd} timings={timings} autoLoadPerSet={autoLoadPerSetByTiming} habit={habit} onLevelAssessment={handleLevelAssessment} />
           <DetailTab isActive={activeTab === 3} formState={formState} onFieldChange={handleFieldChange} goals={goals ?? []} tags={(tags ?? []).map((tag: any) => ({ id: tag.id, name: tag.name, color: tag.color }))} allHabits={allHabits} relations={relations} onRelationAdd={handleAddRelation} onRelationDelete={handleDeleteRelation} onTagsChange={handleTagsChange} habit={habit} loadingRelations={loadingRelations} />
+
+          {/* 関連Sticky'n セクション - DetailTab (activeTab === 3) に表示 */}
+          {activeTab === 3 && relatedStickies.length > 0 && (
+            <div className="space-y-2 mt-6 pt-6 border-t border-border">
+              <h4 className="text-base sm:text-lg font-medium text-foreground">関連Sticky'n</h4>
+              <div className="space-y-1">
+                {relatedStickies.map(sticky => (
+                  <div
+                    key={sticky.id}
+                    className="flex items-center gap-2 p-2 bg-muted/50 rounded-md"
+                  >
+                    <button
+                      type="button"
+                      onClick={() => onStickyComplete?.(sticky.id)}
+                      className={`w-5 h-5 rounded border flex-shrink-0 flex items-center justify-center ${
+                        sticky.completed
+                          ? 'bg-primary border-primary'
+                          : 'border-border hover:border-primary/50'
+                      }`}
+                      aria-label={sticky.completed ? 'Mark as incomplete' : 'Mark as complete'}
+                    >
+                      {sticky.completed && (
+                        <svg className="w-3 h-3 text-primary-foreground" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                        </svg>
+                      )}
+                    </button>
+                    <span
+                      className={`flex-1 text-sm cursor-pointer hover:text-primary ${sticky.completed ? 'line-through opacity-50' : ''}`}
+                      onClick={() => onStickyEdit?.(sticky.id)}
+                    >
+                      {sticky.name}
+                    </span>
+                    {sticky.isReusable && (
+                      <span className="text-xs px-1.5 py-0.5 bg-blue-500/10 text-blue-600 dark:text-blue-400 rounded">
+                        使いまわし
+                      </span>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
         <StickyFooter onSave={handleSave} onCancel={onClose} onDelete={habit ? handleDelete : undefined} saveDisabled={!name.trim()} saveLabel={t('habit.button.save')} cancelLabel={t('habit.button.cancel')} deleteLabel={t('habit.button.delete')} deleteConfirmMessage="Are you sure you want to delete this habit?" />
       </div>

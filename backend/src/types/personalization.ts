@@ -61,6 +61,8 @@ export interface UserContext {
   preferredTimeSlots: TimeSlot[];
   /** 既存の習慣名リスト */
   existingHabitNames: string[];
+  /** 既存の目標名リスト */
+  existingGoalNames: string[];
   /** アンカー習慣（達成率80%以上の習慣） */
   anchorHabits: AnchorHabit[];
   // THLI-24 レベル関連コンテキスト

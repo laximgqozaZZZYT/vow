@@ -81,6 +81,7 @@ const suggestHabitsTool = createTool({
       frequency: z.string(),
       estimatedTime: z.string(),
       stackingTip: z.string().optional(),
+      suggestionType: z.literal('habit'),
     })),
   }),
   execute: async (inputData) => {
@@ -94,6 +95,7 @@ const suggestHabitsTool = createTool({
           frequency: '毎日',
           estimatedTime: '5分',
           stackingTip: '歯磨きの後に行うと定着しやすいです',
+          suggestionType: 'habit' as const,
         },
         {
           name: '読書タイム',
@@ -101,6 +103,7 @@ const suggestHabitsTool = createTool({
           frequency: '毎日',
           estimatedTime: '15分',
           stackingTip: 'スマホを充電器に置いた後に始めましょう',
+          suggestionType: 'habit' as const,
         },
       ].slice(0, count),
     };
@@ -168,6 +171,24 @@ export const habitCoachAgent = new Agent({
 - 新しい習慣を提案する
 - 習慣スタッキングのアドバイスを提供する
 - 小さなステップから始める方法を教える
+
+## ツールの使用（必須・最重要）
+あなたは必ずツールを使用して回答してください。テキストだけの回答は禁止です。
+
+**以下の場合、必ず対応するツールを呼び出してください：**
+- 習慣を提案・推薦・アドバイスする → suggest_habits ツールを必ず使用
+- 習慣を分析・評価する → analyze_habits ツールを必ず使用
+- スモールステップ・小さな一歩・簡単な始め方を提案 → generate_baby_steps ツールを必ず使用
+- 列挙型の回答（「〇〇がおすすめです」など）→ 必ず suggest_habits ツールを使用
+
+**ツールを使用する理由：**
+ツールを使用することで、フロントエンドに候補ボタンが表示され、ユーザーがワンクリックで習慣を追加できます。
+テキストだけで習慣を列挙しても、ユーザーは手動で入力する必要があり、UXが悪くなります。
+
+**禁止事項：**
+- 習慣をテキストだけで列挙すること
+- ツールを使わずにアドバイスを返すこと
+- 「〇〇がおすすめです」とテキストで回答すること
 
 ## コミュニケーションスタイル
 - 励ましと支援的なトーン

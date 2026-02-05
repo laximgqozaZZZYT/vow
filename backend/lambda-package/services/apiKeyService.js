@@ -22,6 +22,10 @@ const KEY_LENGTH_BYTES = 32;
  */
 const KEY_PREFIX_LENGTH = 8;
 /**
+ * Default expiration period for API keys in days.
+ */
+const DEFAULT_EXPIRATION_DAYS = 365;
+/**
  * Error thrown when a user attempts to create more than the maximum allowed API keys.
  */
 export class MaxKeysReachedError extends Error {
@@ -103,10 +107,11 @@ export class ApiKeyService {
      *
      * @param userId - The unique identifier of the user.
      * @param name - User-provided name for the API key.
+     * @param expirationDays - Expiration period in days (7-365). Default: 365.
      * @returns The created API key details including the full key.
      * @throws MaxKeysReachedError if user already has 5 active keys.
      */
-    async createKey(userId, name) {
+    async createKey(userId, name, expirationDays = DEFAULT_EXPIRATION_DAYS) {
         // Check if user has reached the maximum number of keys
         const activeKeyCount = await this.countActiveKeys(userId);
         if (activeKeyCount >= MAX_KEYS_PER_USER) {
@@ -116,12 +121,17 @@ export class ApiKeyService {
         const key = this.generateKey();
         const keyHash = this.hashKey(key);
         const keyPrefix = this.getKeyPrefix(key);
+        // Calculate expiration date (validate: 7-365 days)
+        const validExpirationDays = Math.min(Math.max(expirationDays, 7), 365);
+        const expiresAt = new Date();
+        expiresAt.setDate(expiresAt.getDate() + validExpirationDays);
         // Store the key in the database
         const createdKey = await this.apiKeyRepo.create({
             user_id: userId,
             key_hash: keyHash,
             key_prefix: keyPrefix,
             name,
+            expires_at: expiresAt.toISOString(),
             is_active: true,
         });
         return {
@@ -130,6 +140,7 @@ export class ApiKeyService {
             keyPrefix,
             name: createdKey.name,
             createdAt: createdKey.created_at,
+            expiresAt: expiresAt.toISOString(),
         };
     }
     /**
@@ -178,6 +189,8 @@ export class ApiKeyService {
             name: key.name,
             createdAt: key.created_at,
             lastUsedAt: key.last_used_at,
+            // Provide a default expiration for legacy keys (1 year from creation)
+            expiresAt: key.expires_at || new Date(new Date(key.created_at).getTime() + 365 * 24 * 60 * 60 * 1000).toISOString(),
             isActive: key.is_active,
         }));
     }
@@ -226,6 +239,53 @@ export class ApiKeyService {
      */
     async countActiveKeys(userId) {
         return this.apiKeyRepo.countActiveByUserId(userId);
+    }
+    /**
+     * Clean up expired API keys.
+     *
+     * Removes keys that have passed their expiration date.
+     *
+     * @returns Number of keys deleted.
+     */
+    async cleanupExpiredKeys() {
+        return this.apiKeyRepo.deleteExpiredKeys();
+    }
+    /**
+     * Extend the expiration of an API key.
+     *
+     * Allows a user to extend the expiration date of an active API key.
+     * The new expiration is calculated from the current date plus the
+     * specified number of days (7-365 days).
+     *
+     * @param userId - The unique identifier of the user (for ownership verification).
+     * @param keyId - The unique identifier of the API key to extend.
+     * @param extensionDays - Number of days to extend from now (7-365).
+     * @returns The updated API key response, or null if not found.
+     */
+    async extendExpiration(userId, keyId, extensionDays) {
+        // First verify the key belongs to the user and is active
+        const key = await this.apiKeyRepo.getById(keyId);
+        if (!key || key.user_id !== userId || !key.is_active) {
+            return null;
+        }
+        // Calculate new expiration date (validate: 7-365 days)
+        const validExtensionDays = Math.min(Math.max(extensionDays, 7), 365);
+        const newExpiresAt = new Date();
+        newExpiresAt.setDate(newExpiresAt.getDate() + validExtensionDays);
+        // Update the expiration
+        const updatedKey = await this.apiKeyRepo.extendExpiration(keyId, userId, newExpiresAt.toISOString());
+        if (!updatedKey) {
+            return null;
+        }
+        return {
+            id: updatedKey.id,
+            keyPrefix: updatedKey.key_prefix,
+            name: updatedKey.name,
+            createdAt: updatedKey.created_at,
+            lastUsedAt: updatedKey.last_used_at,
+            expiresAt: updatedKey.expires_at || newExpiresAt.toISOString(),
+            isActive: updatedKey.is_active,
+        };
     }
 }
 //# sourceMappingURL=apiKeyService.js.map

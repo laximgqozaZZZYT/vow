@@ -134,7 +134,71 @@ function isEncrypted(data: string): boolean {
 /**
  * Supported credential types
  */
-export type CredentialType = 'openai' | 'anthropic' | 'custom';
+export type CredentialType = 'openai' | 'anthropic' | 'gemini' | 'codex' | 'custom';
+
+/**
+ * AI Provider configuration
+ */
+export interface AIProviderConfig {
+  id: CredentialType;
+  name: string;
+  nameJa: string;
+  defaultModel: string;
+  models: string[];
+  supportsChat: boolean;
+  supportsCompletion: boolean;
+}
+
+/**
+ * Available AI providers configuration
+ */
+export const AI_PROVIDERS: Record<CredentialType, AIProviderConfig> = {
+  openai: {
+    id: 'openai',
+    name: 'OpenAI',
+    nameJa: 'OpenAI',
+    defaultModel: 'gpt-4o',
+    models: ['gpt-4o', 'gpt-4o-mini', 'gpt-4-turbo', 'gpt-4', 'gpt-3.5-turbo'],
+    supportsChat: true,
+    supportsCompletion: true,
+  },
+  anthropic: {
+    id: 'anthropic',
+    name: 'Anthropic Claude',
+    nameJa: 'Anthropic Claude',
+    defaultModel: 'claude-sonnet-4-20250514',
+    models: ['claude-sonnet-4-20250514', 'claude-opus-4-20250514', 'claude-3-5-sonnet-20241022', 'claude-3-5-haiku-20241022'],
+    supportsChat: true,
+    supportsCompletion: false,
+  },
+  gemini: {
+    id: 'gemini',
+    name: 'Google Gemini',
+    nameJa: 'Google Gemini',
+    defaultModel: 'gemini-2.0-flash',
+    models: ['gemini-2.0-flash', 'gemini-2.0-flash-lite', 'gemini-1.5-pro', 'gemini-1.5-flash'],
+    supportsChat: true,
+    supportsCompletion: true,
+  },
+  codex: {
+    id: 'codex',
+    name: 'OpenAI Codex',
+    nameJa: 'OpenAI Codex',
+    defaultModel: 'codex-mini-latest',
+    models: ['codex-mini-latest', 'o3-mini', 'o1-mini', 'o1'],
+    supportsChat: true,
+    supportsCompletion: true,
+  },
+  custom: {
+    id: 'custom',
+    name: 'Custom Provider',
+    nameJa: 'カスタムプロバイダー',
+    defaultModel: '',
+    models: [],
+    supportsChat: true,
+    supportsCompletion: true,
+  },
+};
 
 /**
  * Stored credential data (with encrypted API key)
@@ -601,4 +665,190 @@ export async function getOpenAIModel(userId?: string): Promise<string> {
   const credential = await store.getCredential(userId, 'openai');
 
   return credential?.model || defaultModel;
+}
+
+/**
+ * Get Gemini API key for a user.
+ * Falls back to environment variable if user doesn't have a saved key.
+ */
+export async function getGeminiApiKey(userId?: string): Promise<string | null> {
+  // If no userId, use environment variable
+  if (!userId) {
+    return process.env['GEMINI_API_KEY'] || process.env['GOOGLE_API_KEY'] || null;
+  }
+
+  // Try to get user's saved key
+  const store = getCredentialsStore();
+  const userKey = await store.getApiKey(userId, 'gemini');
+
+  if (userKey) {
+    return userKey;
+  }
+
+  // Fall back to environment variable
+  return process.env['GEMINI_API_KEY'] || process.env['GOOGLE_API_KEY'] || null;
+}
+
+/**
+ * Get Gemini model configuration for a user.
+ */
+export async function getGeminiModel(userId?: string): Promise<string> {
+  const defaultModel = process.env['GEMINI_MODEL'] || 'gemini-2.0-flash';
+
+  if (!userId) {
+    return defaultModel;
+  }
+
+  const store = getCredentialsStore();
+  const credential = await store.getCredential(userId, 'gemini');
+
+  return credential?.model || defaultModel;
+}
+
+/**
+ * Get Anthropic API key for a user.
+ * Falls back to environment variable if user doesn't have a saved key.
+ */
+export async function getAnthropicApiKey(userId?: string): Promise<string | null> {
+  // If no userId, use environment variable
+  if (!userId) {
+    return process.env['ANTHROPIC_API_KEY'] || null;
+  }
+
+  // Try to get user's saved key
+  const store = getCredentialsStore();
+  const userKey = await store.getApiKey(userId, 'anthropic');
+
+  if (userKey) {
+    return userKey;
+  }
+
+  // Fall back to environment variable
+  return process.env['ANTHROPIC_API_KEY'] || null;
+}
+
+/**
+ * Get Anthropic model configuration for a user.
+ */
+export async function getAnthropicModel(userId?: string): Promise<string> {
+  const defaultModel = process.env['ANTHROPIC_MODEL'] || 'claude-sonnet-4-20250514';
+
+  if (!userId) {
+    return defaultModel;
+  }
+
+  const store = getCredentialsStore();
+  const credential = await store.getCredential(userId, 'anthropic');
+
+  return credential?.model || defaultModel;
+}
+
+/**
+ * Get Codex API key for a user.
+ * Falls back to OpenAI API key if user doesn't have a saved Codex key.
+ */
+export async function getCodexApiKey(userId?: string): Promise<string | null> {
+  // If no userId, use environment variable
+  if (!userId) {
+    return process.env['CODEX_API_KEY'] || process.env['OPENAI_API_KEY'] || null;
+  }
+
+  // Try to get user's saved Codex key
+  const store = getCredentialsStore();
+  const userKey = await store.getApiKey(userId, 'codex');
+
+  if (userKey) {
+    return userKey;
+  }
+
+  // Fall back to OpenAI key or environment variable
+  const openaiKey = await store.getApiKey(userId, 'openai');
+  if (openaiKey) {
+    return openaiKey;
+  }
+
+  return process.env['CODEX_API_KEY'] || process.env['OPENAI_API_KEY'] || null;
+}
+
+/**
+ * Get Codex model configuration for a user.
+ */
+export async function getCodexModel(userId?: string): Promise<string> {
+  const defaultModel = process.env['CODEX_MODEL'] || 'codex-mini-latest';
+
+  if (!userId) {
+    return defaultModel;
+  }
+
+  const store = getCredentialsStore();
+  const credential = await store.getCredential(userId, 'codex');
+
+  return credential?.model || defaultModel;
+}
+
+/**
+ * Get API key for any provider.
+ */
+export async function getProviderApiKey(
+  provider: CredentialType,
+  userId?: string
+): Promise<string | null> {
+  switch (provider) {
+    case 'openai':
+      return getOpenAIApiKey(userId);
+    case 'anthropic':
+      return getAnthropicApiKey(userId);
+    case 'gemini':
+      return getGeminiApiKey(userId);
+    case 'codex':
+      return getCodexApiKey(userId);
+    case 'custom':
+      if (!userId) return null;
+      const store = getCredentialsStore();
+      return store.getApiKey(userId, 'custom');
+    default:
+      return null;
+  }
+}
+
+/**
+ * Get model for any provider.
+ */
+export async function getProviderModel(
+  provider: CredentialType,
+  userId?: string
+): Promise<string> {
+  switch (provider) {
+    case 'openai':
+      return getOpenAIModel(userId);
+    case 'anthropic':
+      return getAnthropicModel(userId);
+    case 'gemini':
+      return getGeminiModel(userId);
+    case 'codex':
+      return getCodexModel(userId);
+    case 'custom':
+      if (!userId) return '';
+      const store = getCredentialsStore();
+      const credential = await store.getCredential(userId, 'custom');
+      return credential?.model || '';
+    default:
+      return '';
+  }
+}
+
+/**
+ * Get all available providers for a user (those with API keys configured).
+ */
+export async function getAvailableProviders(userId?: string): Promise<CredentialType[]> {
+  const providers: CredentialType[] = [];
+
+  for (const providerType of ['openai', 'anthropic', 'gemini', 'codex'] as CredentialType[]) {
+    const apiKey = await getProviderApiKey(providerType, userId);
+    if (apiKey) {
+      providers.push(providerType);
+    }
+  }
+
+  return providers;
 }

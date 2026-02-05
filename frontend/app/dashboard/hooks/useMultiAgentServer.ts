@@ -137,6 +137,7 @@ export interface UseMultiAgentServerReturn {
 
   // Utilities
   refreshData: () => Promise<void>;
+  refreshConfig: () => Promise<void>;
   createTask: (serverId: string, task: Partial<AgentTask> & { assignTo?: string }) => Promise<AgentTask | null>;
   assignTask: (serverId: string, taskId: string, agentId: string) => Promise<boolean>;
   sendMessageToMcpAgent: (serverId: string, agentId: string, message: string) => Promise<string | null>;
@@ -469,6 +470,7 @@ export function useMultiAgentServer(options?: UseMultiAgentServerOptions): UseMu
 
   /**
    * Make authenticated API request to a server
+   * Includes timeout handling for mobile browser compatibility
    */
   const apiRequest = useCallback(async (
     server: McpServer,
@@ -483,21 +485,33 @@ export function useMultiAgentServer(options?: UseMultiAgentServerOptions): UseMu
       ...(options.headers as Record<string, string> || {}),
     };
 
-    const response = await fetch(url, {
-      ...options,
-      headers,
-    });
+    // Add timeout handling for mobile browser compatibility
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 10000);
 
-    if (!response.ok) {
-      throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+    try {
+      const response = await fetch(url, {
+        ...options,
+        headers,
+        signal: controller.signal,
+      });
+
+      clearTimeout(timeoutId);
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+
+      const data = await response.json();
+      if (!data.success) {
+        throw new Error(data.error || 'Unknown error');
+      }
+
+      return data.data;
+    } catch (e) {
+      clearTimeout(timeoutId);
+      throw e;
     }
-
-    const data = await response.json();
-    if (!data.success) {
-      throw new Error(data.error || 'Unknown error');
-    }
-
-    return data.data;
   }, []);
 
   /**
@@ -726,7 +740,16 @@ export function useMultiAgentServer(options?: UseMultiAgentServerOptions): UseMu
 
     try {
       // Test connection with health check
-      const health = await fetch(`${server.serverUrl}/health`);
+      // Use AbortController with setTimeout for mobile browser compatibility
+      const healthController = new AbortController();
+      const healthTimeout = setTimeout(() => healthController.abort(), 5000);
+
+      const health = await fetch(`${server.serverUrl}/health`, {
+        signal: healthController.signal,
+      });
+
+      clearTimeout(healthTimeout);
+
       if (!health.ok) {
         throw new Error('Server health check failed');
       }
@@ -1015,6 +1038,42 @@ export function useMultiAgentServer(options?: UseMultiAgentServerOptions): UseMu
       }
     }));
   }, [config.servers, connections, apiRequest, updateConnectionState]);
+
+  /**
+   * Public: Refresh config from backend
+   * Useful when config may have been changed by another component/page
+   */
+  const refreshConfig = useCallback(async () => {
+    const loaded = await loadConfigFromBackend(authTokenRef.current);
+    setConfig(loaded);
+    configRef.current = loaded;
+
+    // Initialize connection states for any new servers
+    setConnections(prev => {
+      const newMap = new Map(prev);
+      for (const server of loaded.servers) {
+        if (!newMap.has(server.id)) {
+          newMap.set(server.id, {
+            serverId: server.id,
+            serverName: server.name,
+            connectionState: 'disconnected',
+            error: null,
+            agents: [],
+            tasks: [],
+            activities: [],
+            stats: null,
+          });
+        }
+      }
+      // Remove connections for servers that no longer exist
+      for (const serverId of newMap.keys()) {
+        if (!loaded.servers.find(s => s.id === serverId)) {
+          newMap.delete(serverId);
+        }
+      }
+      return newMap;
+    });
+  }, []);
 
   /**
    * Public: Create task on a specific server
@@ -1309,6 +1368,7 @@ export function useMultiAgentServer(options?: UseMultiAgentServerOptions): UseMu
 
     // Utilities
     refreshData,
+    refreshConfig,
     createTask,
     assignTask,
     sendMessageToMcpAgent,

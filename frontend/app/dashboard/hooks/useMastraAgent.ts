@@ -18,15 +18,23 @@ import {
   type AgentResponse,
   type ToolCallResult,
 } from '../../../lib/mastra/config';
+import {
+  validateUserInput,
+  sanitizeInput,
+  getViolationMessage,
+  logViolation,
+} from '../utils/chatGuardrails';
 
 /**
  * Stream chunk from SSE
  */
 interface StreamChunk {
-  type: 'text' | 'tool_call' | 'done' | 'error';
+  type: 'text' | 'tool_call' | 'done' | 'error' | 'start';
   content?: string;
   toolCall?: ToolCallResult;
+  toolCalls?: ToolCallResult[]; // For complete event with multiple tool calls
   error?: string;
+  sessionId?: string; // For start event with session ID
 }
 
 /**
@@ -136,6 +144,8 @@ export function useMastraAgent(options?: UseMastraAgentOptions): UseMastraAgentR
   const [isStreaming, setIsStreaming] = useState(false);
   const [error, setError] = useState<Error | null>(null);
   const [connectionState, setConnectionState] = useState<'idle' | 'connecting' | 'streaming' | 'error'>('idle');
+  // Session ID for multi-turn conversations - persisted across messages
+  const [sessionId, setSessionId] = useState<string | null>(null);
 
   // Refs
   const abortControllerRef = useRef<AbortController | null>(null);
@@ -169,7 +179,23 @@ export function useMastraAgent(options?: UseMastraAgentOptions): UseMastraAgentR
 
       if (eventType === 'complete') {
         // Complete event contains the full message and optional tool calls
-        return { type: 'done' };
+        // Extract toolCalls if present
+        const toolCalls = parsed.toolCalls as ToolCallResult[] | undefined;
+        console.log('[useMastraAgent] SSE complete event received:', {
+          hasToolCalls: !!toolCalls,
+          toolCallCount: toolCalls?.length ?? 0,
+          toolNames: toolCalls?.map(tc => tc.toolName),
+          // Debug: Log each toolCall's output details
+          toolCallOutputs: toolCalls?.map(tc => ({
+            toolName: tc.toolName,
+            hasOutput: tc.output !== null && tc.output !== undefined,
+            outputType: typeof tc.output,
+            outputKeys: tc.output && typeof tc.output === 'object' ? Object.keys(tc.output as object) : [],
+            hasSuggestions: tc.output && typeof tc.output === 'object' && 'suggestions' in (tc.output as object),
+          })),
+          parsedData: parsed,
+        });
+        return { type: 'done', toolCalls };
       }
 
       if (eventType === 'token') {
@@ -182,7 +208,11 @@ export function useMastraAgent(options?: UseMastraAgentOptions): UseMastraAgentR
       }
 
       if (eventType === 'start') {
-        // Start event - no content to add yet
+        // Start event contains sessionId - return it for storage
+        const receivedSessionId = parsed.sessionId as string | undefined;
+        if (receivedSessionId) {
+          return { type: 'start', sessionId: receivedSessionId };
+        }
         return null;
       }
 
@@ -216,7 +246,8 @@ export function useMastraAgent(options?: UseMastraAgentOptions): UseMastraAgentR
    */
   const processStream = async (
     response: Response,
-    assistantMessageId: string
+    assistantMessageId: string,
+    onSessionId: (id: string) => void
   ): Promise<void> => {
     const reader = response.body?.getReader();
     if (!reader) {
@@ -258,6 +289,13 @@ export function useMastraAgent(options?: UseMastraAgentOptions): UseMastraAgentR
             if (!chunk) continue;
 
             switch (chunk.type) {
+              case 'start':
+                // Store session ID from start event
+                if (chunk.sessionId) {
+                  onSessionId(chunk.sessionId);
+                }
+                break;
+
               case 'text':
                 if (chunk.content) {
                   fullContent += chunk.content;
@@ -281,14 +319,26 @@ export function useMastraAgent(options?: UseMastraAgentOptions): UseMastraAgentR
                 throw new Error(chunk.error || 'Unknown streaming error');
 
               case 'done':
-                // Final update
+                // Final update - merge any toolCalls from the complete event
+                const finalToolCalls = chunk.toolCalls && chunk.toolCalls.length > 0
+                  ? chunk.toolCalls
+                  : (toolCalls.length > 0 ? toolCalls : undefined);
+
+                console.log('[useMastraAgent] Setting final message with toolCalls:', {
+                  messageId: assistantMessageId,
+                  chunkToolCalls: chunk.toolCalls,
+                  accumulatedToolCalls: toolCalls,
+                  finalToolCalls,
+                  toolNames: finalToolCalls?.map(tc => tc.toolName),
+                });
+
                 setMessages(prev => prev.map(msg =>
                   msg.id === assistantMessageId
                     ? {
                         ...msg,
                         content: fullContent,
                         status: 'complete' as const,
-                        toolCalls: toolCalls.length > 0 ? toolCalls : undefined,
+                        toolCalls: finalToolCalls,
                       }
                     : msg
                 ));
@@ -332,9 +382,15 @@ export function useMastraAgent(options?: UseMastraAgentOptions): UseMastraAgentR
    */
   const processResponse = async (
     response: Response,
-    assistantMessageId: string
+    assistantMessageId: string,
+    onSessionId: (id: string) => void
   ): Promise<void> => {
     const data: ChatApiResponse = await response.json();
+
+    // Store sessionId from backend for subsequent messages
+    if (data.sessionId) {
+      onSessionId(data.sessionId);
+    }
 
     setMessages(prev => prev.map(msg =>
       msg.id === assistantMessageId
@@ -353,6 +409,24 @@ export function useMastraAgent(options?: UseMastraAgentOptions): UseMastraAgentR
    */
   const sendMessage = useCallback(async (message: string): Promise<void> => {
     if (!message.trim()) return;
+
+    // Guardrail: Sanitize and validate user input
+    const sanitizedMessage = sanitizeInput(message);
+    const validationResult = validateUserInput(sanitizedMessage);
+
+    if (!validationResult.allowed) {
+      logViolation(validationResult, {
+        agentType: 'Mastra',
+        sessionId: sessionId ?? undefined,
+      });
+      const violationError = new Error(getViolationMessage(validationResult, 'ja'));
+      setError(violationError);
+      setConnectionState('error');
+      if (onError) {
+        onError(violationError);
+      }
+      return;
+    }
 
     // Cancel any ongoing request
     if (abortControllerRef.current) {
@@ -404,9 +478,9 @@ export function useMastraAgent(options?: UseMastraAgentOptions): UseMastraAgentR
       // Determine locale from browser or default to 'ja'
       const locale = typeof navigator !== 'undefined' && navigator.language?.startsWith('en') ? 'en' : 'ja';
 
-      // Build session ID for multi-turn conversations
-      // Use existing session ID if we have messages, otherwise create new
-      const existingSessionId = messages.length > 0 ? `session_${Date.now()}` : undefined;
+      // Use stored sessionId for multi-turn conversations (persisted across messages)
+      // If no sessionId yet, backend will generate one and return it in the response
+      const requestSessionId = sessionId ?? undefined;
 
       // Make request - Backend expects single message, not array
       const response = await fetch(endpoint, {
@@ -414,7 +488,7 @@ export function useMastraAgent(options?: UseMastraAgentOptions): UseMastraAgentR
         headers,
         body: JSON.stringify({
           message,  // Single message string, not array
-          sessionId: existingSessionId,
+          sessionId: requestSessionId,
           locale,
           streaming: enableStreaming,  // 'streaming' not 'stream'
         }),
@@ -429,10 +503,17 @@ export function useMastraAgent(options?: UseMastraAgentOptions): UseMastraAgentR
       setConnectionState('streaming');
 
       // Process response based on streaming mode
+      // Callback to store sessionId from backend for subsequent messages
+      const handleSessionId = (newSessionId: string) => {
+        if (!sessionId) {
+          setSessionId(newSessionId);
+        }
+      };
+
       if (enableStreaming) {
-        await processStream(response, assistantMessageId);
+        await processStream(response, assistantMessageId, handleSessionId);
       } else {
-        await processResponse(response, assistantMessageId);
+        await processResponse(response, assistantMessageId, handleSessionId);
       }
 
       // Notify callback
@@ -475,7 +556,7 @@ export function useMastraAgent(options?: UseMastraAgentOptions): UseMastraAgentR
       setIsStreaming(false);
       abortControllerRef.current = null;
     }
-  }, [messages, endpoint, enableStreaming, agentId, onMessage, onError]);
+  }, [messages, endpoint, enableStreaming, agentId, sessionId, onMessage, onError]);
 
   /**
    * Clear conversation history
@@ -490,6 +571,7 @@ export function useMastraAgent(options?: UseMastraAgentOptions): UseMastraAgentR
     }] : []);
     setError(null);
     setConnectionState('idle');
+    setSessionId(null); // Reset session for new conversation
     lastUserMessageRef.current = null;
   }, [systemMessage]);
 

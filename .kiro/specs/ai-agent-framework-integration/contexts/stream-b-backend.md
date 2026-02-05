@@ -307,7 +307,7 @@ export class CircuitBreaker {
 - `guardrailChecker.ts` - 出力フィルタリング
 
 ### With MCP Task Server
-- 既存のMCP Task Server (`/home/ubuntu/mcp-multi-agent/`)
+- 既存のMCP Task Server (`/home/ubuntu/.mcp-multi-agent/`)
 - Strands MCPClientで接続
 - 既存のトークン認証を使用
 

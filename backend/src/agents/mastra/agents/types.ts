@@ -5,16 +5,27 @@
  */
 
 /**
+ * Tool call information
+ */
+export interface ToolCallInfo {
+  toolName: string;
+  toolCallId: string;
+  args: unknown;
+  result: unknown;
+}
+
+/**
  * Single agent response
  */
 export interface AgentResponse {
   agentId: string;
   agentName: string;
   content: string;
-  toolCalls?: Array<{
+  toolCalls?: ToolCallInfo[];
+  toolResults?: Array<{
+    toolCallId: string;
     toolName: string;
-    input: unknown;
-    output: unknown;
+    result: unknown;
   }>;
   timestamp: Date;
   durationMs: number;
@@ -25,7 +36,19 @@ export interface AgentResponse {
  */
 export interface MultiAgentResponse {
   query: string;
-  responses: AgentResponse[];
+  responses: Array<{
+    agentId: string;
+    agentName: string;
+    content: string;
+    toolCalls: ToolCallInfo[];
+    toolResults: Array<{
+      toolCallId: string;
+      toolName: string;
+      result: unknown;
+    }>;
+    timestamp: Date;
+    durationMs: number;
+  }>;
   summary: string;
   timestamp: Date;
   totalDurationMs: number;

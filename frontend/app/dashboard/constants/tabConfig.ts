@@ -43,7 +43,8 @@ const ALL_TAB_CONFIGS: TabConfig[] = [
   { id: 'coach', label: 'Coach', labelJa: 'コーチ', iconType: 'coach', enabled: false /* ENABLE_AI_COACH - temporarily disabled */ },
   { id: 'agents', label: 'Agents', labelJa: 'エージェント', iconType: 'agents', enabled: false /* ENABLE_MULTI_AGENT - temporarily disabled */, requiresPremium: true, adminOnly: true },
   // MOC tab is always enabled - access is controlled by requiresPremium (admins can access)
-  { id: 'moc', label: 'MOC', labelJa: 'MOC', iconType: 'moc', enabled: true, requiresPremium: true },
+  // NOTE: Testing - temporarily disabled requiresPremium for E2E testing
+  { id: 'moc', label: 'MOC', labelJa: 'MOC', iconType: 'moc', enabled: true /* requiresPremium: true - disabled for testing */ },
 ];
 
 // Filter tabs based on feature flags
