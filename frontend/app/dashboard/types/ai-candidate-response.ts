@@ -132,6 +132,8 @@ export interface GoalCandidateDetail {
  */
 export interface GoalCandidate extends CandidateBase {
   type: 'Goal';
+  /** Goal候補の一意ID（Habit紐付け用、例: "goal-1", "goal-2"） */
+  id?: string;
   detail: GoalCandidateDetail;
 }
 
@@ -181,6 +183,8 @@ export interface HabitCandidateDetail {
  */
 export interface HabitCandidate extends CandidateBase {
   type: 'Habit';
+  /** 紐付け先GoalのID（Goal候補のidに対応、例: "goal-1"） */
+  parentGoalId?: string;
   detail: HabitCandidateDetail;
 }
 

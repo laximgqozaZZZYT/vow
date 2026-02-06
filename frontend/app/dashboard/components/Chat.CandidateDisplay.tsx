@@ -356,10 +356,90 @@ export function CandidateDisplay({
     return null;
   }
 
+  // Goal-Habit階層表示のためのグルーピング
+  const hasGoalsWithHabits = goals && goals.length > 0 && habits && habits.length > 0;
+
+  // GoalにparentGoalIdで紐づくHabitをマッピング
+  const habitsByGoalId = new Map<string, HabitCandidate[]>();
+  const orphanHabits: HabitCandidate[] = [];
+
+  if (hasGoalsWithHabits && habits) {
+    habits.forEach(habit => {
+      if (habit.parentGoalId) {
+        const existing = habitsByGoalId.get(habit.parentGoalId) || [];
+        existing.push(habit);
+        habitsByGoalId.set(habit.parentGoalId, existing);
+      } else {
+        orphanHabits.push(habit);
+      }
+    });
+  }
+
+  // 階層表示すべきか判定（Goalがあり、紐づくHabitが1つ以上ある場合）
+  const shouldShowHierarchy = hasGoalsWithHabits && habitsByGoalId.size > 0;
+
   return (
     <div className="mt-4 space-y-4">
-      {/* Goal Candidates */}
-      {candidateTypes.showGoals && goals && goals.length > 0 && (
+      {/* Goal-Habit階層表示 */}
+      {shouldShowHierarchy && candidateTypes.showGoals && goals && goals.length > 0 && (
+        <div className="space-y-3">
+          <h5 className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+            {locale === 'ja' ? '🎯 目標と習慣の候補' : '🎯 Goal & Habit Candidates'}
+          </h5>
+          <div className="space-y-4">
+            {goals.map((goal, goalIndex) => {
+              const linkedHabits = goal.id ? habitsByGoalId.get(goal.id) : undefined;
+              return (
+                <div key={`goal-group-${goalIndex}-${goal.label}`} className="space-y-2">
+                  {/* Goal候補 */}
+                  <EntityCandidateCard
+                    candidate={goal}
+                    locale={locale}
+                    onAdopt={() => onGoalAdopt?.(goal)}
+                    disabled={disabled}
+                  />
+                  {/* 紐づくHabit候補（インデント表示） */}
+                  {linkedHabits && linkedHabits.length > 0 && (
+                    <div className="ml-6 space-y-2 border-l-2 border-blue-200 dark:border-blue-800 pl-3">
+                      {linkedHabits.map((habit, habitIndex) => (
+                        <EntityCandidateCard
+                          key={`habit-${goalIndex}-${habitIndex}-${habit.label}`}
+                          candidate={habit}
+                          locale={locale}
+                          onAdopt={() => onHabitAdopt?.(habit)}
+                          disabled={disabled}
+                        />
+                      ))}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+          {/* 紐づかないHabit候補がある場合 */}
+          {orphanHabits.length > 0 && candidateTypes.showHabits && (
+            <div className="space-y-3 mt-4">
+              <h5 className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                {locale === 'ja' ? '📝 その他の習慣候補' : '📝 Other Habit Candidates'}
+              </h5>
+              <div className="space-y-3">
+                {orphanHabits.map((habit, index) => (
+                  <EntityCandidateCard
+                    key={`orphan-habit-${index}-${habit.label}`}
+                    candidate={habit}
+                    locale={locale}
+                    onAdopt={() => onHabitAdopt?.(habit)}
+                    disabled={disabled}
+                  />
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Goal単独表示（階層表示でない場合） */}
+      {!shouldShowHierarchy && candidateTypes.showGoals && goals && goals.length > 0 && (
         <div className="space-y-3">
           <h5 className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">
             {locale === 'ja' ? '🎯 目標候補' : '🎯 Goal Candidates'}
@@ -378,8 +458,8 @@ export function CandidateDisplay({
         </div>
       )}
 
-      {/* Habit Candidates */}
-      {candidateTypes.showHabits && habits && habits.length > 0 && (
+      {/* Habit単独表示（階層表示でない場合） */}
+      {!shouldShowHierarchy && candidateTypes.showHabits && habits && habits.length > 0 && (
         <div className="space-y-3">
           <h5 className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">
             {locale === 'ja' ? '📝 習慣候補' : '📝 Habit Candidates'}

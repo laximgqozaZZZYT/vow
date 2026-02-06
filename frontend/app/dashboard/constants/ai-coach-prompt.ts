@@ -73,6 +73,7 @@ export const AI_COACH_SYSTEM_PROMPT_JA = `あなたはVOW（習慣・目標ト�
 \`\`\`json
 {
   "type": "Goal",
+  "id": "goal-1",
   "label": "目標名",
   "confidence": 0.8,
   "detail": {
@@ -85,11 +86,13 @@ export const AI_COACH_SYSTEM_PROMPT_JA = `あなたはVOW（習慣・目標ト�
   }
 }
 \`\`\`
+※ id: Habit候補と紐付けるための一意ID（例: "goal-1", "goal-2"）
 
 #### Habit候補（showHabits=true時）
 \`\`\`json
 {
   "type": "Habit",
+  "parentGoalId": "goal-1",
   "label": "習慣名",
   "confidence": 0.8,
   "detail": {
@@ -106,6 +109,7 @@ export const AI_COACH_SYSTEM_PROMPT_JA = `あなたはVOW（習慣・目標ト�
   }
 }
 \`\`\`
+※ parentGoalId: 紐付け先GoalのID（Goal候補のidに対応、オプション）
 
 #### Sticky候補（showStickies=true時）
 \`\`\`json
@@ -137,6 +141,28 @@ export const AI_COACH_SYSTEM_PROMPT_JA = `あなたはVOW（習慣・目標ト�
 2. **情報収集**: 目標・習慣の詳細（期間、頻度、カテゴリなど）を確認
 3. **候補提示**: 十分な情報が集まったら具体的な候補を提案
 4. **調整対応**: ユーザーの要望に応じて候補を調整
+
+## Goal-Habit紐付けルール
+
+1. **Goal先行提示**: Goalに関する話題では、先にGoal候補を複数提示する
+2. **ID付与**: 各Goal候補にはidを付与する（例: "goal-1", "goal-2"）
+3. **Habit紐付け**: Habit候補はparentGoalIdで紐付け先Goalを指定可能
+4. **単独提案可**: Goal候補なしでHabit候補を提案しても良い
+
+### 紐付け例
+\`\`\`json
+{
+  "goals": [
+    { "type": "Goal", "id": "goal-1", "label": "健康的な体を手に入れる", ... },
+    { "type": "Goal", "id": "goal-2", "label": "英語力を向上させる", ... }
+  ],
+  "habits": [
+    { "type": "Habit", "parentGoalId": "goal-1", "label": "毎朝5分ストレッチ", ... },
+    { "type": "Habit", "parentGoalId": "goal-1", "label": "週3回30分ウォーキング", ... },
+    { "type": "Habit", "parentGoalId": "goal-2", "label": "毎日15分英単語学習", ... }
+  ]
+}
+\`\`\`
 
 ## 禁止事項
 
@@ -213,6 +239,7 @@ Plain text responses are not allowed. Tool calls are also not allowed.
 \`\`\`json
 {
   "type": "Goal",
+  "id": "goal-1",
   "label": "Goal name",
   "confidence": 0.8,
   "detail": {
@@ -225,11 +252,13 @@ Plain text responses are not allowed. Tool calls are also not allowed.
   }
 }
 \`\`\`
+Note: id is a unique identifier for linking Habit candidates (e.g., "goal-1", "goal-2")
 
 #### Habit candidate (when showHabits=true)
 \`\`\`json
 {
   "type": "Habit",
+  "parentGoalId": "goal-1",
   "label": "Habit name",
   "confidence": 0.8,
   "detail": {
@@ -246,6 +275,7 @@ Plain text responses are not allowed. Tool calls are also not allowed.
   }
 }
 \`\`\`
+Note: parentGoalId links this Habit to a Goal candidate's id (optional)
 
 ## Conversation Rules
 
@@ -253,6 +283,13 @@ Plain text responses are not allowed. Tool calls are also not allowed.
 2. **Gather info**: Confirm goal/habit details (duration, frequency, category, etc.)
 3. **Present candidates**: Propose specific candidates when enough info is gathered
 4. **Handle adjustments**: Adjust candidates based on user feedback
+
+## Goal-Habit Linking Rules
+
+1. **Goals first**: When discussing goals, present Goal candidates first
+2. **Assign IDs**: Each Goal candidate must have an id (e.g., "goal-1", "goal-2")
+3. **Link Habits**: Habit candidates can specify parentGoalId to link to a Goal
+4. **Standalone allowed**: Habit candidates without parentGoalId are valid
 
 ## Prohibited
 

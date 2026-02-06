@@ -296,6 +296,7 @@ export function generateSystemPrompt(locale: 'ja' | 'en', userContext?: UserCont
 \`\`\`json
 {
   "type": "Goal",           // 固定値
+  "id": "goal-1",           // 一意のID（Habit紐付け用、例: "goal-1", "goal-2"）
   "label": "string",        // 表示ラベル（必須）
   "comment": "string",      // 補足コメント（任意）
   "confidence": 0.0-1.0,    // 信頼度（任意）
@@ -330,6 +331,7 @@ export function generateSystemPrompt(locale: 'ja' | 'en', userContext?: UserCont
 \`\`\`json
 {
   "type": "Habit",          // 固定値
+  "parentGoalId": "goal-1", // 紐付け先GoalのID（Goal候補のidに対応、オプション）
   "label": "string",        // 表示ラベル（必須）
   "comment": "string",      // 補足コメント（任意）
   "confidence": 0.0-1.0,    // 信頼度（任意）
@@ -611,6 +613,30 @@ repliesにカテゴリ選択肢を含めます。
 
 ユーザーが「もっとやさしく」「もっと難しく」「もっと具体的に」「他には」と言った場合、
 前回の候補を調整して新しい候補を提示してください。
+
+---
+
+## Goal-Habit紐付けルール
+
+1. **Goal先行提示**: Goalに関する話題では、先にGoal候補を複数提示する
+2. **ID付与**: 各Goal候補にはidを付与する（例: "goal-1", "goal-2"）
+3. **Habit紐付け**: Habit候補はparentGoalIdで紐付け先Goalを指定可能
+4. **単独提案可**: Goal候補なしでHabit候補を提案しても良い
+
+### 紐付け例
+\`\`\`json
+{
+  "goals": [
+    { "type": "Goal", "id": "goal-1", "label": "健康的な体を手に入れる", "detail": { ... } },
+    { "type": "Goal", "id": "goal-2", "label": "英語力を向上させる", "detail": { ... } }
+  ],
+  "habits": [
+    { "type": "Habit", "parentGoalId": "goal-1", "label": "毎朝5分ストレッチ", "detail": { ... } },
+    { "type": "Habit", "parentGoalId": "goal-1", "label": "週3回30分ウォーキング", "detail": { ... } },
+    { "type": "Habit", "parentGoalId": "goal-2", "label": "毎日15分英単語学習", "detail": { ... } }
+  ]
+}
+\`\`\`
 
 ---
 
@@ -941,6 +967,7 @@ As a project manager and planner, you comprehensively support users in building 
 \`\`\`json
 {
   "type": "Goal",
+  "id": "goal-1",
   "label": "Goal name displayed on button",
   "confidence": 0.0-1.0,
   "comment": "Optional note",
@@ -954,11 +981,13 @@ As a project manager and planner, you comprehensively support users in building 
   }
 }
 \`\`\`
+Note: id is a unique identifier for linking Habit candidates (e.g., "goal-1", "goal-2")
 
 **HabitCandidate:**
 \`\`\`json
 {
   "type": "Habit",
+  "parentGoalId": "goal-1",
   "label": "Habit name displayed on button",
   "confidence": 0.0-1.0,
   "detail": {
@@ -973,6 +1002,7 @@ As a project manager and planner, you comprehensively support users in building 
   }
 }
 \`\`\`
+Note: parentGoalId links this Habit to a Goal candidate's id (optional)
 
 **ReplyCandidate:**
 \`\`\`json
@@ -997,6 +1027,28 @@ As a project manager and planner, you comprehensively support users in building 
 - hobbies/creative → "hobbies"
 - money/finance/savings → "finance"
 - personal growth/lifestyle → "lifestyle"
+
+### Goal-Habit Linking Rules
+
+1. **Goals first**: When discussing goals, present Goal candidates first
+2. **Assign IDs**: Each Goal candidate must have an id (e.g., "goal-1", "goal-2")
+3. **Link Habits**: Habit candidates can specify parentGoalId to link to a Goal
+4. **Standalone allowed**: Habit candidates without parentGoalId are valid
+
+**Linking Example:**
+\`\`\`json
+{
+  "goals": [
+    { "type": "Goal", "id": "goal-1", "label": "Get a healthy body", "detail": { ... } },
+    { "type": "Goal", "id": "goal-2", "label": "Improve English skills", "detail": { ... } }
+  ],
+  "habits": [
+    { "type": "Habit", "parentGoalId": "goal-1", "label": "5-min morning stretch", "detail": { ... } },
+    { "type": "Habit", "parentGoalId": "goal-1", "label": "30-min walking 3x/week", "detail": { ... } },
+    { "type": "Habit", "parentGoalId": "goal-2", "label": "15-min vocabulary daily", "detail": { ... } }
+  ]
+}
+\`\`\`
 
 ## Conversation Style (JSON Output Mode)
 
