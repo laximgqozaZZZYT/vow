@@ -349,3 +349,39 @@ export {
   getTypedDetail,
 } from './unified-response';
 
+// AI Candidate Response Format (v2)
+export type {
+  CandidateEntityType,
+  CandidateOperationType,
+  CandidateType,
+  DifficultyLevel,
+  ReplyActionType,
+  CandidateContext,
+  GatheredRequirements,
+  CandidateTypeFlags,
+  CandidateBase,
+  GoalCandidateDetail,
+  GoalCandidate,
+  HabitCandidateDetail,
+  HabitCandidate,
+  StickyCandidateDetail,
+  StickyCandidate,
+  ReplyCandidateDetail,
+  ReplyCandidate,
+  AnyCandidate,
+  AICandidateResponse,
+} from './ai-candidate-response';
+
+export {
+  FIXED_ADJUSTMENT_REPLIES,
+  isAICandidateResponse,
+  isGoalCandidate,
+  isHabitCandidate,
+  isStickyCandidate,
+  isReplyCandidate,
+  extractAICandidateResponse,
+  hasEntityCandidates,
+  ensureAdjustmentReplies,
+  createDebugModeResponse,
+} from './ai-candidate-response';
+

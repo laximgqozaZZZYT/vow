@@ -11,8 +11,12 @@ import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import { useMultiAgentServer, type ServerConnection } from './useMultiAgentServer';
 import { useMastraAgent, type MastraMessage } from './useMastraAgent';
 import { useMcpChat } from './useMcpChat';
+import { useChatSessions } from './useChatSessions';
 import type { McpServer } from '../types/agent.types';
 import type { Goal, Habit } from '../types';
+import type { AgentRole } from '../constants/role-prompts';
+import { getRoleSystemPrompt, getRoleConfig, getAvailableRoles } from '../constants/role-prompts';
+import type { ChatSession } from '../types/chat-session.types';
 
 // Re-export types needed by consumers
 export type { MastraMessage };
@@ -74,10 +78,13 @@ export interface SelectableAgent {
 
 export interface UseMOCChatOptions {
   authToken?: string;
+  userId?: string;
   locale?: 'ja' | 'en';
   habits?: Habit[];
   goals?: Goal[];
   roleIcons: Record<string, string>;
+  /** Initial role for the chat (default: 'coach') */
+  initialRole?: AgentRole;
   // Parser functions
   parseSuggestions: (msg: MastraMessage) => GroupChatMessage['suggestions'] | undefined;
   parseQuickReplies: (msg: MastraMessage) => { quickReplies: GroupChatMessage['quickReplies']; selectionType?: GroupChatMessage['selectionType'] } | undefined;
@@ -119,6 +126,17 @@ export interface UseMOCChatReturn {
 
   // Server access for other hooks
   server: ReturnType<typeof useMultiAgentServer>;
+
+  // Session management
+  sessions: ChatSession[];
+  activeSession: ChatSession | null;
+  currentRole: AgentRole;
+  createSession: (role: AgentRole, name?: string) => ChatSession;
+  switchSession: (sessionId: string) => void;
+  deleteSession: (sessionId: string) => void;
+  renameSession: (sessionId: string, newName: string) => void;
+  canCreateSession: boolean;
+  availableRoles: Array<{ id: AgentRole; name: string; icon: string; description: string }>;
 }
 
 /**
@@ -126,10 +144,12 @@ export interface UseMOCChatReturn {
  */
 export function useMOCChat({
   authToken,
+  userId,
   locale = 'ja',
   habits = [],
   goals = [],
   roleIcons,
+  initialRole = 'coach',
   parseSuggestions,
   parseQuickReplies,
   parseFollowUpActions,
@@ -140,6 +160,34 @@ export function useMOCChat({
   const [messages, setMessages] = useState<GroupChatMessage[]>([]);
   const [inputValue, setInputValue] = useState('');
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  // Session management hook
+  const sessionManager = useChatSessions({
+    userId,
+    locale,
+    onSessionChange: (session) => {
+      console.log('[useMOCChat] Session changed:', session?.id, session?.role);
+      // Clear messages when switching sessions (they'll be loaded from MCP server memory)
+      setMessages([]);
+    },
+  });
+
+  // Get current role from active session or use initial role
+  const currentRole: AgentRole = sessionManager.activeSession?.role || initialRole;
+
+  // Get role-based system prompt
+  const roleSystemPrompt = useMemo(() => {
+    const prompt = getRoleSystemPrompt(currentRole, locale);
+    console.log('[useMOCChat] Role system prompt loaded:', {
+      role: currentRole,
+      locale,
+      promptLength: prompt?.length ?? 0,
+    });
+    return prompt;
+  }, [currentRole, locale]);
+
+  // Available roles for selection
+  const availableRoles = useMemo(() => getAvailableRoles(locale), [locale]);
 
   // Server hook
   const server = useMultiAgentServer({ authToken });
@@ -253,12 +301,22 @@ export function useMOCChat({
     return serverAgents[0]?.id;
   }, [server.chatAgentSettings, selectedMcpServer, server.agents]);
 
-  // MCP chat hook
+  // Get the MCP session ID for the current session
+  const mcpSessionId = useMemo(() => {
+    if (sessionManager.activeSession) {
+      return sessionManager.getMcpSessionId(sessionManager.activeSession.id);
+    }
+    return undefined;
+  }, [sessionManager.activeSession, sessionManager]);
+
+  // MCP chat hook - with role-based system prompt
   const mcpChat = useMcpChat({
     server: selectedMcpServer,
     agentId: selectedMcpAgentId,
     settings: server.chatAgentSettings,
     enableStreaming: true,
+    systemMessage: roleSystemPrompt,
+    userId: userId,
     onError: (error) => {
       console.error('[useMOCChat] MCP chat error:', error);
     },
@@ -615,6 +673,16 @@ export function useMOCChat({
     activeAgent.retry();
   }, [activeAgent]);
 
+  // Update session activity when messages are sent
+  useEffect(() => {
+    if (sessionManager.activeSession && messages.length > 0) {
+      sessionManager.updateSessionActivity(
+        sessionManager.activeSession.id,
+        messages.filter(m => m.senderType === 'user' || m.senderType === 'coach').length
+      );
+    }
+  }, [messages.length, sessionManager.activeSession, sessionManager]);
+
   return {
     messages,
     setMessages,
@@ -635,5 +703,15 @@ export function useMOCChat({
     availableAgents,
     quickActions,
     server,
+    // Session management
+    sessions: sessionManager.sessions,
+    activeSession: sessionManager.activeSession,
+    currentRole,
+    createSession: sessionManager.createSession,
+    switchSession: sessionManager.switchSession,
+    deleteSession: sessionManager.deleteSession,
+    renameSession: sessionManager.renameSession,
+    canCreateSession: sessionManager.canCreateSession,
+    availableRoles,
   };
 }

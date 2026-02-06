@@ -39,7 +39,6 @@ import type { LevelEstimate, BabyStepPlans, BabyStepPlan, QuotaStatus } from '..
 import {
   getVowCoachAgent,
   coachTools as vowCoachTools,
-  type CoachExecutionContext,
   type CoachTool,
 } from '../agents/mastra/vow-coach-agent.js';
 import {
@@ -56,10 +55,18 @@ const logger = getLogger('aiCoachService');
 /**
  * Check if Mastra Coach should be used instead of legacy OpenAI direct calls.
  * Controlled by environment variable USE_MASTRA_COACH.
+ *
+ * Default is now TRUE (Mastra mode) for JSON candidate format support.
+ * Set USE_MASTRA_COACH=false to use legacy mode.
  */
 function shouldUseMastraCoach(): boolean {
   const envValue = process.env['USE_MASTRA_COACH'];
-  return envValue === 'true' || envValue === '1';
+  // Default to true (Mastra mode) for JSON candidate format
+  // Only disable if explicitly set to 'false' or '0'
+  if (envValue === 'false' || envValue === '0') {
+    return false;
+  }
+  return true;
 }
 
 /**
@@ -847,6 +854,8 @@ export interface CoachResponse {
   toolsUsed: string[];
   toolCalls?: ToolCallResult[]; // フロントエンドが期待するツール呼び出し詳細
   tokensUsed: number;
+  /** AICandidateResponse JSON (new unified format) */
+  candidateResponse?: Record<string, unknown>;
   data?: {
     analysis?: HabitAnalysis[];
     workload?: WorkloadSummary;
@@ -1046,15 +1055,6 @@ export class AICoachService {
       // Analyze user context for personalization
       this.userContext = await this.personalizationEngine.analyzeUserContext(this.userId);
 
-      // Create execution context for VowCoachAgent tools
-      const executionContext: CoachExecutionContext = {
-        userId: this.userId,
-        sessionId: this.sessionId || `session_${this.userId}_${Date.now()}`,
-        supabase: this.supabase,
-        locale: 'ja',
-        userContext: this.userContext,
-      };
-
       // Get system prompt from VowCoachAgent
       const systemPrompt = vowCoachAgent.getSystemPrompt('ja', this.userContext);
 
@@ -1077,100 +1077,83 @@ export class AICoachService {
         { role: 'user', content: userMessage },
       ];
 
-      // Get tools from registry (includes VowCoachAgent tools converted to OpenAI format)
-      // Also include legacy COACH_TOOLS for backward compatibility
-      const allTools = [...this.toolRegistry.getOpenAITools(), ...COACH_TOOLS];
-
-      const toolsUsed: string[] = [];
-      const collectedData: NonNullable<CoachResponse['data']> = {};
-      let totalTokens = 0;
-
-      // Allow up to 3 tool call iterations
-      for (let iteration = 0; iteration < 3; iteration++) {
-        const response = await this.openai.chat.completions.create({
-          model: this.model,
-          messages,
-          tools: allTools,
-          tool_choice: 'auto',
-          temperature: 0.7,
-          max_tokens: 1500,
-        });
-
-        totalTokens += response.usage?.total_tokens || 0;
-        const choice = response.choices[0];
-
-        if (!choice) {
-          break;
-        }
-
-        if (choice.finish_reason === 'tool_calls' && choice.message.tool_calls) {
-          messages.push(choice.message);
-
-          for (const toolCall of choice.message.tool_calls) {
-            if (toolCall.type !== 'function') continue;
-
-            const toolName = toolCall.function.name;
-            let args: Record<string, unknown>;
-            try {
-              args = JSON.parse(toolCall.function.arguments || '{}') as Record<string, unknown>;
-            } catch {
-              args = {};
-            }
-
-            toolsUsed.push(toolName);
-            logger.info('Executing tool (Mastra mode)', { toolName, userId: this.userId });
-
-            // Try to execute through registry (VowCoachAgent tools), then fall back to legacy
-            let result: unknown;
-            if (this.toolRegistry.hasTool(toolName)) {
-              result = await this.toolRegistry.executeTool(toolName, args, executionContext);
-            } else {
-              // Fall back to legacy tool execution
-              result = await this.executeToolSafely(toolName, args);
-            }
-
-            // Store collected data
-            this.storeToolResult(collectedData, toolName, result);
-
-            messages.push({
-              role: 'tool',
-              tool_call_id: toolCall.id,
-              content: JSON.stringify(result),
-            });
-          }
-        } else {
-          // Final response
-          logger.info('Chat completed (Mastra mode)', {
-            userId: this.userId,
-            toolsUsed,
-            tokensUsed: totalTokens,
-          });
-
-          return {
-            message: choice.message.content || 'すみません、応答を生成できませんでした。',
-            toolsUsed,
-            tokensUsed: totalTokens,
-            data: Object.keys(collectedData).length > 0 ? collectedData : undefined,
-          };
-        }
-      }
-
-      // If we hit max iterations, get final response
-      const finalResponse = await this.openai.chat.completions.create({
+      // Use JSON candidate format mode - no tools, AI returns structured JSON
+      // This is the new unified candidate format (AICandidateResponse)
+      const response = await this.openai.chat.completions.create({
         model: this.model,
         messages,
         temperature: 0.7,
-        max_tokens: 1000,
+        max_tokens: 2000,
+        response_format: { type: 'json_object' },
       });
 
-      totalTokens += finalResponse.usage?.total_tokens || 0;
-      const finalChoice = finalResponse.choices[0];
+      const totalTokens = response.usage?.total_tokens || 0;
+      const choice = response.choices[0];
+
+      if (!choice?.message?.content) {
+        throw new Error('No response from AI');
+      }
+
+      // Parse the JSON response
+      let jsonResponse: Record<string, unknown>;
+      try {
+        jsonResponse = JSON.parse(choice.message.content) as Record<string, unknown>;
+      } catch {
+        // If parsing fails, wrap the content in a basic structure
+        jsonResponse = {
+          message: choice.message.content,
+          context: { aboutType: null, aboutOperation: null, categories: [] },
+          gatheredRequirements: { explicit: {}, inferred: {}, completeness: 0 },
+          candidateTypes: { showGoals: false, showHabits: false, showStickies: false, showReplies: true },
+          replies: [],
+        };
+      }
+
+      logger.info('Chat completed (Mastra JSON mode)', {
+        userId: this.userId,
+        tokensUsed: totalTokens,
+        hasGoals: !!(jsonResponse['goals'] as unknown[])?.length,
+        hasHabits: !!(jsonResponse['habits'] as unknown[])?.length,
+        hasReplies: !!(jsonResponse['replies'] as unknown[])?.length,
+      });
+
+      // Build data from JSON response
+      const collectedData: NonNullable<CoachResponse['data']> = {};
+      const goalsArray = jsonResponse['goals'];
+      const habitsArray = jsonResponse['habits'];
+      if (goalsArray && Array.isArray(goalsArray)) {
+        collectedData.goalSuggestions = (goalsArray as unknown[]).map((g: unknown) => {
+          const goal = g as Record<string, unknown>;
+          const detail = goal['detail'] as Record<string, unknown> | undefined;
+          return {
+            name: (detail?.['name'] as string) || (goal['label'] as string) || '',
+            description: (detail?.['details'] as string) || (detail?.['rationale'] as string) || '',
+            category: (detail?.['category'] as string) || '',
+            difficulty: (detail?.['difficulty'] as string) || 'medium',
+          };
+        });
+      }
+      if (habitsArray && Array.isArray(habitsArray)) {
+        collectedData.habitSuggestions = (habitsArray as unknown[]).map((h: unknown) => {
+          const habit = h as Record<string, unknown>;
+          const detail = habit['detail'] as Record<string, unknown> | undefined;
+          return {
+            name: (detail?.['name'] as string) || (habit['label'] as string) || '',
+            description: (detail?.['reason'] as string) || '',
+            frequency: (detail?.['frequency'] as string) || (detail?.['repeat'] as string) || 'daily',
+            estimatedTime: (detail?.['duration'] as number) || 10,
+            category: (detail?.['category'] as string) || '',
+          };
+        });
+      }
 
       return {
-        message: finalChoice?.message.content || 'すみません、応答を生成できませんでした。',
-        toolsUsed,
+        message: (jsonResponse['message'] as string) || 'すみません、応答を生成できませんでした。',
+        toolsUsed: [],
         tokensUsed: totalTokens,
         data: Object.keys(collectedData).length > 0 ? collectedData : undefined,
+        // Include full JSON response for frontend processing
+        candidateResponse: jsonResponse,
       };
     } catch (error) {
       const errorResult = handleError(error);

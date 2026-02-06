@@ -28,6 +28,7 @@ import { PersonalizationEngine } from '../services/personalizationEngine.js';
 import {
   getVowCoachAgent,
   checkCoachQuota,
+  generateSystemPrompt as generateCoachSystemPrompt,
   type CoachExecutionContext,
   type CoachResponse,
 } from '../agents/mastra/vow-coach-agent.js';
@@ -1394,10 +1395,24 @@ agentsRouter.post(
           agentId,
         });
 
-        // Build simple system prompt with locale
-        const systemPrompt = locale === 'ja'
-          ? `あなたはVOW（習慣・目標トラッカーアプリ）のAIコーチです。ユーザーの習慣形成と目標達成をサポートしてください。日本語で親しみやすく対話してください。`
-          : `You are an AI coach for VOW (habit and goal tracker app). Help users build habits and achieve their goals. Respond in a friendly manner in English.`;
+        // Build system prompt based on agent role
+        // For CLI chat endpoint and coach-related agentIds, use the full AICoach system prompt
+        const isCoachRole = !agentId ||
+          agentId === 'default' ||
+          agentId.toLowerCase().includes('coach') ||
+          agentId.toLowerCase().includes('vow');
+
+        const systemPrompt = isCoachRole
+          ? generateCoachSystemPrompt(locale)
+          : locale === 'ja'
+            ? `あなたはVOWアプリのAIアシスタントです。日本語で親しみやすく対話してください。`
+            : `You are an AI assistant for the VOW app. Respond in a friendly manner in English.`;
+
+        logger.info('Using system prompt for MCP chat', {
+          agentId,
+          isCoachRole,
+          promptLength: systemPrompt.length,
+        });
 
         const mcpResult = await callMcpChat(mcpServer, agentId || 'default', message, sessionId, systemPrompt);
 

@@ -25,7 +25,20 @@ import type {
   AggregationSession,
 } from '../types/moc.types';
 import { TABS, ROLE_ICONS } from '../types/moc.types';
-// Candidate label functionality removed - will be re-implemented with proper backend integration
+import { getRoleSystemPrompt } from '../constants/role-prompts';
+// AI Candidate Response types and utilities
+import type {
+  AICandidateResponse,
+  GoalCandidate,
+  HabitCandidate,
+  StickyCandidate,
+  ReplyCandidate,
+} from '../types/ai-candidate-response';
+import {
+  extractAICandidateResponse,
+  createDebugModeResponse,
+} from '../types/ai-candidate-response';
+import { CandidateDisplay } from './Chat.CandidateDisplay';
 import api from '../../../lib/api';
 import { HabitModal } from './Modal.Habit';
 import { GoalModal } from './Modal.Goal';
@@ -119,6 +132,10 @@ export function MOCSection({
 
   // Track if initial suggestions have been shown
   const [hasShownInitialSuggestions, setHasShownInitialSuggestions] = useState(false);
+
+  // AI Candidate responses (parsed from AI messages)
+  // Key: message ID, Value: parsed candidate response
+  const [candidateResponses, setCandidateResponses] = useState<Map<string, AICandidateResponse>>(new Map());
 
   // Multi-agent server hook
   const server = useMultiAgentServer({ authToken });
@@ -245,13 +262,25 @@ export function MOCSection({
     return serverAgents[0]?.id;
   }, [server.chatAgentSettings, selectedMcpServer, server.agents]);
 
+  // Get AI Coach system prompt for JSON format responses
+  const aiCoachSystemPrompt = useMemo(() => {
+    const prompt = getRoleSystemPrompt('coach', locale);
+    console.log('[MOCSection] AI Coach system prompt loaded:', {
+      locale,
+      promptLength: prompt?.length ?? 0,
+    });
+    return prompt;
+  }, [locale]);
+
   // MCP chat hook - no automatic fallback, let user see errors and retry
   // userId is passed for user-specific session isolation
+  // systemMessage is the AI Coach prompt that instructs JSON format response
   const mcpChat = useMcpChat({
     server: selectedMcpServer,
     agentId: selectedMcpAgentId,
     settings: server.chatAgentSettings,
     enableStreaming: true,
+    systemMessage: aiCoachSystemPrompt,  // AI Coach system prompt for JSON responses
     userId: userId,
     // Don't use onFallback - it causes permanent switch to OpenAI
     // Instead, show errors to user and let them retry
@@ -351,46 +380,7 @@ export function MOCSection({
     });
   }, [server.connections, messages]);
 
-  // Handle sending message - use active agent (MCP or Mastra based on settings)
-  const handleSendMessage = useCallback(async () => {
-    if (!inputValue.trim() || activeAgent.isStreaming) return;
-
-    const userMessage: GroupChatMessage = {
-      id: `user-${Date.now()}`,
-      senderId: 'user',
-      senderName: 'You',
-      senderType: 'user',
-      senderIcon: ROLE_ICONS.user,
-      content: inputValue,
-      timestamp: new Date(),
-    };
-
-    setMessages(prev => [...prev, userMessage]);
-    const messageText = inputValue;
-    setInputValue('');
-
-    // Reset textarea height
-    if (textareaRef.current) {
-      textareaRef.current.style.height = 'auto';
-    }
-
-    try {
-      // Use active agent (MCP or Mastra based on settings)
-      console.log(`[MOCSection] Sending message via ${shouldUseMcpAgent ? 'MCP agent' : 'Mastra agent'}`);
-      await activeAgent.sendMessage(messageText);
-    } catch (error) {
-      console.error('Failed to send message:', error);
-      setMessages(prev => [...prev, {
-        id: `error-${Date.now()}`,
-        senderId: 'system',
-        senderName: 'System',
-        senderType: 'system',
-        senderIcon: ROLE_ICONS.system,
-        content: locale === 'ja' ? '❌ AIへの問い合わせに失敗しました' : '❌ Failed to query AI',
-        timestamp: new Date(),
-      }]);
-    }
-  }, [inputValue, activeAgent, shouldUseMcpAgent, locale]);
+  // handleSendMessage is defined below after candidate response handlers
 
   // Convert active agent messages to group chat format with candidate label support
   // Using a single batch update to avoid race conditions with multiple setMessages calls
@@ -449,6 +439,107 @@ export function MOCSection({
       return hasChanges ? updated : prev;
     });
   }, [activeAgent.messages, shouldUseMcpAgent]); // Depend on activeAgent.messages
+
+  // Parse AI candidate responses from messages
+  useEffect(() => {
+    const newCandidates = new Map<string, AICandidateResponse>();
+
+    messages.forEach(msg => {
+      if (msg.senderType === 'coach' && msg.content) {
+        // Try to parse as AI candidate response
+        const parsed = extractAICandidateResponse(msg.content);
+        if (parsed) {
+          newCandidates.set(msg.id, parsed);
+        }
+      }
+    });
+
+    // Only update if there are changes
+    if (newCandidates.size !== candidateResponses.size ||
+        Array.from(newCandidates.keys()).some(k => !candidateResponses.has(k))) {
+      setCandidateResponses(newCandidates);
+    }
+  }, [messages, candidateResponses]);
+
+  // Handle sending message - with debug mode and candidate support
+  const handleSendMessage = useCallback(async () => {
+    if (!inputValue.trim() || activeAgent.isStreaming) return;
+
+    const messageText = inputValue.trim();
+    setInputValue('');
+
+    // Reset textarea height
+    if (textareaRef.current) {
+      textareaRef.current.style.height = 'auto';
+    }
+
+    console.log(`[MOCSection] Sending message via ${shouldUseMcpAgent ? 'MCP agent' : 'Mastra agent'}`);
+
+    // Check for debug mode trigger
+    if (messageText === '候補表示テスト') {
+      // Add user message
+      const userMessage: GroupChatMessage = {
+        id: `user-${Date.now()}`,
+        senderId: 'user',
+        senderName: 'You',
+        senderType: 'user',
+        senderIcon: ROLE_ICONS.user,
+        content: messageText,
+        timestamp: new Date(),
+      };
+      setMessages(prev => [...prev, userMessage]);
+
+      // Add debug response with all candidate types
+      const debugResponse = createDebugModeResponse();
+      const debugMessageId = `ai-debug-${Date.now()}`;
+      const debugMessage: GroupChatMessage = {
+        id: debugMessageId,
+        senderId: 'ai',
+        senderName: 'AI',
+        senderType: 'coach',
+        senderRole: 'Coach',
+        senderIcon: '🤖',
+        content: JSON.stringify(debugResponse, null, 2),
+        timestamp: new Date(),
+      };
+      setMessages(prev => [...prev, debugMessage]);
+
+      // Add to candidate responses
+      setCandidateResponses(prev => {
+        const newMap = new Map(prev);
+        newMap.set(debugMessageId, debugResponse);
+        return newMap;
+      });
+      return;
+    }
+
+    // Normal message handling - delegate to original handler
+    const userMessage: GroupChatMessage = {
+      id: `user-${Date.now()}`,
+      senderId: 'user',
+      senderName: 'You',
+      senderType: 'user',
+      senderIcon: ROLE_ICONS.user,
+      content: messageText,
+      timestamp: new Date(),
+    };
+    setMessages(prev => [...prev, userMessage]);
+
+    try {
+      await activeAgent.sendMessage(messageText);
+    } catch (error) {
+      console.error('Failed to send message:', error);
+      setMessages(prev => [...prev, {
+        id: `error-${Date.now()}`,
+        senderId: 'system',
+        senderName: 'System',
+        senderType: 'system',
+        senderIcon: ROLE_ICONS.system,
+        content: locale === 'ja' ? '❌ AIへの問い合わせに失敗しました' : '❌ Failed to query AI',
+        timestamp: new Date(),
+      }]);
+    }
+  }, [inputValue, activeAgent, shouldUseMcpAgent, locale]);
 
   // Quick actions - enhanced to match AICoaching section features
   const quickActions = useMemo(() => {
@@ -587,6 +678,68 @@ export function MOCSection({
     } as Sticky);
     setStickyModalOpen(true);
   }, []);
+
+  // Handle candidate adoption - opens modals with pre-filled data
+  const handleGoalCandidateAdopt = useCallback((candidate: GoalCandidate) => {
+    openGoalModal({
+      name: candidate.detail.name,
+      parentId: candidate.detail.parentId,
+    });
+  }, [openGoalModal]);
+
+  const handleHabitCandidateAdopt = useCallback((candidate: HabitCandidate) => {
+    openHabitModal({
+      name: candidate.detail.name,
+      type: candidate.detail.habitType || 'do',
+      goalId: candidate.detail.goalId,
+    });
+  }, [openHabitModal]);
+
+  const handleStickyCandidateAdopt = useCallback((candidate: StickyCandidate) => {
+    openStickyModal({
+      name: candidate.detail.name,
+      description: candidate.detail.description || undefined,
+    });
+  }, [openStickyModal]);
+
+  const handleReplyCandidateSelect = useCallback((candidate: ReplyCandidate) => {
+    // Send the reply label as a user message
+    const userMessage: GroupChatMessage = {
+      id: `user-${Date.now()}`,
+      senderId: 'user',
+      senderName: 'You',
+      senderType: 'user',
+      senderIcon: ROLE_ICONS.user,
+      content: candidate.label,
+      timestamp: new Date(),
+    };
+    setMessages(prev => [...prev, userMessage]);
+    activeAgent.sendMessage(candidate.label);
+  }, [activeAgent]);
+
+  // Copy chat history to clipboard
+  const [copySuccess, setCopySuccess] = useState(false);
+  const handleCopyChatHistory = useCallback(async () => {
+    if (messages.length === 0) return;
+
+    const formattedHistory = messages
+      .filter(msg => msg.senderType !== 'system') // システムメッセージは除外
+      .map(msg => {
+        const senderLabel = msg.senderType === 'user'
+          ? 'ユーザー'
+          : 'チャットボット';
+        return `${senderLabel}:\n${msg.content}`;
+      })
+      .join('\n');
+
+    try {
+      await navigator.clipboard.writeText(formattedHistory);
+      setCopySuccess(true);
+      setTimeout(() => setCopySuccess(false), 2000);
+    } catch (err) {
+      console.error('Failed to copy chat history:', err);
+    }
+  }, [messages]);
 
   const handleHabitCreated = useCallback(async (payload: { name: string; goalId?: string; type: 'do' | 'avoid'; timings?: any[]; workloadUnit?: string; workloadTotal?: number; workloadTotalEnd?: number; workloadPerCount?: number; notes?: string; relatedHabitIds?: string[] }) => {
     // Call API to create habit in database
@@ -739,6 +892,29 @@ export function MOCSection({
               </div>
             );
           })()}
+          {/* Copy chat history button */}
+          <button
+            onClick={handleCopyChatHistory}
+            disabled={messages.length === 0}
+            className={`p-2 rounded-lg transition-colors ${
+              copySuccess
+                ? 'text-green-500 bg-green-100 dark:bg-green-900/30'
+                : messages.length === 0
+                  ? 'text-muted-foreground/50 cursor-not-allowed'
+                  : 'text-muted-foreground hover:text-foreground hover:bg-muted'
+            }`}
+            title={locale === 'ja' ? 'チャット履歴をコピー' : 'Copy chat history'}
+          >
+            {copySuccess ? (
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M5 13l4 4L19 7" />
+              </svg>
+            ) : (
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+              </svg>
+            )}
+          </button>
           {/* Settings button - navigates to settings page */}
           <a
             href="/settings#ai-config"
@@ -793,6 +969,11 @@ export function MOCSection({
                 messagesEndRef={messagesEndRef}
                 error={activeAgent.error}
                 onRetry={handleRetry}
+                candidateResponses={candidateResponses}
+                onGoalAdopt={handleGoalCandidateAdopt}
+                onHabitAdopt={handleHabitCandidateAdopt}
+                onStickyAdopt={handleStickyCandidateAdopt}
+                onReplySelect={handleReplyCandidateSelect}
               />
             </div>
 
@@ -1411,9 +1592,27 @@ interface GroupChatViewProps {
   messagesEndRef?: React.RefObject<HTMLDivElement | null>;
   error?: Error | null;
   onRetry?: () => void;
+  // Candidate display props
+  candidateResponses?: Map<string, AICandidateResponse>;
+  onGoalAdopt?: (candidate: GoalCandidate) => void;
+  onHabitAdopt?: (candidate: HabitCandidate) => void;
+  onStickyAdopt?: (candidate: StickyCandidate) => void;
+  onReplySelect?: (candidate: ReplyCandidate) => void;
 }
 
-function GroupChatView({ messages, isLoading, locale, messagesEndRef, error, onRetry }: GroupChatViewProps) {
+function GroupChatView({
+  messages,
+  isLoading,
+  locale,
+  messagesEndRef,
+  error,
+  onRetry,
+  candidateResponses,
+  onGoalAdopt,
+  onHabitAdopt,
+  onStickyAdopt,
+  onReplySelect,
+}: GroupChatViewProps) {
   return (
     <div className="flex flex-col min-h-full p-4 space-y-4">
       {messages.length === 0 ? (
@@ -1443,15 +1642,35 @@ function GroupChatView({ messages, isLoading, locale, messagesEndRef, error, onR
         </div>
       ) : (
         <>
-          {messages.map((msg, index) => (
-            <ChatMessageBubble
-              key={msg.id}
-              message={msg}
-              locale={locale}
-              isFirstInGroup={index === 0 || messages[index - 1]?.senderId !== msg.senderId}
-              isLastInGroup={index === messages.length - 1 || messages[index + 1]?.senderId !== msg.senderId}
-            />
-          ))}
+          {messages.map((msg, index) => {
+            const candidateResponse = candidateResponses?.get(msg.id);
+            const isLastInGroup = index === messages.length - 1 || messages[index + 1]?.senderId !== msg.senderId;
+
+            return (
+              <React.Fragment key={msg.id}>
+                <ChatMessageBubble
+                  message={msg}
+                  locale={locale}
+                  isFirstInGroup={index === 0 || messages[index - 1]?.senderId !== msg.senderId}
+                  isLastInGroup={isLastInGroup}
+                  displayContent={candidateResponse?.message}
+                />
+                {/* Show CandidateDisplay for messages with parsed candidates */}
+                {candidateResponse && isLastInGroup && (
+                  <div className="ml-13 pl-3">
+                    <CandidateDisplay
+                      response={candidateResponse}
+                      locale={locale}
+                      onGoalAdopt={onGoalAdopt}
+                      onHabitAdopt={onHabitAdopt}
+                      onStickyAdopt={onStickyAdopt}
+                      onReplySelect={onReplySelect}
+                    />
+                  </div>
+                )}
+              </React.Fragment>
+            );
+          })}
         </>
       )}
 

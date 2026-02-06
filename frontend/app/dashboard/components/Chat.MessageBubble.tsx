@@ -17,6 +17,8 @@ export interface ChatMessageBubbleProps {
   locale: 'ja' | 'en';
   isFirstInGroup?: boolean;
   isLastInGroup?: boolean;
+  /** Optional content to display instead of message.content (used for AI candidate responses) */
+  displayContent?: string;
 }
 
 // Helper function to format time
@@ -65,8 +67,11 @@ export function ChatMessageBubble({
   locale,
   isFirstInGroup = true,
   isLastInGroup = true,
+  displayContent,
 }: ChatMessageBubbleProps) {
   const isUser = message.senderType === 'user';
+  // Use displayContent if provided, otherwise use message.content
+  const contentToDisplay = displayContent ?? message.content;
 
   const styles = senderStyles[message.senderType] || senderStyles.agent;
 
@@ -118,7 +123,7 @@ export function ChatMessageBubble({
             ? `rounded-2xl ${isFirstInGroup ? 'rounded-tr-md' : ''} ${isLastInGroup ? '' : 'rounded-br-md'}`
             : `rounded-2xl ${isFirstInGroup ? 'rounded-tl-md' : ''} ${isLastInGroup ? '' : 'rounded-bl-md'}`
         }`}>
-          <p className="whitespace-pre-wrap text-sm leading-relaxed">{message.content}</p>
+          <p className="whitespace-pre-wrap text-sm leading-relaxed">{contentToDisplay}</p>
         </div>
 
         {/* Task reference */}

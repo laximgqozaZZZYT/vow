@@ -276,10 +276,15 @@ export function useMcpChat(options: UseMcpChatOptions): UseMastraAgentReturn {
       if (enableStreaming) {
         // Use fetch with POST for SSE to support long systemPrompt in body
         // (GET with URL params truncates Japanese systemPrompt due to URL length limits)
-        console.log('[useMcpChat] POST request:', {
+        // Debug: Verify systemMessage is available before sending
+        console.log('[useMcpChat] POST request - systemMessage check:', {
           endpoint,
           sessionId: sessionIdRef.current,
-          systemPromptLength: systemMessage?.length ?? 0,
+          systemMessageDefined: systemMessage !== undefined,
+          systemMessageNull: systemMessage === null,
+          systemMessageType: typeof systemMessage,
+          systemMessageLength: systemMessage?.length ?? 0,
+          systemMessagePreview: systemMessage?.substring(0, 80) ?? 'UNDEFINED',
           messagePreview: message.substring(0, 50),
         });
 
@@ -288,6 +293,22 @@ export function useMcpChat(options: UseMcpChatOptions): UseMastraAgentReturn {
         setConnectionState('streaming');
 
         try {
+          // Construct body with explicit systemPrompt handling
+          const requestBody = {
+            message: message,
+            sessionId: sessionIdRef.current,
+            systemPrompt: systemMessage,  // Should be AICoach prompt
+            userId: userId,
+          };
+
+          // Debug: Log the exact body being sent
+          console.log('[useMcpChat] Sending request body:', {
+            hasSystemPrompt: 'systemPrompt' in requestBody,
+            systemPromptDefined: requestBody.systemPrompt !== undefined,
+            systemPromptLength: requestBody.systemPrompt?.length ?? 0,
+            bodyKeys: Object.keys(requestBody),
+          });
+
           const response = await fetch(endpoint, {
             method: 'POST',
             headers: {
@@ -295,12 +316,7 @@ export function useMcpChat(options: UseMcpChatOptions): UseMastraAgentReturn {
               'Accept': 'text/event-stream',
               'Authorization': `Bearer ${effectiveToken}`,
             },
-            body: JSON.stringify({
-              message: message,
-              sessionId: sessionIdRef.current,
-              systemPrompt: systemMessage,
-              userId: userId,
-            }),
+            body: JSON.stringify(requestBody),
             signal: abortControllerRef.current?.signal,
           });
 

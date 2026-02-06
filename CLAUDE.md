@@ -2,6 +2,24 @@
 
 This document provides context for Claude AI agents working on the VOW project.
 
+## Single Entry Point Architecture（推奨）
+
+**ユーザーは1つの親エージェントのみと対話します。**
+
+```bash
+# 親エージェントの起動
+cd ~/Downloads/vow
+claude --model opus
+```
+
+親エージェントが:
+1. ユーザーリクエストを分析
+2. 調査エージェント (researcher) に調査を委譲
+3. 調査結果を元に実装エージェント (implementer) に修正を委譲
+4. 結果を統合してユーザーに報告
+
+詳細: `specs/AGENT_WORKFLOW.md`
+
 ## Project Overview
 
 VOW (習慣・目標トラッカー) is a habit and goal tracking web application built with:
