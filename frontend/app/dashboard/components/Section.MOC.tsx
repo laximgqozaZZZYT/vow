@@ -517,6 +517,7 @@ export function MOCSection({
   }, [messages, candidateResponses, adoptedCandidates, adoptionStates]);
 
   // Batch registration handler
+  // Goals are registered first, and their IDs are mapped to link Habits with parentGoalId
   const handleBatchRegister = useCallback(async () => {
     if (adoptedCandidates.size === 0) return;
 
@@ -526,63 +527,107 @@ export function MOCSection({
     let successCount = 0;
     let errorCount = 0;
 
+    // 1. Separate candidates by type
+    const goalCandidates: { candidateId: string; candidate: GoalCandidate }[] = [];
+    const habitCandidates: { candidateId: string; candidate: HabitCandidate }[] = [];
+    const stickyCandidates: { candidateId: string; candidate: StickyCandidate }[] = [];
+
     for (const [candidateId, { type, candidate }] of adoptedCandidates) {
+      if (type === 'Goal') {
+        goalCandidates.push({ candidateId, candidate: candidate as GoalCandidate });
+      } else if (type === 'Habit') {
+        habitCandidates.push({ candidateId, candidate: candidate as HabitCandidate });
+      } else if (type === "Sticky'n") {
+        stickyCandidates.push({ candidateId, candidate: candidate as StickyCandidate });
+      }
+    }
+
+    // 2. Goal ID mapping (temporary ID -> real ID)
+    const goalIdMap = new Map<string, string>();
+
+    // 3. Register Goal candidates first
+    for (const { candidate } of goalCandidates) {
       try {
-        if (type === 'Goal') {
-          const goalCandidate = candidate as GoalCandidate;
-          const createdGoal = await api.createGoal({
-            name: goalCandidate.detail.name,
-            details: goalCandidate.detail.details || '',
-            dueDate: goalCandidate.detail.dueDate || null,
-            parentId: goalCandidate.detail.parentId || null,
-          });
-          if (createdGoal) {
-            onGoalCreated?.(createdGoal as Goal);
+        const tempId = candidate.id; // temporary ID for linking
+        const createdGoal = await api.createGoal({
+          name: candidate.detail.name,
+          details: candidate.detail.details || '',
+          dueDate: candidate.detail.dueDate || null,
+          parentId: candidate.detail.parentId || null,
+        });
+        if (createdGoal) {
+          onGoalCreated?.(createdGoal as Goal);
+          // Map temporary ID to real ID for Habit linking
+          if (tempId && createdGoal.id) {
+            goalIdMap.set(tempId, createdGoal.id);
           }
-          successCount++;
-        } else if (type === 'Habit') {
-          const habitCandidate = candidate as HabitCandidate;
-          const createdHabit = await api.createHabit({
-            name: habitCandidate.detail.name,
-            type: habitCandidate.detail.habitType || 'do',
-            must: habitCandidate.detail.must || 1,
-            duration: habitCandidate.detail.duration || null,
-            repeat: habitCandidate.detail.repeat || 'daily',
-            time: habitCandidate.detail.time || null,
-            endTime: habitCandidate.detail.endTime || null,
-            dueDate: habitCandidate.detail.dueDate || null,
-            allDay: habitCandidate.detail.allDay || false,
-            goalId: habitCandidate.detail.goalId || null,
-            notes: habitCandidate.detail.notes || '',
-          });
-          if (createdHabit) {
-            onHabitCreated?.(createdHabit as Habit);
-          }
-          successCount++;
-        } else if (type === "Sticky'n") {
-          const stickyCandidate = candidate as StickyCandidate;
-          const createdSticky = await api.createSticky({
-            name: stickyCandidate.detail.name,
-            description: stickyCandidate.detail.description || '',
-            completed: stickyCandidate.detail.completed || false,
-            displayOrder: stickyCandidate.detail.displayOrder || 0,
-            parentStickyId: stickyCandidate.detail.parentStickyId || null,
-          });
-          if (createdSticky) {
-            onStickyCreated?.(createdSticky as Sticky);
-          }
-          successCount++;
         }
+        successCount++;
       } catch (error) {
-        console.error(`Failed to register ${type}:`, error);
+        console.error('Failed to register Goal:', error);
         errorCount++;
       }
     }
 
-    // Clear adopted candidates after registration
+    // 4. Register Habit candidates (resolve parentGoalId if present)
+    for (const { candidate } of habitCandidates) {
+      try {
+        // Resolve goalId from parentGoalId if available
+        let resolvedGoalId = candidate.detail.goalId || null;
+        if (candidate.parentGoalId && goalIdMap.has(candidate.parentGoalId)) {
+          resolvedGoalId = goalIdMap.get(candidate.parentGoalId) || null;
+        }
+
+        const createdHabit = await api.createHabit({
+          name: candidate.detail.name,
+          type: candidate.detail.habitType || 'do',
+          must: candidate.detail.must || 1,
+          duration: candidate.detail.duration || null,
+          repeat: candidate.detail.repeat || 'daily',
+          time: candidate.detail.time || null,
+          endTime: candidate.detail.endTime || null,
+          dueDate: candidate.detail.dueDate || null,
+          allDay: candidate.detail.allDay || false,
+          goalId: resolvedGoalId,
+          notes: candidate.detail.notes || '',
+        });
+        if (createdHabit) {
+          onHabitCreated?.(createdHabit as Habit);
+        }
+        successCount++;
+      } catch (error) {
+        console.error('Failed to register Habit:', error);
+        errorCount++;
+      }
+    }
+
+    // 5. Register Sticky candidates
+    for (const { candidate } of stickyCandidates) {
+      try {
+        const createdSticky = await api.createSticky({
+          name: candidate.detail.name,
+          description: candidate.detail.description || '',
+          completed: candidate.detail.completed || false,
+          displayOrder: candidate.detail.displayOrder || 0,
+          parentStickyId: candidate.detail.parentStickyId || null,
+        });
+        if (createdSticky) {
+          onStickyCreated?.(createdSticky as Sticky);
+        }
+        successCount++;
+      } catch (error) {
+        console.error('Failed to register Sticky:', error);
+        errorCount++;
+      }
+    }
+
+    // 6. Clear adopted candidates after registration
     setAdoptedCandidates(new Map());
     setAdoptionStates(new Map());
     setIsRegistering(false);
+
+    // Log completion summary
+    console.log(`Batch registration complete: ${goalCandidates.length} goals, ${habitCandidates.length} habits, ${stickyCandidates.length} stickies`);
 
     // Show success/error message
     if (errorCount === 0) {
