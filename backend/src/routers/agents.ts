@@ -66,6 +66,7 @@ import {
   getAvailableProviders,
   type CredentialType,
 } from '../services/credentials-store.js';
+import { FREE_USER_CONFIG } from '../config/llm-config.js';
 import {
   classifyQuery,
 } from '../services/query-classifier.js';
@@ -455,10 +456,27 @@ agentsRouter.post(
       const userApiKey = await getProviderApiKey(selectedProvider, userId);
       const userModel = await getProviderModel(selectedProvider, userId);
 
+      // Track if using shared key for free users
+      let effectiveApiKey: string | null = userApiKey;
+      let effectiveModel: string = userModel || 'gpt-4o';
+
       if (!userApiKey) {
         // Try fallback to OpenAI if the selected provider isn't configured
         const fallbackKey = await getOpenAIApiKey(userId);
-        if (!fallbackKey) {
+        if (fallbackKey) {
+          effectiveApiKey = fallbackKey;
+          // Check if user has their own OpenAI key, or using shared key
+          const store = await import('../services/credentials-store.js').then(m => m.getCredentialsStore());
+          const userOpenAIKey = await store.getApiKey(userId, 'openai');
+          if (!userOpenAIKey) {
+            // User doesn't have their own key, using shared key - use free user config
+            effectiveModel = FREE_USER_CONFIG.model;
+            logger.info('Free user using shared API key', { userId, model: effectiveModel, usingSharedKey: true });
+          } else {
+            effectiveModel = await getOpenAIModel(userId);
+          }
+        } else {
+          // No API key available at all
           return c.json(
             {
               error: 'API_KEY_REQUIRED',
@@ -472,10 +490,6 @@ agentsRouter.post(
           );
         }
       }
-
-      // Use the appropriate API key (selected provider or fallback to OpenAI)
-      const effectiveApiKey = userApiKey || await getOpenAIApiKey(userId);
-      const effectiveModel = userApiKey ? userModel : await getOpenAIModel(userId);
 
       // SSE streaming response
       if (body.streaming) {

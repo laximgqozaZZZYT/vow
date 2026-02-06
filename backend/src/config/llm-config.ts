@@ -97,6 +97,16 @@ export const LLM_DEFAULTS = {
 } as const;
 
 /**
+ * Free user configuration for MOC chat
+ * Uses shared API key and cost-effective model
+ */
+export const FREE_USER_CONFIG = {
+  provider: 'openai' as const,
+  model: 'gpt-4o-mini',
+  useSharedKey: true,
+};
+
+/**
  * Model configurations for each provider
  */
 export const MODEL_CATALOG: Record<
