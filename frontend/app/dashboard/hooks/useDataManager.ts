@@ -8,6 +8,17 @@ import type { Goal, Habit, Activity, SectionId } from '../types/index';
 // Default sections - coach and agents are now available in all environments
 const DEFAULT_SECTIONS: SectionId[] = ['board', 'calendar', 'statics', 'stickies', 'coach', 'agents'];
 
+// Timeout helper for preventing mobile session hangs
+const withTimeout = <T>(promise: Promise<T>, ms: number, label?: string): Promise<T> => {
+  const timeout = new Promise<never>((_, reject) =>
+    setTimeout(() => reject(new Error(`Request timeout after ${ms}ms${label ? `: ${label}` : ''}`)), ms)
+  );
+  return Promise.race([promise, timeout]);
+};
+
+// Default timeout for API requests (10 seconds)
+const API_TIMEOUT_MS = 10000;
+
 export function useDataManager() {
   const [goals, setGoals] = useState<Goal[]>([]);
   const [habits, setHabits] = useState<Habit[]>([]);
@@ -109,44 +120,67 @@ export function useDataManager() {
     return () => clearInterval(interval);
   }, [isClient, lastResetDate]);
 
-  // Load data function
+  // Load data function with timeout protection for mobile environments
   const loadData = async () => {
     try {
       setIsLoading(true);
-      debug.log('[dashboard] Loading goals...');
-      const gs = await api.getGoals();
-      debug.log('[dashboard] Goals loaded:', gs);
-      setGoals(gs || []);
-      
-      debug.log('[dashboard] Loading habits...');
-      const hs = await api.getHabits();
-      debug.log('[dashboard] Habits loaded:', hs);
-      setHabits(hs || []);
-      
-      debug.log('[dashboard] Loading activities...');
-      const acts = await api.getActivities();
-      debug.log('[dashboard] Activities loaded:', acts);
-      setActivities(acts || []);
-      
-      debug.log('[dashboard] Loading layout...');
-      const layout = await api.getLayout();
-      debug.log('[dashboard] Layout loaded:', layout);
-      if (layout && Array.isArray(layout.sections) && layout.sections.length > 0) {
-        debug.log('[dashboard] Using layout from API:', layout.sections);
-        setPageSections(layout.sections as any);
+      debug.log('[dashboard] Starting data load with timeout protection...');
+
+      // Load all data in parallel with timeout protection
+      const [goalsResult, habitsResult, activitiesResult, layoutResult] = await Promise.all([
+        withTimeout(api.getGoals(), API_TIMEOUT_MS, 'getGoals')
+          .catch((error) => {
+            console.error('[dashboard] Failed to load goals:', error);
+            return null;
+          }),
+        withTimeout(api.getHabits(), API_TIMEOUT_MS, 'getHabits')
+          .catch((error) => {
+            console.error('[dashboard] Failed to load habits:', error);
+            return null;
+          }),
+        withTimeout(api.getActivities(), API_TIMEOUT_MS, 'getActivities')
+          .catch((error) => {
+            console.error('[dashboard] Failed to load activities:', error);
+            return null;
+          }),
+        withTimeout(api.getLayout(), API_TIMEOUT_MS, 'getLayout')
+          .catch((error) => {
+            console.error('[dashboard] Failed to load layout:', error);
+            return null;
+          }),
+      ]);
+
+      // Update state with loaded data
+      debug.log('[dashboard] Goals loaded:', goalsResult);
+      setGoals(goalsResult || []);
+
+      debug.log('[dashboard] Habits loaded:', habitsResult);
+      setHabits(habitsResult || []);
+
+      debug.log('[dashboard] Activities loaded:', activitiesResult);
+      setActivities(activitiesResult || []);
+
+      debug.log('[dashboard] Layout loaded:', layoutResult);
+      if (layoutResult && Array.isArray(layoutResult.sections) && layoutResult.sections.length > 0) {
+        debug.log('[dashboard] Using layout from API:', layoutResult.sections);
+        setPageSections(layoutResult.sections as any);
       } else {
         debug.log('[dashboard] No layout from API, using default');
-        // デフォルト値を保存
+        // デフォルト値を保存 (also with timeout protection)
         try {
-          await api.saveLayout(DEFAULT_SECTIONS);
+          await withTimeout(api.saveLayout(DEFAULT_SECTIONS), API_TIMEOUT_MS, 'saveLayout');
         } catch (e) {
-          console.error('Failed to save default layout', e);
+          console.error('[dashboard] Failed to save default layout:', e);
         }
       }
+
+      debug.log('[dashboard] Data load completed successfully');
     } catch (e) {
-      console.error('Failed to load data', e);
+      console.error('[dashboard] Failed to load data:', e);
     } finally {
+      // Ensure isLoading is always set to false, even on timeout or error
       setIsLoading(false);
+      debug.log('[dashboard] isLoading set to false');
     }
   };
 
