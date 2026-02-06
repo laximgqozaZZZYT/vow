@@ -1895,6 +1895,8 @@ app.get('/agents/:agentId/chat', async (req, res) => {
   res.setHeader('Cache-Control', 'no-cache');
   res.setHeader('Connection', 'keep-alive');
   res.setHeader('X-Accel-Buffering', 'no');
+  // Flush headers immediately to establish SSE connection
+  res.flushHeaders();
 
   res.write(`data: ${JSON.stringify({ type: 'session', sessionId })}\n\n`);
 
@@ -1995,7 +1997,9 @@ app.get('/agents/:agentId/chat', async (req, res) => {
       res.end();
     });
 
-    req.on('close', () => {
+    // Use res.on('close') instead of req.on('close') for SSE endpoints
+    // req.on('close') fires when request body is fully received, not when client disconnects
+    res.on('close', () => {
       claudeProcess.kill();
     });
 
@@ -2049,6 +2053,8 @@ app.post('/agents/:agentId/chat', async (req, res) => {
   res.setHeader('Cache-Control', 'no-cache');
   res.setHeader('Connection', 'keep-alive');
   res.setHeader('X-Accel-Buffering', 'no');
+  // Flush headers immediately to establish SSE connection
+  res.flushHeaders();
 
   res.write(`data: ${JSON.stringify({ type: 'session', sessionId })}\n\n`);
 
@@ -2141,7 +2147,7 @@ app.post('/agents/:agentId/chat', async (req, res) => {
     });
 
     claudeProcess.on('error', (err: Error & { code?: string }) => {
-      console.error('[Chat] Claude process error:', err);
+      console.error('[Chat POST] Claude process error:', err);
       const errorMsg = err.code === 'ENOENT'
         ? `Claude CLI not found at ${CLAUDE_CLI_PATH}. Please set CLAUDE_CLI_PATH environment variable.`
         : err.message;
@@ -2149,7 +2155,9 @@ app.post('/agents/:agentId/chat', async (req, res) => {
       res.end();
     });
 
-    req.on('close', () => {
+    // Use res.on('close') instead of req.on('close') for POST requests
+    // req.on('close') fires when request body is fully received, not when client disconnects
+    res.on('close', () => {
       claudeProcess.kill();
     });
 
