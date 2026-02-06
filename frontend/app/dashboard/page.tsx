@@ -46,6 +46,7 @@ import type { CreateGoalPayload } from './types';
 
 import { useAuth } from './hooks/useAuth';
 import { HandednessProvider, useHandedness } from './contexts/HandednessContext';
+import { MultiAgentServerProvider } from './contexts/MultiAgentServerContext';
 import { LocaleProvider } from '@/contexts/LocaleContext';
 
 export default function DashboardPage() {
@@ -503,6 +504,7 @@ export default function DashboardPage() {
   return (
     <LocaleProvider>
       <HandednessProvider>
+        <MultiAgentServerProvider authToken={authToken}>
         <DashboardLayout
           showLeftPane={showLeftPane}
           setShowLeftPane={setShowLeftPane}
@@ -595,6 +597,7 @@ export default function DashboardPage() {
         authToken={authToken}
         userId={userId}
       />
+        </MultiAgentServerProvider>
     </HandednessProvider>
     </LocaleProvider>
   );

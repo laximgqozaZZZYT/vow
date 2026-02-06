@@ -17,7 +17,8 @@
 import { useState, useCallback } from 'react';
 import { useAIAssistantMode, type AIAssistantMode } from '../hooks/useAIAssistantMode';
 import { useAuth } from '../hooks/useAuth';
-import { useMultiAgentServer, type ConnectionState } from '../hooks/useMultiAgentServer';
+import { useMultiAgentServerContext } from '../contexts/MultiAgentServerContext';
+import type { ConnectionState } from '../hooks/useMultiAgentServer';
 import MultiAgentConfigModal from './Modal.MultiAgentConfig';
 import type { Goal, Habit } from '../types';
 
@@ -435,7 +436,7 @@ export default function AIAssistantSection({
   // Hooks
   const { mode, setMode, isCoachMode, isManagerMode } = useAIAssistantMode();
   const { isPremium, isAdmin, authToken } = useAuth();
-  const multiAgentServer = useMultiAgentServer({ authToken });
+  const multiAgentServer = useMultiAgentServerContext();
 
   // Local state
   const [showConfigModal, setShowConfigModal] = useState(false);

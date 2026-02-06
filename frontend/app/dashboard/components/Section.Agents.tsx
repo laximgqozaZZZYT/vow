@@ -21,7 +21,7 @@
  * @module Section.Agents
  */
 
-import { useState, useMemo, useCallback, useEffect } from 'react';
+import { useState, useMemo, useCallback } from 'react';
 import { useHandedness } from '../contexts/HandednessContext';
 import type {
   Agent,
@@ -53,7 +53,8 @@ import MultiAgentConfigModal from './Modal.MultiAgentConfig';
 import AgentPanels from './View.AgentPanels';
 import AgentActivityPanel from './Widget.AgentActivityPanel';
 import InstructionFlow from './Widget.InstructionFlow';
-import { useMultiAgentServer, type DashboardStats, type ConnectionState } from '../hooks/useMultiAgentServer';
+import { useMultiAgentServerContext } from '../contexts/MultiAgentServerContext';
+import type { DashboardStats, ConnectionState } from '../hooks/useMultiAgentServer';
 
 type ViewMode = 'grid' | 'list' | 'kanban' | 'panels';
 type FilterRole = AgentRole | 'all';
@@ -1041,30 +1042,13 @@ export default function AgentsSection({ onOpenSettings }: AgentsSectionProps) {
   const [showLogsPanel, setShowLogsPanel] = useState(false);
   const [showTaskCreationForm, setShowTaskCreationForm] = useState(false);
   const [selectedAgentForLogs, setSelectedAgentForLogs] = useState<string | undefined>(undefined);
-  const [authToken, setAuthToken] = useState<string | null>(null);
   const [focusTaskId, setFocusTaskId] = useState<string | null>(null);
-
-  // Get auth token from Supabase session
-  useEffect(() => {
-    const getAuthToken = async () => {
-      try {
-        const { supabase } = await import('../../../lib/supabaseClient');
-        if (supabase) {
-          const { data: { session } } = await supabase.auth.getSession();
-          setAuthToken(session?.access_token ?? null);
-        }
-      } catch (e) {
-        console.error('[AgentsSection] Failed to get auth token:', e);
-      }
-    };
-    getAuthToken();
-  }, []);
 
   // Tooltip hook for agent cards
   const tooltip = useAgentTooltip();
 
-  // Multi-agent server hook with auth token for DynamoDB config storage
-  const server = useMultiAgentServer({ authToken });
+  // Multi-agent server from context (shared SSE connection)
+  const server = useMultiAgentServerContext();
 
   // Use real data from server (empty arrays when disconnected)
   const isConnected = server.connectionState === 'connected';

@@ -33,7 +33,8 @@ import {
 } from '../types/unified-message.types';
 import { ChoiceButtons, type Choice } from './Widget.ChoiceButtons';
 import { useMastraAgent, type MastraMessage } from '../hooks/useMastraAgent';
-import { useMultiAgentServer, type ConnectionState, type DashboardStats } from '../hooks/useMultiAgentServer';
+import { useMultiAgentServerContext } from '../contexts/MultiAgentServerContext';
+import type { ConnectionState, DashboardStats } from '../hooks/useMultiAgentServer';
 import type {
   Agent,
   AgentTask,
@@ -588,8 +589,8 @@ export function AIHubSection({
     }, []),
   });
 
-  // Multi-Agent Server Hook (for Agents mode)
-  const multiAgentServer = useMultiAgentServer({ authToken });
+  // Multi-Agent Server from context (shared SSE connection)
+  const multiAgentServer = useMultiAgentServerContext();
 
   // Auto-scroll to bottom
   useEffect(() => {

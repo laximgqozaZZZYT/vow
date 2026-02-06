@@ -10,7 +10,8 @@
 'use client';
 
 import React, { useState, useCallback, useEffect, useMemo, useRef } from 'react';
-import { useMultiAgentServer, type ServerConnection } from '../hooks/useMultiAgentServer';
+import { useMultiAgentServerContext } from '../contexts/MultiAgentServerContext';
+import type { ServerConnection } from '../hooks/useMultiAgentServer';
 import { useMastraAgent, type MastraMessage } from '../hooks/useMastraAgent';
 import { useMcpChat } from '../hooks/useMcpChat';
 import type { Goal, Habit, Sticky, Tag } from '../types';
@@ -148,8 +149,8 @@ export function MOCSection({
   const [isRegistering, setIsRegistering] = useState(false);
   const [registrationMessage, setRegistrationMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null);
 
-  // Multi-agent server hook
-  const server = useMultiAgentServer({ authToken });
+  // Multi-agent server from context (shared SSE connection)
+  const server = useMultiAgentServerContext();
 
   // Available agents for selection (AI Coach + connected MCP agents)
   interface SelectableAgent {
