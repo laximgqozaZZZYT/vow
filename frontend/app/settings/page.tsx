@@ -145,6 +145,10 @@ export default function SettingsPage() {
   // Drag and drop state
   const [draggedServerId, setDraggedServerId] = useState<string | null>(null);
 
+  // Debug log state
+  const [debugLogs, setDebugLogs] = useState<Map<string, string[]>>(new Map());
+  const [debugTesting, setDebugTesting] = useState(false);
+
   // Load AI config from backend
   useEffect(() => {
     if (authToken) {
@@ -351,7 +355,122 @@ export default function SettingsPage() {
       await multiAgentServer.connectServer(server.id);
     }
   };
-  
+
+  // Run debug connection test
+  const handleDebugTest = async (server: McpServer) => {
+    setDebugTesting(true);
+    const sid = server.id;
+    const url = server.serverUrl || editServerUrl;
+
+    // Clear previous logs for this server
+    setDebugLogs(prev => {
+      const next = new Map(prev);
+      next.set(sid, []);
+      return next;
+    });
+
+    // Helper to add log (needs to work with fresh state)
+    const log = (msg: string) => {
+      const ts = new Date().toISOString().replace('T', ' ').substring(0, 19);
+      setDebugLogs(prev => {
+        const next = new Map(prev);
+        const logs = next.get(sid) || [];
+        next.set(sid, [...logs, `[${ts}] ${msg}`]);
+        return next;
+      });
+    };
+
+    log(`[INFO] テスト開始: ${server.name} (${url})`);
+
+    // Step 1: Health check
+    log(`[STEP 1] ヘルスチェック: GET ${url}/health`);
+    try {
+      const res = await fetch(`${url}/health`, { signal: AbortSignal.timeout(5000) });
+      const body = await res.text().catch(() => '(no body)');
+      log(`[STEP 1] 結果: status=${res.status}, body=${body.substring(0, 200)}`);
+    } catch (err) {
+      log(`[STEP 1] エラー: ${err instanceof Error ? err.message : String(err)}`);
+    }
+
+    // Step 2: Auth test
+    const token = server.serverToken || editServerToken;
+    log(`[STEP 2] 認証テスト: GET ${url}/agents (Bearer token${token ? '付き' : 'なし'})`);
+    try {
+      const headers: Record<string, string> = {};
+      if (token) headers['Authorization'] = `Bearer ${token}`;
+      const res = await fetch(`${url}/agents`, { headers, signal: AbortSignal.timeout(5000) });
+      const body = await res.text().catch(() => '(no body)');
+      log(`[STEP 2] 結果: status=${res.status}, body=${body.substring(0, 200)}`);
+    } catch (err) {
+      log(`[STEP 2] エラー: ${err instanceof Error ? err.message : String(err)}`);
+    }
+
+    // Step 3: SSE connection test
+    log(`[STEP 3] SSE接続テスト: EventSource ${url}/events`);
+    try {
+      await new Promise<void>((resolve) => {
+        const sseUrl = token ? `${url}/events?token=${encodeURIComponent(token)}` : `${url}/events`;
+        const es = new EventSource(sseUrl);
+        const timeout = setTimeout(() => {
+          log(`[STEP 3] 結果: 3秒タイムアウト（接続は開いたが、イベント受信なし）`);
+          es.close();
+          resolve();
+        }, 3000);
+
+        es.onopen = () => {
+          log(`[STEP 3] SSE接続オープン成功`);
+        };
+        es.onmessage = (event) => {
+          log(`[STEP 3] イベント受信: ${String(event.data).substring(0, 100)}`);
+          clearTimeout(timeout);
+          es.close();
+          resolve();
+        };
+        es.onerror = () => {
+          log(`[STEP 3] SSE接続エラー（readyState=${es.readyState}）`);
+          clearTimeout(timeout);
+          es.close();
+          resolve();
+        };
+      });
+    } catch (err) {
+      log(`[STEP 3] エラー: ${err instanceof Error ? err.message : String(err)}`);
+    }
+
+    // Connection state from Map
+    const conn = multiAgentServer.connections.get(sid);
+    log(`[INFO] 現在のconnection state: ${conn?.connectionState ?? 'なし（未接続）'}`);
+    log(`[INFO] テスト完了`);
+
+    setDebugTesting(false);
+  };
+
+  // Save debug log as .txt file download
+  const handleSaveDebugLog = (server: McpServer) => {
+    const logs = debugLogs.get(server.id);
+    if (!logs || logs.length === 0) return;
+
+    const content = logs.join('\n');
+    const blob = new Blob([content], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `mcp-debug-${server.name.replace(/\s+/g, '_')}-${new Date().toISOString().slice(0, 10)}.txt`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
+  // Clear debug log for a server
+  const handleClearDebugLog = (serverId: string) => {
+    setDebugLogs(prev => {
+      const next = new Map(prev);
+      next.delete(serverId);
+      return next;
+    });
+  };
+
   // Get user ID and auth token from Supabase session
   useEffect(() => {
     if (!supabase) return;
@@ -1281,6 +1400,71 @@ export default function SettingsPage() {
                               キャンセル
                             </button>
                           </div>
+
+                          {/* Debug Log Section */}
+                          {(() => {
+                            const debugServer = multiAgentServer.config.servers.find(s => s.id === editingServerId);
+                            if (!debugServer) return null;
+                            const logs = debugLogs.get(debugServer.id) || [];
+                            return (
+                              <div className="border-t border-border pt-4 mt-4">
+                                <h5 className="text-sm font-medium mb-3 flex items-center gap-2 text-muted-foreground">
+                                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                  </svg>
+                                  デバッグログ
+                                </h5>
+                                <div className="flex flex-wrap gap-2 mb-3">
+                                  <button
+                                    onClick={() => handleDebugTest(debugServer)}
+                                    disabled={debugTesting}
+                                    className="px-3 py-1.5 bg-amber-600 text-white rounded-md text-xs font-medium hover:bg-amber-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5"
+                                  >
+                                    {debugTesting ? (
+                                      <>
+                                        <span className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                                        テスト中...
+                                      </>
+                                    ) : (
+                                      <>
+                                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                                        </svg>
+                                        接続テスト（デバッグ）
+                                      </>
+                                    )}
+                                  </button>
+                                  {logs.length > 0 && (
+                                    <>
+                                      <button
+                                        onClick={() => handleSaveDebugLog(debugServer)}
+                                        className="px-3 py-1.5 border border-border text-foreground rounded-md text-xs font-medium hover:bg-muted transition-colors flex items-center gap-1.5"
+                                      >
+                                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                                        </svg>
+                                        ログを保存
+                                      </button>
+                                      <button
+                                        onClick={() => handleClearDebugLog(debugServer.id)}
+                                        className="px-3 py-1.5 border border-border text-muted-foreground rounded-md text-xs font-medium hover:bg-muted hover:text-foreground transition-colors flex items-center gap-1.5"
+                                      >
+                                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                        </svg>
+                                        ログをクリア
+                                      </button>
+                                    </>
+                                  )}
+                                </div>
+                                {logs.length > 0 && (
+                                  <pre className="bg-black/80 text-green-400 text-xs font-mono p-3 rounded-md max-h-64 overflow-auto whitespace-pre-wrap break-all">
+                                    {logs.join('\n')}
+                                  </pre>
+                                )}
+                              </div>
+                            );
+                          })()}
                         </div>
                       </div>
                     )}
