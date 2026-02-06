@@ -469,8 +469,52 @@ export function MOCSection({
     if (newCandidates.size !== candidateResponses.size ||
         Array.from(newCandidates.keys()).some(k => !candidateResponses.has(k))) {
       setCandidateResponses(newCandidates);
+
+      // 新しい候補が来たら自動で採用状態にする
+      // candidateIdはCandidateDisplayと同じ形式: `${type}-${index}-${label}`
+      const newAdopted = new Map(adoptedCandidates);
+      const newAdoptionStates = new Map(adoptionStates);
+      let hasNewCandidates = false;
+
+      newCandidates.forEach((response) => {
+        // Goal候補を自動採用
+        response.goals?.forEach((goal, index) => {
+          const candidateId = `goal-${index}-${goal.label}`;
+          if (!adoptedCandidates.has(candidateId)) {
+            newAdopted.set(candidateId, { type: 'Goal', candidate: goal });
+            newAdoptionStates.set(candidateId, 'adopted');
+            hasNewCandidates = true;
+          }
+        });
+
+        // Habit候補を自動採用
+        response.habits?.forEach((habit, index) => {
+          const candidateId = `habit-${index}-${habit.label}`;
+          if (!adoptedCandidates.has(candidateId)) {
+            newAdopted.set(candidateId, { type: 'Habit', candidate: habit });
+            newAdoptionStates.set(candidateId, 'adopted');
+            hasNewCandidates = true;
+          }
+        });
+
+        // Orphan習慣 (Goalに紐づいていない習慣)も自動採用
+        const orphanHabits = response.habits?.filter(h => !h.parentGoalId) || [];
+        orphanHabits.forEach((habit, index) => {
+          const candidateId = `orphan-habit-${index}-${habit.label}`;
+          if (!adoptedCandidates.has(candidateId)) {
+            newAdopted.set(candidateId, { type: 'Habit', candidate: habit });
+            newAdoptionStates.set(candidateId, 'adopted');
+            hasNewCandidates = true;
+          }
+        });
+      });
+
+      if (hasNewCandidates) {
+        setAdoptedCandidates(newAdopted);
+        setAdoptionStates(newAdoptionStates);
+      }
     }
-  }, [messages, candidateResponses]);
+  }, [messages, candidateResponses, adoptedCandidates, adoptionStates]);
 
   // Batch registration handler
   const handleBatchRegister = useCallback(async () => {
@@ -615,9 +659,14 @@ export function MOCSection({
 
     // Registration keyword detection
     const registrationKeywords = [
+      // 既存
       '登録したい', '登録して', '登録する', '登録お願い',
       'これで登録', 'まとめて登録', '一括登録',
-      'register', 'save these', 'save them'
+      'register', 'save these', 'save them',
+      // 採用・確認系
+      '採用', 'これで採用', 'このまま採用', 'いい感じ',
+      'これでOK', 'OK', 'いいね', '決定', 'これにする',
+      '確定', 'confirm', 'looks good', 'perfect'
     ];
 
     const messageTextLower = messageText.toLowerCase();
@@ -884,7 +933,7 @@ export function MOCSection({
     });
   }, [openStickyModal]);
 
-  const handleReplyCandidateSelect = useCallback((candidate: ReplyCandidate) => {
+  const handleReplyCandidateSelect = useCallback(async (candidate: ReplyCandidate) => {
     // Send the reply label as a user message
     const userMessage: GroupChatMessage = {
       id: `user-${Date.now()}`,
@@ -896,8 +945,16 @@ export function MOCSection({
       timestamp: new Date(),
     };
     setMessages(prev => [...prev, userMessage]);
+
+    // confirmアクションの場合、採用済み候補があれば一括登録
+    if (candidate.detail?.action === 'confirm' && adoptedCandidates.size > 0) {
+      await handleBatchRegister();
+      return;
+    }
+
+    // 通常のAI送信
     activeAgent.sendMessage(candidate.label);
-  }, [activeAgent]);
+  }, [activeAgent, adoptedCandidates, handleBatchRegister]);
 
   // Copy chat history to clipboard
   const [copySuccess, setCopySuccess] = useState(false);
