@@ -619,8 +619,7 @@ export function getCredentialsStore(config?: CredentialsStoreConfig): Credential
     return credentialsStoreInstance;
   }
 
-  const isProduction = process.env['NODE_ENV'] === 'production';
-  const useInMemory = config?.useInMemory ?? !isProduction;
+  const useInMemory = config?.useInMemory ?? false;
 
   if (useInMemory) {
     credentialsStoreInstance = new InMemoryCredentialsStore();
@@ -636,7 +635,6 @@ export function getCredentialsStore(config?: CredentialsStoreConfig): Credential
 
   logger.info('Credentials store initialized', {
     type: useInMemory ? 'InMemory' : 'DynamoDB',
-    isProduction,
   });
 
   return credentialsStoreInstance;
