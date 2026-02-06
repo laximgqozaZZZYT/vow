@@ -281,27 +281,12 @@ async function loadConfigFromBackend(authToken: string | null): Promise<MultiAge
           console.log('[useMultiAgentServer] Config migrated from legacy format');
         }
 
-        // Merge tokens from localStorage (since API returns masked tokens)
-        const localConfig = loadConfigFromLocalStorage();
-        const localServerById = new Map(localConfig.servers.map(s => [s.id, s]));
-        const localServerByUrl = new Map(localConfig.servers.map(s => [s.serverUrl, s]));
-
-        // Restore tokens where API returned masked values
-        const serversWithTokens = apiConfig.servers.map((server: McpServer & { hasToken?: boolean }) => {
-          if (server.hasToken && server.serverToken === '********') {
-            // Try to find matching server by ID first, then by URL (for migration cases)
-            const localServer = localServerById.get(server.id) || localServerByUrl.get(server.serverUrl);
-            if (localServer?.serverToken && localServer.serverToken !== '********') {
-              return { ...server, serverToken: localServer.serverToken };
-            }
-          }
-          return server;
-        });
-
+        // Backend now returns decrypted real tokens (encrypted at rest in DynamoDB).
+        // No need to merge from localStorage — cross-device access works out of the box.
         return {
           ...DEFAULT_CONFIG,
           ...apiConfig,
-          servers: serversWithTokens,
+          servers: apiConfig.servers,
         };
       }
     } else if (response.status === 401) {

@@ -21,6 +21,7 @@ import {
 } from '@aws-sdk/lib-dynamodb';
 import { jwtAuthMiddleware, getUserId } from '../middleware/auth.js';
 import { getLogger } from '../utils/logger.js';
+import { encryptToken, decryptToken } from '../utils/encryption.js';
 import { z } from 'zod';
 
 const logger = getLogger('routers.mcpConnections');
@@ -124,17 +125,74 @@ function isLegacyFormat(data: Record<string, unknown>): boolean {
 }
 
 /**
- * Mask server tokens for security (replace with ********)
+ * Check if a token value is already encrypted (Base64 with IV + ciphertext).
+ * Plain text tokens and masked tokens ('********') return false.
  */
-function maskServerTokens(config: McpConnectionSettings): McpConnectionSettings & { servers: (McpServer & { hasToken: boolean })[] } {
+function isEncryptedToken(token: string): boolean {
+  if (!token || token === '********') return false;
+  // Encrypted tokens are strict Base64 (A-Za-z0-9+/=) with no other characters.
+  // Plain text tokens like "mcp-multi-agent-token-xxx" contain hyphens/underscores
+  // that are not in standard Base64, so this regex rejects them.
+  if (!/^[A-Za-z0-9+/]+=*$/.test(token)) return false;
+  try {
+    const decoded = Buffer.from(token, 'base64');
+    // AES-256-GCM: IV(12) + ciphertext(>=1) + tag(16) = minimum 29 bytes
+    return decoded.length >= 29;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Decrypt server tokens for API response.
+ * Encrypted tokens are decrypted; plain text tokens (pre-migration) are returned as-is.
+ */
+async function decryptServerTokens(config: McpConnectionSettings): Promise<McpConnectionSettings> {
   return {
     ...config,
-    servers: config.servers.map(server => ({
-      ...server,
-      serverToken: server.serverToken ? '********' : '',
-      hasToken: !!server.serverToken,
+    servers: await Promise.all(config.servers.map(async (server) => {
+      if (!server.serverToken) return server;
+      if (isEncryptedToken(server.serverToken)) {
+        try {
+          return { ...server, serverToken: await decryptToken(server.serverToken) };
+        } catch {
+          logger.error('Failed to decrypt server token', new Error('Decrypt failed'), { serverId: server.id });
+          return { ...server, serverToken: '' };
+        }
+      }
+      // Plain text token (pre-migration) — return as-is
+      return server;
     })),
   };
+}
+
+/**
+ * Silently migrate plain text tokens to encrypted format in DynamoDB.
+ */
+async function migrateToEncrypted(userId: string, config: McpConnectionSettings): Promise<void> {
+  const encryptedServers = await Promise.all(config.servers.map(async (server) => {
+    if (server.serverToken && !isEncryptedToken(server.serverToken)) {
+      return { ...server, serverToken: await encryptToken(server.serverToken) };
+    }
+    return server;
+  }));
+
+  await docClient.send(
+    new PutCommand({
+      TableName: TABLE_NAME,
+      Item: {
+        userId,
+        servers: encryptedServers,
+        showInDashboard: config.showInDashboard,
+        notifyOnTaskComplete: config.notifyOnTaskComplete,
+        notifyOnAgentOffline: config.notifyOnAgentOffline,
+        chatAgentSettings: config.chatAgentSettings,
+        updatedAt: new Date().toISOString(),
+      },
+    })
+  );
+
+  logger.info('Migrated plain text tokens to encrypted format', { userId });
 }
 
 /**
@@ -181,10 +239,16 @@ export function createMcpConnectionsRouter(): Hono {
         const legacyParsed = legacyMcpConnectionSchema.safeParse(storedData);
         if (legacyParsed.success) {
           const migratedConfig = migrateLegacyConfig(legacyParsed.data);
-          // Return migrated config (tokens masked)
+
+          // Trigger background encryption migration for legacy plain text tokens
+          migrateToEncrypted(userId, migratedConfig).catch(err =>
+            logger.error('Token migration failed', err instanceof Error ? err : new Error(String(err)), { userId })
+          );
+
+          // Return decrypted real tokens (JWT-authenticated users only)
           return c.json({
             success: true,
-            data: maskServerTokens(migratedConfig),
+            data: migratedConfig,
             migrated: true, // Indicate that client should save this new format
           });
         }
@@ -200,9 +264,20 @@ export function createMcpConnectionsRouter(): Hono {
         });
       }
 
+      // Trigger background encryption migration for any remaining plain text tokens
+      const needsMigration = parsed.data.servers.some(s => s.serverToken && !isEncryptedToken(s.serverToken));
+      if (needsMigration) {
+        migrateToEncrypted(userId, parsed.data).catch(err =>
+          logger.error('Token migration failed', err instanceof Error ? err : new Error(String(err)), { userId })
+        );
+      }
+
+      // Decrypt encrypted tokens and return real tokens (JWT-authenticated users only)
+      const decryptedConfig = await decryptServerTokens(parsed.data);
+
       return c.json({
         success: true,
-        data: maskServerTokens(parsed.data),
+        data: decryptedConfig,
       });
     } catch (error) {
       logger.error(
@@ -263,18 +338,19 @@ export function createMcpConnectionsRouter(): Hono {
       // Create a map of existing servers by ID for quick lookup
       const existingServerMap = new Map(existingServers.map(s => [s.id, s]));
 
-      // Process servers - preserve tokens when masked
-      const processedServers = settings.servers.map(server => {
-        if (server.serverToken === '********') {
-          // Keep existing token
+      // Process servers - preserve existing encrypted tokens when masked, encrypt new plain text tokens
+      const processedServers = await Promise.all(settings.servers.map(async (server) => {
+        if (!server.serverToken || server.serverToken === '********') {
+          // Masked or empty → preserve existing token (already encrypted in DynamoDB)
           const existingServer = existingServerMap.get(server.id);
           return {
             ...server,
             serverToken: existingServer?.serverToken || '',
           };
         }
-        return server;
-      });
+        // New plain text token from frontend → encrypt before saving
+        return { ...server, serverToken: await encryptToken(server.serverToken) };
+      }));
 
       const item = {
         userId,
