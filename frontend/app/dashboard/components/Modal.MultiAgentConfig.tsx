@@ -255,14 +255,108 @@ function ServerEditForm({
  */
 function GlobalSettings({
   config,
+  connections,
   onUpdate,
 }: {
   config: MultiAgentConfig;
+  connections: Map<string, ServerConnection>;
   onUpdate: (updates: Partial<MultiAgentConfig>) => void;
 }) {
+  const chatSettings = config.chatAgentSettings || {
+    useMcpAgent: false,
+    mcpServerId: undefined,
+    fallbackToApi: true,
+  };
+
+  // Get connected servers for selection
+  const connectedServers = config.servers.filter(s => {
+    const conn = connections.get(s.id);
+    return conn?.connectionState === 'connected';
+  });
+
+  const updateChatSettings = (updates: Partial<typeof chatSettings>) => {
+    onUpdate({
+      chatAgentSettings: {
+        ...chatSettings,
+        ...updates,
+      },
+    });
+  };
+
   return (
     <div className="space-y-3 pt-4 border-t border-border">
       <h3 className="text-sm font-medium text-muted-foreground">グローバル設定</h3>
+
+      {/* MCP Agent for Chat - NEW! */}
+      <div className="p-3 bg-primary/5 border border-primary/20 rounded-lg space-y-3">
+        <label className="flex items-center justify-between">
+          <div>
+            <span className="text-sm font-medium">チャットにMCPエージェントを使用</span>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              MOCセクションでClaude Codeエージェントを使用します
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => updateChatSettings({ useMcpAgent: !chatSettings.useMcpAgent })}
+            className={`
+              relative w-9 h-5 rounded-full transition-colors
+              ${chatSettings.useMcpAgent ? 'bg-primary' : 'bg-muted'}
+            `}
+          >
+            <span
+              className={`
+                absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full transition-transform shadow
+                ${chatSettings.useMcpAgent ? 'translate-x-4' : ''}
+              `}
+            />
+          </button>
+        </label>
+
+        {chatSettings.useMcpAgent && (
+          <>
+            {/* Server Selection */}
+            <div>
+              <label className="block text-xs text-muted-foreground mb-1">チャット用サーバー</label>
+              <select
+                value={chatSettings.mcpServerId || ''}
+                onChange={(e) => updateChatSettings({ mcpServerId: e.target.value || undefined })}
+                className="w-full px-2 py-1.5 bg-muted border border-border rounded text-sm focus:outline-none focus:ring-1 focus:ring-primary"
+              >
+                <option value="">自動選択（接続済みの最初のサーバー）</option>
+                {connectedServers.map(s => (
+                  <option key={s.id} value={s.id}>{s.name}</option>
+                ))}
+              </select>
+              {connectedServers.length === 0 && (
+                <p className="text-xs text-amber-500 mt-1">
+                  ⚠️ 接続済みのサーバーがありません。サーバーに接続してください。
+                </p>
+              )}
+            </div>
+
+            {/* Fallback Option */}
+            <label className="flex items-center justify-between">
+              <span className="text-xs">MCP失敗時にOpenAIにフォールバック</span>
+              <button
+                type="button"
+                onClick={() => updateChatSettings({ fallbackToApi: !chatSettings.fallbackToApi })}
+                className={`
+                  relative w-8 h-4 rounded-full transition-colors
+                  ${chatSettings.fallbackToApi ? 'bg-primary' : 'bg-muted'}
+                `}
+              >
+                <span
+                  className={`
+                    absolute top-0.5 left-0.5 w-3 h-3 bg-white rounded-full transition-transform shadow
+                    ${chatSettings.fallbackToApi ? 'translate-x-4' : ''}
+                  `}
+                />
+              </button>
+            </label>
+          </>
+        )}
+      </div>
 
       <label className="flex items-center justify-between">
         <span className="text-sm">ダッシュボードに表示</span>
@@ -496,7 +590,7 @@ export default function MultiAgentConfigModal({
               />
 
               {/* Global Settings */}
-              <GlobalSettings config={config} onUpdate={onUpdateConfig} />
+              <GlobalSettings config={config} connections={connections} onUpdate={onUpdateConfig} />
 
               {/* MCP Server Download */}
               <div className="p-4 bg-gradient-to-br from-primary/10 to-primary/5 border border-primary/20 rounded-lg">

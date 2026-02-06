@@ -1364,7 +1364,11 @@ export function MOCSection({
                         handleSendMessage();
                       }
                     }}
-                    placeholder={locale === 'ja' ? 'AIにメッセージ...' : 'Message AI...'}
+                    placeholder={
+                      shouldUseMcpAgent
+                        ? (locale === 'ja' ? 'Claude Code にメッセージ...' : 'Message Claude Code...')
+                        : (locale === 'ja' ? 'AI にメッセージ...' : 'Message AI...')
+                    }
                     rows={1}
                     className="flex-1 px-3 py-2 bg-transparent text-sm text-foreground placeholder-muted-foreground focus:outline-none resize-none max-h-[120px]"
                     style={{ minHeight: '40px' }}
@@ -1404,10 +1408,20 @@ export function MOCSection({
                   </button>
                 </div>
 
-                {/* Keyboard hint - hidden on mobile */}
-                <p className="hidden md:block text-[10px] text-muted-foreground mt-1.5 text-center">
-                  {locale === 'ja' ? 'Enter で送信 • Shift+Enter で改行' : 'Enter to send • Shift+Enter for new line'}
-                </p>
+                {/* Keyboard hint and agent indicator - hidden on mobile */}
+                <div className="hidden md:flex items-center justify-between mt-1.5 text-[10px] text-muted-foreground">
+                  <p>
+                    {locale === 'ja' ? 'Enter で送信 • Shift+Enter で改行' : 'Enter to send • Shift+Enter for new line'}
+                  </p>
+                  <div className={`flex items-center gap-1 px-2 py-0.5 rounded-full ${
+                    shouldUseMcpAgent
+                      ? 'bg-green-500/10 text-green-600 dark:text-green-400'
+                      : 'bg-blue-500/10 text-blue-600 dark:text-blue-400'
+                  }`}>
+                    <span className="w-1.5 h-1.5 rounded-full bg-current"></span>
+                    <span>{shouldUseMcpAgent ? 'Claude Code (MCP)' : 'OpenAI'}</span>
+                  </div>
+                </div>
               </div>
 
               {/* Mobile bottom spacer - accounts for bottom nav bar (approx 70px) */}
@@ -2040,21 +2054,73 @@ function GroupChatView({
       {/* Error indicator with retry button */}
       {error && !isLoading && (
         <div className="flex items-start gap-3">
-          <div className="w-10 h-10 rounded-full bg-gradient-to-br from-red-500 to-red-600 flex items-center justify-center text-white text-lg shadow-md flex-shrink-0">
-            ⚠️
+          <div className={`w-10 h-10 rounded-full flex items-center justify-center text-white text-lg shadow-md flex-shrink-0 ${
+            error.message.includes('RATE_LIMIT:')
+              ? 'bg-gradient-to-br from-amber-500 to-orange-600'
+              : 'bg-gradient-to-br from-red-500 to-red-600'
+          }`}>
+            {error.message.includes('RATE_LIMIT:') ? '⏱️' : '⚠️'}
           </div>
-          <div className="flex flex-col gap-2 px-4 py-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-2xl rounded-tl-sm max-w-[70%]">
+          <div className={`flex flex-col gap-2 px-4 py-3 rounded-2xl rounded-tl-sm max-w-[70%] border ${
+            error.message.includes('RATE_LIMIT:')
+              ? 'bg-amber-50 dark:bg-amber-900/20 border-amber-200 dark:border-amber-800'
+              : 'bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800'
+          }`}>
             <div className="flex items-center gap-2">
-              <span className="text-sm font-medium text-red-700 dark:text-red-300">
-                {error.message.includes('API_KEY_REQUIRED') || error.message.includes('APIキーが設定されていません')
-                  ? (locale === 'ja' ? 'APIキーの設定が必要です' : 'API key configuration required')
-                  : (locale === 'ja' ? 'エラーが発生しました' : 'An error occurred')}
+              <span className={`text-sm font-medium ${
+                error.message.includes('RATE_LIMIT:')
+                  ? 'text-amber-700 dark:text-amber-300'
+                  : 'text-red-700 dark:text-red-300'
+              }`}>
+                {(() => {
+                  // Handle rate limit errors with specific messages
+                  if (error.message.includes('RATE_LIMIT:daily_limit')) {
+                    return locale === 'ja' ? '本日の利用上限に達しました' : 'Daily limit reached';
+                  }
+                  if (error.message.includes('RATE_LIMIT:total_limit')) {
+                    return locale === 'ja' ? '無料プランの上限に達しました' : 'Free plan limit reached';
+                  }
+                  if (error.message.includes('RATE_LIMIT:ip_limit')) {
+                    return locale === 'ja' ? 'ネットワーク制限' : 'Network limit';
+                  }
+                  if (error.message.includes('RATE_LIMIT:')) {
+                    return locale === 'ja' ? '利用上限に達しました' : 'Usage limit reached';
+                  }
+                  if (error.message.includes('API_KEY_REQUIRED') || error.message.includes('APIキーが設定されていません')) {
+                    return locale === 'ja' ? 'APIキーの設定が必要です' : 'API key configuration required';
+                  }
+                  return locale === 'ja' ? 'エラーが発生しました' : 'An error occurred';
+                })()}
               </span>
             </div>
-            <p className="text-xs text-red-600 dark:text-red-400">
-              {error.message}
+            <p className={`text-xs ${
+              error.message.includes('RATE_LIMIT:')
+                ? 'text-amber-600 dark:text-amber-400'
+                : 'text-red-600 dark:text-red-400'
+            }`}>
+              {(() => {
+                // Extract clean message for rate limit errors
+                if (error.message.includes('RATE_LIMIT:')) {
+                  const parts = error.message.split(':');
+                  return parts.slice(2).join(':') || error.message;
+                }
+                return error.message;
+              })()}
             </p>
-            {onRetry && (
+            {/* Show upgrade button for total limit */}
+            {error.message.includes('RATE_LIMIT:total_limit') && (
+              <a
+                href="/settings/subscription"
+                className="self-start flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-gradient-to-r from-purple-500 to-indigo-500 text-white rounded-lg hover:from-purple-600 hover:to-indigo-600 transition-colors"
+              >
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 10l7-7m0 0l7 7m-7-7v18" />
+                </svg>
+                {locale === 'ja' ? 'プレミアムにアップグレード' : 'Upgrade to Premium'}
+              </a>
+            )}
+            {/* Show retry button only for non-rate-limit errors */}
+            {onRetry && !error.message.includes('RATE_LIMIT:') && (
               <button
                 onClick={onRetry}
                 className="self-start flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-red-100 dark:bg-red-800/50 text-red-700 dark:text-red-300 rounded-lg hover:bg-red-200 dark:hover:bg-red-800 transition-colors"
