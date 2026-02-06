@@ -48,6 +48,84 @@
 
 ---
 
+## 解決済み: MCP Remote Server モバイル接続問題
+
+### 問題概要
+- **報告日**: 2026-02-06
+- **解決日**: 2026-02-06
+- **状態**: 原因特定・ワークアラウンド適用済み / 根本対策は未実装
+
+### 根本原因
+
+**MCPサーバーのトークンがPC端末のlocalStorageにしか存在しない。**
+
+バックエンドAPI (`GET /api/mcp-connections`) はセキュリティのため `serverToken` を `'********'` にマスクして返す。
+フロントエンド (`useMultiAgentServer.ts` line 284-299) はlocalStorageの実トークンとマージして復元するが、
+**スマホなど別端末のlocalStorageには実トークンが一度も保存されたことがない**ため、
+`Bearer ********` で認証しようとして401 Unauthorizedになる。
+
+```
+PC (初回設定端末):
+  バックエンドAPI → token='********' + localStorage実トークン → マージ成功 ✅
+
+スマホ (別端末):
+  バックエンドAPI → token='********' + localStorage空 → '********'のまま → 401 ❌
+```
+
+### デバッグログによる裏付け
+
+| ステップ | PC | スマホ |
+|---|---|---|
+| STEP 1 ヘルスチェック (認証不要) | 200 OK | 200 OK |
+| STEP 2 認証テスト (Bearer token) | **200 OK** | **401 Unauthorized** |
+| STEP 3 SSE接続 | 接続成功 | エラー (readyState=2) |
+
+→ ネットワークは疎通するが、トークンの値が異なることが原因
+
+### ワークアラウンド（適用済み）
+スマホの Settings > AI設定 > MCPサーバー(momo) で認証トークンを再入力して保存。
+→ スマホのlocalStorageに実トークンが保存され、正常動作を確認。
+
+### 根本対策（未実装）
+別端末でもトークン再入力なしで接続できるようにする仕組みが必要。
+→ バックエンドでの暗号化保存＆復元が有力候補。詳細は別途検討中。
+
+### 過去の調査: Tailscale Funnel
+
+Tailscale Funnel経由のHTTPSアクセスはポート制限等で断念。
+現在はTailscale直接接続 (192.168.2.110:3456) を使用。
+
+---
+
+## 作業中: AI APIキー設定が保存後に消える問題
+
+### 問題概要
+- **報告日**: 2026-02-06
+- **状態**: 作業中
+- **対象**: Settings > AI APIキー設定
+
+### 根本原因
+
+**2つの問題が複合:**
+
+1. **InMemoryStore使用 (`credentials-store.ts:601-602`)**
+   - `NODE_ENV !== 'production'` の場合、DynamoDBではなくインメモリMapに保存
+   - バックエンド再起動/Lambdaコールドスタートで全データ消失
+   - 開発環境・ステージング環境で再現
+
+2. **バリデーション不足 (`credentials.ts:33`)**
+   - `VALID_CREDENTIAL_TYPES = ['openai', 'anthropic', 'custom']` に `gemini`/`codex` が欠落
+   - フロントエンドは4種送信 → `gemini`/`codex` は 400 エラーで拒否
+
+### 修正計画
+
+| ファイル | 変更内容 |
+|---------|---------|
+| `backend/src/services/credentials-store.ts` | 開発環境でもDynamoDBを使用するように変更 |
+| `backend/src/routers/credentials.ts` | `VALID_CREDENTIAL_TYPES` に `gemini`, `codex` を追加 |
+
+---
+
 ## 完了済みタスク
 
 | 完了日時 | エージェント | タスク | 結果 |

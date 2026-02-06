@@ -283,11 +283,16 @@ async function loadConfigFromBackend(authToken: string | null): Promise<MultiAge
 
         // Backend now returns decrypted real tokens (encrypted at rest in DynamoDB).
         // No need to merge from localStorage — cross-device access works out of the box.
-        return {
+        const mergedConfig = {
           ...DEFAULT_CONFIG,
           ...apiConfig,
           servers: apiConfig.servers,
         };
+
+        // Persist to localStorage so fallback (authToken not yet available) has real tokens
+        saveConfigToLocalStorage(mergedConfig);
+
+        return mergedConfig;
       }
     } else if (response.status === 401) {
       // Authentication error - token might be expired, fall back silently
@@ -407,8 +412,15 @@ export function useMultiAgentServer(options?: UseMultiAgentServerOptions): UseMu
 
   // Load config on mount or when authToken changes
   useEffect(() => {
+    let cancelled = false;
+    const autoConnectTimers: ReturnType<typeof setTimeout>[] = [];
+
     const loadAndSetConfig = async () => {
       const loaded = await loadConfigFromBackend(authToken);
+
+      // If effect was cleaned up while loading, don't update state
+      if (cancelled) return;
+
       setConfig(loaded);
       setConfigLoaded(true);
 
@@ -435,11 +447,13 @@ export function useMultiAgentServer(options?: UseMultiAgentServerOptions): UseMu
           const retryKey = `retry_${server.id}`;
           (window as unknown as Record<string, number>)[retryKey] = 0;
 
-          setTimeout(() => {
+          const timer = setTimeout(() => {
+            if (cancelled) return;
             connectToServer(server).catch(err => {
               console.warn(`[useMultiAgentServer] Auto-connect failed for ${server.name}:`, err.message);
             });
           }, 500);
+          autoConnectTimers.push(timer);
         }
       }
     };
@@ -447,7 +461,9 @@ export function useMultiAgentServer(options?: UseMultiAgentServerOptions): UseMu
     loadAndSetConfig();
 
     return () => {
-      // Cleanup on unmount
+      // Cleanup on unmount or authToken change
+      cancelled = true;
+      autoConnectTimers.forEach(t => clearTimeout(t));
       eventSourcesRef.current.forEach((es) => es.close());
       reconnectTimeoutsRef.current.forEach((timeout) => clearTimeout(timeout));
     };

@@ -30,7 +30,7 @@ const logger = getLogger('credentialsRouter');
 // =============================================================================
 
 /** Valid credential types for URL parameter validation */
-const VALID_CREDENTIAL_TYPES = ['openai', 'anthropic', 'custom'] as const;
+const VALID_CREDENTIAL_TYPES = ['openai', 'anthropic', 'gemini', 'codex', 'custom'] as const;
 
 /**
  * Save credential request body
