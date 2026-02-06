@@ -37,16 +37,24 @@ export interface CandidateDisplayProps {
   response: AICandidateResponse;
   /** ロケール */
   locale: 'ja' | 'en';
-  /** Goal候補を採用した時のコールバック */
-  onGoalAdopt?: (candidate: GoalCandidate) => void;
-  /** Habit候補を採用した時のコールバック */
-  onHabitAdopt?: (candidate: HabitCandidate) => void;
-  /** Sticky候補を採用した時のコールバック */
-  onStickyAdopt?: (candidate: StickyCandidate) => void;
+  /** Goal候補の採用状態変更時のコールバック */
+  onGoalAdoptionChange?: (candidate: GoalCandidate, isAdopted: boolean, candidateId: string) => void;
+  /** Habit候補の採用状態変更時のコールバック */
+  onHabitAdoptionChange?: (candidate: HabitCandidate, isAdopted: boolean, candidateId: string) => void;
+  /** Sticky候補の採用状態変更時のコールバック */
+  onStickyAdoptionChange?: (candidate: StickyCandidate, isAdopted: boolean, candidateId: string) => void;
+  /** Goal候補クリック時のコールバック（詳細表示用） */
+  onGoalClick?: (candidate: GoalCandidate) => void;
+  /** Habit候補クリック時のコールバック（詳細表示用） */
+  onHabitClick?: (candidate: HabitCandidate) => void;
+  /** Sticky候補クリック時のコールバック（詳細表示用） */
+  onStickyClick?: (candidate: StickyCandidate) => void;
   /** Reply選択時のコールバック */
   onReplySelect?: (candidate: ReplyCandidate) => void;
   /** 無効状態 */
   disabled?: boolean;
+  /** 採用状態マップ（外部管理用） */
+  adoptionStates?: Map<string, 'pending' | 'adopted' | 'rejected'>;
 }
 
 export interface EntityCandidateCardProps {
@@ -54,8 +62,12 @@ export interface EntityCandidateCardProps {
   candidate: GoalCandidate | HabitCandidate | StickyCandidate;
   /** ロケール */
   locale: 'ja' | 'en';
-  /** 採用時のコールバック */
-  onAdopt: () => void;
+  /** 採用状態変更時のコールバック（トグル用） */
+  onAdoptionChange?: (isAdopted: boolean) => void;
+  /** カードクリック時のコールバック（詳細表示用） */
+  onCardClick?: () => void;
+  /** 初期採用状態 */
+  initialAdoptionState?: 'pending' | 'adopted' | 'rejected';
   /** 無効状態 */
   disabled?: boolean;
 }
@@ -107,18 +119,20 @@ const typeConfig = {
 function EntityCandidateCard({
   candidate,
   locale,
-  onAdopt,
+  onAdoptionChange,
+  onCardClick,
+  initialAdoptionState = 'pending',
   disabled = false,
 }: EntityCandidateCardProps) {
-  const [adoptionState, setAdoptionState] = useState<'pending' | 'adopted' | 'rejected'>('pending');
+  const [adoptionState, setAdoptionState] = useState<'pending' | 'adopted' | 'rejected'>(initialAdoptionState);
 
   const config = typeConfig[candidate.type];
 
-  // カードクリックで編集モーダルを開く
+  // カードクリックで詳細表示（登録はしない）
   const handleCardClick = useCallback(() => {
     if (disabled) return;
-    onAdopt();
-  }, [disabled, onAdopt]);
+    onCardClick?.();
+  }, [disabled, onCardClick]);
 
   // 詳細情報を取得
   const getSubtext = (): string | null => {
@@ -170,17 +184,24 @@ function EntityCandidateCard({
     return null;
   };
 
-  // 採用ボタン - 状態のみ変更（モーダルは開かない）
-  const handleAdopt = useCallback((e: React.MouseEvent) => {
+  // 採用ボタン - トグル動作（pending⇔adopted）
+  const handleAdoptToggle = useCallback((e: React.MouseEvent) => {
     e.stopPropagation(); // カードクリックイベントを防止
-    setAdoptionState('adopted');
-  }, []);
+    const newState = adoptionState === 'adopted' ? 'pending' : 'adopted';
+    setAdoptionState(newState);
+    onAdoptionChange?.(newState === 'adopted');
+  }, [adoptionState, onAdoptionChange]);
 
-  // 不採用ボタン - 状態のみ変更
-  const handleReject = useCallback((e: React.MouseEvent) => {
+  // 不採用ボタン - トグル動作（pending⇔rejected）
+  const handleRejectToggle = useCallback((e: React.MouseEvent) => {
     e.stopPropagation(); // カードクリックイベントを防止
-    setAdoptionState('rejected');
-  }, []);
+    const newState = adoptionState === 'rejected' ? 'pending' : 'rejected';
+    setAdoptionState(newState);
+    // rejectの場合は採用状態をfalseに
+    if (newState === 'rejected') {
+      onAdoptionChange?.(false);
+    }
+  }, [adoptionState, onAdoptionChange]);
 
   const subtext = getSubtext();
   const reason = getReason();
@@ -248,50 +269,51 @@ function EntityCandidateCard({
         </div>
       </div>
 
-      {/* Adoption Toggle - Bottom Right */}
+      {/* Adoption Toggle Buttons - Bottom Right */}
       <div className="flex justify-end gap-2 mt-4">
-        {adoptionState === 'pending' ? (
-          <>
-            <button
-              type="button"
-              onClick={handleReject}
-              disabled={disabled}
-              className={`
-                px-3 py-1.5 rounded-lg text-xs font-medium transition-colors
-                ${config.rejectColor}
-                disabled:opacity-50 disabled:cursor-not-allowed
-              `}
-            >
-              {locale === 'ja' ? '不採用' : 'Reject'}
-            </button>
-            <button
-              type="button"
-              onClick={handleAdopt}
-              disabled={disabled}
-              className={`
-                px-3 py-1.5 rounded-lg text-xs font-medium transition-colors
-                ${config.adoptColor}
-                disabled:opacity-50 disabled:cursor-not-allowed
-              `}
-            >
-              {locale === 'ja' ? '採用' : 'Adopt'}
-            </button>
-          </>
-        ) : adoptionState === 'adopted' ? (
-          <span className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium bg-green-500 text-white">
-            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-            </svg>
-            {locale === 'ja' ? '採用済み' : 'Adopted'}
-          </span>
-        ) : (
-          <span className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium bg-gray-400 text-white">
+        {/* 不採用ボタン - トグル動作 */}
+        <button
+          type="button"
+          onClick={handleRejectToggle}
+          disabled={disabled}
+          className={`
+            inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium transition-all
+            ${adoptionState === 'rejected'
+              ? 'bg-gray-500 text-white ring-2 ring-gray-400'
+              : 'bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 text-gray-600 dark:text-gray-300'
+            }
+            disabled:opacity-50 disabled:cursor-not-allowed
+          `}
+        >
+          {adoptionState === 'rejected' && (
             <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
             </svg>
-            {locale === 'ja' ? '不採用' : 'Rejected'}
-          </span>
-        )}
+          )}
+          {locale === 'ja' ? '不採用' : 'Reject'}
+        </button>
+
+        {/* 採用ボタン - トグル動作 */}
+        <button
+          type="button"
+          onClick={handleAdoptToggle}
+          disabled={disabled}
+          className={`
+            inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium transition-all
+            ${adoptionState === 'adopted'
+              ? 'bg-green-500 text-white ring-2 ring-green-400'
+              : `${config.adoptColor}`
+            }
+            disabled:opacity-50 disabled:cursor-not-allowed
+          `}
+        >
+          {adoptionState === 'adopted' && (
+            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+            </svg>
+          )}
+          {locale === 'ja' ? '採用' : 'Adopt'}
+        </button>
       </div>
     </div>
   );
@@ -337,13 +359,20 @@ function ReplyCandidateButton({
 export function CandidateDisplay({
   response,
   locale,
-  onGoalAdopt,
-  onHabitAdopt,
-  onStickyAdopt,
+  onGoalAdoptionChange,
+  onHabitAdoptionChange,
+  onStickyAdoptionChange,
+  onGoalClick,
+  onHabitClick,
+  onStickyClick,
   onReplySelect,
   disabled = false,
+  adoptionStates,
 }: CandidateDisplayProps) {
   const { candidateTypes, goals, habits, stickies, replies } = response;
+
+  // 候補IDを生成するヘルパー
+  const getCandidateId = (type: string, index: number, label: string) => `${type}-${index}-${label}`;
 
   // エンティティ候補が存在するかチェック
   const hasEntityCandidates =
@@ -389,27 +418,35 @@ export function CandidateDisplay({
           <div className="space-y-4">
             {goals.map((goal, goalIndex) => {
               const linkedHabits = goal.id ? habitsByGoalId.get(goal.id) : undefined;
+              const goalCandidateId = getCandidateId('goal', goalIndex, goal.label);
               return (
                 <div key={`goal-group-${goalIndex}-${goal.label}`} className="space-y-2">
                   {/* Goal候補 */}
                   <EntityCandidateCard
                     candidate={goal}
                     locale={locale}
-                    onAdopt={() => onGoalAdopt?.(goal)}
+                    onAdoptionChange={(isAdopted) => onGoalAdoptionChange?.(goal, isAdopted, goalCandidateId)}
+                    onCardClick={() => onGoalClick?.(goal)}
+                    initialAdoptionState={adoptionStates?.get(goalCandidateId) || 'pending'}
                     disabled={disabled}
                   />
                   {/* 紐づくHabit候補（インデント表示） */}
                   {linkedHabits && linkedHabits.length > 0 && (
                     <div className="ml-6 space-y-2 border-l-2 border-blue-200 dark:border-blue-800 pl-3">
-                      {linkedHabits.map((habit, habitIndex) => (
-                        <EntityCandidateCard
-                          key={`habit-${goalIndex}-${habitIndex}-${habit.label}`}
-                          candidate={habit}
-                          locale={locale}
-                          onAdopt={() => onHabitAdopt?.(habit)}
-                          disabled={disabled}
-                        />
-                      ))}
+                      {linkedHabits.map((habit, habitIndex) => {
+                        const habitCandidateId = getCandidateId('habit', habitIndex, habit.label);
+                        return (
+                          <EntityCandidateCard
+                            key={`habit-${goalIndex}-${habitIndex}-${habit.label}`}
+                            candidate={habit}
+                            locale={locale}
+                            onAdoptionChange={(isAdopted) => onHabitAdoptionChange?.(habit, isAdopted, habitCandidateId)}
+                            onCardClick={() => onHabitClick?.(habit)}
+                            initialAdoptionState={adoptionStates?.get(habitCandidateId) || 'pending'}
+                            disabled={disabled}
+                          />
+                        );
+                      })}
                     </div>
                   )}
                 </div>
@@ -423,15 +460,20 @@ export function CandidateDisplay({
                 {locale === 'ja' ? '📝 その他の習慣候補' : '📝 Other Habit Candidates'}
               </h5>
               <div className="space-y-3">
-                {orphanHabits.map((habit, index) => (
-                  <EntityCandidateCard
-                    key={`orphan-habit-${index}-${habit.label}`}
-                    candidate={habit}
-                    locale={locale}
-                    onAdopt={() => onHabitAdopt?.(habit)}
-                    disabled={disabled}
-                  />
-                ))}
+                {orphanHabits.map((habit, index) => {
+                  const habitCandidateId = getCandidateId('orphan-habit', index, habit.label);
+                  return (
+                    <EntityCandidateCard
+                      key={`orphan-habit-${index}-${habit.label}`}
+                      candidate={habit}
+                      locale={locale}
+                      onAdoptionChange={(isAdopted) => onHabitAdoptionChange?.(habit, isAdopted, habitCandidateId)}
+                      onCardClick={() => onHabitClick?.(habit)}
+                      initialAdoptionState={adoptionStates?.get(habitCandidateId) || 'pending'}
+                      disabled={disabled}
+                    />
+                  );
+                })}
               </div>
             </div>
           )}
@@ -445,15 +487,20 @@ export function CandidateDisplay({
             {locale === 'ja' ? '🎯 目標候補' : '🎯 Goal Candidates'}
           </h5>
           <div className="space-y-3">
-            {goals.map((goal, index) => (
-              <EntityCandidateCard
-                key={`goal-${index}-${goal.label}`}
-                candidate={goal}
-                locale={locale}
-                onAdopt={() => onGoalAdopt?.(goal)}
-                disabled={disabled}
-              />
-            ))}
+            {goals.map((goal, index) => {
+              const goalCandidateId = getCandidateId('goal', index, goal.label);
+              return (
+                <EntityCandidateCard
+                  key={`goal-${index}-${goal.label}`}
+                  candidate={goal}
+                  locale={locale}
+                  onAdoptionChange={(isAdopted) => onGoalAdoptionChange?.(goal, isAdopted, goalCandidateId)}
+                  onCardClick={() => onGoalClick?.(goal)}
+                  initialAdoptionState={adoptionStates?.get(goalCandidateId) || 'pending'}
+                  disabled={disabled}
+                />
+              );
+            })}
           </div>
         </div>
       )}
@@ -465,15 +512,20 @@ export function CandidateDisplay({
             {locale === 'ja' ? '📝 習慣候補' : '📝 Habit Candidates'}
           </h5>
           <div className="space-y-3">
-            {habits.map((habit, index) => (
-              <EntityCandidateCard
-                key={`habit-${index}-${habit.label}`}
-                candidate={habit}
-                locale={locale}
-                onAdopt={() => onHabitAdopt?.(habit)}
-                disabled={disabled}
-              />
-            ))}
+            {habits.map((habit, index) => {
+              const habitCandidateId = getCandidateId('habit', index, habit.label);
+              return (
+                <EntityCandidateCard
+                  key={`habit-${index}-${habit.label}`}
+                  candidate={habit}
+                  locale={locale}
+                  onAdoptionChange={(isAdopted) => onHabitAdoptionChange?.(habit, isAdopted, habitCandidateId)}
+                  onCardClick={() => onHabitClick?.(habit)}
+                  initialAdoptionState={adoptionStates?.get(habitCandidateId) || 'pending'}
+                  disabled={disabled}
+                />
+              );
+            })}
           </div>
         </div>
       )}
@@ -485,15 +537,20 @@ export function CandidateDisplay({
             {locale === 'ja' ? '📌 メモ候補' : '📌 Memo Candidates'}
           </h5>
           <div className="space-y-3">
-            {stickies.map((sticky, index) => (
-              <EntityCandidateCard
-                key={`sticky-${index}-${sticky.label}`}
-                candidate={sticky}
-                locale={locale}
-                onAdopt={() => onStickyAdopt?.(sticky)}
-                disabled={disabled}
-              />
-            ))}
+            {stickies.map((sticky, index) => {
+              const stickyCandidateId = getCandidateId('sticky', index, sticky.label);
+              return (
+                <EntityCandidateCard
+                  key={`sticky-${index}-${sticky.label}`}
+                  candidate={sticky}
+                  locale={locale}
+                  onAdoptionChange={(isAdopted) => onStickyAdoptionChange?.(sticky, isAdopted, stickyCandidateId)}
+                  onCardClick={() => onStickyClick?.(sticky)}
+                  initialAdoptionState={adoptionStates?.get(stickyCandidateId) || 'pending'}
+                  disabled={disabled}
+                />
+              );
+            })}
           </div>
         </div>
       )}

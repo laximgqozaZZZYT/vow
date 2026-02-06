@@ -137,6 +137,17 @@ export function MOCSection({
   // Key: message ID, Value: parsed candidate response
   const [candidateResponses, setCandidateResponses] = useState<Map<string, AICandidateResponse>>(new Map());
 
+  // Adopted candidates for batch registration
+  // Key: candidateId, Value: { type, candidate }
+  type AdoptedCandidate = {
+    type: 'Goal' | 'Habit' | "Sticky'n";
+    candidate: GoalCandidate | HabitCandidate | StickyCandidate;
+  };
+  const [adoptedCandidates, setAdoptedCandidates] = useState<Map<string, AdoptedCandidate>>(new Map());
+  const [adoptionStates, setAdoptionStates] = useState<Map<string, 'pending' | 'adopted' | 'rejected'>>(new Map());
+  const [isRegistering, setIsRegistering] = useState(false);
+  const [registrationMessage, setRegistrationMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null);
+
   // Multi-agent server hook
   const server = useMultiAgentServer({ authToken });
 
@@ -679,15 +690,67 @@ export function MOCSection({
     setStickyModalOpen(true);
   }, []);
 
-  // Handle candidate adoption - opens modals with pre-filled data
-  const handleGoalCandidateAdopt = useCallback((candidate: GoalCandidate) => {
+  // Handle candidate adoption state change (toggle)
+  const handleGoalAdoptionChange = useCallback((candidate: GoalCandidate, isAdopted: boolean, candidateId: string) => {
+    setAdoptionStates(prev => {
+      const next = new Map(prev);
+      next.set(candidateId, isAdopted ? 'adopted' : 'pending');
+      return next;
+    });
+    setAdoptedCandidates(prev => {
+      const next = new Map(prev);
+      if (isAdopted) {
+        next.set(candidateId, { type: 'Goal', candidate });
+      } else {
+        next.delete(candidateId);
+      }
+      return next;
+    });
+  }, []);
+
+  const handleHabitAdoptionChange = useCallback((candidate: HabitCandidate, isAdopted: boolean, candidateId: string) => {
+    setAdoptionStates(prev => {
+      const next = new Map(prev);
+      next.set(candidateId, isAdopted ? 'adopted' : 'pending');
+      return next;
+    });
+    setAdoptedCandidates(prev => {
+      const next = new Map(prev);
+      if (isAdopted) {
+        next.set(candidateId, { type: 'Habit', candidate });
+      } else {
+        next.delete(candidateId);
+      }
+      return next;
+    });
+  }, []);
+
+  const handleStickyAdoptionChange = useCallback((candidate: StickyCandidate, isAdopted: boolean, candidateId: string) => {
+    setAdoptionStates(prev => {
+      const next = new Map(prev);
+      next.set(candidateId, isAdopted ? 'adopted' : 'pending');
+      return next;
+    });
+    setAdoptedCandidates(prev => {
+      const next = new Map(prev);
+      if (isAdopted) {
+        next.set(candidateId, { type: "Sticky'n", candidate });
+      } else {
+        next.delete(candidateId);
+      }
+      return next;
+    });
+  }, []);
+
+  // Handle card click - opens modal for detail view (no registration)
+  const handleGoalCardClick = useCallback((candidate: GoalCandidate) => {
     openGoalModal({
       name: candidate.detail.name,
       parentId: candidate.detail.parentId,
     });
   }, [openGoalModal]);
 
-  const handleHabitCandidateAdopt = useCallback((candidate: HabitCandidate) => {
+  const handleHabitCardClick = useCallback((candidate: HabitCandidate) => {
     openHabitModal({
       name: candidate.detail.name,
       type: candidate.detail.habitType || 'do',
@@ -695,12 +758,101 @@ export function MOCSection({
     });
   }, [openHabitModal]);
 
-  const handleStickyCandidateAdopt = useCallback((candidate: StickyCandidate) => {
+  const handleStickyCardClick = useCallback((candidate: StickyCandidate) => {
     openStickyModal({
       name: candidate.detail.name,
       description: candidate.detail.description || undefined,
     });
   }, [openStickyModal]);
+
+  // Batch registration handler
+  const handleBatchRegister = useCallback(async () => {
+    if (adoptedCandidates.size === 0) return;
+
+    setIsRegistering(true);
+    setRegistrationMessage(null);
+
+    let successCount = 0;
+    let errorCount = 0;
+
+    for (const [candidateId, { type, candidate }] of adoptedCandidates) {
+      try {
+        if (type === 'Goal') {
+          const goalCandidate = candidate as GoalCandidate;
+          const createdGoal = await api.createGoal({
+            name: goalCandidate.detail.name,
+            details: goalCandidate.detail.details || '',
+            dueDate: goalCandidate.detail.dueDate || null,
+            parentId: goalCandidate.detail.parentId || null,
+          });
+          if (createdGoal) {
+            onGoalCreated?.(createdGoal as Goal);
+          }
+          successCount++;
+        } else if (type === 'Habit') {
+          const habitCandidate = candidate as HabitCandidate;
+          const createdHabit = await api.createHabit({
+            name: habitCandidate.detail.name,
+            type: habitCandidate.detail.habitType || 'do',
+            must: habitCandidate.detail.must || 1,
+            duration: habitCandidate.detail.duration || null,
+            repeat: habitCandidate.detail.repeat || 'daily',
+            time: habitCandidate.detail.time || null,
+            endTime: habitCandidate.detail.endTime || null,
+            dueDate: habitCandidate.detail.dueDate || null,
+            allDay: habitCandidate.detail.allDay || false,
+            goalId: habitCandidate.detail.goalId || null,
+            notes: habitCandidate.detail.notes || '',
+          });
+          if (createdHabit) {
+            onHabitCreated?.(createdHabit as Habit);
+          }
+          successCount++;
+        } else if (type === "Sticky'n") {
+          const stickyCandidate = candidate as StickyCandidate;
+          const createdSticky = await api.createSticky({
+            name: stickyCandidate.detail.name,
+            description: stickyCandidate.detail.description || '',
+            completed: stickyCandidate.detail.completed || false,
+            displayOrder: stickyCandidate.detail.displayOrder || 0,
+            parentStickyId: stickyCandidate.detail.parentStickyId || null,
+          });
+          if (createdSticky) {
+            onStickyCreated?.(createdSticky as Sticky);
+          }
+          successCount++;
+        }
+      } catch (error) {
+        console.error(`Failed to register ${type}:`, error);
+        errorCount++;
+      }
+    }
+
+    // Clear adopted candidates after registration
+    setAdoptedCandidates(new Map());
+    setAdoptionStates(new Map());
+    setIsRegistering(false);
+
+    // Show success/error message
+    if (errorCount === 0) {
+      setRegistrationMessage({
+        type: 'success',
+        text: locale === 'ja'
+          ? `${successCount}件を登録しました`
+          : `Registered ${successCount} item(s)`,
+      });
+    } else {
+      setRegistrationMessage({
+        type: 'error',
+        text: locale === 'ja'
+          ? `${successCount}件登録、${errorCount}件失敗`
+          : `Registered ${successCount}, failed ${errorCount}`,
+      });
+    }
+
+    // Clear message after 3 seconds
+    setTimeout(() => setRegistrationMessage(null), 3000);
+  }, [adoptedCandidates, locale, onGoalCreated, onHabitCreated, onStickyCreated]);
 
   const handleReplyCandidateSelect = useCallback((candidate: ReplyCandidate) => {
     // Send the reply label as a user message
@@ -970,12 +1122,60 @@ export function MOCSection({
                 error={activeAgent.error}
                 onRetry={handleRetry}
                 candidateResponses={candidateResponses}
-                onGoalAdopt={handleGoalCandidateAdopt}
-                onHabitAdopt={handleHabitCandidateAdopt}
-                onStickyAdopt={handleStickyCandidateAdopt}
+                onGoalAdoptionChange={handleGoalAdoptionChange}
+                onHabitAdoptionChange={handleHabitAdoptionChange}
+                onStickyAdoptionChange={handleStickyAdoptionChange}
+                onGoalClick={handleGoalCardClick}
+                onHabitClick={handleHabitCardClick}
+                onStickyClick={handleStickyCardClick}
                 onReplySelect={handleReplyCandidateSelect}
+                adoptionStates={adoptionStates}
               />
             </div>
+
+            {/* Batch Registration Bar - shown when there are adopted candidates */}
+            {adoptedCandidates.size > 0 && (
+              <div className="flex-shrink-0 flex items-center justify-between px-4 py-3 bg-green-50 dark:bg-green-900/20 border-t border-green-200 dark:border-green-800">
+                <span className="text-sm text-green-700 dark:text-green-300">
+                  {locale === 'ja'
+                    ? `${adoptedCandidates.size}件の候補を選択中`
+                    : `${adoptedCandidates.size} candidate(s) selected`}
+                </span>
+                <button
+                  onClick={handleBatchRegister}
+                  disabled={isRegistering}
+                  className="px-4 py-2 bg-green-600 text-white text-sm font-medium rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-2"
+                >
+                  {isRegistering ? (
+                    <>
+                      <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                      </svg>
+                      {locale === 'ja' ? '登録中...' : 'Registering...'}
+                    </>
+                  ) : (
+                    <>
+                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                      </svg>
+                      {locale === 'ja' ? 'まとめて登録' : 'Register All'}
+                    </>
+                  )}
+                </button>
+              </div>
+            )}
+
+            {/* Registration Success/Error Message */}
+            {registrationMessage && (
+              <div className={`flex-shrink-0 px-4 py-2 text-sm text-center ${
+                registrationMessage.type === 'success'
+                  ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300'
+                  : 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300'
+              }`}>
+                {registrationMessage.text}
+              </div>
+            )}
 
             {/* Fixed Input Area at Bottom - flex-shrink-0 to prevent shrinking */}
             <div
@@ -1592,12 +1792,16 @@ interface GroupChatViewProps {
   messagesEndRef?: React.RefObject<HTMLDivElement | null>;
   error?: Error | null;
   onRetry?: () => void;
-  // Candidate display props
+  // Candidate display props (new toggle-based API)
   candidateResponses?: Map<string, AICandidateResponse>;
-  onGoalAdopt?: (candidate: GoalCandidate) => void;
-  onHabitAdopt?: (candidate: HabitCandidate) => void;
-  onStickyAdopt?: (candidate: StickyCandidate) => void;
+  onGoalAdoptionChange?: (candidate: GoalCandidate, isAdopted: boolean, candidateId: string) => void;
+  onHabitAdoptionChange?: (candidate: HabitCandidate, isAdopted: boolean, candidateId: string) => void;
+  onStickyAdoptionChange?: (candidate: StickyCandidate, isAdopted: boolean, candidateId: string) => void;
+  onGoalClick?: (candidate: GoalCandidate) => void;
+  onHabitClick?: (candidate: HabitCandidate) => void;
+  onStickyClick?: (candidate: StickyCandidate) => void;
   onReplySelect?: (candidate: ReplyCandidate) => void;
+  adoptionStates?: Map<string, 'pending' | 'adopted' | 'rejected'>;
 }
 
 function GroupChatView({
@@ -1608,10 +1812,14 @@ function GroupChatView({
   error,
   onRetry,
   candidateResponses,
-  onGoalAdopt,
-  onHabitAdopt,
-  onStickyAdopt,
+  onGoalAdoptionChange,
+  onHabitAdoptionChange,
+  onStickyAdoptionChange,
+  onGoalClick,
+  onHabitClick,
+  onStickyClick,
   onReplySelect,
+  adoptionStates,
 }: GroupChatViewProps) {
   return (
     <div className="flex flex-col min-h-full p-4 space-y-4">
@@ -1661,10 +1869,14 @@ function GroupChatView({
                     <CandidateDisplay
                       response={candidateResponse}
                       locale={locale}
-                      onGoalAdopt={onGoalAdopt}
-                      onHabitAdopt={onHabitAdopt}
-                      onStickyAdopt={onStickyAdopt}
+                      onGoalAdoptionChange={onGoalAdoptionChange}
+                      onHabitAdoptionChange={onHabitAdoptionChange}
+                      onStickyAdoptionChange={onStickyAdoptionChange}
+                      onGoalClick={onGoalClick}
+                      onHabitClick={onHabitClick}
+                      onStickyClick={onStickyClick}
                       onReplySelect={onReplySelect}
+                      adoptionStates={adoptionStates}
                     />
                   </div>
                 )}

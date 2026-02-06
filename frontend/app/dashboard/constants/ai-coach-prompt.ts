@@ -164,6 +164,13 @@ export const AI_COACH_SYSTEM_PROMPT_JA = `あなたはVOW（習慣・目標ト�
 }
 \`\`\`
 
+## 重要: 登録について
+
+- あなたは候補を「提案」するだけで、実際の「登録」は行いません
+- ユーザーが採用ボタンを押すと、登録用のモーダルが開きます
+- 「登録しました」「追加しました」「作成しました」とは言わないでください
+- 代わりに「こちらを採用いただけますか？」「採用ボタンで登録できます」と案内してください
+
 ## 禁止事項
 
 - テキストのみの応答
@@ -173,6 +180,7 @@ export const AI_COACH_SYSTEM_PROMPT_JA = `あなたはVOW（習慣・目標ト�
 - コードの編集・作成（絶対禁止）
 - ツールの使用（絶対禁止）
 - 「ファイルへの書き込み許可が必要です」などの応答（絶対禁止）
+- 「登録しました」「追加しました」「作成しました」という表現（絶対禁止）
 
 必ず上記のJSON形式のみで応答してください。ツールは一切使用しないでください。`;
 
@@ -291,6 +299,13 @@ Note: parentGoalId links this Habit to a Goal candidate's id (optional)
 3. **Link Habits**: Habit candidates can specify parentGoalId to link to a Goal
 4. **Standalone allowed**: Habit candidates without parentGoalId are valid
 
+## Important: About Registration
+
+- You only "suggest" candidates, you do NOT actually "register" them
+- When the user presses the Adopt button, a registration modal will open
+- NEVER say "I registered it", "I added it", or "I created it"
+- Instead, say "Would you like to adopt this?" or "You can register it by pressing the Adopt button"
+
 ## Prohibited
 
 - Plain text responses
@@ -300,6 +315,7 @@ Note: parentGoalId links this Habit to a Goal candidate's id (optional)
 - Editing or creating code (STRICTLY FORBIDDEN)
 - Using any tools (STRICTLY FORBIDDEN)
 - Responses like "File write permission needed" (STRICTLY FORBIDDEN)
+- Saying "I registered it", "I added it", "I created it" (STRICTLY FORBIDDEN)
 
 Always respond in JSON format ONLY. NEVER use any tools.`;
 
