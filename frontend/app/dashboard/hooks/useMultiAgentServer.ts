@@ -400,6 +400,9 @@ export function useMultiAgentServer(options?: UseMultiAgentServerOptions): UseMu
   // Track servers that have successfully connected (to avoid stale closure in onerror)
   const connectedServersRef = useRef<Set<string>>(new Set());
 
+  // Track unmount state to prevent zombie reconnect timers from onerror
+  const isUnmountedRef = useRef(false);
+
   // Update authToken ref
   useEffect(() => {
     authTokenRef.current = authToken;
@@ -411,6 +414,8 @@ export function useMultiAgentServer(options?: UseMultiAgentServerOptions): UseMu
   }, [config]);
 
   // Load config on mount or when authToken changes
+  // IMPORTANT: SSE connections use server.serverToken (not authToken), so they survive authToken changes.
+  // Only reconnect if the actual server config (URL/token) has changed.
   useEffect(() => {
     let cancelled = false;
     const autoConnectTimers: ReturnType<typeof setTimeout>[] = [];
@@ -421,28 +426,54 @@ export function useMultiAgentServer(options?: UseMultiAgentServerOptions): UseMu
       // If effect was cleaned up while loading, don't update state
       if (cancelled) return;
 
+      const prevServers = configRef.current.servers;
       setConfig(loaded);
       setConfigLoaded(true);
 
-      // Initialize connection states for all servers
-      const initialConnections = new Map<string, ServerConnection>();
-      for (const server of loaded.servers) {
-        initialConnections.set(server.id, {
-          serverId: server.id,
-          serverName: server.name,
-          connectionState: 'disconnected',
-          error: null,
-          agents: [],
-          tasks: [],
-          activities: [],
-          stats: null,
-        });
-      }
-      setConnections(initialConnections);
+      // Update connection states: preserve existing, add new, remove stale
+      setConnections(prev => {
+        const newMap = new Map(prev);
+        // Add entries for new servers only
+        for (const server of loaded.servers) {
+          if (!newMap.has(server.id)) {
+            newMap.set(server.id, {
+              serverId: server.id,
+              serverName: server.name,
+              connectionState: 'disconnected',
+              error: null,
+              agents: [],
+              tasks: [],
+              activities: [],
+              stats: null,
+            });
+          }
+        }
+        // Remove entries for servers no longer in config
+        const loadedIds = new Set(loaded.servers.map(s => s.id));
+        for (const [id] of newMap) {
+          if (!loadedIds.has(id)) {
+            const es = eventSourcesRef.current.get(id);
+            if (es) { es.close(); eventSourcesRef.current.delete(id); }
+            const timeout = reconnectTimeoutsRef.current.get(id);
+            if (timeout) { clearTimeout(timeout); reconnectTimeoutsRef.current.delete(id); }
+            newMap.delete(id);
+          }
+        }
+        return newMap;
+      });
 
-      // Auto-connect enabled servers
+      // Auto-connect enabled servers (skip already-connected with unchanged config)
       for (const server of loaded.servers) {
         if (server.enabled && server.autoConnect && server.serverUrl && server.serverToken) {
+          // Check if already connected with the same URL and token — skip reconnection
+          const existingES = eventSourcesRef.current.get(server.id);
+          const prevServer = prevServers.find(s => s.id === server.id);
+          if (existingES && prevServer &&
+              prevServer.serverUrl === server.serverUrl &&
+              prevServer.serverToken === server.serverToken) {
+            continue;
+          }
+
           // Reset retry counter for fresh connections
           const retryKey = `retry_${server.id}`;
           (window as unknown as Record<string, number>)[retryKey] = 0;
@@ -461,13 +492,24 @@ export function useMultiAgentServer(options?: UseMultiAgentServerOptions): UseMu
     loadAndSetConfig();
 
     return () => {
-      // Cleanup on unmount or authToken change
+      // Only cancel pending auto-connect timers — do NOT close SSE connections.
+      // SSE connections use server.serverToken (not authToken), so they must survive authToken changes.
       cancelled = true;
       autoConnectTimers.forEach(t => clearTimeout(t));
-      eventSourcesRef.current.forEach((es) => es.close());
-      reconnectTimeoutsRef.current.forEach((timeout) => clearTimeout(timeout));
     };
   }, [authToken]);
+
+  // Clean up all SSE connections on unmount only
+  useEffect(() => {
+    isUnmountedRef.current = false;
+    return () => {
+      isUnmountedRef.current = true;
+      eventSourcesRef.current.forEach((es) => es.close());
+      eventSourcesRef.current.clear();
+      reconnectTimeoutsRef.current.forEach((timeout) => clearTimeout(timeout));
+      reconnectTimeoutsRef.current.clear();
+    };
+  }, []);
 
   /**
    * Make authenticated API request to a server
@@ -663,6 +705,9 @@ export function useMultiAgentServer(options?: UseMultiAgentServerOptions): UseMu
     };
 
     eventSource.onerror = () => {
+      // If hook is unmounted, don't attempt reconnection (prevents zombie timers)
+      if (isUnmountedRef.current) return;
+
       // Check if we've ever successfully connected (using ref to avoid stale closure)
       const wasConnected = connectedServersRef.current.has(server.id);
 
