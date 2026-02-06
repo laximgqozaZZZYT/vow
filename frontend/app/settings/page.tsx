@@ -1352,6 +1352,9 @@ export default function SettingsPage() {
                             <label className="block text-sm font-medium mb-1">認証トークン（変更する場合のみ入力）</label>
                             <input
                               type="password"
+                              id="mcp-edit-token"
+                              name="mcp-edit-token"
+                              autoComplete="off"
                               value={editServerToken}
                               onChange={(e) => setEditServerToken(e.target.value)}
                               placeholder="新しいトークンを入力..."
@@ -1498,6 +1501,9 @@ export default function SettingsPage() {
                             <label className="block text-sm font-medium mb-1">認証トークン</label>
                             <input
                               type="password"
+                              id="mcp-new-token"
+                              name="mcp-new-token"
+                              autoComplete="off"
                               value={newServerToken}
                               onChange={(e) => setNewServerToken(e.target.value)}
                               placeholder="サーバー認証トークン"

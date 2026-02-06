@@ -263,6 +263,9 @@ export default function AIProviderSettings({ authToken }: AIProviderSettingsProp
           </label>
           <input
             type="password"
+            id="ai-provider-api-key"
+            name="ai-provider-api-key"
+            autoComplete="off"
             value={apiKey}
             onChange={(e) => setApiKey(e.target.value)}
             placeholder={providerCredentials[activeProvider]?.exists ? '新しいキーで上書き' : 'APIキーを入力'}

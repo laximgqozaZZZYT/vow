@@ -382,22 +382,43 @@ export class DynamoDBCredentialsStore implements CredentialsStore {
 
       if (existingResult.Item) {
         // Update existing credential
+        // Build UpdateExpression dynamically to avoid referencing
+        // undefined values that removeUndefinedValues would strip
+        // from ExpressionAttributeValues.
+        const setClauses: string[] = [
+          'encryptedApiKey = :encryptedApiKey',
+          '#model = :model',
+          'updatedAt = :updatedAt',
+          'isActive = :isActive',
+        ];
+        const exprAttrValues: Record<string, unknown> = {
+          ':encryptedApiKey': encryptedApiKey,
+          ':model': input.model,
+          ':updatedAt': now,
+          ':isActive': true,
+        };
+        const exprAttrNames: Record<string, string> = {
+          '#model': 'model',
+        };
+
+        if (input.endpoint !== undefined) {
+          setClauses.push('endpoint = :endpoint');
+          exprAttrValues[':endpoint'] = input.endpoint;
+        }
+
+        if (input.metadata !== undefined) {
+          setClauses.push('#metadata = :metadata');
+          exprAttrValues[':metadata'] = input.metadata;
+          exprAttrNames['#metadata'] = 'metadata';
+        }
+
         await this.docClient.send(
           new UpdateCommand({
             TableName: this.tableName,
             Key: { userId, credentialType: type },
-            UpdateExpression: 'SET encryptedApiKey = :encryptedApiKey, #model = :model, endpoint = :endpoint, updatedAt = :updatedAt, isActive = :isActive, metadata = :metadata',
-            ExpressionAttributeNames: {
-              '#model': 'model',
-            },
-            ExpressionAttributeValues: {
-              ':encryptedApiKey': encryptedApiKey,
-              ':model': input.model,
-              ':endpoint': input.endpoint,
-              ':updatedAt': now,
-              ':isActive': true,
-              ':metadata': input.metadata,
-            },
+            UpdateExpression: `SET ${setClauses.join(', ')}`,
+            ExpressionAttributeNames: exprAttrNames,
+            ExpressionAttributeValues: exprAttrValues,
           })
         );
       } else {
@@ -598,7 +619,8 @@ export function getCredentialsStore(config?: CredentialsStoreConfig): Credential
     return credentialsStoreInstance;
   }
 
-  const useInMemory = config?.useInMemory ?? false;
+  const isProduction = process.env['NODE_ENV'] === 'production';
+  const useInMemory = config?.useInMemory ?? !isProduction;
 
   if (useInMemory) {
     credentialsStoreInstance = new InMemoryCredentialsStore();
@@ -614,6 +636,7 @@ export function getCredentialsStore(config?: CredentialsStoreConfig): Credential
 
   logger.info('Credentials store initialized', {
     type: useInMemory ? 'InMemory' : 'DynamoDB',
+    isProduction,
   });
 
   return credentialsStoreInstance;
