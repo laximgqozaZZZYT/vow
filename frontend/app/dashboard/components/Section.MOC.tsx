@@ -472,6 +472,95 @@ export function MOCSection({
     }
   }, [messages, candidateResponses]);
 
+  // Batch registration handler
+  const handleBatchRegister = useCallback(async () => {
+    if (adoptedCandidates.size === 0) return;
+
+    setIsRegistering(true);
+    setRegistrationMessage(null);
+
+    let successCount = 0;
+    let errorCount = 0;
+
+    for (const [candidateId, { type, candidate }] of adoptedCandidates) {
+      try {
+        if (type === 'Goal') {
+          const goalCandidate = candidate as GoalCandidate;
+          const createdGoal = await api.createGoal({
+            name: goalCandidate.detail.name,
+            details: goalCandidate.detail.details || '',
+            dueDate: goalCandidate.detail.dueDate || null,
+            parentId: goalCandidate.detail.parentId || null,
+          });
+          if (createdGoal) {
+            onGoalCreated?.(createdGoal as Goal);
+          }
+          successCount++;
+        } else if (type === 'Habit') {
+          const habitCandidate = candidate as HabitCandidate;
+          const createdHabit = await api.createHabit({
+            name: habitCandidate.detail.name,
+            type: habitCandidate.detail.habitType || 'do',
+            must: habitCandidate.detail.must || 1,
+            duration: habitCandidate.detail.duration || null,
+            repeat: habitCandidate.detail.repeat || 'daily',
+            time: habitCandidate.detail.time || null,
+            endTime: habitCandidate.detail.endTime || null,
+            dueDate: habitCandidate.detail.dueDate || null,
+            allDay: habitCandidate.detail.allDay || false,
+            goalId: habitCandidate.detail.goalId || null,
+            notes: habitCandidate.detail.notes || '',
+          });
+          if (createdHabit) {
+            onHabitCreated?.(createdHabit as Habit);
+          }
+          successCount++;
+        } else if (type === "Sticky'n") {
+          const stickyCandidate = candidate as StickyCandidate;
+          const createdSticky = await api.createSticky({
+            name: stickyCandidate.detail.name,
+            description: stickyCandidate.detail.description || '',
+            completed: stickyCandidate.detail.completed || false,
+            displayOrder: stickyCandidate.detail.displayOrder || 0,
+            parentStickyId: stickyCandidate.detail.parentStickyId || null,
+          });
+          if (createdSticky) {
+            onStickyCreated?.(createdSticky as Sticky);
+          }
+          successCount++;
+        }
+      } catch (error) {
+        console.error(`Failed to register ${type}:`, error);
+        errorCount++;
+      }
+    }
+
+    // Clear adopted candidates after registration
+    setAdoptedCandidates(new Map());
+    setAdoptionStates(new Map());
+    setIsRegistering(false);
+
+    // Show success/error message
+    if (errorCount === 0) {
+      setRegistrationMessage({
+        type: 'success',
+        text: locale === 'ja'
+          ? `${successCount}件を登録しました`
+          : `Registered ${successCount} item(s)`,
+      });
+    } else {
+      setRegistrationMessage({
+        type: 'error',
+        text: locale === 'ja'
+          ? `${successCount}件登録、${errorCount}件失敗`
+          : `Registered ${successCount}, failed ${errorCount}`,
+      });
+    }
+
+    // Clear message after 3 seconds
+    setTimeout(() => setRegistrationMessage(null), 3000);
+  }, [adoptedCandidates, locale, onGoalCreated, onHabitCreated, onStickyCreated]);
+
   // Handle sending message - with debug mode and candidate support
   const handleSendMessage = useCallback(async () => {
     if (!inputValue.trim() || activeAgent.isStreaming) return;
@@ -524,6 +613,36 @@ export function MOCSection({
       return;
     }
 
+    // Registration keyword detection
+    const registrationKeywords = [
+      '登録したい', '登録して', '登録する', '登録お願い',
+      'これで登録', 'まとめて登録', '一括登録',
+      'register', 'save these', 'save them'
+    ];
+
+    const messageTextLower = messageText.toLowerCase();
+    const shouldAutoRegister = registrationKeywords.some(kw =>
+      messageTextLower.includes(kw.toLowerCase())
+    );
+
+    if (shouldAutoRegister && adoptedCandidates.size > 0) {
+      // Add user message first
+      const userMessage: GroupChatMessage = {
+        id: `user-${Date.now()}`,
+        senderId: 'user',
+        senderName: 'You',
+        senderType: 'user',
+        senderIcon: ROLE_ICONS.user,
+        content: messageText,
+        timestamp: new Date(),
+      };
+      setMessages(prev => [...prev, userMessage]);
+
+      // Execute batch registration
+      await handleBatchRegister();
+      return;
+    }
+
     // Normal message handling - delegate to original handler
     const userMessage: GroupChatMessage = {
       id: `user-${Date.now()}`,
@@ -550,7 +669,7 @@ export function MOCSection({
         timestamp: new Date(),
       }]);
     }
-  }, [inputValue, activeAgent, shouldUseMcpAgent, locale]);
+  }, [inputValue, activeAgent, shouldUseMcpAgent, locale, adoptedCandidates, handleBatchRegister]);
 
   // Quick actions - enhanced to match AICoaching section features
   const quickActions = useMemo(() => {
@@ -764,95 +883,6 @@ export function MOCSection({
       description: candidate.detail.description || undefined,
     });
   }, [openStickyModal]);
-
-  // Batch registration handler
-  const handleBatchRegister = useCallback(async () => {
-    if (adoptedCandidates.size === 0) return;
-
-    setIsRegistering(true);
-    setRegistrationMessage(null);
-
-    let successCount = 0;
-    let errorCount = 0;
-
-    for (const [candidateId, { type, candidate }] of adoptedCandidates) {
-      try {
-        if (type === 'Goal') {
-          const goalCandidate = candidate as GoalCandidate;
-          const createdGoal = await api.createGoal({
-            name: goalCandidate.detail.name,
-            details: goalCandidate.detail.details || '',
-            dueDate: goalCandidate.detail.dueDate || null,
-            parentId: goalCandidate.detail.parentId || null,
-          });
-          if (createdGoal) {
-            onGoalCreated?.(createdGoal as Goal);
-          }
-          successCount++;
-        } else if (type === 'Habit') {
-          const habitCandidate = candidate as HabitCandidate;
-          const createdHabit = await api.createHabit({
-            name: habitCandidate.detail.name,
-            type: habitCandidate.detail.habitType || 'do',
-            must: habitCandidate.detail.must || 1,
-            duration: habitCandidate.detail.duration || null,
-            repeat: habitCandidate.detail.repeat || 'daily',
-            time: habitCandidate.detail.time || null,
-            endTime: habitCandidate.detail.endTime || null,
-            dueDate: habitCandidate.detail.dueDate || null,
-            allDay: habitCandidate.detail.allDay || false,
-            goalId: habitCandidate.detail.goalId || null,
-            notes: habitCandidate.detail.notes || '',
-          });
-          if (createdHabit) {
-            onHabitCreated?.(createdHabit as Habit);
-          }
-          successCount++;
-        } else if (type === "Sticky'n") {
-          const stickyCandidate = candidate as StickyCandidate;
-          const createdSticky = await api.createSticky({
-            name: stickyCandidate.detail.name,
-            description: stickyCandidate.detail.description || '',
-            completed: stickyCandidate.detail.completed || false,
-            displayOrder: stickyCandidate.detail.displayOrder || 0,
-            parentStickyId: stickyCandidate.detail.parentStickyId || null,
-          });
-          if (createdSticky) {
-            onStickyCreated?.(createdSticky as Sticky);
-          }
-          successCount++;
-        }
-      } catch (error) {
-        console.error(`Failed to register ${type}:`, error);
-        errorCount++;
-      }
-    }
-
-    // Clear adopted candidates after registration
-    setAdoptedCandidates(new Map());
-    setAdoptionStates(new Map());
-    setIsRegistering(false);
-
-    // Show success/error message
-    if (errorCount === 0) {
-      setRegistrationMessage({
-        type: 'success',
-        text: locale === 'ja'
-          ? `${successCount}件を登録しました`
-          : `Registered ${successCount} item(s)`,
-      });
-    } else {
-      setRegistrationMessage({
-        type: 'error',
-        text: locale === 'ja'
-          ? `${successCount}件登録、${errorCount}件失敗`
-          : `Registered ${successCount}, failed ${errorCount}`,
-      });
-    }
-
-    // Clear message after 3 seconds
-    setTimeout(() => setRegistrationMessage(null), 3000);
-  }, [adoptedCandidates, locale, onGoalCreated, onHabitCreated, onStickyCreated]);
 
   const handleReplyCandidateSelect = useCallback((candidate: ReplyCandidate) => {
     // Send the reply label as a user message
