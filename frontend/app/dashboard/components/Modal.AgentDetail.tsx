@@ -10,7 +10,8 @@
 
 'use client';
 
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback } from 'react';
+import { getRoleSystemPrompt } from '../constants/role-prompts';
 
 /**
  * Agent configuration data
@@ -21,46 +22,10 @@ export interface AgentConfig {
   role: string;
   description: string;
   icon: string;
-  status: 'idle' | 'busy' | 'offline';
   systemPrompt: string;
-  model: string;
-  tools: string[];
   capabilities: string[];
   isBuiltIn: boolean; // Built-in agents cannot have their prompts modified
-  parentAgentId?: string | null; // Parent agent ID for tree structure
 }
-
-/**
- * Available agent roles
- */
-export const AGENT_ROLES = [
-  'Manager',
-  'Coach',
-  'Planner',
-  'Analyst',
-  'Developer',
-  'Reviewer',
-  'Tester',
-  'Architect',
-  'DevOps',
-  'Custom',
-] as const;
-
-export type AgentRole = typeof AGENT_ROLES[number];
-
-/**
- * Available tools for agents
- */
-export const AVAILABLE_TOOLS = [
-  { id: 'analyze_habits', label: '習慣分析', labelEn: 'Analyze Habits' },
-  { id: 'suggest_habits', label: '習慣提案', labelEn: 'Suggest Habits' },
-  { id: 'suggest_goals', label: '目標提案', labelEn: 'Suggest Goals' },
-  { id: 'generate_baby_steps', label: 'スモールステップ生成', labelEn: 'Generate Baby Steps' },
-  { id: 'analyze_progress', label: '進捗分析', labelEn: 'Analyze Progress' },
-  { id: 'create_smart_goal', label: 'SMART目標作成', labelEn: 'Create SMART Goal' },
-  { id: 'identify_patterns', label: 'パターン識別', labelEn: 'Identify Patterns' },
-  { id: 'generate_report', label: 'レポート生成', labelEn: 'Generate Report' },
-] as const;
 
 /**
  * Available icons for agents
@@ -75,6 +40,7 @@ export const AGENT_ICONS = [
  * Role-specific icons
  */
 export const ROLE_ICONS: Record<string, string> = {
+  AICoach: '🎯',
   manager: '👔',
   developer: '💻',
   reviewer: '🔍',
@@ -92,168 +58,15 @@ export const ROLE_ICONS: Record<string, string> = {
  * These mirror the backend Mastra agent definitions
  */
 export const BUILTIN_AGENTS: Record<string, AgentConfig> = {
-  manager: {
-    id: 'manager',
-    name: 'VOW Manager',
-    role: 'Manager',
-    description: 'タスク管理・エージェント統括',
-    icon: '👔',
-    status: 'idle',
-    model: 'openai/gpt-4o',
-    tools: ['analyze_query', 'aggregate_responses', 'delegate_task'],
-    capabilities: ['クエリ分析', 'エージェント振り分け', 'レスポンス集約'],
-    isBuiltIn: true,
-    parentAgentId: null,
-    systemPrompt: `あなたはVOW習慣・目標トラッカーのマネージャーAIです。
-
-## 役割
-あなたは複数の専門エージェントを統括するマネージャーです：
-- **Habit Coach**: 習慣形成と維持のエキスパート
-- **Goal Planner**: 目標設定とマイルストーン管理のエキスパート
-- **Progress Tracker**: 進捗追跡と分析のエキスパート
-
-## 処理フロー
-1. ユーザーからの質問やリクエストを分析
-2. 適切なエージェント（複数可）を選択
-3. 各エージェントからの応答を集約
-4. 統合された、一貫性のある回答を提供
-
-## コミュニケーションスタイル
-- 明確で簡潔な日本語
-- 各エージェントの専門性を活かした回答
-- ユーザーにとって実行可能なアドバイス
-- 必要に応じて詳細情報を提供
-
-## 重要なポイント
-- 常にユーザーの目標達成を最優先
-- 複数の視点からのアドバイスを統合
-- 矛盾がある場合は適切に調整
-- ユーザーの状況に合わせた柔軟な対応`,
-  },
-  coach: {
-    id: 'coach',
+  AICoach: {
+    id: 'AICoach',
     name: 'AI Coach',
     role: 'Coach',
-    description: '習慣・目標のアドバイザー',
-    icon: '🤖',
-    status: 'idle',
-    model: 'openai/gpt-4o',
-    tools: ['suggest_habits', 'suggest_goals', 'analyze_habits', 'generate_baby_steps'],
+    description: '習慣・目標のAIコーチ',
+    icon: '🎯',
+    systemPrompt: getRoleSystemPrompt('AICoach', 'ja'),
     capabilities: ['習慣提案', '目標提案', 'パターン分析', 'スモールステップ生成'],
     isBuiltIn: true,
-    parentAgentId: 'manager',
-    systemPrompt: `あなたは習慣形成の専門家AIコーチです。
-
-## 役割
-- ユーザーの習慣パターンを分析する
-- 新しい習慣を提案する
-- 習慣スタッキングのアドバイスを提供する
-- 小さなステップから始める方法を教える
-
-## ツールの使用（必須・最重要）
-あなたは必ずツールを使用して回答してください。テキストだけの回答は禁止です。
-
-**以下の場合、必ず対応するツールを呼び出してください：**
-- 習慣を提案・推薦・アドバイスする → suggest_habits ツールを必ず使用
-- 目標を提案・推薦 → suggest_goals ツールを必ず使用
-- 習慣を分析・評価する → analyze_habits ツールを必ず使用
-- スモールステップ・小さな一歩・簡単な始め方を提案 → generate_baby_steps ツールを必ず使用
-
-## コミュニケーションスタイル
-- 励ましと支援的なトーン
-- 具体的で実践的なアドバイス
-- 科学的根拠に基づいた提案
-- ユーザーの状況に合わせた柔軟な対応
-
-## 重要なポイント
-- 「アトミックハビット」の原則を活用
-- 2分ルール: 新しい習慣は2分以内で始められるものに
-- 習慣スタッキング: 既存の習慣に新しい習慣を連結
-- 環境デザイン: 良い習慣を簡単に、悪い習慣を難しく`,
-  },
-  'habit-coach': {
-    id: 'habit-coach',
-    name: 'Habit Coach',
-    role: 'Coach',
-    description: '習慣形成の専門家',
-    icon: '🎯',
-    status: 'idle',
-    model: 'openai/gpt-4o',
-    tools: ['analyze_habits', 'suggest_habits', 'generate_baby_steps'],
-    capabilities: ['習慣分析', '習慣提案', 'スモールステップ生成'],
-    isBuiltIn: true,
-    parentAgentId: 'manager',
-    systemPrompt: `あなたは習慣形成の専門家AIコーチです。
-
-## 役割
-- ユーザーの習慣パターンを分析する
-- 新しい習慣を提案する
-- 習慣スタッキングのアドバイスを提供する
-- 小さなステップから始める方法を教える
-
-## ツールの使用（必須）
-習慣を提案する際は必ず suggest_habits ツールを使用してください。
-
-## 重要なポイント
-- 「アトミックハビット」の原則を活用
-- 2分ルール: 新しい習慣は2分以内で始められるものに
-- 習慣スタッキング: 既存の習慣に新しい習慣を連結`,
-  },
-  'goal-planner': {
-    id: 'goal-planner',
-    name: 'Goal Planner',
-    role: 'Planner',
-    description: '目標設定・計画の専門家',
-    icon: '📋',
-    status: 'idle',
-    model: 'openai/gpt-4o',
-    tools: ['suggest_goals', 'create_smart_goal', 'analyze_goal_progress'],
-    capabilities: ['目標設定', 'SMART目標作成', '進捗分析'],
-    isBuiltIn: true,
-    parentAgentId: 'manager',
-    systemPrompt: `あなたは目標設定の専門家AIプランナーです。
-
-## 役割
-- ユーザーの目標を分析・設定支援
-- SMART目標の作成サポート
-- マイルストーンの提案
-- 目標達成への道筋を示す
-
-## ツールの使用（必須）
-目標を提案する際は必ず suggest_goals ツールを使用してください。
-
-## SMART目標の原則
-- Specific（具体的）
-- Measurable（測定可能）
-- Achievable（達成可能）
-- Relevant（関連性）
-- Time-bound（期限付き）`,
-  },
-  'progress-tracker': {
-    id: 'progress-tracker',
-    name: 'Progress Tracker',
-    role: 'Analyst',
-    description: '進捗追跡・分析の専門家',
-    icon: '📊',
-    status: 'idle',
-    model: 'openai/gpt-4o',
-    tools: ['analyze_progress', 'generate_report', 'identify_patterns'],
-    capabilities: ['進捗分析', 'レポート生成', 'パターン識別'],
-    isBuiltIn: true,
-    parentAgentId: 'manager',
-    systemPrompt: `あなたは進捗追跡の専門家AIアナリストです。
-
-## 役割
-- ユーザーの習慣・目標の進捗を追跡
-- データに基づいた分析を提供
-- 改善点の提案
-- モチベーション維持のサポート
-
-## 分析の観点
-- 達成率とトレンド
-- 連続記録（ストリーク）
-- 時間帯別パフォーマンス
-- 改善のための具体的アドバイス`,
   },
 };
 
@@ -265,7 +78,6 @@ interface AgentDetailModalProps {
   onSave?: (agentId: string, updates: Partial<AgentConfig>) => void;
   onDelete?: (agentId: string) => void;
   mode?: 'view' | 'edit' | 'create';
-  availableParents?: AgentConfig[];
 }
 
 export function AgentDetailModal({
@@ -276,7 +88,6 @@ export function AgentDetailModal({
   onSave,
   onDelete,
   mode = 'view',
-  availableParents = [],
 }: AgentDetailModalProps) {
   const isCreateMode = mode === 'create';
   const isEditMode = mode === 'edit';
@@ -289,14 +100,12 @@ export function AgentDetailModal({
     description: '',
     icon: '🤖',
     systemPrompt: '',
-    tools: [],
     capabilities: [],
-    parentAgentId: 'manager',
   });
 
   const [isEditing, setIsEditing] = useState(false);
   const [editedPrompt, setEditedPrompt] = useState('');
-  const [activeTab, setActiveTab] = useState<'overview' | 'prompt' | 'tools' | 'hierarchy'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'prompt'>('overview');
   const [showIconPicker, setShowIconPicker] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
 
@@ -310,9 +119,7 @@ export function AgentDetailModal({
           description: '',
           icon: '🤖',
           systemPrompt: '',
-          tools: [],
           capabilities: [],
-          parentAgentId: 'manager',
         });
         setActiveTab('overview');
       } else if (agent) {
@@ -322,9 +129,7 @@ export function AgentDetailModal({
           description: agent.description,
           icon: agent.icon,
           systemPrompt: agent.systemPrompt,
-          tools: [...agent.tools],
           capabilities: [...agent.capabilities],
-          parentAgentId: agent.parentAgentId,
         });
         setEditedPrompt(agent.systemPrompt);
         setIsEditing(false);
@@ -344,13 +149,9 @@ export function AgentDetailModal({
         role: formData.role || 'Custom',
         description: formData.description || '',
         icon: formData.icon || '🤖',
-        status: 'idle',
         systemPrompt: formData.systemPrompt || '',
-        model: 'openai/gpt-4o',
-        tools: formData.tools || [],
         capabilities: formData.capabilities || [],
         isBuiltIn: false,
-        parentAgentId: formData.parentAgentId || 'manager',
       };
       onSave?.(newId, newAgent);
     } else if (agent && onSave) {
@@ -360,9 +161,7 @@ export function AgentDetailModal({
           description: formData.description,
           icon: formData.icon,
           systemPrompt: formData.systemPrompt,
-          tools: formData.tools,
           capabilities: formData.capabilities,
-          parentAgentId: formData.parentAgentId,
         });
       } else if (editedPrompt !== agent.systemPrompt) {
         onSave(agent.id, { systemPrompt: editedPrompt });
@@ -387,60 +186,23 @@ export function AgentDetailModal({
     }
   }, [agent, onClose, onDelete]);
 
-  const toggleTool = useCallback((toolId: string) => {
-    setFormData(prev => {
-      const tools = prev.tools || [];
-      if (tools.includes(toolId)) {
-        return { ...prev, tools: tools.filter(t => t !== toolId) };
-      } else {
-        return { ...prev, tools: [...tools, toolId] };
-      }
-    });
-  }, []);
-
-  // Get all agents for parent selection (built-in + custom, excluding self)
-  const parentOptions = useMemo(() => {
-    const builtInOptions = Object.values(BUILTIN_AGENTS);
-    const allOptions = [...builtInOptions, ...availableParents];
-    // Remove duplicates and self
-    const uniqueOptions = allOptions.filter((a, i, arr) =>
-      arr.findIndex(b => b.id === a.id) === i && a.id !== agent?.id
-    );
-    return uniqueOptions;
-  }, [availableParents, agent]);
-
   if (!open) return null;
   if (!isCreateMode && !agent) return null;
-
-  const statusColors: Record<string, string> = {
-    idle: 'bg-green-500',
-    busy: 'bg-yellow-500',
-    offline: 'bg-gray-400',
-  };
-
-  const statusLabels: Record<string, { ja: string; en: string }> = {
-    idle: { ja: '待機中', en: 'Idle' },
-    busy: { ja: '処理中', en: 'Busy' },
-    offline: { ja: 'オフライン', en: 'Offline' },
-  };
 
   const tabs = isCreateMode || isEditMode
     ? [
         { id: 'overview' as const, label: locale === 'ja' ? '基本設定' : 'Basic', icon: '📋' },
         { id: 'prompt' as const, label: locale === 'ja' ? 'プロンプト' : 'Prompt', icon: '💬' },
-        { id: 'tools' as const, label: locale === 'ja' ? 'ツール' : 'Tools', icon: '🛠️' },
-        { id: 'hierarchy' as const, label: locale === 'ja' ? '階層' : 'Hierarchy', icon: '🌳' },
       ]
     : [
         { id: 'overview' as const, label: locale === 'ja' ? '概要' : 'Overview', icon: '📋' },
         { id: 'prompt' as const, label: locale === 'ja' ? 'プロンプト' : 'Prompt', icon: '💬' },
-        { id: 'tools' as const, label: locale === 'ja' ? 'ツール' : 'Tools', icon: '🛠️' },
       ];
 
   const modalTitle = isCreateMode
-    ? (locale === 'ja' ? '新規エージェント登録' : 'Create New Agent')
+    ? (locale === 'ja' ? '新規役割登録' : 'Create New Role')
     : isEditMode
-    ? (locale === 'ja' ? 'エージェント編集' : 'Edit Agent')
+    ? (locale === 'ja' ? '役割編集' : 'Edit Role')
     : agent?.name || '';
 
   return (
@@ -474,16 +236,15 @@ export function AgentDetailModal({
                 )}
               </button>
             ) : (
-              <div className="relative w-12 h-12 rounded-full bg-gradient-to-br from-purple-500 to-indigo-500 flex items-center justify-center text-2xl shadow-lg">
+              <div className="w-12 h-12 rounded-full bg-gradient-to-br from-purple-500 to-indigo-500 flex items-center justify-center text-2xl shadow-lg">
                 {agent?.icon}
-                <span className={`absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 rounded-full border-2 border-white dark:border-gray-900 ${statusColors[agent?.status || 'offline']}`} />
               </div>
             )}
             <div>
               <h2 className="text-lg font-bold text-gray-900 dark:text-white">{modalTitle}</h2>
               {!isCreateMode && agent && (
                 <p className="text-sm text-gray-500 dark:text-gray-400">
-                  {agent.description} {agent.status && `\u2022 ${statusLabels[agent.status][locale]}`}
+                  {agent.description}
                 </p>
               )}
             </div>
@@ -525,31 +286,15 @@ export function AgentDetailModal({
                   {/* Name Input */}
                   <div>
                     <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                      {locale === 'ja' ? 'エージェント名' : 'Agent Name'} *
+                      {locale === 'ja' ? '役割名' : 'Role Name'} *
                     </label>
                     <input
                       type="text"
                       value={formData.name || ''}
                       onChange={(e) => setFormData(prev => ({ ...prev, name: e.target.value }))}
                       className="w-full px-3 py-2 text-sm bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-                      placeholder={locale === 'ja' ? 'エージェント名を入力' : 'Enter agent name'}
+                      placeholder={locale === 'ja' ? '役割名を入力' : 'Enter role name'}
                     />
-                  </div>
-
-                  {/* Role Select */}
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                      {locale === 'ja' ? '役割' : 'Role'} *
-                    </label>
-                    <select
-                      value={formData.role || 'Custom'}
-                      onChange={(e) => setFormData(prev => ({ ...prev, role: e.target.value }))}
-                      className="w-full px-3 py-2 text-sm bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-                    >
-                      {AGENT_ROLES.map(role => (
-                        <option key={role} value={role}>{role}</option>
-                      ))}
-                    </select>
                   </div>
 
                   {/* Description Input */}
@@ -562,41 +307,12 @@ export function AgentDetailModal({
                       value={formData.description || ''}
                       onChange={(e) => setFormData(prev => ({ ...prev, description: e.target.value }))}
                       className="w-full px-3 py-2 text-sm bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-                      placeholder={locale === 'ja' ? 'エージェントの説明' : 'Agent description'}
+                      placeholder={locale === 'ja' ? '役割の説明' : 'Role description'}
                     />
                   </div>
                 </>
               ) : agent && (
                 <>
-                  {/* Basic Info */}
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="p-3 bg-gray-50 dark:bg-gray-800 rounded-lg">
-                      <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">
-                        {locale === 'ja' ? 'エージェントID' : 'Agent ID'}
-                      </p>
-                      <p className="font-mono text-sm text-gray-900 dark:text-white">{agent.id}</p>
-                    </div>
-                    <div className="p-3 bg-gray-50 dark:bg-gray-800 rounded-lg">
-                      <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">
-                        {locale === 'ja' ? '使用モデル' : 'Model'}
-                      </p>
-                      <p className="font-mono text-sm text-gray-900 dark:text-white">{agent.model}</p>
-                    </div>
-                  </div>
-
-                  {/* Parent Agent */}
-                  {agent.parentAgentId && (
-                    <div className="p-3 bg-gray-50 dark:bg-gray-800 rounded-lg">
-                      <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">
-                        {locale === 'ja' ? '親エージェント' : 'Parent Agent'}
-                      </p>
-                      <p className="text-sm text-gray-900 dark:text-white flex items-center gap-2">
-                        <span>{BUILTIN_AGENTS[agent.parentAgentId]?.icon || '🤖'}</span>
-                        <span>{BUILTIN_AGENTS[agent.parentAgentId]?.name || agent.parentAgentId}</span>
-                      </p>
-                    </div>
-                  )}
-
                   {/* Capabilities */}
                   <div>
                     <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
@@ -698,112 +414,6 @@ export function AgentDetailModal({
                   </pre>
                 </div>
               )}
-            </div>
-          )}
-
-          {activeTab === 'tools' && (
-            <div className="space-y-3">
-              <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300">
-                {locale === 'ja' ? '利用可能なツール' : 'Available Tools'}
-              </h3>
-
-              {(isCreateMode || isEditMode) ? (
-                <div className="grid grid-cols-2 gap-2">
-                  {AVAILABLE_TOOLS.map(tool => {
-                    const isSelected = formData.tools?.includes(tool.id);
-                    return (
-                      <button
-                        key={tool.id}
-                        onClick={() => toggleTool(tool.id)}
-                        className={`flex items-center gap-2 p-3 rounded-lg border transition-all ${
-                          isSelected
-                            ? 'bg-purple-50 dark:bg-purple-900/30 border-purple-300 dark:border-purple-600'
-                            : 'bg-gray-50 dark:bg-gray-800 border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600'
-                        }`}
-                      >
-                        <span className={`w-5 h-5 rounded flex items-center justify-center text-xs ${
-                          isSelected
-                            ? 'bg-purple-500 text-white'
-                            : 'bg-gray-200 dark:bg-gray-700 text-gray-400'
-                        }`}>
-                          {isSelected ? '✓' : ''}
-                        </span>
-                        <div className="text-left">
-                          <p className="font-mono text-sm text-gray-900 dark:text-white">{tool.id}</p>
-                          <p className="text-xs text-gray-500 dark:text-gray-400">
-                            {locale === 'ja' ? tool.label : tool.labelEn}
-                          </p>
-                        </div>
-                      </button>
-                    );
-                  })}
-                </div>
-              ) : agent && (
-                <>
-                  <div className="space-y-2">
-                    {agent.tools.map((tool, i) => (
-                      <div
-                        key={i}
-                        className="flex items-center gap-3 p-3 bg-gray-50 dark:bg-gray-800 rounded-lg"
-                      >
-                        <span className="text-lg">🔧</span>
-                        <div>
-                          <p className="font-mono text-sm text-gray-900 dark:text-white">{tool}</p>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                  {agent.tools.length === 0 && (
-                    <p className="text-sm text-gray-500 dark:text-gray-400 text-center py-4">
-                      {locale === 'ja' ? 'ツールがありません' : 'No tools available'}
-                    </p>
-                  )}
-                </>
-              )}
-            </div>
-          )}
-
-          {activeTab === 'hierarchy' && (isCreateMode || isEditMode) && (
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                  {locale === 'ja' ? '親エージェント' : 'Parent Agent'}
-                </label>
-                <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">
-                  {locale === 'ja'
-                    ? 'このエージェントを統括する上位エージェントを選択してください'
-                    : 'Select the parent agent that will manage this agent'}
-                </p>
-                <div className="space-y-2">
-                  {parentOptions.map(parent => {
-                    const isSelected = formData.parentAgentId === parent.id;
-                    return (
-                      <button
-                        key={parent.id}
-                        onClick={() => setFormData(prev => ({ ...prev, parentAgentId: parent.id }))}
-                        className={`w-full flex items-center gap-3 p-3 rounded-lg border transition-all ${
-                          isSelected
-                            ? 'bg-purple-50 dark:bg-purple-900/30 border-purple-300 dark:border-purple-600'
-                            : 'bg-gray-50 dark:bg-gray-800 border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600'
-                        }`}
-                      >
-                        <div className="w-10 h-10 rounded-full bg-gradient-to-br from-purple-500 to-indigo-500 flex items-center justify-center text-xl">
-                          {parent.icon}
-                        </div>
-                        <div className="flex-1 text-left">
-                          <p className="font-medium text-gray-900 dark:text-white">{parent.name}</p>
-                          <p className="text-xs text-gray-500 dark:text-gray-400">{parent.description}</p>
-                        </div>
-                        {isSelected && (
-                          <span className="w-6 h-6 rounded-full bg-purple-500 text-white flex items-center justify-center text-sm">
-                            ✓
-                          </span>
-                        )}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
             </div>
           )}
         </div>

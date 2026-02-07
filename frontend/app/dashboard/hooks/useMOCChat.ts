@@ -9,14 +9,14 @@
 
 import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import { useMultiAgentServer, type ServerConnection } from './useMultiAgentServer';
-import { useMastraAgent, type MastraMessage } from './useMastraAgent';
-import { useMcpChat } from './useMcpChat';
+import { useMcpChat, type MastraMessage } from './useMcpChat';
 import { useChatSessions } from './useChatSessions';
 import type { McpServer } from '../types/agent.types';
 import type { Goal, Habit } from '../types';
 import type { AgentRole } from '../constants/role-prompts';
 import { getRoleSystemPrompt, getRoleConfig, getAvailableRoles } from '../constants/role-prompts';
 import type { ChatSession } from '../types/chat-session.types';
+import type { AgentConfig } from '../components/Modal.AgentDetail';
 
 // Re-export types needed by consumers
 export type { MastraMessage };
@@ -83,8 +83,10 @@ export interface UseMOCChatOptions {
   habits?: Habit[];
   goals?: Goal[];
   roleIcons: Record<string, string>;
-  /** Initial role for the chat (default: 'coach') */
+  /** Initial role for the chat (default: 'AICoach') */
   initialRole?: AgentRole;
+  /** Custom agents for custom role prompt lookup */
+  customAgents?: AgentConfig[];
   // Parser functions
   parseSuggestions: (msg: MastraMessage) => GroupChatMessage['suggestions'] | undefined;
   parseQuickReplies: (msg: MastraMessage) => { quickReplies: GroupChatMessage['quickReplies']; selectionType?: GroupChatMessage['selectionType'] } | undefined;
@@ -113,8 +115,7 @@ export interface UseMOCChatReturn {
   // State
   isLoading: boolean;
   error: Error | null;
-  activeAgent: ReturnType<typeof useMastraAgent> | ReturnType<typeof useMcpChat>;
-  shouldUseMcpAgent: boolean;
+  activeAgent: ReturnType<typeof useMcpChat>;
 
   // Server info
   isConnected: boolean;
@@ -149,7 +150,8 @@ export function useMOCChat({
   habits = [],
   goals = [],
   roleIcons,
-  initialRole = 'coach',
+  initialRole = 'AICoach',
+  customAgents = [],
   parseSuggestions,
   parseQuickReplies,
   parseFollowUpActions,
@@ -175,8 +177,20 @@ export function useMOCChat({
   // Get current role from active session or use initial role
   const currentRole: AgentRole = sessionManager.activeSession?.role || initialRole;
 
-  // Get role-based system prompt
+  // Get role-based system prompt (custom agent prompt takes priority)
   const roleSystemPrompt = useMemo(() => {
+    // Check custom agents first for a matching role's systemPrompt
+    const customAgent = customAgents.find(a => a.role === currentRole || a.id === currentRole);
+    if (customAgent?.systemPrompt) {
+      console.log('[useMOCChat] Using custom agent system prompt:', {
+        role: currentRole,
+        agentId: customAgent.id,
+        promptLength: customAgent.systemPrompt.length,
+      });
+      return customAgent.systemPrompt;
+    }
+
+    // Fall back to built-in role prompt
     const prompt = getRoleSystemPrompt(currentRole, locale);
     console.log('[useMOCChat] Role system prompt loaded:', {
       role: currentRole,
@@ -184,7 +198,7 @@ export function useMOCChat({
       promptLength: prompt?.length ?? 0,
     });
     return prompt;
-  }, [currentRole, locale]);
+  }, [currentRole, locale, customAgents]);
 
   // Available roles for selection
   const availableRoles = useMemo(() => getAvailableRoles(locale), [locale]);
@@ -192,26 +206,29 @@ export function useMOCChat({
   // Server hook
   const server = useMultiAgentServer({ authToken });
 
-  // Available agents for selection (AI Coach + connected MCP agents)
+  // Available agents for selection (AI Coach + custom roles + connected MCP agents)
   const availableAgents = useMemo((): SelectableAgent[] => {
     const agents: SelectableAgent[] = [
-      // Manager is the top-level orchestrator (always available)
+      // AI Coach is the built-in role (always available)
       {
-        id: 'manager',
-        name: locale === 'ja' ? 'マネージャー' : 'Manager',
-        role: 'Manager',
-        icon: roleIcons.manager,
-        type: 'coach',
-      },
-      // AI Coach is a callable sub-agent
-      {
-        id: 'coach',
+        id: 'AICoach',
         name: 'AI Coach',
         role: 'Coach',
-        icon: roleIcons.coach,
+        icon: roleIcons.coach || '🎯',
         type: 'coach',
       },
     ];
+
+    // Add custom agents as selectable roles
+    customAgents.forEach(agent => {
+      agents.push({
+        id: agent.id,
+        name: agent.name,
+        role: agent.role,
+        icon: agent.icon || '🤖',
+        type: 'coach',
+      });
+    });
 
     // Add connected MCP agents
     server.agents.forEach(agent => {
@@ -238,13 +255,7 @@ export function useMOCChat({
     }
 
     return agents;
-  }, [server.agents, locale, roleIcons]);
-
-  // Mastra agent hook - default AI chat
-  const mastraAgent = useMastraAgent({
-    authToken,
-    enableStreaming: true,
-  });
+  }, [server.agents, locale, roleIcons, customAgents]);
 
   // Get the selected MCP server for chat
   const selectedMcpServer = useMemo(() => {
@@ -322,25 +333,8 @@ export function useMOCChat({
     },
   });
 
-  // Determine which agent to use for chat
-  const shouldUseMcpAgent = useMemo(() => {
-    const settings = server.chatAgentSettings;
-    const result = settings.useMcpAgent && selectedMcpServer !== null;
-
-    console.log('[useMOCChat] Agent routing check:', {
-      useMcpAgent: settings.useMcpAgent,
-      hasSelectedMcpServer: !!selectedMcpServer,
-      selectedMcpServerUrl: selectedMcpServer?.serverUrl,
-      result,
-    });
-
-    return result;
-  }, [server.chatAgentSettings, selectedMcpServer]);
-
-  // Get the active chat agent
-  const activeAgent = shouldUseMcpAgent ? mcpChat : mastraAgent;
-
-  console.log('[useMOCChat] Active agent:', shouldUseMcpAgent ? 'MCP Chat (Claude Code)' : 'Mastra (OpenAI)');
+  // Active chat agent - always MCP
+  const activeAgent = mcpChat;
 
   // Connection status
   const isConnected = useMemo(() => {
@@ -412,7 +406,7 @@ export function useMOCChat({
     }
 
     try {
-      console.log(`[useMOCChat] Sending message via ${shouldUseMcpAgent ? 'MCP agent' : 'Mastra agent'}`);
+      console.log('[useMOCChat] Sending message via MCP agent');
       await activeAgent.sendMessage(messageText);
     } catch (error) {
       console.error('Failed to send message:', error);
@@ -426,12 +420,12 @@ export function useMOCChat({
         timestamp: new Date(),
       }]);
     }
-  }, [inputValue, activeAgent, shouldUseMcpAgent, locale, roleIcons]);
+  }, [inputValue, activeAgent, locale, roleIcons]);
 
   // Convert active agent messages to group chat format
   useEffect(() => {
     console.log('[useMOCChat useEffect] Processing activeAgent.messages:', {
-      agentType: shouldUseMcpAgent ? 'MCP' : 'Mastra',
+      agentType: 'MCP',
       count: activeAgent.messages.length,
       messages: activeAgent.messages.map(m => ({
         id: m.id,
@@ -544,7 +538,7 @@ export function useMOCChat({
 
       return hasChanges ? updated : prev;
     });
-  }, [activeAgent.messages, shouldUseMcpAgent, parseSuggestions, parseQuickReplies, parseFollowUpActions, parseUnifiedResponse]);
+  }, [activeAgent.messages, parseSuggestions, parseQuickReplies, parseFollowUpActions, parseUnifiedResponse]);
 
   // Quick actions
   const quickActions = useMemo(() => {
@@ -697,7 +691,6 @@ export function useMOCChat({
     isLoading: activeAgent.isStreaming,
     error: activeAgent.error,
     activeAgent,
-    shouldUseMcpAgent,
     isConnected,
     connectedAgentCount,
     availableAgents,

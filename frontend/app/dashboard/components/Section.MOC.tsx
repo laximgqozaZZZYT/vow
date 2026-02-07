@@ -12,8 +12,7 @@
 import React, { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import { useMultiAgentServerContext } from '../contexts/MultiAgentServerContext';
 import type { ServerConnection } from '../hooks/useMultiAgentServer';
-import { useMastraAgent, type MastraMessage } from '../hooks/useMastraAgent';
-import { useMcpChat } from '../hooks/useMcpChat';
+import { useMcpChat, type MastraMessage } from '../hooks/useMcpChat';
 import type { Goal, Habit, Sticky, Tag } from '../types';
 import type { ChatAgentSettings, McpServer } from '../types/agent.types';
 import type {
@@ -27,6 +26,7 @@ import type {
 } from '../types/moc.types';
 import { TABS, ROLE_ICONS } from '../types/moc.types';
 import { getRoleSystemPrompt } from '../constants/role-prompts';
+import { useRolePrompt } from '../hooks/useRolePrompt';
 // AI Candidate Response types and utilities
 import type {
   AICandidateResponse,
@@ -83,7 +83,7 @@ export function MOCSection({
   const [historySearch, setHistorySearch] = useState('');
 
   // Multi-agent aggregation state
-  // aggregationSession removed - using simple mastraAgent approach
+  // aggregationSession removed - using simple MCP chat approach
 
   // Modal states for creating habits/goals from suggestions
   const [habitModalOpen, setHabitModalOpen] = useState(false);
@@ -152,74 +152,6 @@ export function MOCSection({
   // Multi-agent server from context (shared SSE connection)
   const server = useMultiAgentServerContext();
 
-  // Available agents for selection (AI Coach + connected MCP agents)
-  interface SelectableAgent {
-    id: string;
-    name: string;
-    role: string;
-    icon: string;
-    type: 'coach' | 'mcp-agent';
-    serverId?: string;
-    status?: string;
-  }
-
-  const availableAgents = useMemo((): SelectableAgent[] => {
-    const agents: SelectableAgent[] = [
-      // Manager is the top-level orchestrator (always available)
-      {
-        id: 'manager',
-        name: locale === 'ja' ? 'マネージャー' : 'Manager',
-        role: 'Manager',
-        icon: ROLE_ICONS.manager,
-        type: 'coach', // Uses the coach AI but acts as manager
-      },
-      // AI Coach is a callable sub-agent
-      {
-        id: 'coach',
-        name: 'AI Coach',
-        role: 'Coach',
-        icon: ROLE_ICONS.coach,
-        type: 'coach',
-      },
-    ];
-
-    // Add connected MCP agents
-    server.agents.forEach(agent => {
-      agents.push({
-        id: agent.id,
-        name: agent.name,
-        role: agent.role,
-        icon: ROLE_ICONS[agent.role.toLowerCase()] || ROLE_ICONS.developer,
-        type: 'mcp-agent',
-        serverId: agent.serverId,
-        status: agent.status,
-      });
-    });
-
-    // Add broadcast option if there are multiple agents
-    if (agents.length > 2) {
-      agents.push({
-        id: 'broadcast',
-        name: locale === 'ja' ? '全員' : 'Everyone',
-        role: 'Broadcast',
-        icon: '📢',
-        type: 'mcp-agent',
-      });
-    }
-
-    return agents;
-  }, [server.agents, locale]);
-
-  // Mastra agent hook - default AI chat
-  // SSE streaming disabled: handle() from hono/aws-lambda buffers streamSSE() responses,
-  // causing empty body on Lambda/API Gateway timeout. JSON response is more reliable
-  // and appropriate for structured AICandidateResponse JSON format.
-  const mastraAgent = useMastraAgent({
-    authToken,
-    enableStreaming: false,
-    userId,
-  });
-
   // Get the selected MCP server for chat
   const selectedMcpServer = useMemo(() => {
     const settings = server.chatAgentSettings;
@@ -279,14 +211,17 @@ export function MOCSection({
   }, [server.chatAgentSettings, selectedMcpServer, server.agents]);
 
   // Get AI Coach system prompt for JSON format responses
-  const aiCoachSystemPrompt = useMemo(() => {
-    const prompt = getRoleSystemPrompt('coach', locale);
+  // Uses backend API with SWR caching, falls back to local ai-coach-prompt.ts
+  const { prompt: aiCoachSystemPrompt, source: promptSource } = useRolePrompt('AICoach', locale, {
+    authToken,
+  });
+  useEffect(() => {
     console.log('[MOCSection] AI Coach system prompt loaded:', {
       locale,
-      promptLength: prompt?.length ?? 0,
+      promptLength: aiCoachSystemPrompt?.length ?? 0,
+      source: promptSource,
     });
-    return prompt;
-  }, [locale]);
+  }, [aiCoachSystemPrompt, locale, promptSource]);
 
   // MCP chat hook - no automatic fallback, let user see errors and retry
   // userId is passed for user-specific session isolation
@@ -305,50 +240,8 @@ export function MOCSection({
     },
   });
 
-  // Determine which agent to use for chat
-  // Simple logic: use MCP if enabled and server is available
-  const shouldUseMcpAgent = useMemo(() => {
-    const settings = server.chatAgentSettings;
-    const result = settings.useMcpAgent && selectedMcpServer !== null;
-
-    // Debug logging
-    console.log('[MOC] Agent routing check:', {
-      useMcpAgent: settings.useMcpAgent,
-      hasSelectedMcpServer: !!selectedMcpServer,
-      selectedMcpServerUrl: selectedMcpServer?.serverUrl,
-      result,
-    });
-
-    return result;
-  }, [server.chatAgentSettings, selectedMcpServer]);
-
-  // Get the active chat agent (either mastraAgent or mcpChat)
-  const activeAgent = shouldUseMcpAgent ? mcpChat : mastraAgent;
-
-  // Log which agent is active
-  console.log('[MOC] Active agent:', shouldUseMcpAgent ? 'MCP Chat (Claude Code)' : 'Mastra (OpenAI)');
-
-  // Helper to get agent role from ID
-  const getAgentRole = (agentId: string): string => {
-    const roleMap: Record<string, string> = {
-      'habit-coach': 'Habit Coach',
-      'goal-planner': 'Goal Planner',
-      'progress-tracker': 'Progress Tracker',
-      'manager': 'Manager',
-    };
-    return roleMap[agentId] || 'Specialist';
-  };
-
-  // Helper to get agent icon from ID
-  const getAgentIcon = (agentId: string): string => {
-    const iconMap: Record<string, string> = {
-      'habit-coach': '🎯',
-      'goal-planner': '📋',
-      'progress-tracker': '📊',
-      'manager': '👔',
-    };
-    return iconMap[agentId] || '🤖';
-  };
+  // Active chat agent - always MCP
+  const activeAgent = mcpChat;
 
   // Connection status
   const isConnected = useMemo(() => {
@@ -402,7 +295,7 @@ export function MOCSection({
   // Using a single batch update to avoid race conditions with multiple setMessages calls
   useEffect(() => {
     console.log('[MOC useEffect] Processing activeAgent.messages:', {
-      agentType: shouldUseMcpAgent ? 'MCP' : 'Mastra',
+      agentType: 'MCP',
       count: activeAgent.messages.length,
       messages: activeAgent.messages.map(m => ({
         id: m.id,
@@ -454,7 +347,7 @@ export function MOCSection({
 
       return hasChanges ? updated : prev;
     });
-  }, [activeAgent.messages, shouldUseMcpAgent]); // Depend on activeAgent.messages
+  }, [activeAgent.messages]); // Depend on activeAgent.messages
 
   // Parse AI candidate responses from messages
   useEffect(() => {
@@ -667,7 +560,7 @@ export function MOCSection({
       textareaRef.current.style.height = 'auto';
     }
 
-    console.log(`[MOCSection] Sending message via ${shouldUseMcpAgent ? 'MCP agent' : 'Mastra agent'}`);
+    console.log('[MOCSection] Sending message via MCP agent');
 
     // Check for debug mode trigger
     if (messageText === '候補表示テスト') {
@@ -704,6 +597,55 @@ export function MOCSection({
         newMap.set(debugMessageId, debugResponse);
         return newMap;
       });
+      return;
+    }
+
+    // Debug: Show which prompt the MCP path is loading
+    if (messageText === 'プロンプトテスト') {
+      const promptLen = aiCoachSystemPrompt?.length ?? 0;
+      const promptPreview = aiCoachSystemPrompt?.substring(0, 300) ?? '(undefined)';
+      // Simple hash for quick comparison
+      const simpleHash = promptLen > 0
+        ? Array.from(aiCoachSystemPrompt).reduce((h, c) => ((h << 5) - h + c.charCodeAt(0)) | 0, 0).toString(16)
+        : 'N/A';
+
+      const info = [
+        `=== プロンプトテスト (MCP パス) ===`,
+        ``,
+        `■ パス: MCP (useMcpChat → MCPサーバー)`,
+        `■ プロンプト取得元: useRolePrompt('AICoach')`,
+        `■ ソース: ${promptSource} (api=バックエンドAPI / cache=localStorage / local=ai-coach-prompt.ts)`,
+        `■ 文字数: ${promptLen}`,
+        `■ ハッシュ: ${simpleHash}`,
+        `■ プロンプトプレビュー (先頭300文字):`,
+        promptPreview,
+        `...`,
+      ].join('\n');
+
+      // Add user message
+      const userMsg: GroupChatMessage = {
+        id: `user-${Date.now()}`,
+        senderId: 'user',
+        senderName: 'You',
+        senderType: 'user',
+        senderIcon: ROLE_ICONS.user,
+        content: messageText,
+        timestamp: new Date(),
+      };
+      setMessages(prev => [...prev, userMsg]);
+
+      // Add debug response
+      const debugMsg: GroupChatMessage = {
+        id: `ai-debug-prompt-${Date.now()}`,
+        senderId: 'ai',
+        senderName: 'System Debug',
+        senderType: 'coach',
+        senderRole: 'Debug',
+        senderIcon: '🔍',
+        content: info,
+        timestamp: new Date(),
+      };
+      setMessages(prev => [...prev, debugMsg]);
       return;
     }
 
@@ -768,7 +710,7 @@ export function MOCSection({
         timestamp: new Date(),
       }]);
     }
-  }, [inputValue, activeAgent, shouldUseMcpAgent, locale, adoptedCandidates, handleBatchRegister]);
+  }, [inputValue, activeAgent, locale, adoptedCandidates, handleBatchRegister]);
 
   // Quick actions - enhanced to match AICoaching section features
   const quickActions = useMemo(() => {
@@ -1370,9 +1312,7 @@ export function MOCSection({
                       }
                     }}
                     placeholder={
-                      shouldUseMcpAgent
-                        ? (locale === 'ja' ? 'Claude Code にメッセージ...' : 'Message Claude Code...')
-                        : (locale === 'ja' ? 'AI にメッセージ...' : 'Message AI...')
+                      locale === 'ja' ? 'Claude Code にメッセージ...' : 'Message Claude Code...'
                     }
                     rows={1}
                     className="flex-1 px-3 py-2 bg-transparent text-sm text-foreground placeholder-muted-foreground focus:outline-none resize-none max-h-[120px]"
@@ -1418,13 +1358,9 @@ export function MOCSection({
                   <p>
                     {locale === 'ja' ? 'Enter で送信 • Shift+Enter で改行' : 'Enter to send • Shift+Enter for new line'}
                   </p>
-                  <div className={`flex items-center gap-1 px-2 py-0.5 rounded-full ${
-                    shouldUseMcpAgent
-                      ? 'bg-green-500/10 text-green-600 dark:text-green-400'
-                      : 'bg-blue-500/10 text-blue-600 dark:text-blue-400'
-                  }`}>
+                  <div className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-green-500/10 text-green-600 dark:text-green-400">
                     <span className="w-1.5 h-1.5 rounded-full bg-current"></span>
-                    <span>{shouldUseMcpAgent ? 'Claude Code (MCP)' : 'OpenAI'}</span>
+                    <span>Claude Code (MCP)</span>
                   </div>
                 </div>
               </div>
@@ -1472,12 +1408,9 @@ export function MOCSection({
                           role: mcpAgent.role,
                           description: `MCP Agent - ${mcpAgent.role}`,
                           icon: ROLE_ICONS[mcpAgent.role.toLowerCase()] || '🤖',
-                          status: mcpAgent.status || 'offline',
                           systemPrompt: locale === 'ja'
                             ? 'MCPエージェントのシステムプロンプトは接続先で管理されています。'
                             : 'MCP agent system prompt is managed by the connected server.',
-                          model: 'MCP Server',
-                          tools: [],
                           capabilities: mcpAgent.capabilities || [],
                           isBuiltIn: false,
                         };
@@ -1566,7 +1499,6 @@ export function MOCSection({
         agent={selectedAgentForDetail}
         locale={locale}
         mode={agentDetailModalMode}
-        availableParents={customAgents}
         onSave={(agentId, updates) => {
           // Handle saving agent config updates
           if (agentDetailModalMode === 'create') {
