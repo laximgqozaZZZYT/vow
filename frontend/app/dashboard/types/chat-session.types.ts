@@ -115,6 +115,7 @@ export interface SessionManagerActions {
  * Default session names by role (Japanese)
  */
 export const DEFAULT_SESSION_NAMES_JA: Record<AgentRole, string> = {
+  AICoach: 'AIコーチ',
   coach: 'AIコーチ',
   manager: 'マネージャー',
   developer: '開発者',
@@ -129,6 +130,7 @@ export const DEFAULT_SESSION_NAMES_JA: Record<AgentRole, string> = {
  * Default session names by role (English)
  */
 export const DEFAULT_SESSION_NAMES_EN: Record<AgentRole, string> = {
+  AICoach: 'AI Coach',
   coach: 'AI Coach',
   manager: 'Manager',
   developer: 'Developer',

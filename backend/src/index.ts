@@ -38,6 +38,8 @@ import { createLevelConfigRouter } from './routers/levelConfig.js';
 import { createMcpConnectionsRouter } from './routers/mcpConnections.js';
 import { createRagRouter } from './routers/rag.js';
 import { createAgentsRouter } from './routers/agents.js';
+import { createPromptsRouter } from './routers/prompts.js';
+import { createAgentConfigsRouter } from './routers/agentConfigs.js';
 import { createSuggestionsRouter } from './routers/suggestions.js';
 import { createConversationsRouter } from './routers/conversations.js';
 import { createCredentialsRouter } from './routers/credentials.js';
@@ -337,6 +339,20 @@ export function createApp(): Hono {
   // Requirements: B-005, B-006, B-007, B-008
   const agentsRouter = createAgentsRouter();
   app.route('/api/agents', agentsRouter);
+
+  // Prompts router - mounted at /api/prompts
+  // Endpoints: GET /api/prompts/:role?locale=ja
+  // Note: Canonical system prompt API for role-based prompt system
+  // Requirements: Role-Based Prompt System spec
+  const promptsRouter = createPromptsRouter();
+  app.route('/api/prompts', promptsRouter);
+
+  // Agent Configs router - mounted at /api/agent-configs
+  // Endpoints: GET/POST /api/agent-configs, GET/PUT/DELETE /api/agent-configs/:agentId,
+  //            POST /api/agent-configs/migrate
+  // Note: CRUD API for agent configurations (built-in + custom roles)
+  const agentConfigsRouter = createAgentConfigsRouter();
+  app.route('/api/agent-configs', agentConfigsRouter);
 
   // Suggestions router - mounted at /api/suggestions
   // Endpoints: POST /api/suggestions, GET /api/suggestions,

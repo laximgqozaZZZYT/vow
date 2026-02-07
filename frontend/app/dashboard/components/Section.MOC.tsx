@@ -45,6 +45,7 @@ import { HabitModal } from './Modal.Habit';
 import { GoalModal } from './Modal.Goal';
 import { StickyModal } from './Modal.Sticky';
 import { AgentDetailModal, BUILTIN_AGENTS, ROLE_ICONS as AGENT_ROLE_ICONS, type AgentConfig } from './Modal.AgentDetail';
+import { useAgentConfigs } from '../hooks/useAgentConfigs';
 import { IssueModal, type ConversationData, type ConversationMessage } from './Modal.Issue';
 import ReactMarkdown from 'react-markdown';
 import { ChatMessageBubble } from './Chat.MessageBubble';
@@ -113,23 +114,15 @@ export function MOCSection({
   // Issue modal state
   const [showIssueModal, setShowIssueModal] = useState(false);
 
-  // Custom agents state with localStorage persistence
-  const [customAgents, setCustomAgents] = useState<AgentConfig[]>(() => {
-    if (typeof window === 'undefined') return [];
-    try {
-      const stored = localStorage.getItem('vow_custom_agents');
-      return stored ? JSON.parse(stored) : [];
-    } catch {
-      return [];
-    }
-  });
-
-  // Persist custom agents to localStorage
-  useEffect(() => {
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('vow_custom_agents', JSON.stringify(customAgents));
-    }
-  }, [customAgents]);
+  // Agent configs from backend API (built-in + custom)
+  const {
+    configs: allAgentConfigs,
+    customConfigs: customAgents,
+    builtInConfigs,
+    createAgent,
+    updateAgent,
+    deleteAgent,
+  } = useAgentConfigs();
 
   // Track if initial suggestions have been shown
   const [hasShownInitialSuggestions, setHasShownInitialSuggestions] = useState(false);
@@ -1383,24 +1376,25 @@ export function MOCSection({
                 connections={server.connections}
                 locale={locale}
                 customAgents={customAgents}
+                builtInAgents={builtInConfigs}
                 onSelectAgent={(agentId) => {
-                  // Open agent detail modal
-                  const builtInAgent = BUILTIN_AGENTS[agentId];
-                  if (builtInAgent) {
-                    setSelectedAgentForDetail(builtInAgent);
+                  // Open agent detail modal - check all configs from backend
+                  const agentConfig = allAgentConfigs.find(a => a.id === agentId);
+                  if (agentConfig) {
+                    setSelectedAgentForDetail(agentConfig);
                     setAgentDetailModalMode('view');
                     setAgentDetailModalOpen(true);
                   } else {
-                    // Check custom agents first
-                    const customAgent = customAgents.find(a => a.id === agentId);
-                    if (customAgent) {
-                      setSelectedAgentForDetail(customAgent);
+                    // Fallback: check BUILTIN_AGENTS constant
+                    const builtInAgent = BUILTIN_AGENTS[agentId];
+                    if (builtInAgent) {
+                      setSelectedAgentForDetail(builtInAgent);
                       setAgentDetailModalMode('view');
                       setAgentDetailModalOpen(true);
                     } else {
                       // MCP agent - create config from connection data
-                      const allAgents = Array.from(server.connections.values()).flatMap(c => c.agents || []);
-                      const mcpAgent = allAgents.find(a => a.id === agentId);
+                      const allMcpAgents = Array.from(server.connections.values()).flatMap(c => c.agents || []);
+                      const mcpAgent = allMcpAgents.find(a => a.id === agentId);
                       if (mcpAgent) {
                         const mcpConfig: AgentConfig = {
                           id: mcpAgent.id,
@@ -1427,15 +1421,15 @@ export function MOCSection({
                   setAgentDetailModalOpen(true);
                 }}
                 onEditAgent={(agentId) => {
-                  const customAgent = customAgents.find(a => a.id === agentId);
-                  if (customAgent) {
-                    setSelectedAgentForDetail(customAgent);
+                  const agent = allAgentConfigs.find(a => a.id === agentId);
+                  if (agent) {
+                    setSelectedAgentForDetail(agent);
                     setAgentDetailModalMode('edit');
                     setAgentDetailModalOpen(true);
                   }
                 }}
                 onDeleteAgent={(agentId) => {
-                  setCustomAgents(prev => prev.filter(a => a.id !== agentId));
+                  deleteAgent(agentId);
                 }}
               />
             )}
@@ -1500,20 +1494,15 @@ export function MOCSection({
         locale={locale}
         mode={agentDetailModalMode}
         onSave={(agentId, updates) => {
-          // Handle saving agent config updates
+          // Handle saving agent config updates via backend API
           if (agentDetailModalMode === 'create') {
-            // Create new custom agent
-            const newAgent = updates as AgentConfig;
-            setCustomAgents(prev => [...prev, newAgent]);
+            createAgent(updates as AgentConfig);
           } else {
-            // Update existing custom agent
-            setCustomAgents(prev =>
-              prev.map(a => a.id === agentId ? { ...a, ...updates } : a)
-            );
+            updateAgent(agentId, updates);
           }
         }}
         onDelete={(agentId) => {
-          setCustomAgents(prev => prev.filter(a => a.id !== agentId));
+          deleteAgent(agentId);
         }}
       />
 

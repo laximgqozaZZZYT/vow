@@ -13,7 +13,8 @@ import { getAICoachSystemPrompt } from './ai-coach-prompt';
  * Agent roles available in the system
  */
 export type AgentRole =
-  | 'coach'      // AI Coach - habit/goal guidance
+  | 'AICoach'    // AI Coach - canonical role name
+  | 'coach'      // AI Coach - alias (backward compat)
   | 'manager'    // Manager - task coordination
   | 'developer'  // Developer - code-related tasks
   | 'reviewer'   // Reviewer - code review
@@ -46,7 +47,7 @@ export interface RoleConfig {
  * Responds in JSON format (AICandidateResponse)
  */
 const coachRole: RoleConfig = {
-  id: 'coach',
+  id: 'AICoach',
   name: { ja: 'AIコーチ', en: 'AI Coach' },
   icon: '🎯',
   description: {
@@ -462,6 +463,7 @@ For specialized work, suggest delegating to appropriate role agents (coach, deve
  * All available role configurations
  */
 export const ROLE_CONFIGS: Record<AgentRole, RoleConfig> = {
+  AICoach: coachRole,
   coach: coachRole,
   manager: managerRole,
   developer: developerRole,

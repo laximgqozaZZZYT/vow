@@ -27,7 +27,7 @@ import { ChoiceButtons, type Choice } from './Widget.ChoiceButtons';
 import { ProgressIndicator } from './Widget.Progress';
 import { SuggestionHistory } from './Widget.SuggestionHistory';
 import LevelAssessmentSliders, { type LevelVariables } from './Widget.LevelAssessmentSliders';
-import { useMastraAgent, type MastraMessage } from '../hooks/useMastraAgent';
+import { type MastraMessage, type UseMastraAgentReturn } from '../hooks/useMcpChat';
 import type { ToolCallResult } from '../../../lib/mastra/config';
 
 // ============================================================================
@@ -168,8 +168,8 @@ export interface CoachModeViewProps {
   onLevelAssessmentCancel?: () => void;
   /** Level assessment loading state */
   levelAssessmentLoading?: boolean;
-  /** Mastra agent instance (optional, for external control) */
-  mastraAgent?: ReturnType<typeof useMastraAgent>;
+  /** Chat agent instance (optional, for external control) */
+  mastraAgent?: UseMastraAgentReturn;
   /** Workflow steps for progress indicator */
   workflowSteps?: WorkflowStep[];
   /** Current workflow step index */

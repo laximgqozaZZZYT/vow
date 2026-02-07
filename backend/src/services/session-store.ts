@@ -25,7 +25,43 @@ import {
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { getLogger } from '../utils/logger.js';
-import type { CoachSession, CoachMessage } from '../agents/mastra/vow-coach-agent.js';
+// CoachSession and CoachMessage types were previously imported from
+// vow-coach-agent.ts. They are now defined locally after the removal of
+// the Mastra/OpenAI chat path.
+
+/**
+ * Tool call record
+ */
+export interface ToolCallRecord {
+  toolName: string;
+  input: unknown;
+  output: unknown;
+  success: boolean;
+  durationMs: number;
+}
+
+/**
+ * Message in the conversation
+ */
+export interface CoachMessage {
+  role: 'user' | 'assistant' | 'system';
+  content: string;
+  timestamp: Date;
+  toolCalls?: ToolCallRecord[] | undefined;
+}
+
+/**
+ * Coach session for multi-turn conversations
+ */
+export interface CoachSession {
+  id: string;
+  userId: string;
+  messages: CoachMessage[];
+  userContext?: import('../types/personalization.js').UserContext;
+  createdAt: Date;
+  lastActivityAt: Date;
+  quotaUsed: number;
+}
 
 const logger = getLogger('services.session-store');
 

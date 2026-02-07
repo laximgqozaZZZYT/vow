@@ -3,7 +3,7 @@
  *
  * This module provides unified type definitions for Server-Sent Events (SSE)
  * across different implementations:
- * - Mastra Agent (useMastraAgent) - streaming chat responses
+ * - MCP Chat (useMcpChat) - streaming chat responses
  * - Multi-Agent Server (useMultiAgentServer) - real-time agent/task updates
  * - Coach (Section.Coach) - coaching responses
  *

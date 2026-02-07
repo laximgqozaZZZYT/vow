@@ -3,7 +3,7 @@
  *
  * React hook for communicating with MCP server agents.
  * Features:
- * - Similar interface to useMastraAgent for easy switching
+ * - Standard chat agent interface (MastraMessage, UseMastraAgentReturn)
  * - Streaming response support via SSE
  * - Message history management
  * - Fallback to default API when MCP fails
@@ -13,7 +13,7 @@
 
 import { useState, useCallback, useRef, useEffect } from 'react';
 import type { McpServer, ChatAgentSettings } from '../types/agent.types';
-import type { MastraMessage, UseMastraAgentReturn } from './useMastraAgent';
+import type { ToolCallResult } from '../../../lib/mastra/config';
 import {
   validateUserInput,
   validateAIResponse,
@@ -21,6 +21,49 @@ import {
   getViolationMessage,
   logViolation,
 } from '../utils/chatGuardrails';
+
+/**
+ * Extended message with metadata.
+ * Previously defined in useMastraAgent.ts, now owned by useMcpChat.
+ */
+export interface MastraMessage {
+  id: string;
+  role: 'user' | 'assistant' | 'system';
+  content: string;
+  status: 'pending' | 'streaming' | 'complete' | 'error';
+  timestamp: Date;
+  toolCalls?: ToolCallResult[];
+  usage?: {
+    promptTokens: number;
+    completionTokens: number;
+    totalTokens: number;
+  };
+}
+
+/**
+ * Return type for chat agent hooks (MCP chat).
+ * Previously defined in useMastraAgent.ts as UseMastraAgentReturn.
+ */
+export interface UseMastraAgentReturn {
+  /** Send a message to the agent */
+  sendMessage: (message: string) => Promise<void>;
+  /** Conversation history */
+  messages: MastraMessage[];
+  /** Whether currently streaming a response */
+  isStreaming: boolean;
+  /** Current error state */
+  error: Error | null;
+  /** Clear the conversation history */
+  clearMessages: () => void;
+  /** Clear the error state */
+  clearError: () => void;
+  /** Retry the last failed message */
+  retry: () => Promise<void>;
+  /** Cancel the current streaming request */
+  cancelStream: () => void;
+  /** Connection state */
+  connectionState: 'idle' | 'connecting' | 'streaming' | 'error';
+}
 
 /**
  * Hook options
@@ -55,7 +98,7 @@ function generateMessageId(): string {
 
 /**
  * Hook for communicating with MCP server agents
- * Returns the same interface as useMastraAgent for seamless switching
+ * Returns the standard chat agent interface (UseMastraAgentReturn)
  */
 export function useMcpChat(options: UseMcpChatOptions): UseMastraAgentReturn {
   const {

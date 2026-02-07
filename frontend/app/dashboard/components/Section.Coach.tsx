@@ -24,8 +24,8 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import { supabase } from '../../../lib/supabaseClient';
 import { HabitModal } from './Modal.Habit';
 import { GoalModal } from './Modal.Goal';
-import { useMastraAgent, type MastraMessage } from '../hooks/useMastraAgent';
-import type { ToolCallResult } from '../../../lib/mastra/config';
+import { type MastraMessage } from '../hooks/useMcpChat';
+import { useRolePrompt } from '../hooks/useRolePrompt';
 import {
   CoachModeView,
   type CoachModeViewProps,
@@ -88,7 +88,7 @@ interface CoachSectionProps {
   onHabitUpdated?: () => void;
   /** Language preference */
   locale?: 'ja' | 'en';
-  /** Enable Mastra agent integration (default: true) */
+  /** @deprecated Mastra agent has been removed. This prop is ignored. */
   useMastra?: boolean;
 }
 
@@ -103,8 +103,10 @@ export function CoachSection({
   onGoalCreated,
   onHabitUpdated,
   locale = 'ja',
-  useMastra: enableMastra = true,
+  useMastra: _useMastra,
 }: CoachSectionProps) {
+  // Mastra agent has been removed - always disabled
+  const enableMastra = false;
   // Access control state
   const [isPremium, setIsPremium] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
@@ -122,6 +124,9 @@ export function CoachSection({
   const [activeToolCall, setActiveToolCall] = useState<string | null>(null);
   const [workflowSteps, setWorkflowSteps] = useState<WorkflowStep[]>([]);
   const [currentWorkflowStep, setCurrentWorkflowStep] = useState(0);
+
+  // Fetch canonical prompt from backend API (with SWR fallback)
+  const { prompt: aiCoachPrompt } = useRolePrompt('AICoach', locale, { authToken });
 
   // Quick action prompts
   const quickActionPrompts = locale === 'ja' ? QUICK_ACTION_PROMPTS : QUICK_ACTION_PROMPTS_EN;
@@ -297,42 +302,19 @@ export function CoachSection({
     checkStatus();
   }, [apiUrl]);
 
-  // Mastra Agent Hook Integration
-  const mastraAgent = useMastraAgent({
-    authToken,
-    enableStreaming: true,
-    systemMessage: locale === 'ja'
-      ? 'あなたはVOWアプリの習慣コーチです。ユーザーの習慣形成をサポートします。'
-      : 'You are a habit coach for the VOW app. You help users build better habits.',
-    onMessage: useCallback((msg: MastraMessage) => {
-      // Process tool calls for visualization
-      if (msg.toolCalls && msg.toolCalls.length > 0) {
-        setActiveToolCall(null);
-      }
-
-      // Update workflow progress on completion
-      if (msg.status === 'complete' && workflowSteps.length > 0) {
-        setWorkflowSteps(prev => prev.map((step, idx) =>
-          idx === currentWorkflowStep
-            ? { ...step, status: 'completed' }
-            : step
-        ));
-        setCurrentWorkflowStep(prev => Math.min(prev + 1, workflowSteps.length - 1));
-      }
-    }, [workflowSteps.length, currentWorkflowStep]),
-    onError: useCallback((err: Error) => {
-      setError(err.message);
-      setActiveToolCall(null);
-      // Mark current workflow step as error
-      if (workflowSteps.length > 0) {
-        setWorkflowSteps(prev => prev.map((step, idx) =>
-          idx === currentWorkflowStep
-            ? { ...step, status: 'error' }
-            : step
-        ));
-      }
-    }, [workflowSteps.length, currentWorkflowStep]),
-  });
+  // Mastra agent has been removed - stub for backward compatibility
+  // All enableMastra checks are false, so this is never used at runtime
+  const mastraAgent = {
+    messages: [] as MastraMessage[],
+    isStreaming: false,
+    error: null as Error | null,
+    connectionState: 'idle' as 'idle' | 'connecting' | 'streaming' | 'error',
+    sendMessage: async (_msg: string) => {},
+    clearMessages: () => {},
+    clearError: () => {},
+    retry: async () => {},
+    cancelStream: () => {},
+  };
 
   // Sync Mastra messages to local messages state when using Mastra
   useEffect(() => {

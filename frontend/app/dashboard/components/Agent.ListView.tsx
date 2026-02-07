@@ -21,6 +21,7 @@ interface AgentListViewProps {
   connections: Map<string, ServerConnection>;
   locale: 'ja' | 'en';
   customAgents?: AgentConfig[];
+  builtInAgents?: AgentConfig[];
   onSelectAgent?: (agentId: string) => void;
   onAddAgent?: () => void;
   onEditAgent?: (agentId: string) => void;
@@ -31,6 +32,7 @@ export function AgentListView({
   connections,
   locale,
   customAgents = [],
+  builtInAgents = [],
   onSelectAgent,
   onAddAgent,
   onEditAgent,
@@ -39,21 +41,32 @@ export function AgentListView({
   const allMcpAgents = Array.from(connections.values()).flatMap(c => c.agents || []);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
 
-  // Built-in role: AICoach (the only built-in role)
-  const builtInRoles = [
-    {
-      id: 'AICoach',
-      name: 'AI Coach',
-      description: locale === 'ja' ? '習慣・目標のAIコーチ' : 'AI Coach for habits & goals',
-      icon: '🎯',
-      gradient: 'from-purple-500 to-indigo-500',
-      isBuiltIn: true,
-    },
-  ];
+  // Built-in roles from backend (with fallback)
+  const builtInRoles = builtInAgents.length > 0
+    ? builtInAgents.map(a => ({
+        id: a.id,
+        name: a.name,
+        description: a.description,
+        icon: a.icon,
+        gradient: 'from-purple-500 to-indigo-500',
+        isBuiltIn: true,
+        capabilities: a.capabilities || [],
+      }))
+    : [
+        {
+          id: 'AICoach',
+          name: 'AI Coach',
+          description: locale === 'ja' ? '習慣・目標のAIコーチ' : 'AI Coach for habits & goals',
+          icon: '🎯',
+          gradient: 'from-purple-500 to-indigo-500',
+          isBuiltIn: true,
+          capabilities: [] as string[],
+        },
+      ];
 
   // Combine built-in + custom roles
   const allRoles = [
-    ...builtInRoles.map(r => ({ ...r, capabilities: [] as string[] })),
+    ...builtInRoles,
     ...customAgents.map(a => ({
       id: a.id,
       name: a.name,

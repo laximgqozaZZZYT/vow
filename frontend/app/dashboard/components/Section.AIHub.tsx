@@ -20,6 +20,7 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { supabase } from '../../../lib/supabaseClient';
 import { useHandedness } from '../contexts/HandednessContext';
+import { useRolePrompt } from '../hooks/useRolePrompt';
 import {
   type UnifiedMessage,
   createUnifiedMessage,
@@ -32,7 +33,7 @@ import {
   hasToolCalls,
 } from '../types/unified-message.types';
 import { ChoiceButtons, type Choice } from './Widget.ChoiceButtons';
-import { useMastraAgent, type MastraMessage } from '../hooks/useMastraAgent';
+import { type MastraMessage } from '../hooks/useMcpChat';
 import { useMultiAgentServerContext } from '../contexts/MultiAgentServerContext';
 import type { ConnectionState, DashboardStats } from '../hooks/useMultiAgentServer';
 import type {
@@ -548,46 +549,29 @@ export function AIHubSection({
 
   const apiUrl = process.env.NEXT_PUBLIC_BACKEND_API_URL || process.env.NEXT_PUBLIC_SLACK_API_URL;
 
-  // Mastra Agent Hook (for Coach mode)
-  const mastraAgent = useMastraAgent({
-    authToken,
-    enableStreaming: true,
-    systemMessage: locale === 'ja'
-      ? 'あなたはVOWアプリの習慣コーチです。ユーザーの習慣形成をサポートします。'
-      : 'You are a habit coach for the VOW app. You help users build better habits.',
-    onMessage: useCallback((msg: MastraMessage) => {
-      // Convert MastraMessage to UnifiedMessage
-      const unified = createUnifiedMessage({
-        id: msg.id,
-        role: msg.role as 'user' | 'assistant' | 'system',
-        content: msg.content,
-        timestamp: msg.timestamp || new Date(),
-        status: msg.status,
-        agentType: 'mastra',
-        toolCalls: msg.toolCalls?.map(tc => ({
-          toolName: tc.toolName,
-          input: (tc.input || {}) as Record<string, unknown>,
-          output: (tc.output || {}) as Record<string, unknown>,
-          success: tc.success,
-          error: tc.error,
-        })),
-        usage: msg.usage,
-      });
-      // Update messages
-      setMessages(prev => {
-        const existingIdx = prev.findIndex(m => m.id === unified.id);
-        if (existingIdx >= 0) {
-          const updated = [...prev];
-          updated[existingIdx] = unified;
-          return updated;
-        }
-        return [...prev, unified];
-      });
-    }, []),
-    onError: useCallback((err: Error) => {
-      setError(err.message);
-    }, []),
-  });
+  // Fetch canonical prompt from backend API (with SWR fallback)
+  const { prompt: aiCoachPrompt } = useRolePrompt('AICoach', locale, { authToken });
+
+  // Mastra agent has been removed - stub for backward compatibility
+  const mastraAgent = {
+    messages: [] as MastraMessage[],
+    isStreaming: false,
+    error: null as Error | null,
+    connectionState: 'idle' as 'idle' | 'connecting' | 'streaming' | 'error',
+    sendMessage: async (msg: string) => {
+      // Placeholder - Coach mode chat not available without MCP
+      addMessage(createAssistantMessage(
+        locale === 'ja'
+          ? 'AI Coach機能はMCPサーバー経由でのみ利用できます。MOCセクションをご利用ください。'
+          : 'AI Coach functionality is only available through MCP server. Please use the MOC section.',
+        { agentType: 'custom' }
+      ));
+    },
+    clearMessages: () => {},
+    clearError: () => {},
+    retry: async () => {},
+    cancelStream: () => {},
+  };
 
   // Multi-Agent Server from context (shared SSE connection)
   const multiAgentServer = useMultiAgentServerContext();

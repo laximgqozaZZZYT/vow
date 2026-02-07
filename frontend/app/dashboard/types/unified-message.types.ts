@@ -5,7 +5,7 @@
  * agent implementations (Mastra, Multi-Agent Chat, Coach).
  *
  * Consolidates:
- * - MastraMessage (useMastraAgent)
+ * - MastraMessage (useMcpChat)
  * - ChatMessage (agent.types - multi-agent chat)
  * - Message (Section.Coach - local coach interface)
  * - AgentMessage (mastra/config - base message type)
@@ -284,7 +284,7 @@ export interface UnifiedSession {
  * Source format identifier for message conversion.
  */
 export type MessageSourceType =
-  | 'mastra'      // MastraMessage from useMastraAgent
+  | 'mastra'      // MastraMessage from useMcpChat (legacy name retained for adapter compatibility)
   | 'multi-agent' // ChatMessage from agent.types.ts
   | 'coach'       // Message from Section.Coach
   | 'base'        // AgentMessage from mastra/config

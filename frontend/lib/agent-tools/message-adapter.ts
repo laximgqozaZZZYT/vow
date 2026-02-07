@@ -4,7 +4,7 @@
  * Provides type-safe conversion functions between different message formats
  * used across the VOW application:
  *
- * - MastraMessage (useMastraAgent hook)
+ * - MastraMessage (useMcpChat hook)
  * - ChatMessage (multi-agent system)
  * - CoachMessage/Message (Section.Coach)
  * - AgentMessage (base Mastra type)
@@ -34,7 +34,7 @@ import {
 // =============================================================================
 
 /**
- * MastraMessage type from useMastraAgent hook.
+ * MastraMessage type from useMcpChat hook.
  */
 export interface MastraMessage {
   id: string;

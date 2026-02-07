@@ -6,9 +6,12 @@
  *
  * Endpoints:
  * - GET    /api/conversations           - List conversations (sessions)
+ * - POST   /api/conversations           - Create/save a conversation
  * - GET    /api/conversations/:id       - Get a specific conversation
- * - DELETE /api/conversations/:id       - Delete a conversation
+ * - DELETE /api/conversations/:id       - Delete a conversation (Premium)
  * - GET    /api/conversations/:id/messages - Get messages for a conversation
+ * - PUT    /api/conversations/:id/messages - Append messages to a conversation
+ * - GET    /api/conversations/stats     - Get conversation statistics (Premium)
  *
  * @module routers/conversations
  */
@@ -97,12 +100,61 @@ async function requirePremiumOrAdmin(
 const conversationsRouter = new Hono<{ Variables: AuthContext }>();
 
 /**
+ * GET /api/conversations/stats
+ * Get conversation statistics for the user.
+ */
+conversationsRouter.get(
+  '/stats',
+  requirePremiumOrAdmin,
+  async (c: Context<{ Variables: AuthContext }>) => {
+    const user = c.get('user');
+    if (!user) {
+      return c.json({ error: 'Unauthorized' }, 401);
+    }
+
+    const userId = user.sub;
+
+    try {
+      const sessionStore = getSessionStore();
+      const sessions = await sessionStore.listUserSessions(userId, 100);
+
+      // Calculate last conversation timestamp
+      let lastConversationAt: string | null = null;
+      if (sessions.length > 0) {
+        const firstSession = sessions[0];
+        if (firstSession) {
+          const latestDate = sessions.reduce(
+            (latest, s) => (s.lastActivityAt > latest ? s.lastActivityAt : latest),
+            firstSession.lastActivityAt
+          );
+          lastConversationAt = latestDate.toISOString();
+        }
+      }
+
+      const stats = {
+        totalConversations: sessions.length,
+        totalMessages: sessions.reduce((sum, s) => sum + s.messages.length, 0),
+        totalQuotaUsed: sessions.reduce((sum, s) => sum + s.quotaUsed, 0),
+        averageMessagesPerConversation: sessions.length > 0
+          ? Math.round(sessions.reduce((sum, s) => sum + s.messages.length, 0) / sessions.length)
+          : 0,
+        lastConversationAt,
+      };
+
+      return c.json({ stats });
+    } catch (err) {
+      logger.error('Get conversation stats error', err instanceof Error ? err : undefined, { userId });
+      return c.json({ error: 'FETCH_FAILED', message: getUserFriendlyMessage(err) }, 500);
+    }
+  }
+);
+
+/**
  * GET /api/conversations
  * List user's conversation sessions.
  */
 conversationsRouter.get(
   '/',
-  requirePremiumOrAdmin,
   async (c: Context<{ Variables: AuthContext }>) => {
     const user = c.get('user');
     if (!user) {
@@ -144,12 +196,65 @@ conversationsRouter.get(
 );
 
 /**
+ * POST /api/conversations
+ * Create/save a conversation from the frontend.
+ */
+conversationsRouter.post(
+  '/',
+  async (c: Context<{ Variables: AuthContext }>) => {
+    const user = c.get('user');
+    if (!user) {
+      return c.json({ error: 'Unauthorized' }, 401);
+    }
+
+    const userId = user.sub;
+
+    try {
+      const body = await c.req.json();
+      const { sessionId, messages, metadata } = body;
+
+      if (!sessionId || !Array.isArray(messages)) {
+        return c.json({ error: 'Missing sessionId or messages array' }, 400);
+      }
+
+      const sessionStore = getSessionStore();
+
+      // Get or create the session
+      await sessionStore.getOrCreateSession(userId, sessionId, {
+        metadata: metadata || {},
+      });
+
+      // Add messages
+      for (const msg of messages) {
+        const coachMessage = {
+          role: msg.role as 'user' | 'assistant' | 'system',
+          content: msg.content || '',
+          timestamp: msg.timestamp ? new Date(msg.timestamp) : new Date(),
+          toolCalls: msg.toolCalls,
+        };
+        await sessionStore.addMessageToSession(sessionId, userId, coachMessage);
+      }
+
+      logger.info('Conversation saved', { userId, sessionId, messageCount: messages.length });
+
+      return c.json({
+        success: true,
+        sessionId,
+        messageCount: messages.length,
+      }, 201);
+    } catch (err) {
+      logger.error('Save conversation error', err instanceof Error ? err : undefined, { userId });
+      return c.json({ error: 'SAVE_FAILED', message: getUserFriendlyMessage(err) }, 500);
+    }
+  }
+);
+
+/**
  * GET /api/conversations/:id
  * Get a specific conversation session.
  */
 conversationsRouter.get(
   '/:id',
-  requirePremiumOrAdmin,
   async (c: Context<{ Variables: AuthContext }>) => {
     const user = c.get('user');
     if (!user) {
@@ -200,7 +305,6 @@ conversationsRouter.get(
  */
 conversationsRouter.get(
   '/:id/messages',
-  requirePremiumOrAdmin,
   async (c: Context<{ Variables: AuthContext }>) => {
     const user = c.get('user');
     if (!user) {
@@ -245,6 +349,62 @@ conversationsRouter.get(
 );
 
 /**
+ * PUT /api/conversations/:id/messages
+ * Append messages to an existing conversation.
+ */
+conversationsRouter.put(
+  '/:id/messages',
+  async (c: Context<{ Variables: AuthContext }>) => {
+    const user = c.get('user');
+    if (!user) {
+      return c.json({ error: 'Unauthorized' }, 401);
+    }
+
+    const userId = user.sub;
+    const sessionId = c.req.param('id');
+
+    try {
+      const body = await c.req.json();
+      const { messages } = body;
+
+      if (!Array.isArray(messages) || messages.length === 0) {
+        return c.json({ error: 'Missing or empty messages array' }, 400);
+      }
+
+      const sessionStore = getSessionStore();
+
+      // Verify session exists
+      const session = await sessionStore.getSession(sessionId, userId);
+      if (!session) {
+        return c.json({ error: 'NOT_FOUND', message: '会話が見つかりません' }, 404);
+      }
+
+      // Append messages
+      for (const msg of messages) {
+        const coachMessage = {
+          role: msg.role as 'user' | 'assistant' | 'system',
+          content: msg.content || '',
+          timestamp: msg.timestamp ? new Date(msg.timestamp) : new Date(),
+          toolCalls: msg.toolCalls,
+        };
+        await sessionStore.addMessageToSession(sessionId, userId, coachMessage);
+      }
+
+      logger.info('Messages appended', { userId, sessionId, count: messages.length });
+
+      return c.json({
+        success: true,
+        sessionId,
+        messagesAdded: messages.length,
+      });
+    } catch (err) {
+      logger.error('Append messages error', err instanceof Error ? err : undefined, { userId, sessionId });
+      return c.json({ error: 'UPDATE_FAILED', message: getUserFriendlyMessage(err) }, 500);
+    }
+  }
+);
+
+/**
  * DELETE /api/conversations/:id
  * Delete a conversation session.
  */
@@ -277,56 +437,6 @@ conversationsRouter.delete(
     } catch (err) {
       logger.error('Delete conversation error', err instanceof Error ? err : undefined, { userId, sessionId });
       return c.json({ error: 'DELETE_FAILED', message: getUserFriendlyMessage(err) }, 500);
-    }
-  }
-);
-
-/**
- * GET /api/conversations/stats
- * Get conversation statistics for the user.
- */
-conversationsRouter.get(
-  '/stats',
-  requirePremiumOrAdmin,
-  async (c: Context<{ Variables: AuthContext }>) => {
-    const user = c.get('user');
-    if (!user) {
-      return c.json({ error: 'Unauthorized' }, 401);
-    }
-
-    const userId = user.sub;
-
-    try {
-      const sessionStore = getSessionStore();
-      const sessions = await sessionStore.listUserSessions(userId, 100);
-
-      // Calculate last conversation timestamp
-      let lastConversationAt: string | null = null;
-      if (sessions.length > 0) {
-        const firstSession = sessions[0];
-        if (firstSession) {
-          const latestDate = sessions.reduce(
-            (latest, s) => (s.lastActivityAt > latest ? s.lastActivityAt : latest),
-            firstSession.lastActivityAt
-          );
-          lastConversationAt = latestDate.toISOString();
-        }
-      }
-
-      const stats = {
-        totalConversations: sessions.length,
-        totalMessages: sessions.reduce((sum, s) => sum + s.messages.length, 0),
-        totalQuotaUsed: sessions.reduce((sum, s) => sum + s.quotaUsed, 0),
-        averageMessagesPerConversation: sessions.length > 0
-          ? Math.round(sessions.reduce((sum, s) => sum + s.messages.length, 0) / sessions.length)
-          : 0,
-        lastConversationAt,
-      };
-
-      return c.json({ stats });
-    } catch (err) {
-      logger.error('Get conversation stats error', err instanceof Error ? err : undefined, { userId });
-      return c.json({ error: 'FETCH_FAILED', message: getUserFriendlyMessage(err) }, 500);
     }
   }
 );

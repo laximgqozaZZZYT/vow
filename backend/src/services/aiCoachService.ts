@@ -36,16 +36,32 @@ import { LevelManagerService } from './levelManagerService.js';
 import { UsageQuotaService } from './usageQuotaService.js';
 import type { LevelEstimate, BabyStepPlans, BabyStepPlan, QuotaStatus } from '../types/thli.js';
 
-// VowCoachAgent integration imports
-import {
-  getVowCoachAgent,
-  coachTools as vowCoachTools,
-  type CoachTool,
-} from '../agents/mastra/vow-coach-agent.js';
-import {
-  OpenAIToolRegistry,
-  convertCoachToolsToOpenAI,
-} from '../adapters/openai-tool-adapter.js';
+// VowCoachAgent and Mastra integration has been removed.
+// The service now operates only in legacy mode (direct OpenAI calls).
+// The Mastra-mode code paths below are retained but unreachable since
+// shouldUseMastraCoach() is forced to return false.
+
+// Stub types and functions for backward compatibility with dead code paths
+interface CoachToolStub {
+  name: string;
+  description: string;
+  descriptionJa?: string;
+  inputSchema: unknown;
+  execute: (input: unknown, context: unknown) => Promise<unknown>;
+}
+type CoachTool = CoachToolStub;
+const vowCoachTools: CoachTool[] = [];
+function getVowCoachAgent(): { getSystemPrompt: (locale: string, ctx: unknown) => string; processMessage: (msg: string, ctx: unknown) => Promise<unknown> } {
+  throw new Error('VowCoachAgent has been removed. Use MCP chat instead.');
+}
+class OpenAIToolRegistry {
+  size = 0;
+  constructor(_opts?: unknown) { /* no-op */ }
+  registerCustomTool(_tool: unknown, _execute: unknown): void { /* no-op */ }
+}
+function convertCoachToolsToOpenAI(_defs: unknown[], _opts: unknown): Map<string, { openaiTool: unknown; execute: unknown }> {
+  return new Map();
+}
 
 const logger = getLogger('aiCoachService');
 
@@ -54,20 +70,11 @@ const logger = getLogger('aiCoachService');
 // =============================================================================
 
 /**
- * Check if Mastra Coach should be used instead of legacy OpenAI direct calls.
- * Controlled by environment variable USE_MASTRA_COACH.
- *
- * Default is now TRUE (Mastra mode) for JSON candidate format support.
- * Set USE_MASTRA_COACH=false to use legacy mode.
+ * Mastra Coach has been removed. This function always returns false
+ * so the service operates in legacy mode (direct OpenAI calls only).
  */
 function shouldUseMastraCoach(): boolean {
-  const envValue = process.env['USE_MASTRA_COACH'];
-  // Default to true (Mastra mode) for JSON candidate format
-  // Only disable if explicitly set to 'false' or '0'
-  if (envValue === 'false' || envValue === '0') {
-    return false;
-  }
-  return true;
+  return false;
 }
 
 /**

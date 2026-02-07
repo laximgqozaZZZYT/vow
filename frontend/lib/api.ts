@@ -690,7 +690,7 @@ export async function me() {
   }
 }
 
-export async function claim() { 
+export async function claim() {
   return await request('/auth/claim', { method: 'POST' });
 }
 
@@ -876,11 +876,32 @@ const api = {
   logout: async () => {
     const { supabase } = await import('./supabaseClient');
     if (!supabase) throw new Error('Supabase client not available');
-    
+
     const { error } = await supabase.auth.signOut();
     if (error) throw new Error(error.message);
     return { success: true };
   }
 };
+
+// Conversation API (Backend)
+export async function listConversations(limit = 20) {
+  return await api.get(`/api/conversations?limit=${limit}`);
+}
+
+export async function getConversation(id: string) {
+  return await api.get(`/api/conversations/${id}`);
+}
+
+export async function saveConversation(sessionId: string, messages: Array<{ role: string; content: string; timestamp?: string }>, metadata?: Record<string, unknown>) {
+  return await api.post('/api/conversations', { sessionId, messages, metadata });
+}
+
+export async function appendMessages(sessionId: string, messages: Array<{ role: string; content: string; timestamp?: string }>) {
+  return await api.put(`/api/conversations/${sessionId}/messages`, { messages });
+}
+
+export async function getConversationMessages(id: string, limit = 50, offset = 0) {
+  return await api.get(`/api/conversations/${id}/messages?limit=${limit}&offset=${offset}`);
+}
 
 export default api;

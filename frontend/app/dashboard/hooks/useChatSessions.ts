@@ -7,7 +7,7 @@
  * @module hooks/useChatSessions
  */
 
-import { useState, useCallback, useEffect, useMemo } from 'react';
+import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import type { AgentRole } from '../constants/role-prompts';
 import { getRoleConfig } from '../constants/role-prompts';
 import {
@@ -17,6 +17,7 @@ import {
   getDefaultSessionName,
   getRandomSessionColor,
 } from '../types/chat-session.types';
+import { saveConversation, listConversations } from '../../../lib/api';
 
 /**
  * Storage key for sessions in localStorage
@@ -39,6 +40,8 @@ export interface UseChatSessionsOptions {
   locale?: 'ja' | 'en';
   /** Callback when session changes */
   onSessionChange?: (session: ChatSession | null) => void;
+  /** Enable backend sync for conversation persistence */
+  enableBackendSync?: boolean;
 }
 
 /**
@@ -74,13 +77,20 @@ export interface UseChatSessionsReturn {
 
   /** Get MCP session ID for a session */
   getMcpSessionId: (sessionId: string) => string;
+
+  /** Sync a session's messages to backend */
+  syncToBackend: (sessionId: string, messages: Array<{ role: string; content: string; timestamp?: string }>) => void;
+
+  /** Fetch sessions from backend */
+  fetchFromBackend: () => Promise<void>;
 }
 
 /**
  * Hook for managing multiple chat sessions
  */
 export function useChatSessions(options: UseChatSessionsOptions = {}): UseChatSessionsReturn {
-  const { userId, locale = 'ja', onSessionChange } = options;
+  const { userId, locale = 'ja', onSessionChange, enableBackendSync = false } = options;
+  const syncInFlightRef = useRef<Set<string>>(new Set());
 
   // Generate storage keys based on userId
   const getStorageKey = useCallback((key: string) => {
@@ -293,6 +303,54 @@ export function useChatSessions(options: UseChatSessionsOptions = {}): UseChatSe
     return `mcp-${sessionId}`;
   }, []);
 
+  // Sync messages to backend (fire-and-forget)
+  const syncToBackend = useCallback((
+    sessionId: string,
+    messages: Array<{ role: string; content: string; timestamp?: string }>
+  ) => {
+    if (!enableBackendSync || !userId) return;
+    if (syncInFlightRef.current.has(sessionId)) return;
+
+    syncInFlightRef.current.add(sessionId);
+    saveConversation(sessionId, messages, { source: 'frontend' })
+      .catch(err => console.error('[useChatSessions] Backend sync failed:', err))
+      .finally(() => syncInFlightRef.current.delete(sessionId));
+  }, [enableBackendSync, userId]);
+
+  // Fetch sessions from backend and merge with local
+  const fetchFromBackend = useCallback(async () => {
+    if (!enableBackendSync || !userId) return;
+
+    try {
+      const data = await listConversations(MAX_SESSIONS);
+      if (!data?.conversations?.length) return;
+
+      setSessions(prev => {
+        const localIds = new Set(prev.map(s => s.id));
+        const newSessions: ChatSession[] = [];
+
+        for (const conv of data.conversations) {
+          if (!localIds.has(conv.id)) {
+            newSessions.push({
+              id: conv.id,
+              name: `Session ${conv.id.slice(0, 6)}`,
+              role: 'AICoach' as AgentRole,
+              createdAt: new Date(conv.createdAt),
+              updatedAt: new Date(conv.lastActivityAt),
+              messageCount: conv.messageCount,
+              isActive: false,
+              icon: getRoleConfig('AICoach').icon,
+            });
+          }
+        }
+
+        return newSessions.length > 0 ? [...prev, ...newSessions] : prev;
+      });
+    } catch (err) {
+      console.error('[useChatSessions] Backend fetch failed:', err);
+    }
+  }, [enableBackendSync, userId]);
+
   return {
     sessions,
     activeSession,
@@ -304,6 +362,8 @@ export function useChatSessions(options: UseChatSessionsOptions = {}): UseChatSe
     clearAllSessions,
     canCreateSession,
     getMcpSessionId,
+    syncToBackend,
+    fetchFromBackend,
   };
 }
 

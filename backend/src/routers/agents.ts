@@ -1,13 +1,16 @@
 /**
  * Agents Router
  *
- * Unified API endpoints for AI agents including:
- * - VowCoachAgent chat (Mastra)
+ * API endpoints for AI agents including:
+ * - MCP-based CLI chat (no OpenAI fallback)
  * - TaskOrchestratorAgent task creation (Strands)
  * - Agent status monitoring
- * - Workflow execution (habit-analysis, goal-achievement)
+ * - Remote task execution (MCP Task Server proxy)
  *
- * Requirements: B-005, B-006, B-007, B-008
+ * Note: OpenAI/Mastra chat endpoints (/chat, /multi-chat, /multi-agents)
+ * and Mastra workflow endpoints have been removed in favor of MCP-only chat.
+ *
+ * Requirements: B-005, B-008
  *
  * @module routers/agents
  */
@@ -22,16 +25,7 @@ import { getLogger } from '../utils/logger.js';
 import type { AuthContext } from '../middleware/auth.js';
 import { getSubscriptionService } from '../services/subscriptionService.js';
 import { getAdminService } from '../services/adminService.js';
-import { PersonalizationEngine } from '../services/personalizationEngine.js';
-
-// Agent imports
-import {
-  getVowCoachAgent,
-  checkCoachQuota,
-  generateSystemPrompt as generateCoachSystemPrompt,
-  type CoachExecutionContext,
-  type CoachResponse,
-} from '../agents/mastra/vow-coach-agent.js';
+// Agent imports (Strands - kept)
 import {
   getTaskOrchestratorAgent,
   type CreateTaskInput,
@@ -39,98 +33,21 @@ import {
   type DashboardStats,
 } from '../agents/strands/task-orchestrator.js';
 
-// Mastra Multi-Agent imports
-import {
-  managerAgent,
-  habitCoachAgent,
-  goalPlannerAgent,
-  progressTrackerAgent,
-} from '../agents/mastra/agents/index.js';
-import { getMultiAgentResponse } from '../agents/mastra/agents/manager-agent.js';
-import type { MultiAgentResponse } from '../agents/mastra/agents/types.js';
-
-// Workflow imports
-import {
-  executeHabitAnalysis,
-  executeGoalAchievementWorkflow,
-  type HabitAnalysisOutput,
-  type GoalAchievementInput,
-  type GoalAchievementWorkflowResult,
-  GoalAchievementInputSchema,
-} from '../agents/mastra/workflows/index.js';
-import {
-  getOpenAIApiKey,
-  getOpenAIModel,
-  getProviderApiKey,
-  getProviderModel,
-  getAvailableProviders,
-  type CredentialType,
-} from '../services/credentials-store.js';
-import { FREE_USER_CONFIG } from '../config/llm-config.js';
-import {
-  classifyQuery,
-} from '../services/query-classifier.js';
+// MCP chat imports (kept)
 import {
   getActiveMcpServer,
   callMcpChat,
 } from '../services/mcp-settings-service.js';
-import {
-  checkChatRateLimit,
-  incrementChatUsage,
-} from '../services/rateLimitService.js';
+// Rate limiting imports removed - no longer needed after removing OpenAI chat endpoints
+
+// Prompt registry - canonical system prompt for MCP chat
+import { getCanonicalPrompt } from '../prompts/prompt-registry.js';
 
 const logger = getLogger('agentsRouter');
 
 // =============================================================================
 // Request/Response Schemas
 // =============================================================================
-
-/**
- * Chat request schema
- */
-const ChatRequestSchema = z.object({
-  message: z.string().min(1).max(2000)
-    .describe('User message to the coach'),
-  sessionId: z.string().optional()
-    .describe('Session ID for multi-turn conversations'),
-  locale: z.enum(['ja', 'en']).default('ja')
-    .describe('Response language'),
-  streaming: z.boolean().default(false)
-    .describe('Whether to use SSE streaming'),
-});
-
-type ChatRequest = z.infer<typeof ChatRequestSchema>;
-
-/**
- * Multi-Agent Chat request schema
- */
-const MultiAgentChatRequestSchema = z.object({
-  message: z.string().min(1).max(2000)
-    .describe('User message to the multi-agent system'),
-  sessionId: z.string().optional()
-    .describe('Session ID for multi-turn conversations'),
-  locale: z.enum(['ja', 'en']).default('ja')
-    .describe('Response language'),
-  includeAgents: z.array(z.enum(['habit-coach', 'goal-planner', 'progress-tracker'])).optional()
-    .describe('Specific agents to query (defaults to smart routing)'),
-  streaming: z.boolean().default(false)
-    .describe('Whether to use SSE streaming'),
-  aiProvider: z.enum(['openai', 'anthropic', 'gemini', 'codex', 'auto']).optional().default('auto')
-    .describe('AI provider to use (auto = smart selection based on query)'),
-  smartRouting: z.boolean().optional().default(true)
-    .describe('Enable smart routing to only query relevant agents'),
-  managerOnly: z.boolean().optional().default(false)
-    .describe('Use manager only mode - no specialist agents unless explicitly needed'),
-  conversationHistory: z.array(z.object({
-    role: z.enum(['user', 'assistant']),
-    content: z.string(),
-  })).optional()
-    .describe('Previous conversation history for context-aware routing'),
-  previousIntent: z.enum(['habit_related', 'goal_related', 'progress_related', 'general', 'mixed']).optional()
-    .describe('Previous conversation intent to maintain context'),
-});
-
-type MultiAgentChatRequest = z.infer<typeof MultiAgentChatRequestSchema>;
 
 /**
  * Task creation request schema
@@ -147,16 +64,6 @@ const CreateTaskRequestSchema = z.object({
 });
 
 type CreateTaskRequest = z.infer<typeof CreateTaskRequestSchema>;
-
-/**
- * Workflow execution request schema
- */
-const WorkflowRequestSchema = z.object({
-  params: z.record(z.unknown())
-    .describe('Workflow parameters'),
-});
-
-type WorkflowRequest = z.infer<typeof WorkflowRequestSchema>;
 
 // =============================================================================
 // Middleware
@@ -229,655 +136,16 @@ async function requirePremiumOrAdmin(
   }
 }
 
-/**
- * Auth middleware that allows free users with rate limiting.
- * - Guest (unauthenticated) → 401
- * - Admin → bypass all limits
- * - Premium → bypass rate limits
- * - Free user → rate limit check (5/day)
- *
- * Sets context variables: isAdmin, isPremium (both as `any` to match existing pattern)
- */
-async function requireAuthWithRateLimit(
-  c: Context<{ Variables: AuthContext }>,
-  next: Next
-): Promise<Response | void> {
-  const user = c.get('user');
-  if (!user) {
-    return c.json({ error: 'Unauthorized' }, 401);
-  }
-
-  const userId = user.sub;
-  const userEmail = user.email?.toLowerCase() ?? '';
-  const supabase = getSupabaseClient();
-  const adminService = getAdminService(supabase);
-
-  // Check for admin access first
-  const isAdmin = await adminService.isAdmin(userId, userEmail);
-  if (isAdmin) {
-    c.set('isAdmin' as any, true);
-    c.set('isPremium' as any, true);
-    logger.info('Admin access granted (rate limit bypass)', { userId });
-    await next();
-    return;
-  }
-
-  // Check premium subscription
-  let isPremium = false;
-  try {
-    const subscriptionService = getSubscriptionService(supabase);
-    isPremium = await subscriptionService.hasPremiumAccess(userId);
-  } catch (error) {
-    logger.warning('Subscription check failed, treating as free user', {
-      userId,
-      error: (error as Error).message,
-    });
-  }
-
-  if (isPremium) {
-    c.set('isAdmin' as any, false);
-    c.set('isPremium' as any, true);
-    await next();
-    return;
-  }
-
-  // Free user - check rate limit
-  const ipAddress = c.req.header('x-forwarded-for') || c.req.header('x-real-ip') || 'unknown';
-  const rateLimitResult = await checkChatRateLimit(supabase, userId, ipAddress, false);
-
-  if (!rateLimitResult.allowed) {
-    const messages: Record<string, string> = {
-      daily_limit: '本日のAIチャット利用回数（5回）の上限に達しました。明日また利用できます。',
-      total_limit: 'AIチャットの累計利用回数の上限に達しました。Premiumプランへのアップグレードをご検討ください。',
-      ip_limit: 'このIPアドレスからの利用上限に達しました。',
-    };
-    return c.json(
-      {
-        error: 'RATE_LIMIT_EXCEEDED',
-        message: messages[rateLimitResult.reason!] || 'Rate limit exceeded',
-        remaining: rateLimitResult.remaining,
-        current: rateLimitResult.current,
-        upgradeUrl: '/settings/subscription',
-      },
-      429
-    );
-  }
-
-  c.set('isAdmin' as any, false);
-  c.set('isPremium' as any, false);
-  logger.info('Free user access granted with rate limit', {
-    userId,
-    remaining: rateLimitResult.remaining,
-  });
-  await next();
-}
-
 // =============================================================================
 // Router
 // =============================================================================
 
 const agentsRouter = new Hono<{ Variables: AuthContext }>();
 
-/**
- * POST /api/agents/chat
- *
- * Chat with VOW Coach Agent.
- * Supports both JSON response and SSE streaming.
- * Free users can use this with rate limiting (5/day).
- *
- * Requirements: B-005
- */
-agentsRouter.post(
-  '/chat',
-  requireAuthWithRateLimit,
-  zValidator('json', ChatRequestSchema),
-  async (c: Context<{ Variables: AuthContext }>) => {
-    const user = c.get('user');
-    if (!user) {
-      return c.json({ error: 'Unauthorized' }, 401);
-    }
-
-    const body = c.req.valid('json' as never) as ChatRequest;
-    const userId = user.sub;
-
-    logger.info('Chat request received', {
-      userId,
-      sessionId: body.sessionId,
-      locale: body.locale,
-      streaming: body.streaming,
-      messageLength: body.message.length,
-    });
-
-    try {
-      const supabase = getSupabaseClient();
-
-      // Check quota
-      const quotaResult = await checkCoachQuota(userId, supabase);
-      if (!quotaResult.allowed) {
-        return c.json(
-          {
-            error: 'QUOTA_EXCEEDED',
-            message: quotaResult.message,
-            quotaRemaining: 0,
-            quotaLimit: quotaResult.limit,
-          },
-          429
-        );
-      }
-
-      const coachAgent = getVowCoachAgent();
-
-      // Get user context for personalization (ISS-20260204-019)
-      const personalizationEngine = new PersonalizationEngine(supabase);
-      const userContext = await personalizationEngine.analyzeUserContext(userId);
-
-      // Create execution context with userContext
-      const executionContext: CoachExecutionContext = {
-        userId,
-        sessionId: body.sessionId ?? `session_${userId}_${Date.now()}`,
-        supabase,
-        locale: body.locale,
-        userContext,
-      };
-
-      // SSE streaming response
-      if (body.streaming) {
-        return streamSSE(c, async (stream) => {
-          try {
-            // Send initial event
-            await stream.writeSSE({
-              event: 'start',
-              data: JSON.stringify({ sessionId: executionContext.sessionId }),
-            });
-
-            // Process message
-            const response = await coachAgent.processMessage(
-              body.message,
-              executionContext
-            );
-
-            // Send response chunks (simulated streaming for now)
-            const words = response.message.split(' ');
-            for (let i = 0; i < words.length; i++) {
-              await stream.writeSSE({
-                event: 'token',
-                data: JSON.stringify({ token: words[i] + ' ', index: i }),
-              });
-            }
-
-            // Send completion event
-            // Debug: Log toolCalls details before sending
-            logger.info('SSE complete event - toolCalls details', {
-              userId,
-              hasToolCalls: !!(response.toolCalls && response.toolCalls.length > 0),
-              toolCallCount: response.toolCalls?.length ?? 0,
-              toolNames: response.toolCalls?.map(tc => tc.toolName),
-              toolCallOutputs: response.toolCalls?.map(tc => ({
-                toolName: tc.toolName,
-                hasOutput: tc.output !== null && tc.output !== undefined,
-                outputType: typeof tc.output,
-                outputKeys: tc.output && typeof tc.output === 'object' ? Object.keys(tc.output as object) : [],
-                // Check for suggestions specifically
-                hasSuggestions: tc.output && typeof tc.output === 'object' && 'suggestions' in (tc.output as object),
-                suggestionsCount: tc.output && typeof tc.output === 'object' && Array.isArray((tc.output as Record<string, unknown>)['suggestions'])
-                  ? ((tc.output as Record<string, unknown>)['suggestions'] as unknown[]).length : 0,
-              })),
-            });
-            await stream.writeSSE({
-              event: 'complete',
-              data: JSON.stringify({
-                message: response.message,
-                toolCalls: response.toolCalls,
-                quotaRemaining: response.quotaRemaining,
-                suggestions: response.suggestions,
-              }),
-            });
-
-            // Increment usage for free users after successful chat
-            const isPremiumSSE = c.get('isPremium' as any);
-            if (!isPremiumSSE) {
-              const ipAddr = c.req.header('x-forwarded-for') || c.req.header('x-real-ip') || 'unknown';
-              await incrementChatUsage(supabase, userId, ipAddr);
-            }
-          } catch (error) {
-            await stream.writeSSE({
-              event: 'error',
-              data: JSON.stringify({
-                error: 'CHAT_ERROR',
-                message: (error as Error).message,
-              }),
-            });
-          }
-        });
-      }
-
-      // JSON response
-      logger.info('Processing chat (JSON mode)', {
-        userId,
-        sessionId: executionContext.sessionId,
-        sessionIdSource: body.sessionId ? 'client' : 'generated',
-        messagePreview: body.message.substring(0, 50),
-      });
-      const response: CoachResponse = await coachAgent.processMessage(
-        body.message,
-        executionContext
-      );
-
-      // Increment usage for free users after successful chat
-      const isPremium = c.get('isPremium' as any);
-      if (!isPremium) {
-        const ipAddr = c.req.header('x-forwarded-for') || c.req.header('x-real-ip') || 'unknown';
-        await incrementChatUsage(supabase, userId, ipAddr);
-      }
-
-      logger.info('Chat response generated', {
-        userId,
-        sessionId: executionContext.sessionId,
-        hasToolCalls: !!(response.toolCalls && response.toolCalls.length > 0),
-        quotaRemaining: response.quotaRemaining,
-      });
-
-      return c.json({
-        message: response.message,
-        sessionId: executionContext.sessionId,
-        toolCalls: response.toolCalls,
-        quotaRemaining: response.quotaRemaining,
-        suggestions: response.suggestions,
-      });
-    } catch (error) {
-      logger.error('Chat error', error as Error, { userId });
-      return c.json(
-        {
-          error: 'CHAT_FAILED',
-          message: 'AI処理中にエラーが発生しました',
-          message_en: 'An error occurred during AI processing',
-        },
-        500
-      );
-    }
-  }
-);
-
-/**
- * POST /api/agents/multi-chat
- *
- * Chat with Mastra Multi-Agent System.
- * Manager agent coordinates responses from multiple specialized agents.
- * Free users can use this with rate limiting (5/day).
- *
- * Requirements: B-005, Multi-Agent System
- */
-agentsRouter.post(
-  '/multi-chat',
-  requireAuthWithRateLimit,
-  zValidator('json', MultiAgentChatRequestSchema),
-  async (c: Context<{ Variables: AuthContext }>) => {
-    const user = c.get('user');
-    if (!user) {
-      return c.json({ error: 'Unauthorized' }, 401);
-    }
-
-    const body = c.req.valid('json' as never) as MultiAgentChatRequest;
-    const userId = user.sub;
-
-    // Classify query for smart routing
-    const classification = classifyQuery(body.message);
-
-    logger.info('Multi-agent chat request received', {
-      userId,
-      sessionId: body.sessionId,
-      locale: body.locale,
-      includeAgents: body.includeAgents,
-      messageLength: body.message.length,
-      queryCategory: classification.category,
-      suggestedProvider: classification.suggestedProvider,
-      relevantAgents: classification.relevantAgents,
-      smartRouting: body.smartRouting,
-    });
-
-    try {
-      const supabase = getSupabaseClient();
-
-      // Check quota
-      const quotaResult = await checkCoachQuota(userId, supabase);
-      if (!quotaResult.allowed) {
-        return c.json(
-          {
-            error: 'QUOTA_EXCEEDED',
-            message: quotaResult.message,
-            quotaRemaining: 0,
-            quotaLimit: quotaResult.limit,
-          },
-          429
-        );
-      }
-
-      // ISS-20260204-019: Get user context for personalization (existing goals/habits)
-      const personalizationEngine = new PersonalizationEngine(supabase);
-      const userContext = await personalizationEngine.analyzeUserContext(userId);
-
-      // Determine which AI provider to use
-      const selectedProvider: CredentialType = body.aiProvider === 'auto'
-        ? classification.suggestedProvider
-        : body.aiProvider as CredentialType;
-
-      // Get user's API key for the selected provider
-      const userApiKey = await getProviderApiKey(selectedProvider, userId);
-      const userModel = await getProviderModel(selectedProvider, userId);
-
-      // Track if using shared key for free users
-      let effectiveApiKey: string | null = userApiKey;
-      let effectiveModel: string = userModel || 'gpt-4o';
-
-      if (!userApiKey) {
-        // Try fallback to OpenAI if the selected provider isn't configured
-        const fallbackKey = await getOpenAIApiKey(userId);
-        if (fallbackKey) {
-          effectiveApiKey = fallbackKey;
-          // Check if user has their own OpenAI key, or using shared key
-          const store = await import('../services/credentials-store.js').then(m => m.getCredentialsStore());
-          const userOpenAIKey = await store.getApiKey(userId, 'openai');
-          if (!userOpenAIKey) {
-            // User doesn't have their own key, using shared key - use free user config
-            effectiveModel = FREE_USER_CONFIG.model;
-            logger.info('Free user using shared API key', { userId, model: effectiveModel, usingSharedKey: true });
-          } else {
-            effectiveModel = await getOpenAIModel(userId);
-          }
-        } else {
-          // No API key available at all
-          return c.json(
-            {
-              error: 'API_KEY_REQUIRED',
-              message: `${selectedProvider}のAPIキーが設定されていません。設定画面からAPIキーを登録してください。`,
-              message_en: `${selectedProvider} API key is not configured. Please set up your API key in settings.`,
-              settingsUrl: '/settings',
-              suggestedProvider: selectedProvider,
-              availableProviders: await getAvailableProviders(userId),
-            },
-            400
-          );
-        }
-      }
-
-      // SSE streaming response
-      if (body.streaming) {
-        return streamSSE(c, async (stream) => {
-          try {
-            const sessionId = body.sessionId ?? `session_${userId}_${Date.now()}`;
-
-            // Send initial event
-            await stream.writeSSE({
-              event: 'start',
-              data: JSON.stringify({ sessionId }),
-            });
-
-            // Get agents to query using smart routing
-            let agentsToQuery: ('habit-coach' | 'goal-planner' | 'progress-tracker')[];
-
-            if (body.includeAgents) {
-              // Use explicitly specified agents
-              agentsToQuery = body.includeAgents;
-            } else if (body.smartRouting !== false) {
-              // Smart routing: only query relevant agents based on classification
-              const relevantAgents = classification.relevantAgents;
-              agentsToQuery = relevantAgents.filter(
-                (a): a is 'habit-coach' | 'goal-planner' | 'progress-tracker' =>
-                  ['habit-coach', 'goal-planner', 'progress-tracker'].includes(a)
-              );
-
-              // Ensure at least one agent is queried
-              if (agentsToQuery.length === 0) {
-                agentsToQuery = ['habit-coach', 'goal-planner'];
-              }
-
-              logger.info('Smart routing selected agents', {
-                queryCategory: classification.category,
-                selectedAgents: agentsToQuery,
-              });
-            } else {
-              // No smart routing: query all agents
-              agentsToQuery = ['habit-coach', 'goal-planner', 'progress-tracker'];
-            }
-
-            // Send agent processing events
-            for (const agentId of agentsToQuery) {
-              await stream.writeSSE({
-                event: 'agent_start',
-                data: JSON.stringify({ agentId, status: 'processing' }),
-              });
-            }
-
-            // Get multi-agent response with user's API key and conversation context
-            // ISS-20260204-019: Include existing goals/habits for duplicate prevention
-            const response = await getMultiAgentResponse(body.message, userId, {
-              ...(body.managerOnly ? {} : { includeAgents: agentsToQuery }),
-              locale: body.locale,
-              openaiApiKey: effectiveApiKey!,
-              openaiModel: effectiveModel,
-              managerOnly: body.managerOnly,
-              existingGoalNames: userContext.existingGoalNames,
-              existingHabitNames: userContext.existingHabitNames,
-              ...(body.sessionId || body.previousIntent || body.conversationHistory ? {
-                conversationContext: {
-                  ...(body.sessionId && { sessionId: body.sessionId }),
-                  ...(body.previousIntent && { previousIntent: body.previousIntent }),
-                  ...(body.conversationHistory && { conversationHistory: body.conversationHistory }),
-                },
-              } : {}),
-            });
-
-            // Send individual agent responses
-            for (const agentResponse of response.responses) {
-              await stream.writeSSE({
-                event: 'agent_response',
-                data: JSON.stringify({
-                  agentId: agentResponse.agentId,
-                  agentName: agentResponse.agentName,
-                  content: agentResponse.content,
-                  toolCalls: agentResponse.toolCalls,
-                  toolResults: agentResponse.toolResults,
-                  durationMs: agentResponse.durationMs,
-                }),
-              });
-            }
-
-            // Send summary from Manager
-            await stream.writeSSE({
-              event: 'summary',
-              data: JSON.stringify({
-                summary: response.summary,
-                totalDurationMs: response.totalDurationMs,
-              }),
-            });
-
-            // Send completion event
-            await stream.writeSSE({
-              event: 'complete',
-              data: JSON.stringify({
-                sessionId,
-                responseCount: response.responses.length,
-                timestamp: response.timestamp,
-              }),
-            });
-
-            // Increment usage for free users after successful chat
-            const isPremiumSSE = c.get('isPremium' as any);
-            if (!isPremiumSSE) {
-              const ipAddr = c.req.header('x-forwarded-for') || c.req.header('x-real-ip') || 'unknown';
-              await incrementChatUsage(supabase, userId, ipAddr);
-            }
-          } catch (error) {
-            await stream.writeSSE({
-              event: 'error',
-              data: JSON.stringify({
-                error: 'MULTI_CHAT_ERROR',
-                message: (error as Error).message,
-              }),
-            });
-          }
-        });
-      }
-
-      // JSON response with smart routing
-      let jsonAgentsToQuery: ('habit-coach' | 'goal-planner' | 'progress-tracker')[];
-
-      if (body.includeAgents) {
-        jsonAgentsToQuery = body.includeAgents;
-      } else if (body.smartRouting !== false) {
-        // Smart routing for JSON response
-        const relevantAgents = classification.relevantAgents;
-        jsonAgentsToQuery = relevantAgents.filter(
-          (a): a is 'habit-coach' | 'goal-planner' | 'progress-tracker' =>
-            ['habit-coach', 'goal-planner', 'progress-tracker'].includes(a)
-        );
-        if (jsonAgentsToQuery.length === 0) {
-          jsonAgentsToQuery = ['habit-coach', 'goal-planner'];
-        }
-      } else {
-        jsonAgentsToQuery = ['habit-coach', 'goal-planner', 'progress-tracker'];
-      }
-
-      // ISS-20260204-019: Include existing goals/habits for duplicate prevention
-      const options: {
-        includeAgents?: ('habit-coach' | 'goal-planner' | 'progress-tracker')[];
-        locale?: 'ja' | 'en';
-        openaiApiKey?: string;
-        openaiModel?: string;
-        managerOnly?: boolean;
-        existingGoalNames?: string[];
-        existingHabitNames?: string[];
-        conversationContext?: {
-          sessionId?: string;
-          previousIntent?: 'habit_related' | 'goal_related' | 'progress_related' | 'general' | 'mixed';
-          conversationHistory?: Array<{ role: 'user' | 'assistant'; content: string }>;
-        };
-      } = {
-        locale: body.locale,
-        openaiApiKey: effectiveApiKey!,
-        openaiModel: effectiveModel,
-        includeAgents: jsonAgentsToQuery,
-        managerOnly: body.managerOnly,
-        existingGoalNames: userContext.existingGoalNames,
-        existingHabitNames: userContext.existingHabitNames,
-        ...(body.sessionId || body.previousIntent || body.conversationHistory ? {
-          conversationContext: {
-            ...(body.sessionId && { sessionId: body.sessionId }),
-            ...(body.previousIntent && { previousIntent: body.previousIntent }),
-            ...(body.conversationHistory && { conversationHistory: body.conversationHistory }),
-          },
-        } : {}),
-      };
-
-      const response: MultiAgentResponse = await getMultiAgentResponse(body.message, userId, options);
-
-      // Increment usage for free users after successful chat
-      const isPremium = c.get('isPremium' as any);
-      if (!isPremium) {
-        const ipAddr = c.req.header('x-forwarded-for') || c.req.header('x-real-ip') || 'unknown';
-        await incrementChatUsage(supabase, userId, ipAddr);
-      }
-
-      logger.info('Multi-agent chat response generated', {
-        userId,
-        responseCount: response.responses.length,
-        totalDurationMs: response.totalDurationMs,
-      });
-
-      return c.json({
-        query: response.query,
-        responses: response.responses.map((r) => ({
-          agentId: r.agentId,
-          agentName: r.agentName,
-          content: r.content,
-          toolCalls: r.toolCalls,
-          toolResults: r.toolResults,
-          timestamp: r.timestamp,
-          durationMs: r.durationMs,
-        })),
-        summary: response.summary,
-        timestamp: response.timestamp,
-        totalDurationMs: response.totalDurationMs,
-        // Include classification info for transparency
-        classification: {
-          category: classification.category,
-          confidence: classification.confidence,
-          queriedAgents: jsonAgentsToQuery,
-          usedProvider: selectedProvider,
-        },
-      });
-    } catch (error) {
-      logger.error('Multi-agent chat error', error as Error, { userId });
-      return c.json(
-        {
-          error: 'MULTI_CHAT_FAILED',
-          message: 'マルチエージェント処理中にエラーが発生しました',
-          message_en: 'An error occurred during multi-agent processing',
-        },
-        500
-      );
-    }
-  }
-);
-
-/**
- * GET /api/agents/multi-agents
- *
- * Get list of available Mastra multi-agents and their status.
- */
-agentsRouter.get(
-  '/multi-agents',
-  requirePremiumOrAdmin,
-  async (c: Context<{ Variables: AuthContext }>) => {
-    const user = c.get('user');
-    if (!user) {
-      return c.json({ error: 'Unauthorized' }, 401);
-    }
-
-    logger.info('Multi-agents list request', { userId: user.sub });
-
-    const agents = [
-      {
-        id: managerAgent.id,
-        name: managerAgent.name,
-        role: 'manager',
-        description: 'マルチエージェントシステムの統括',
-        capabilities: ['query_analysis', 'response_aggregation', 'task_delegation'],
-        status: 'active',
-      },
-      {
-        id: habitCoachAgent.id,
-        name: habitCoachAgent.name,
-        role: 'specialist',
-        description: '習慣形成と維持のエキスパート',
-        capabilities: ['habit_analysis', 'habit_suggestions', 'baby_steps'],
-        status: 'active',
-      },
-      {
-        id: goalPlannerAgent.id,
-        name: goalPlannerAgent.name,
-        role: 'specialist',
-        description: '目標設定とマイルストーン管理',
-        capabilities: ['smart_goals', 'milestone_breakdown', 'prioritization'],
-        status: 'active',
-      },
-      {
-        id: progressTrackerAgent.id,
-        name: progressTrackerAgent.name,
-        role: 'specialist',
-        description: '進捗追跡と分析',
-        capabilities: ['progress_analysis', 'completion_prediction', 'report_generation'],
-        status: 'active',
-      },
-    ];
-
-    return c.json({
-      agents,
-      count: agents.length,
-      systemStatus: 'operational',
-    });
-  }
-);
+// NOTE: POST /api/agents/chat (OpenAI chat) has been removed.
+// NOTE: POST /api/agents/multi-chat (Mastra multi-agent chat) has been removed.
+// NOTE: GET /api/agents/multi-agents (Mastra agent list) has been removed.
+// Use POST /api/agents/cli/chat with MCP instead.
 
 /**
  * POST /api/agents/tasks
@@ -1069,153 +337,7 @@ agentsRouter.get(
   }
 );
 
-/**
- * POST /api/agents/workflow/:workflowId
- *
- * Execute a workflow (habit-analysis, goal-achievement).
- *
- * Requirements: B-006, B-007
- */
-agentsRouter.post(
-  '/workflow/:workflowId',
-  requirePremiumOrAdmin,
-  zValidator('json', WorkflowRequestSchema),
-  async (c: Context<{ Variables: AuthContext }>) => {
-    const user = c.get('user');
-    if (!user) {
-      return c.json({ error: 'Unauthorized' }, 401);
-    }
-
-    const workflowId = c.req.param('workflowId');
-    const body = c.req.valid('json' as never) as WorkflowRequest;
-    const userId = user.sub;
-
-    logger.info('Workflow execution request', {
-      userId,
-      workflowId,
-      params: Object.keys(body.params),
-    });
-
-    try {
-      const supabase = getSupabaseClient();
-
-      switch (workflowId) {
-        case 'habit-analysis': {
-          // Execute habit analysis workflow
-          const locale = (body.params['locale'] as 'ja' | 'en') ?? 'ja';
-          const forceRefresh = (body.params['forceRefresh'] as boolean) ?? false;
-          const analysisDepth = (body.params['analysisDepth'] as 'basic' | 'detailed' | 'comprehensive') ?? 'detailed';
-
-          const result: HabitAnalysisOutput = await executeHabitAnalysis(userId, supabase, {
-            locale,
-            forceRefresh,
-            analysisDepth,
-          });
-
-          logger.info('Habit analysis workflow completed', {
-            userId,
-            totalHabits: result.dataCollection.totalHabits,
-            insightsCount: result.insights.insights.length,
-          });
-
-          return c.json({
-            workflowId: 'habit-analysis',
-            status: 'completed',
-            result: {
-              dataCollection: result.dataCollection,
-              patternAnalysis: result.patternAnalysis,
-              insights: result.insights,
-              recommendations: result.recommendations,
-              metadata: result.metadata,
-            },
-          });
-        }
-
-        case 'goal-achievement': {
-          // Validate and execute goal achievement workflow
-          const goalId = body.params['goalId'] as string;
-          if (!goalId) {
-            return c.json(
-              {
-                error: 'INVALID_PARAMS',
-                message: 'goalId is required for goal-achievement workflow',
-              },
-              400
-            );
-          }
-
-          const input: GoalAchievementInput = GoalAchievementInputSchema.parse({
-            goalId,
-            userId,
-            locale: (body.params['locale'] as 'ja' | 'en') ?? 'ja',
-            includeRecommendations: (body.params['includeRecommendations'] as boolean) ?? true,
-          });
-
-          const result: GoalAchievementWorkflowResult = await executeGoalAchievementWorkflow(
-            input,
-            supabase
-          );
-
-          logger.info('Goal achievement workflow completed', {
-            userId,
-            goalId,
-            overallStatus: result.summary.overallStatus,
-          });
-
-          return c.json({
-            workflowId: 'goal-achievement',
-            status: 'completed',
-            result: {
-              goalId: result.goalId,
-              goalName: result.goalName,
-              assessment: result.assessment,
-              milestones: result.milestones,
-              habitMapping: result.habitMapping,
-              progressTracking: result.progressTracking,
-              summary: result.summary,
-            },
-          });
-        }
-
-        default:
-          return c.json(
-            {
-              error: 'UNKNOWN_WORKFLOW',
-              message: `Unknown workflow: ${workflowId}`,
-              availableWorkflows: ['habit-analysis', 'goal-achievement'],
-            },
-            400
-          );
-      }
-    } catch (error) {
-      logger.error('Workflow execution error', error as Error, {
-        userId,
-        workflowId,
-      });
-
-      // Handle validation errors
-      if (error instanceof z.ZodError) {
-        return c.json(
-          {
-            error: 'VALIDATION_ERROR',
-            message: 'Invalid workflow parameters',
-            details: error.errors,
-          },
-          400
-        );
-      }
-
-      return c.json(
-        {
-          error: 'WORKFLOW_FAILED',
-          message: 'ワークフロー実行中にエラーが発生しました',
-          message_en: 'An error occurred during workflow execution',
-        },
-        500
-      );
-    }
-  }
-);
+// NOTE: POST /api/agents/workflow/:workflowId (Mastra workflows) has been removed.
 
 /**
  * GET /api/agents/orchestration-log
@@ -1480,12 +602,10 @@ type CliChatRequest = z.infer<typeof CliChatRequestSchema>;
 /**
  * POST /api/agents/cli/chat
  *
- * Send a message to the AI coach via CLI.
+ * Send a message to the AI coach via CLI (MCP only).
  * Requires API key authentication (X-API-Key header).
  *
- * Uses the same provider as configured in WEBUI:
- * - If MCP agent is enabled in user settings, uses MCP server
- * - Otherwise uses VowCoachAgent (OpenAI)
+ * Uses MCP server configured in user settings. No OpenAI fallback.
  *
  * Request body:
  * - message: User message (required)
@@ -1497,7 +617,7 @@ type CliChatRequest = z.infer<typeof CliChatRequestSchema>;
  * - sessionId: Session ID for continuing the conversation
  * - toolCalls: Array of tool calls with suggestion details
  * - suggestions: Quick reply suggestions
- * - provider: 'mcp' | 'openai' - which provider was used
+ * - provider: 'mcp'
  */
 agentsRouter.post(
   '/cli/chat',
@@ -1521,128 +641,75 @@ agentsRouter.post(
 
     try {
       // Check user's MCP settings from DynamoDB (same as WEBUI)
-      const { server: mcpServer, agentId, settings: mcpSettings } = await getActiveMcpServer(userId);
+      const { server: mcpServer, agentId } = await getActiveMcpServer(userId);
 
-      if (mcpServer && mcpServer.serverUrl) {
-        logger.info('Using MCP server for chat (from user settings)', {
-          userId,
-          sessionId,
-          serverId: mcpServer.id,
-          serverName: mcpServer.name,
-          agentId,
-        });
-
-        // Build system prompt based on agent role
-        // For CLI chat endpoint and coach-related agentIds, use the full AICoach system prompt
-        const isCoachRole = !agentId ||
-          agentId === 'default' ||
-          agentId.toLowerCase().includes('coach') ||
-          agentId.toLowerCase().includes('vow');
-
-        const systemPrompt = isCoachRole
-          ? generateCoachSystemPrompt(locale)
-          : locale === 'ja'
-            ? `あなたはVOWアプリのAIアシスタントです。日本語で親しみやすく対話してください。`
-            : `You are an AI assistant for the VOW app. Respond in a friendly manner in English.`;
-
-        logger.info('Using system prompt for MCP chat', {
-          agentId,
-          isCoachRole,
-          promptLength: systemPrompt.length,
-        });
-
-        const mcpResult = await callMcpChat(mcpServer, agentId || 'default', message, sessionId, systemPrompt);
-
-        if (mcpResult.success && mcpResult.message) {
-          logger.info('MCP chat response generated', {
-            userId,
-            sessionId,
-            serverName: mcpServer.name,
-            hasToolCalls: !!(mcpResult.toolCalls && mcpResult.toolCalls.length > 0),
-            provider: 'mcp',
-          });
-
-          return c.json({
-            message: mcpResult.message,
-            sessionId,
-            toolCalls: mcpResult.toolCalls ?? [],
-            suggestions: [],
-            quotaRemaining: 100, // MCP doesn't track quota
-            provider: 'mcp',
-          });
-        }
-
-        // MCP call failed - check if fallback is allowed
-        if (mcpSettings?.fallbackToApi) {
-          logger.warning('MCP chat failed, falling back to VowCoachAgent', {
-            userId,
-            sessionId,
-            error: mcpResult.error,
-          });
-        } else {
-          // No fallback allowed, return the error
-          logger.error('MCP chat failed (no fallback)', new Error(mcpResult.error || 'Unknown error'), {
-            userId,
-            sessionId,
-          });
-          return c.json({
-            error: 'MCP_CHAT_FAILED',
-            message: mcpResult.error || 'MCPサーバーへの接続に失敗しました',
-            message_en: mcpResult.error || 'Failed to connect to MCP server',
-          }, 503);
-        }
-      } else {
-        logger.info('MCP not configured, using VowCoachAgent', { userId, sessionId });
+      if (!mcpServer || !mcpServer.serverUrl) {
+        // MCP not configured - return error (no OpenAI fallback)
+        logger.warning('MCP not configured for user', { userId, sessionId });
+        return c.json({
+          error: 'MCP_NOT_CONFIGURED',
+          message: 'MCPサーバーが設定されていません。設定画面からMCPサーバーを設定してください。',
+          message_en: 'MCP server is not configured. Please configure an MCP server in settings.',
+        }, 400);
       }
 
-      // Use VowCoachAgent (OpenAI)
-      const supabase = getSupabaseClient();
-
-      // Get user context for personalization (ISS-20260204-019)
-      const personalizationEngine = new PersonalizationEngine(supabase);
-      const userContext = await personalizationEngine.analyzeUserContext(userId);
-
-      // Create execution context with userContext
-      const executionContext: CoachExecutionContext = {
+      logger.info('Using MCP server for chat (from user settings)', {
         userId,
         sessionId,
-        supabase,
-        locale,
-        userContext,
-      };
-
-      // Get coach agent and process message
-      const coachAgent = getVowCoachAgent();
-      const response: CoachResponse = await coachAgent.processMessage(
-        message,
-        executionContext
-      );
-
-      logger.info('CLI chat response generated', {
-        userId,
-        sessionId,
-        hasToolCalls: !!(response.toolCalls && response.toolCalls.length > 0),
-        toolCallCount: response.toolCalls?.length ?? 0,
-        provider: 'openai',
+        serverId: mcpServer.id,
+        serverName: mcpServer.name,
+        agentId,
       });
 
-      // Format tool calls for response
-      const toolCalls = response.toolCalls?.map(tc => ({
-        toolName: tc.toolName,
-        input: tc.input,
-        output: tc.output,
-        success: tc.success,
-        durationMs: tc.durationMs,
-      }));
+      // Build system prompt based on agent role using prompt-registry
+      const isCoachRole = !agentId ||
+        agentId === 'default' ||
+        agentId.toLowerCase().includes('coach') ||
+        agentId.toLowerCase().includes('vow');
 
+      const systemPrompt = isCoachRole
+        ? getCanonicalPrompt('AICoach', locale).systemPrompt
+        : locale === 'ja'
+          ? `あなたはVOWアプリのAIアシスタントです。日本語で親しみやすく対話してください。`
+          : `You are an AI assistant for the VOW app. Respond in a friendly manner in English.`;
+
+      logger.info('Using system prompt for MCP chat', {
+        agentId,
+        isCoachRole,
+        promptLength: systemPrompt.length,
+      });
+
+      const mcpResult = await callMcpChat(mcpServer, agentId || 'default', message, sessionId, systemPrompt);
+
+      if (mcpResult.success && mcpResult.message) {
+        logger.info('MCP chat response generated', {
+          userId,
+          sessionId,
+          serverName: mcpServer.name,
+          hasToolCalls: !!(mcpResult.toolCalls && mcpResult.toolCalls.length > 0),
+          provider: 'mcp',
+        });
+
+        return c.json({
+          message: mcpResult.message,
+          sessionId,
+          toolCalls: mcpResult.toolCalls ?? [],
+          suggestions: [],
+          quotaRemaining: 100, // MCP doesn't track quota
+          provider: 'mcp',
+        });
+      }
+
+      // MCP call failed - return error (no OpenAI fallback)
+      logger.error('MCP chat failed', new Error(mcpResult.error || 'Unknown error'), {
+        userId,
+        sessionId,
+      });
       return c.json({
-        message: response.message,
-        sessionId,
-        toolCalls: toolCalls ?? [],
-        suggestions: response.suggestions ?? [],
-        quotaRemaining: response.quotaRemaining,
-        provider: 'openai',
-      });
+        error: 'MCP_CHAT_FAILED',
+        message: mcpResult.error || 'MCPサーバーへの接続に失敗しました',
+        message_en: mcpResult.error || 'Failed to connect to MCP server',
+      }, 503);
     } catch (error) {
       logger.error('CLI chat error', error as Error, { userId, sessionId });
       return c.json(
