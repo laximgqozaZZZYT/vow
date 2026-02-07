@@ -38,7 +38,7 @@ export const TABS: TabConfig[] = [
 // Message Types for Group Chat
 // ============================================================================
 
-/** Group chat message structure */
+/** Group chat message structure (canonical definition) */
 export interface GroupChatMessage {
   id: string;
   senderId: string;
@@ -52,6 +52,43 @@ export interface GroupChatMessage {
   taskTitle?: string;
   /** 候補ラベル配列 (エージェントからのJSON出力) */
   candidates?: CandidateLabel[];
+  /** Single suggestion (first from suggestions array) */
+  suggestion?: {
+    type: 'habit' | 'goal';
+    suggestionType?: 'habit' | 'goal' | 'stickyn' | 'reply';
+    data: Record<string, unknown>;
+    actions: Array<{ id: string; label: string; variant: 'primary' | 'secondary' | 'ghost' }>;
+  };
+  /** Multiple suggestions */
+  suggestions?: Array<{
+    type: 'habit' | 'goal';
+    suggestionType?: 'habit' | 'goal' | 'stickyn' | 'reply';
+    data: Record<string, unknown>;
+    actions: Array<{ id: string; label: string; variant: 'primary' | 'secondary' | 'ghost' }>;
+  }>;
+  /** Quick reply options */
+  quickReplies?: Array<{
+    id: string;
+    label: string;
+    value: string;
+    icon?: string;
+  }>;
+  /** Selection type for quick replies */
+  selectionType?: 'habit_category' | 'goal_category' | 'difficulty';
+  /** Follow-up action buttons */
+  followUpActions?: Array<{
+    id: string;
+    label: string;
+    action: 'more_specific' | 'easier' | 'harder' | 'different' | 'more_suggestions' | 'different_habit';
+    category?: string;
+  }>;
+  /** Unified response buttons */
+  unifiedButtons?: Array<{
+    type: string;
+    [key: string]: unknown;
+  }>;
+  /** Extracted message from unified response */
+  extractedMessage?: string;
 }
 
 // ============================================================================

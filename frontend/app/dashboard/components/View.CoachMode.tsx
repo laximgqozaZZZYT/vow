@@ -9,7 +9,7 @@
  * Can be embedded in Section.AIAssistant or used standalone.
  *
  * Features:
- * - Mastra agent integration with streaming responses
+ * - MCP agent integration with streaming responses
  * - Habit/Goal suggestion cards with selection
  * - Level assessment UI
  * - Conversation history with tool call visualization
@@ -27,8 +27,7 @@ import { ChoiceButtons, type Choice } from './Widget.ChoiceButtons';
 import { ProgressIndicator } from './Widget.Progress';
 import { SuggestionHistory } from './Widget.SuggestionHistory';
 import LevelAssessmentSliders, { type LevelVariables } from './Widget.LevelAssessmentSliders';
-import { type MastraMessage, type UseMastraAgentReturn } from '../hooks/useMcpChat';
-import type { ToolCallResult } from '../../../lib/mastra/config';
+import { type MastraMessage, type UseMastraAgentReturn, type ToolCallResult } from '../hooks/useMcpChat';
 
 // ============================================================================
 // Types

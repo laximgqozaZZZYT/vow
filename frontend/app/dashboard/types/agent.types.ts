@@ -101,7 +101,11 @@ export interface TrustedMachine {
   lastSeen: string;
 }
 
-export interface ChatSession {
+/**
+ * Chat session for Manager Chat (Modal.ManagerChat).
+ * Note: The MOC chat session type is in chat-session.types.ts as ChatSession.
+ */
+export interface ManagerChatSession {
   id: string;
   userId: string;
   title: string;

@@ -7,8 +7,8 @@
  * - Agent status monitoring
  * - Remote task execution (MCP Task Server proxy)
  *
- * Note: OpenAI/Mastra chat endpoints (/chat, /multi-chat, /multi-agents)
- * and Mastra workflow endpoints have been removed in favor of MCP-only chat.
+ * Note: Legacy chat endpoints (/chat, /multi-chat, /multi-agents)
+ * and workflow endpoints have been removed in favor of MCP-only chat.
  *
  * Requirements: B-005, B-008
  *
@@ -143,8 +143,8 @@ async function requirePremiumOrAdmin(
 const agentsRouter = new Hono<{ Variables: AuthContext }>();
 
 // NOTE: POST /api/agents/chat (OpenAI chat) has been removed.
-// NOTE: POST /api/agents/multi-chat (Mastra multi-agent chat) has been removed.
-// NOTE: GET /api/agents/multi-agents (Mastra agent list) has been removed.
+// NOTE: POST /api/agents/multi-chat (multi-agent chat) has been removed.
+// NOTE: GET /api/agents/multi-agents (agent list) has been removed.
 // Use POST /api/agents/cli/chat with MCP instead.
 
 /**
@@ -337,7 +337,7 @@ agentsRouter.get(
   }
 );
 
-// NOTE: POST /api/agents/workflow/:workflowId (Mastra workflows) has been removed.
+// NOTE: POST /api/agents/workflow/:workflowId (workflows) has been removed.
 
 /**
  * GET /api/agents/orchestration-log

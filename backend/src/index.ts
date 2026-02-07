@@ -335,8 +335,8 @@ export function createApp(): Hono {
   // Endpoints: POST /api/agents/chat, POST /api/agents/tasks,
   //            GET /api/agents/status, POST /api/agents/workflow/:workflowId,
   //            GET /api/agents/orchestration-log
-  // Note: Unified AI agents API (VowCoachAgent, TaskOrchestratorAgent, workflows)
-  // Requirements: B-005, B-006, B-007, B-008
+  // Note: Unified AI agents API (TaskOrchestratorAgent, MCP chat)
+  // Requirements: B-005, B-008
   const agentsRouter = createAgentsRouter();
   app.route('/api/agents', agentsRouter);
 

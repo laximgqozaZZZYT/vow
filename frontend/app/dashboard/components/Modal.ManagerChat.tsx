@@ -19,7 +19,7 @@
 import { useState, useRef, useEffect, useMemo, useCallback } from 'react';
 import type {
   ChatMessage,
-  ChatSession,
+  ManagerChatSession,
   ChatAction,
   AgentTask,
   Agent,
@@ -66,7 +66,7 @@ function SessionSelector({
   onSelect,
   onNewSession,
 }: {
-  sessions: ChatSession[];
+  sessions: ManagerChatSession[];
   currentSessionId: string;
   onSelect: (sessionId: string) => void;
   onNewSession: () => void;
@@ -325,8 +325,8 @@ export default function ManagerChatModal({
   const [messages, setMessages] = useState<ChatMessage[]>(() =>
     loadFromStorage<ChatMessage[]>(CHAT_MESSAGES_KEY, [])
   );
-  const [sessions, setSessions] = useState<ChatSession[]>(() =>
-    loadFromStorage<ChatSession[]>(CHAT_SESSIONS_KEY, [])
+  const [sessions, setSessions] = useState<ManagerChatSession[]>(() =>
+    loadFromStorage<ManagerChatSession[]>(CHAT_SESSIONS_KEY, [])
   );
   const [currentSessionId, setCurrentSessionId] = useState<string>(() =>
     loadFromStorage<string>(CURRENT_SESSION_KEY, '')
@@ -391,7 +391,7 @@ export default function ManagerChatModal({
   // Create initial session if none exists
   useEffect(() => {
     if (sessions.length === 0 && isOpen) {
-      const initialSession: ChatSession = {
+      const initialSession: ManagerChatSession = {
         id: `session-${Date.now()}`,
         userId: 'current-user',
         title: `Chat ${new Date().toLocaleDateString()}`,
@@ -672,7 +672,7 @@ export default function ManagerChatModal({
   // Note: handleAction has been replaced by handleTimelineAction above
 
   const handleNewSession = () => {
-    const newSession: ChatSession = {
+    const newSession: ManagerChatSession = {
       id: `session-${Date.now()}`,
       userId: 'user-001',
       title: `Chat ${new Date().toLocaleDateString()} ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`,

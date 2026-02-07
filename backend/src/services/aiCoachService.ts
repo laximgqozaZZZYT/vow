@@ -836,9 +836,7 @@ export interface CoachResponse {
 /**
  * AI Coach Service
  *
- * Supports two modes controlled by USE_MASTRA_COACH environment variable:
- * - Legacy mode (default): Direct OpenAI API calls with COACH_TOOLS
- * - Mastra mode: Delegates to VowCoachAgent for unified agent architecture
+ * Provides AI coaching via direct OpenAI API calls with COACH_TOOLS.
  */
 export class AICoachService {
   private openai: OpenAI | null = null;

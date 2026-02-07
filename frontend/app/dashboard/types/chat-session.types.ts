@@ -7,7 +7,7 @@
  */
 
 import type { AgentRole } from '../constants/role-prompts';
-import type { GroupChatMessage } from '../hooks/useMOCChat';
+import type { GroupChatMessage } from './moc.types';
 
 /**
  * Chat session configuration

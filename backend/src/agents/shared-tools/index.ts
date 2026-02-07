@@ -3,7 +3,6 @@
  *
  * Common tool definitions and utilities shared between different agent implementations.
  * This module provides a unified interface for tool definitions used by:
- * - VowCoachAgent (Mastra-based)
  * - AICoachService (Legacy OpenAI direct calls)
  *
  * @module agents/shared-tools

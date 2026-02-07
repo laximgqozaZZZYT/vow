@@ -2,7 +2,7 @@
  * Unified LLM Configuration
  *
  * Centralizes all LLM provider settings across the application.
- * Used by Mastra agents, Strands agents, and AI Coach service.
+ * Used by Strands agents and AI Coach service.
  *
  * @module config/llm-config
  */

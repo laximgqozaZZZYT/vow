@@ -2,11 +2,11 @@
  * Shared Coach Tools
  *
  * Common tool definitions for AI coaching functionality.
- * Used by both VowCoachAgent (Mastra) and legacy AICoachService.
+ * Used by AICoachService.
  *
  * This module provides:
  * - Zod schemas for input validation
- * - Tool definitions compatible with both Mastra and OpenAI formats
+ * - Tool definitions compatible with OpenAI format
  * - Unified tool interface for gradual migration
  *
  * @module agents/shared-tools/coach-tools
@@ -47,7 +47,7 @@ export interface CoachToolContext {
 
 /**
  * Shared coach tool definition
- * Compatible with both Mastra CoachTool and OpenAI adapter
+ * Compatible with OpenAI adapter
  */
 export interface SharedCoachTool<TInput = unknown, TOutput = unknown> {
   /** Tool name (snake_case) */

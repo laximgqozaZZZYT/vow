@@ -13,7 +13,6 @@
 
 import { useState, useCallback, useRef, useEffect } from 'react';
 import type { McpServer, ChatAgentSettings } from '../types/agent.types';
-import type { ToolCallResult } from '../../../lib/mastra/config';
 import {
   validateUserInput,
   validateAIResponse,
@@ -21,6 +20,19 @@ import {
   getViolationMessage,
   logViolation,
 } from '../utils/chatGuardrails';
+
+/**
+ * Tool call result from agent.
+ * Previously imported from lib/mastra/config, now defined locally.
+ */
+export interface ToolCallResult {
+  toolName: string;
+  input: Record<string, unknown>;
+  output: unknown;
+  success: boolean;
+  durationMs?: number;
+  error?: string;
+}
 
 /**
  * Extended message with metadata.

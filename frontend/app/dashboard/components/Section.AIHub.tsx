@@ -1,3 +1,4 @@
+// TODO: Remove unused component - Section.AIHub is not imported anywhere in the codebase
 'use client';
 
 /**

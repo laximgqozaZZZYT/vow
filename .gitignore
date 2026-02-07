@@ -100,3 +100,21 @@ cdk.out/
 .idea/
 *.swp
 *.swo
+
+# Investigation/research reports (temporary)
+INVESTIGATION_*.md
+RESEARCH_*.md
+TOKEN_FLOW_*.md
+MCP_*.md
+MCP_*.txt
+AGENT_CONFIG_*.md
+HYPOTHESIS_*.md
+TECHNICAL_ANALYSIS_*.md
+HANDOFF.md
+START_HERE.txt
+README_MCP_*.md
+
+# Test artifacts
+test-results/
+screenshots/
+*.test-result.json

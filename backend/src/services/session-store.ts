@@ -26,8 +26,7 @@ import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { getLogger } from '../utils/logger.js';
 // CoachSession and CoachMessage types were previously imported from
-// vow-coach-agent.ts. They are now defined locally after the removal of
-// the Mastra/OpenAI chat path.
+// vow-coach-agent.ts. They are now defined locally.
 
 /**
  * Tool call record

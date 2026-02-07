@@ -1,3 +1,4 @@
+// NOTE: Currently not imported by any module - candidate for removal or consolidation
 /**
  * OpenAI Tool Adapter
  *
@@ -6,8 +7,7 @@
  *
  * This adapter enables:
  * - Type-safe tool conversion from Zod schemas to JSON Schema
- * - Unified tool interface between VowCoachAgent and legacy AICoachService
- * - Gradual migration from direct OpenAI calls to Mastra-based agents
+ * - Unified tool interface for AICoachService
  *
  * @module adapters/openai-tool-adapter
  */

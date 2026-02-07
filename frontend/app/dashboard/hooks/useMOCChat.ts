@@ -21,60 +21,11 @@ import type { AgentConfig } from '../components/Modal.AgentDetail';
 // Re-export types needed by consumers
 export type { MastraMessage };
 
-// GroupChatMessage type
-export interface GroupChatMessage {
-  id: string;
-  senderId: string;
-  senderName: string;
-  senderType: 'user' | 'agent' | 'coach' | 'system';
-  senderRole?: string;
-  senderIcon?: string;
-  content: string;
-  timestamp: Date;
-  taskId?: string;
-  taskTitle?: string;
-  suggestion?: {
-    type: 'habit' | 'goal';
-    suggestionType?: 'habit' | 'goal' | 'stickyn' | 'reply';
-    data: Record<string, unknown>;
-    actions: Array<{ id: string; label: string; variant: 'primary' | 'secondary' | 'ghost' }>;
-  };
-  suggestions?: Array<{
-    type: 'habit' | 'goal';
-    suggestionType?: 'habit' | 'goal' | 'stickyn' | 'reply';
-    data: Record<string, unknown>;
-    actions: Array<{ id: string; label: string; variant: 'primary' | 'secondary' | 'ghost' }>;
-  }>;
-  quickReplies?: Array<{
-    id: string;
-    label: string;
-    value: string;
-    icon?: string;
-  }>;
-  selectionType?: 'habit_category' | 'goal_category' | 'difficulty';
-  followUpActions?: Array<{
-    id: string;
-    label: string;
-    action: 'more_specific' | 'easier' | 'harder' | 'different' | 'more_suggestions' | 'different_habit';
-    category?: string;
-  }>;
-  unifiedButtons?: Array<{
-    type: string;
-    [key: string]: unknown;
-  }>;
-  extractedMessage?: string;
-}
+// Import GroupChatMessage from canonical location (moc.types.ts)
+import type { GroupChatMessage, SelectableAgent } from '../types/moc.types';
 
-// SelectableAgent type
-export interface SelectableAgent {
-  id: string;
-  name: string;
-  role: string;
-  icon: string;
-  type: 'coach' | 'mcp-agent';
-  serverId?: string;
-  status?: string;
-}
+// Re-export for backward compatibility
+export type { GroupChatMessage, SelectableAgent };
 
 export interface UseMOCChatOptions {
   authToken?: string;
