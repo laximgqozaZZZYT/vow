@@ -2353,7 +2353,7 @@ function GroupChatView({
                         onClick={() => onReplySelect?.({
                           type: 'reply',
                           label: reply.value,
-                          detail: { action: 'more_suggestions', icon: reply.icon },
+                          detail: { action: 'custom', icon: reply.icon },
                         })}
                         className="px-3 py-1.5 text-xs rounded-full border border-primary/30 bg-primary/5 text-primary hover:bg-primary/10 transition-colors"
                       >
