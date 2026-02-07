@@ -123,45 +123,88 @@ providerChatRouter.post(
       { role: 'user' as const, content: message },
     ];
 
-    // Stream SSE response
-    return streamSSE(c, async (stream) => {
+    // Environment detection: use non-streaming JSON in Lambda, SSE otherwise
+    const isLambda = !!process.env['AWS_LAMBDA_FUNCTION_NAME'];
+    const acceptsSSE = c.req.header('Accept')?.includes('text/event-stream');
+
+    if (!isLambda && acceptsSSE) {
+      // SSE streaming response (local development / non-Lambda environments)
+      return streamSSE(c, async (stream) => {
+        try {
+          const generator = providerInstance.chat(messages, systemPrompt, {
+            model,
+            sessionId,
+            userId,
+          });
+
+          for await (const chunk of generator) {
+            await stream.writeSSE({
+              event: chunk.type,
+              data: JSON.stringify(chunk),
+            });
+          }
+
+          // Send final [DONE] marker
+          await stream.writeSSE({
+            data: '[DONE]',
+          });
+        } catch (err) {
+          logger.error('Provider chat stream error', err instanceof Error ? err : undefined, {
+            userId,
+            provider: providerType,
+          });
+
+          await stream.writeSSE({
+            event: 'error',
+            data: JSON.stringify({
+              type: 'error',
+              error: err instanceof Error ? err.message : 'Stream error',
+            }),
+          });
+
+          await stream.writeSSE({
+            data: '[DONE]',
+          });
+        }
+      });
+    } else {
+      // Non-streaming JSON response (Lambda environment fallback)
+      logger.info('Using non-streaming JSON response', {
+        userId,
+        provider: providerType,
+        isLambda,
+        acceptsSSE,
+      });
+
+      let responseSessionId = '';
+      let fullContent = '';
+      let error: string | null = null;
+
       try {
-        const generator = providerInstance.chat(messages, systemPrompt, {
+        for await (const chunk of providerInstance.chat(messages, systemPrompt, {
           model,
           sessionId,
           userId,
-        });
-
-        for await (const chunk of generator) {
-          await stream.writeSSE({
-            event: chunk.type,
-            data: JSON.stringify(chunk),
-          });
+        })) {
+          if (chunk.type === 'session') responseSessionId = chunk.sessionId ?? '';
+          else if (chunk.type === 'token') fullContent += chunk.token ?? '';
+          else if (chunk.type === 'complete') fullContent = chunk.content ?? fullContent;
+          else if (chunk.type === 'error') error = chunk.error ?? 'Unknown error';
         }
-
-        // Send final [DONE] marker
-        await stream.writeSSE({
-          data: '[DONE]',
-        });
       } catch (err) {
-        logger.error('Provider chat stream error', err instanceof Error ? err : undefined, {
+        logger.error('Provider chat error', err instanceof Error ? err : undefined, {
           userId,
           provider: providerType,
         });
-
-        await stream.writeSSE({
-          event: 'error',
-          data: JSON.stringify({
-            type: 'error',
-            error: err instanceof Error ? err.message : 'Stream error',
-          }),
-        });
-
-        await stream.writeSSE({
-          data: '[DONE]',
-        });
+        error = err instanceof Error ? err.message : 'Chat error';
       }
-    });
+
+      if (error) {
+        return c.json({ error, sessionId: responseSessionId }, 500);
+      }
+
+      return c.json({ sessionId: responseSessionId, content: fullContent, type: 'complete' });
+    }
   },
 );
 

@@ -612,6 +612,21 @@ export interface CredentialsStoreConfig {
 }
 
 /**
+ * Determine whether to use the in-memory credentials store.
+ * Returns true when running in local development without DynamoDB.
+ */
+function shouldUseInMemory(): boolean {
+  if (process.env['USE_IN_MEMORY_CREDENTIALS'] === 'true') {
+    return true;
+  }
+  // Auto-detect local development: if NODE_ENV is not production and no DynamoDB table is explicitly configured
+  if (process.env['NODE_ENV'] !== 'production' && !process.env['USER_CREDENTIALS_TABLE']) {
+    return true;
+  }
+  return false;
+}
+
+/**
  * Get or create the credentials store singleton.
  */
 export function getCredentialsStore(config?: CredentialsStoreConfig): CredentialsStore {
@@ -619,7 +634,7 @@ export function getCredentialsStore(config?: CredentialsStoreConfig): Credential
     return credentialsStoreInstance;
   }
 
-  const useInMemory = config?.useInMemory ?? false;
+  const useInMemory = config?.useInMemory ?? shouldUseInMemory();
 
   if (useInMemory) {
     credentialsStoreInstance = new InMemoryCredentialsStore();

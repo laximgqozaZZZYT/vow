@@ -61,6 +61,101 @@ import { ProviderSelector } from './Chat.ProviderSelector';
 // Re-export commonly used types for backward compatibility
 export type { GroupChatMessage } from '../types/moc.types';
 
+// ---------------------------------------------------------------------------
+// localStorage persistence helpers for chat messages
+// ---------------------------------------------------------------------------
+const MOC_MESSAGES_STORAGE_PREFIX = 'vow_moc_messages_';
+const MOC_MESSAGES_MAX_COUNT = 50;
+
+/** Build a user-scoped localStorage key. */
+function getMocMessagesStorageKey(userId: string | undefined): string {
+  return `${MOC_MESSAGES_STORAGE_PREFIX}${userId ?? 'anonymous'}`;
+}
+
+/** Load persisted messages from localStorage (returns [] on failure). */
+function loadMessagesFromStorage(userId: string | undefined): GroupChatMessage[] {
+  if (typeof window === 'undefined') return [];
+  try {
+    const raw = localStorage.getItem(getMocMessagesStorageKey(userId));
+    if (!raw) return [];
+    const parsed = JSON.parse(raw) as Array<Record<string, unknown>>;
+    // Restore Date objects from ISO strings
+    return parsed.map((m) => ({
+      ...m,
+      timestamp: new Date(m.timestamp as string),
+    })) as unknown as GroupChatMessage[];
+  } catch {
+    return [];
+  }
+}
+
+/** Persist the latest N messages to localStorage (debounced externally). */
+function saveMessagesToStorage(userId: string | undefined, messages: GroupChatMessage[]): void {
+  if (typeof window === 'undefined') return;
+  try {
+    // Keep only the latest MOC_MESSAGES_MAX_COUNT messages
+    const toSave = messages.slice(-MOC_MESSAGES_MAX_COUNT);
+    localStorage.setItem(getMocMessagesStorageKey(userId), JSON.stringify(toSave));
+  } catch (e) {
+    console.warn('[MOC] Failed to save messages to localStorage:', e);
+  }
+}
+
+/** Remove persisted messages from localStorage. */
+function clearMessagesFromStorage(userId: string | undefined): void {
+  if (typeof window === 'undefined') return;
+  try {
+    localStorage.removeItem(getMocMessagesStorageKey(userId));
+  } catch {
+    // ignore
+  }
+}
+
+// ---------------------------------------------------------------------------
+// localStorage persistence helpers for chat HISTORY (separate from active chat)
+// ---------------------------------------------------------------------------
+const MOC_HISTORY_STORAGE_PREFIX = 'vow_moc_history_';
+const MOC_HISTORY_MAX_COUNT = 200; // history retains more messages
+
+function getMocHistoryStorageKey(userId: string | undefined): string {
+  return `${MOC_HISTORY_STORAGE_PREFIX}${userId ?? 'anonymous'}`;
+}
+
+function loadHistoryFromStorage(userId: string | undefined): GroupChatMessage[] {
+  if (typeof window === 'undefined') return [];
+  try {
+    const raw = localStorage.getItem(getMocHistoryStorageKey(userId));
+    if (!raw) return [];
+    const parsed = JSON.parse(raw) as Array<Record<string, unknown>>;
+    return parsed.map((m) => ({
+      ...m,
+      timestamp: new Date(m.timestamp as string),
+    })) as unknown as GroupChatMessage[];
+  } catch {
+    return [];
+  }
+}
+
+function saveHistoryToStorage(userId: string | undefined, messages: GroupChatMessage[]): void {
+  if (typeof window === 'undefined') return;
+  try {
+    const toSave = messages.slice(-MOC_HISTORY_MAX_COUNT);
+    localStorage.setItem(getMocHistoryStorageKey(userId), JSON.stringify(toSave));
+  } catch (e) {
+    console.warn('[MOC] Failed to save history to localStorage:', e);
+  }
+}
+
+/** Append new messages to history (avoiding duplicates by id). */
+function appendToHistory(userId: string | undefined, newMessages: GroupChatMessage[]): void {
+  if (typeof window === 'undefined' || newMessages.length === 0) return;
+  const existing = loadHistoryFromStorage(userId);
+  const existingIds = new Set(existing.map(m => m.id));
+  const uniqueNew = newMessages.filter(m => !existingIds.has(m.id));
+  if (uniqueNew.length === 0) return;
+  saveHistoryToStorage(userId, [...existing, ...uniqueNew]);
+}
+
 export function MOCSection({
   goals = [],
   habits = [],
@@ -74,7 +169,10 @@ export function MOCSection({
   userId,
 }: MOCSectionProps) {
   const [activeTab, setActiveTab] = useState<TabId>('chat');
+  // Chat tab starts empty on every page load (no localStorage restore)
   const [messages, setMessages] = useState<GroupChatMessage[]>([]);
+  // History tab is independently persisted in localStorage
+  const [historyMessages, setHistoryMessages] = useState<GroupChatMessage[]>(() => loadHistoryFromStorage(userId));
   const [inputValue, setInputValue] = useState('');
   // selectedAgent state removed - manager-only mode is now default
 
@@ -239,31 +337,16 @@ export function MOCSection({
   // AI Provider selection (MCP servers + API providers like OpenAI)
   const { availableProviders, selectedProvider, switchProvider, isMcp } = useAIProvider(authToken ?? null);
 
-  // API provider chat hook (used when an API provider is selected)
+  // Provider chat hook for API providers (OpenAI, Anthropic, etc.)
   const providerChat = useProviderChat({
-    authToken: authToken ?? null,
     provider: selectedProvider?.apiProvider || 'openai',
     model: selectedProvider?.model,
-    systemMessage: aiCoachSystemPrompt,
-    userId,
-    onError: (error) => {
-      console.error('[MOCSection] Provider chat error:', error);
-    },
+    systemPrompt: aiCoachSystemPrompt,
+    authToken: authToken ?? null,
   });
 
-  // Active chat agent - use MCP only if selected AND server is actually configured
-  const canUseMcp = isMcp && selectedMcpServer != null;
-  const activeAgent = canUseMcp ? mcpChat : providerChat;
-
-  // Clear provider chat messages when switching providers to prevent confusion
-  const prevProviderIdRef = useRef<string | null>(null);
-  useEffect(() => {
-    if (selectedProvider && prevProviderIdRef.current !== null && prevProviderIdRef.current !== selectedProvider.id) {
-      providerChat.clearMessages();
-    }
-    prevProviderIdRef.current = selectedProvider?.id ?? null;
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedProvider?.id]);
+  // Active chat agent - dynamically switch between MCP and API provider
+  const activeAgent = selectedProvider?.source === 'api' ? providerChat : mcpChat;
 
   // Connection status
   const isConnected = useMemo(() => {
@@ -671,6 +754,113 @@ export function MOCSection({
       return;
     }
 
+    // Debug: Provider chat test
+    if (messageText === '応答テスト') {
+      const userMsg: GroupChatMessage = {
+        id: `user-${Date.now()}`,
+        senderId: 'user',
+        senderName: 'You',
+        senderType: 'user',
+        senderIcon: ROLE_ICONS.user,
+        content: messageText,
+        timestamp: new Date(),
+      };
+      setMessages(prev => [...prev, userMsg]);
+
+      // Perform actual test request to provider-chat endpoint
+      const BACKEND_API_URL = process.env.NEXT_PUBLIC_BACKEND_API_URL || '';
+      const testProvider = selectedProvider?.apiProvider || 'openai';
+      const testModel = selectedProvider?.model;
+      const requestUrl = `${BACKEND_API_URL}/api/provider-chat`;
+      const requestBody = {
+        message: 'テスト',
+        systemPrompt: (aiCoachSystemPrompt || '').substring(0, 100) + '...',
+        provider: testProvider,
+        ...(testModel && { model: testModel }),
+      };
+
+      let debugInfo: string;
+      try {
+        const response = await fetch(requestUrl, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Accept': 'text/event-stream',
+            'Authorization': `Bearer ${authToken}`,
+          },
+          body: JSON.stringify({
+            message: 'テスト',
+            systemPrompt: aiCoachSystemPrompt || 'You are a helpful assistant.',
+            provider: testProvider,
+            ...(testModel && { model: testModel }),
+          }),
+        });
+
+        const contentType = response.headers.get('Content-Type') || '(none)';
+        let bodyPreview: string;
+        try {
+          const text = await response.text();
+          bodyPreview = text.substring(0, 500);
+        } catch (e) {
+          bodyPreview = `(読取エラー: ${e instanceof Error ? e.message : String(e)})`;
+        }
+
+        debugInfo = [
+          `=== 応答テスト ===`,
+          ``,
+          `■ プロバイダー情報`,
+          `  source: ${selectedProvider?.source ?? '(null)'}`,
+          `  apiProvider: ${selectedProvider?.apiProvider ?? '(null)'}`,
+          `  model: ${selectedProvider?.model ?? '(default)'}`,
+          `  id: ${selectedProvider?.id ?? '(null)'}`,
+          `  isAvailable: ${selectedProvider?.isAvailable ?? '(null)'}`,
+          `  isMcp: ${isMcp}`,
+          ``,
+          `■ リクエスト`,
+          `  URL: ${requestUrl}`,
+          `  BACKEND_API_URL: ${BACKEND_API_URL || '(empty)'}`,
+          `  body: ${JSON.stringify(requestBody, null, 2)}`,
+          ``,
+          `■ レスポンス`,
+          `  status: ${response.status} ${response.statusText}`,
+          `  Content-Type: ${contentType}`,
+          `  body (先頭500文字):`,
+          bodyPreview,
+        ].join('\n');
+      } catch (e) {
+        debugInfo = [
+          `=== 応答テスト ===`,
+          ``,
+          `■ プロバイダー情報`,
+          `  source: ${selectedProvider?.source ?? '(null)'}`,
+          `  apiProvider: ${selectedProvider?.apiProvider ?? '(null)'}`,
+          `  model: ${selectedProvider?.model ?? '(default)'}`,
+          `  id: ${selectedProvider?.id ?? '(null)'}`,
+          `  isMcp: ${isMcp}`,
+          ``,
+          `■ リクエスト`,
+          `  URL: ${BACKEND_API_URL}/api/provider-chat`,
+          `  BACKEND_API_URL: ${BACKEND_API_URL || '(empty)'}`,
+          ``,
+          `■ エラー`,
+          `  ${e instanceof Error ? e.message : String(e)}`,
+        ].join('\n');
+      }
+
+      const debugProviderMsg: GroupChatMessage = {
+        id: `ai-debug-provider-${Date.now()}`,
+        senderId: 'ai',
+        senderName: 'System Debug',
+        senderType: 'coach',
+        senderRole: 'Debug',
+        senderIcon: '🔍',
+        content: debugInfo,
+        timestamp: new Date(),
+      };
+      setMessages(prev => [...prev, debugProviderMsg]);
+      return;
+    }
+
     // Registration keyword detection
     const registrationKeywords = [
       // 既存
@@ -994,6 +1184,16 @@ export function MOCSection({
     }
   }, [messages]);
 
+  // Clear chat tab only (history tab retains all past messages)
+  const handleClearMessages = useCallback(() => {
+    setMessages([]);
+    activeAgent.clearMessages();
+    // Also clear candidate responses
+    setCandidateResponses(new Map());
+    setAdoptedCandidates(new Map());
+    setAdoptionStates(new Map());
+  }, [activeAgent]);
+
   const handleHabitCreated = useCallback(async (payload: { name: string; goalId?: string; type: 'do' | 'avoid'; timings?: any[]; workloadUnit?: string; workloadTotal?: number; workloadTotalEnd?: number; workloadPerCount?: number; notes?: string; relatedHabitIds?: string[] }) => {
     // Call API to create habit in database
     console.log('[handleHabitCreated] Creating habit with payload:', payload);
@@ -1094,6 +1294,19 @@ export function MOCSection({
   // Reference for textarea (to reset height after sending)
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
+  // Append chat messages to history (debounced to avoid excessive writes)
+  // History is persisted independently so it survives chat clear / page reload
+  useEffect(() => {
+    if (messages.length === 0) return;
+
+    const timer = setTimeout(() => {
+      appendToHistory(userId, messages);
+      setHistoryMessages(loadHistoryFromStorage(userId));
+    }, 500);
+
+    return () => clearTimeout(timer);
+  }, [messages, userId]);
+
   // Auto-scroll to bottom when new messages arrive
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -1168,6 +1381,21 @@ export function MOCSection({
               </svg>
             )}
           </button>
+          {/* Clear chat history button */}
+          <button
+            onClick={handleClearMessages}
+            disabled={messages.length === 0}
+            className={`p-2 rounded-lg transition-colors ${
+              messages.length === 0
+                ? 'text-muted-foreground/50 cursor-not-allowed'
+                : 'text-muted-foreground hover:text-destructive hover:bg-muted'
+            }`}
+            title={locale === 'ja' ? 'チャット履歴をクリア' : 'Clear chat history'}
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+            </svg>
+          </button>
           {/* Settings button - navigates to settings page */}
           <a
             href="/settings#ai-config"
@@ -1213,14 +1441,12 @@ export function MOCSection({
       <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
         {activeTab === 'chat' ? (
           <>
-            {/* Provider Selector - shown when multiple AI providers are available */}
-            {availableProviders.length > 1 && (
-              <ProviderSelector
-                providers={availableProviders}
-                selectedId={selectedProvider?.id || ''}
-                onSelect={switchProvider}
-              />
-            )}
+            {/* Provider Selector - always shown so user can see/switch AI provider */}
+            <ProviderSelector
+              providers={availableProviders}
+              selectedId={selectedProvider?.id || ''}
+              onSelect={switchProvider}
+            />
             {/* Chat Messages - Scrollable area */}
             <div className="flex-1 overflow-y-auto min-h-0">
               <GroupChatView
@@ -1472,7 +1698,7 @@ export function MOCSection({
             )}
             {activeTab === 'history' && (
               <HistoryView
-                messages={messages}
+                messages={historyMessages}
                 locale={locale}
               />
             )}

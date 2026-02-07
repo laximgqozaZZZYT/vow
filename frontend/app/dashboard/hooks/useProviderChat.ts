@@ -1,210 +1,209 @@
 /**
  * useProviderChat Hook
  *
- * React hook for communicating with API provider chat (OpenAI, Anthropic, etc.)
- * via the backend's `/api/ai/provider-chat` SSE endpoint.
- *
- * Returns the exact same UseMastraAgentReturn interface as useMcpChat so it
- * can be used as a drop-in replacement.
- *
- * Features:
- * - Standard chat agent interface (MastraMessage, UseMastraAgentReturn)
- * - Streaming response support via SSE
- * - Message history management
- * - Conversation history sent with each request
+ * React hook for streaming AI chat via the backend provider-chat SSE endpoint.
+ * Supports OpenAI, Anthropic, Gemini, Codex providers.
+ * Returns the same UseMastraAgentReturn interface as useMcpChat for seamless switching.
  *
  * @module hooks/useProviderChat
  */
 
-import { useState, useCallback, useRef } from 'react';
+'use client';
+
+import { useState, useCallback, useRef, useEffect } from 'react';
 import type { MastraMessage, UseMastraAgentReturn } from './useMcpChat';
+import {
+  validateUserInput,
+  sanitizeInput,
+  getViolationMessage,
+  logViolation,
+} from '../utils/chatGuardrails';
 
 // =============================================================================
 // Types
 // =============================================================================
 
 export interface UseProviderChatOptions {
+  /** Provider identifier: 'openai' | 'anthropic' | 'gemini' | 'codex' */
+  provider: string;
+  /** Optional model override */
+  model?: string;
+  /** System prompt for the AI */
+  systemPrompt: string;
   /** Auth token for backend API */
   authToken: string | null;
-  /** Provider identifier: 'openai', 'anthropic', etc. */
-  provider: string;
-  /** Model identifier (optional, backend will use default if omitted) */
-  model?: string;
-  /** System prompt to send with each request */
-  systemMessage?: string;
-  /** User ID for session isolation */
-  userId?: string;
-  /** Callback when a message is received */
-  onMessage?: (message: MastraMessage) => void;
-  /** Callback when an error occurs */
-  onError?: (error: Error) => void;
 }
+
+// =============================================================================
+// Constants
+// =============================================================================
+
+const BACKEND_API_URL = process.env.NEXT_PUBLIC_BACKEND_API_URL || '';
 
 // =============================================================================
 // Helpers
 // =============================================================================
 
-/** Generate a unique message ID */
 function generateMessageId(): string {
   return `provider-msg-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
-const BACKEND_API_URL = process.env.NEXT_PUBLIC_BACKEND_API_URL || '';
+/**
+ * Safely extract a human-readable error message from an unknown error payload.
+ * Prevents the [object Object] bug by always returning a string.
+ */
+function extractErrorMessage(data: unknown): string {
+  if (typeof data === 'string') return data;
+  if (data && typeof data === 'object') {
+    const obj = data as Record<string, unknown>;
+    if (typeof obj.message === 'string') return obj.message;
+    if (typeof obj.error === 'string') return obj.error;
+    try {
+      return JSON.stringify(data);
+    } catch {
+      return 'Unknown error';
+    }
+  }
+  return String(data);
+}
 
 // =============================================================================
 // Hook
 // =============================================================================
 
-/**
- * Hook for communicating with API providers via the backend provider-chat endpoint.
- * Returns the standard chat agent interface (UseMastraAgentReturn).
- */
 export function useProviderChat(options: UseProviderChatOptions): UseMastraAgentReturn {
-  const {
-    authToken,
-    provider,
-    model,
-    systemMessage,
-    userId,
-    onMessage,
-    onError,
-  } = options;
+  const { provider, model, systemPrompt, authToken } = options;
 
-  // ---------------------------------------------------------------------------
   // State
-  // ---------------------------------------------------------------------------
-  const [messages, setMessages] = useState<MastraMessage[]>(() => {
-    if (systemMessage) {
-      return [{
-        id: generateMessageId(),
-        role: 'system' as const,
-        content: systemMessage,
-        status: 'complete' as const,
-        timestamp: new Date(),
-      }];
-    }
-    return [];
-  });
+  const [messages, setMessages] = useState<MastraMessage[]>([]);
   const [isStreaming, setIsStreaming] = useState(false);
   const [error, setError] = useState<Error | null>(null);
-  const [connectionState, setConnectionState] = useState<
-    'idle' | 'connecting' | 'streaming' | 'error'
-  >('idle');
+  const [connectionState, setConnectionState] = useState<'idle' | 'connecting' | 'streaming' | 'error'>('idle');
 
-  // ---------------------------------------------------------------------------
   // Refs
-  // ---------------------------------------------------------------------------
   const abortControllerRef = useRef<AbortController | null>(null);
   const lastUserMessageRef = useRef<string | null>(null);
   const sessionIdRef = useRef<string | null>(null);
 
-  // ---------------------------------------------------------------------------
-  // sendMessage
-  // ---------------------------------------------------------------------------
-  const sendMessage = useCallback(
-    async (message: string): Promise<void> => {
-      if (!message.trim()) return;
-      if (!authToken) {
-        const err = new Error('Not authenticated');
-        setError(err);
-        setConnectionState('error');
-        onError?.(err);
-        return;
-      }
+  /**
+   * Build conversation history from current messages (excluding system messages).
+   */
+  const buildConversationHistory = useCallback((): Array<{ role: 'user' | 'assistant'; content: string }> => {
+    return messages
+      .filter((m) => m.role !== 'system' && m.status === 'complete' && m.content)
+      .map((m) => ({
+        role: m.role as 'user' | 'assistant',
+        content: m.content,
+      }));
+  }, [messages]);
 
-      // Cancel any ongoing request
-      if (abortControllerRef.current) {
-        abortControllerRef.current.abort();
-      }
-      abortControllerRef.current = new AbortController();
+  /**
+   * Send a message to the provider chat endpoint.
+   */
+  const sendMessage = useCallback(async (message: string): Promise<void> => {
+    if (!message.trim()) return;
 
-      // Store for retry
-      lastUserMessageRef.current = message;
+    // Guardrail: sanitize and validate
+    const sanitized = sanitizeInput(message);
+    const validation = validateUserInput(sanitized);
 
-      // Clear previous error
-      setError(null);
-      setConnectionState('connecting');
+    if (!validation.allowed) {
+      logViolation(validation, { agentType: 'Provider', sessionId: provider });
+      const violationError = new Error(getViolationMessage(validation, 'ja'));
+      setError(violationError);
+      setConnectionState('error');
+      return;
+    }
 
-      // Add user message
-      const userMessage: MastraMessage = {
-        id: generateMessageId(),
-        role: 'user',
-        content: message,
-        status: 'complete',
-        timestamp: new Date(),
-      };
+    if (!authToken) {
+      setError(new Error('認証トークンがありません。ログインしてください。'));
+      setConnectionState('error');
+      return;
+    }
 
-      // Add placeholder for assistant response
-      const assistantMessageId = generateMessageId();
-      const assistantMessage: MastraMessage = {
-        id: assistantMessageId,
-        role: 'assistant',
-        content: '',
-        status: 'pending',
-        timestamp: new Date(),
-      };
+    if (!BACKEND_API_URL) {
+      setError(new Error('バックエンドAPIのURLが設定されていません。'));
+      setConnectionState('error');
+      return;
+    }
 
-      setMessages(prev => [...prev, userMessage, assistantMessage]);
-      setIsStreaming(true);
+    // Cancel any ongoing request
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+    abortControllerRef.current = new AbortController();
 
-      // Build conversation history from existing messages (before adding new ones)
-      // We read from the current closure's messages state (pre-update)
-      const conversationHistory = messages
-        .filter(m => m.role === 'user' || m.role === 'assistant')
-        .map(m => ({ role: m.role as 'user' | 'assistant', content: m.content }));
+    lastUserMessageRef.current = message;
+    setError(null);
+    setConnectionState('connecting');
 
-      let fullContent = '';
-      let lastServerError: string | null = null;
+    // Add user message
+    const userMessage: MastraMessage = {
+      id: generateMessageId(),
+      role: 'user',
+      content: message,
+      status: 'complete',
+      timestamp: new Date(),
+    };
 
-      try {
-        setConnectionState('streaming');
+    // Add placeholder for assistant response
+    const assistantMessageId = generateMessageId();
+    const assistantMessage: MastraMessage = {
+      id: assistantMessageId,
+      role: 'assistant',
+      content: '',
+      status: 'pending',
+      timestamp: new Date(),
+    };
 
-        const requestBody = {
-          message: message,
-          systemPrompt: systemMessage,
-          provider: provider,
-          model: model,
-          sessionId: sessionIdRef.current,
-          conversationHistory,
-          userId: userId,
-        };
+    // Build history before adding the new messages
+    const history = buildConversationHistory();
 
-        console.log('[useProviderChat] Sending request:', {
+    setMessages((prev) => [...prev, userMessage, assistantMessage]);
+    setIsStreaming(true);
+
+    let fullContent = '';
+
+    try {
+      const response = await fetch(`${BACKEND_API_URL}/api/provider-chat`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Accept: 'text/event-stream',
+          Authorization: `Bearer ${authToken}`,
+        },
+        body: JSON.stringify({
+          message: sanitized,
+          systemPrompt,
           provider,
-          model,
-          hasSystemPrompt: !!systemMessage,
-          systemPromptLength: systemMessage?.length ?? 0,
-          historyLength: conversationHistory.length,
-          sessionId: sessionIdRef.current,
-        });
+          ...(model && { model }),
+          ...(sessionIdRef.current && { sessionId: sessionIdRef.current }),
+          ...(history.length > 0 && { conversationHistory: history }),
+        }),
+        signal: abortControllerRef.current.signal,
+      });
 
-        const response = await fetch(`${BACKEND_API_URL}/api/ai/provider-chat`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Accept': 'text/event-stream',
-            'Authorization': `Bearer ${authToken}`,
-          },
-          body: JSON.stringify(requestBody),
-          signal: abortControllerRef.current?.signal,
-        });
-
-        if (!response.ok) {
-          const errorData = await response.json().catch(() => ({
-            message: `HTTP ${response.status} ${response.statusText}`,
-          }));
-          throw new Error(
-            errorData.message || errorData.error || `HTTP ${response.status}`,
-          );
+      if (!response.ok) {
+        let errMsg: string;
+        try {
+          const errData = await response.json();
+          errMsg = extractErrorMessage(errData);
+        } catch {
+          errMsg = `API error: ${response.status} ${response.statusText}`;
         }
+        throw new Error(errMsg);
+      }
 
-        // ------------------------------------------------------------------
-        // SSE streaming parser (same pattern as useMcpChat.ts)
-        // ------------------------------------------------------------------
+      const contentType = response.headers.get('Content-Type') || '';
+
+      if (contentType.includes('text/event-stream')) {
+        // SSE streaming response (local development / non-Lambda environments)
         const reader = response.body?.getReader();
         if (!reader) {
           throw new Error('No response body');
         }
+
+        setConnectionState('streaming');
 
         const decoder = new TextDecoder();
         let buffer = '';
@@ -216,20 +215,20 @@ export function useProviderChat(options: UseProviderChatOptions): UseMastraAgent
 
           buffer += decoder.decode(value, { stream: true });
           const lines = buffer.split('\n');
-          buffer = lines.pop() || ''; // Keep incomplete line in buffer
+          buffer = lines.pop() || '';
 
           for (const line of lines) {
-            const trimmedLine = line.trim();
+            const trimmed = line.trim();
 
-            // Parse SSE event type line (e.g., "event: token")
-            if (trimmedLine.startsWith('event:')) {
-              currentEventType = trimmedLine.slice(6).trim();
+            // Parse SSE event type
+            if (trimmed.startsWith('event:')) {
+              currentEventType = trimmed.slice(6).trim();
               continue;
             }
 
-            // Parse SSE data line (e.g., "data: {...}")
-            if (trimmedLine.startsWith('data:')) {
-              const jsonStr = trimmedLine.slice(5).trim();
+            // Parse SSE data
+            if (trimmed.startsWith('data:')) {
+              const jsonStr = trimmed.slice(5).trim();
 
               // Handle [DONE] marker
               if (jsonStr === '[DONE]') {
@@ -239,263 +238,168 @@ export function useProviderChat(options: UseProviderChatOptions): UseMastraAgent
 
               try {
                 const data = JSON.parse(jsonStr);
+                const eventType = currentEventType || data.type;
 
-                // Determine effective event type:
-                // prefer SSE event: line, fallback to data.type
-                const effectiveType = currentEventType || data.type;
-
-                if (
-                  (effectiveType === 'session' || effectiveType === 'start') &&
-                  data.sessionId
-                ) {
-                  // Save sessionId for conversation continuity
-                  console.log(
-                    '[useProviderChat] Received sessionId:',
-                    data.sessionId,
-                  );
-                  sessionIdRef.current = data.sessionId;
-                } else if (
-                  effectiveType === 'token' ||
-                  effectiveType === 'text'
-                ) {
-                  const token =
-                    data.token || data.text || data.content || '';
-                  if (token) {
-                    fullContent += token;
-                    setMessages(prev =>
-                      prev.map(msg =>
-                        msg.id === assistantMessageId
-                          ? {
-                              ...msg,
-                              content: fullContent,
-                              status: 'streaming' as const,
-                            }
-                          : msg,
-                      ),
-                    );
-                  }
-                } else if (
-                  effectiveType === 'complete' ||
-                  effectiveType === 'done'
-                ) {
-                  // Update sessionId if provided in complete event
+                if (eventType === 'session') {
                   if (data.sessionId) {
                     sessionIdRef.current = data.sessionId;
                   }
-
-                  setMessages(prev =>
-                    prev.map(msg =>
-                      msg.id === assistantMessageId
-                        ? {
-                            ...msg,
-                            content:
-                              fullContent ||
-                              data.content ||
-                              data.message ||
-                              '',
-                            status: 'complete' as const,
-                          }
-                        : msg,
-                    ),
-                  );
-                } else if (effectiveType === 'error') {
-                  lastServerError =
-                    data.error ||
-                    data.message ||
-                    'Unknown error from provider';
-                  console.error(
-                    '[useProviderChat] Server error:',
-                    lastServerError,
-                  );
-                  setMessages(prev =>
-                    prev.map(msg =>
-                      msg.id === assistantMessageId
-                        ? {
-                            ...msg,
-                            content: lastServerError || 'Error',
-                            status: 'error' as const,
-                          }
-                        : msg,
-                    ),
-                  );
-                } else {
-                  // Fallback: try to extract content from various field names
-                  const content =
-                    data.token ||
-                    data.text ||
-                    data.content ||
-                    data.delta?.content ||
-                    data.choices?.[0]?.delta?.content ||
-                    data.choices?.[0]?.message?.content;
-
-                  if (content) {
-                    fullContent += content;
-                    setMessages(prev =>
-                      prev.map(msg =>
+                } else if (eventType === 'token' || eventType === 'text') {
+                  const token = data.token || data.text || data.content || '';
+                  if (token) {
+                    fullContent += token;
+                    setMessages((prev) =>
+                      prev.map((msg) =>
                         msg.id === assistantMessageId
-                          ? {
-                              ...msg,
-                              content: fullContent,
-                              status: 'streaming' as const,
-                            }
-                          : msg,
-                      ),
+                          ? { ...msg, content: fullContent, status: 'streaming' as const }
+                          : msg
+                      )
                     );
                   }
-                }
-              } catch {
-                // Not JSON, might be raw text
-                if (jsonStr && jsonStr !== '[DONE]') {
-                  fullContent += jsonStr;
-                  setMessages(prev =>
-                    prev.map(msg =>
+                } else if (eventType === 'complete' || eventType === 'done') {
+                  if (data.sessionId) {
+                    sessionIdRef.current = data.sessionId;
+                  }
+                  setMessages((prev) =>
+                    prev.map((msg) =>
                       msg.id === assistantMessageId
                         ? {
                             ...msg,
-                            content: fullContent,
-                            status: 'streaming' as const,
+                            content: fullContent || data.content || '',
+                            status: 'complete' as const,
                           }
-                        : msg,
-                    ),
+                        : msg
+                    )
+                  );
+                } else if (eventType === 'error') {
+                  const errMsg = extractErrorMessage(data);
+                  fullContent = errMsg;
+                  setMessages((prev) =>
+                    prev.map((msg) =>
+                      msg.id === assistantMessageId
+                        ? { ...msg, content: errMsg, status: 'error' as const }
+                        : msg
+                    )
+                  );
+                }
+              } catch {
+                // Non-JSON data — treat as raw text token
+                if (jsonStr) {
+                  fullContent += jsonStr;
+                  setMessages((prev) =>
+                    prev.map((msg) =>
+                      msg.id === assistantMessageId
+                        ? { ...msg, content: fullContent, status: 'streaming' as const }
+                        : msg
+                    )
                   );
                 }
               }
 
-              // Reset event type after processing data
               currentEventType = null;
             }
           }
         }
+      } else {
+        // JSON bulk response (Lambda environment fallback)
+        setConnectionState('streaming');
+        const data = await response.json();
 
-        // Stream complete
-        setIsStreaming(false);
-        setConnectionState('idle');
-
-        // If no content received, show appropriate message
-        if (!fullContent && !lastServerError) {
-          const noResponseMessage =
-            'No response received from the AI provider. Please try again.';
-          setMessages(prev =>
-            prev.map(msg =>
-              msg.id === assistantMessageId
-                ? {
-                    ...msg,
-                    content: noResponseMessage,
-                    status: 'error' as const,
-                  }
-                : msg,
-            ),
-          );
-        } else if (fullContent) {
-          // Ensure message is marked as complete
-          setMessages(prev =>
-            prev.map(msg =>
-              msg.id === assistantMessageId && msg.status !== 'complete'
-                ? {
-                    ...msg,
-                    content: fullContent,
-                    status: 'complete' as const,
-                  }
-                : msg,
-            ),
-          );
+        if (data.error) {
+          throw new Error(extractErrorMessage(data));
         }
 
-        // Notify callback
-        const updatedMessage = messages.find(m => m.id === assistantMessageId);
-        if (updatedMessage && onMessage) {
-          onMessage(updatedMessage);
-        }
-      } catch (err) {
-        const errorMessage =
-          err instanceof Error ? err.message : String(err);
-        const isAbortError =
-          errorMessage.includes('aborted') ||
-          errorMessage.includes('AbortError');
-
-        if (isAbortError) {
-          // Abort: if we have content, mark as complete; otherwise show cancelled
-          if (fullContent) {
-            setMessages(prev =>
-              prev.map(msg =>
-                msg.id === assistantMessageId
-                  ? {
-                      ...msg,
-                      content: fullContent,
-                      status: 'complete' as const,
-                    }
-                  : msg,
-              ),
-            );
-          } else {
-            setMessages(prev =>
-              prev.map(msg =>
-                msg.id === assistantMessageId
-                  ? {
-                      ...msg,
-                      status: 'complete' as const,
-                      content: msg.content || '(Cancelled)',
-                    }
-                  : msg,
-              ),
-            );
-          }
-          setConnectionState('idle');
-          setIsStreaming(false);
-          return;
+        if (data.sessionId) {
+          sessionIdRef.current = data.sessionId;
         }
 
-        const error =
-          err instanceof Error ? err : new Error(String(err));
-        setError(error);
-        setConnectionState('error');
-        setIsStreaming(false);
-
-        // Update assistant message with error status
-        setMessages(prev =>
-          prev.map(msg =>
+        fullContent = data.content || '';
+        setMessages((prev) =>
+          prev.map((msg) =>
             msg.id === assistantMessageId
-              ? {
-                  ...msg,
-                  status: 'error' as const,
-                  content: `Error: ${error.message}`,
-                }
-              : msg,
-          ),
+              ? { ...msg, content: fullContent, status: 'complete' as const }
+              : msg
+          )
         );
-
-        onError?.(error);
       }
-    },
-    [authToken, provider, model, systemMessage, userId, messages, onMessage, onError],
-  );
 
-  // ---------------------------------------------------------------------------
-  // clearMessages
-  // ---------------------------------------------------------------------------
+      // Stream finished — ensure message is complete
+      setIsStreaming(false);
+      setConnectionState('idle');
+
+      if (!fullContent) {
+        setMessages((prev) =>
+          prev.map((msg) =>
+            msg.id === assistantMessageId
+              ? { ...msg, content: '応答がありませんでした。', status: 'error' as const }
+              : msg
+          )
+        );
+      } else {
+        setMessages((prev) =>
+          prev.map((msg) =>
+            msg.id === assistantMessageId && msg.status !== 'complete'
+              ? { ...msg, content: fullContent, status: 'complete' as const }
+              : msg
+          )
+        );
+      }
+    } catch (err) {
+      setIsStreaming(false);
+
+      // Handle abort
+      if (err instanceof Error && err.name === 'AbortError') {
+        setMessages((prev) =>
+          prev.map((msg) =>
+            msg.id === assistantMessageId
+              ? { ...msg, status: 'complete' as const, content: fullContent || '(通信が中断されました)' }
+              : msg
+          )
+        );
+        setConnectionState('idle');
+        return;
+      }
+
+      // Recover partial content on stream error
+      if (fullContent) {
+        setMessages((prev) =>
+          prev.map((msg) =>
+            msg.id === assistantMessageId
+              ? { ...msg, content: fullContent, status: 'complete' as const }
+              : msg
+          )
+        );
+        setConnectionState('idle');
+        return;
+      }
+
+      const errorObj = err instanceof Error ? err : new Error(extractErrorMessage(err));
+      setError(errorObj);
+      setConnectionState('error');
+      setMessages((prev) =>
+        prev.map((msg) =>
+          msg.id === assistantMessageId
+            ? { ...msg, content: `Error: ${errorObj.message}`, status: 'error' as const }
+            : msg
+        )
+      );
+    }
+  }, [provider, model, systemPrompt, authToken, buildConversationHistory]);
+
+  /**
+   * Clear all messages and reset session.
+   */
   const clearMessages = useCallback(() => {
-    setMessages(
-      systemMessage
-        ? [
-            {
-              id: generateMessageId(),
-              role: 'system',
-              content: systemMessage,
-              status: 'complete',
-              timestamp: new Date(),
-            },
-          ]
-        : [],
-    );
+    setMessages([]);
     setError(null);
     setConnectionState('idle');
     lastUserMessageRef.current = null;
     sessionIdRef.current = null;
-  }, [systemMessage]);
+  }, []);
 
-  // ---------------------------------------------------------------------------
-  // clearError
-  // ---------------------------------------------------------------------------
+  /**
+   * Clear error state.
+   */
   const clearError = useCallback(() => {
     setError(null);
     if (connectionState === 'error') {
@@ -503,23 +407,19 @@ export function useProviderChat(options: UseProviderChatOptions): UseMastraAgent
     }
   }, [connectionState]);
 
-  // ---------------------------------------------------------------------------
-  // retry
-  // ---------------------------------------------------------------------------
+  /**
+   * Retry the last failed message.
+   */
   const retry = useCallback(async () => {
     if (!lastUserMessageRef.current) return;
 
     // Remove the last failed exchange
-    setMessages(prev => {
+    setMessages((prev) => {
       const newMessages = [...prev];
       if (newMessages.length >= 2) {
-        const lastAssistant = newMessages[newMessages.length - 1];
-        const lastUser = newMessages[newMessages.length - 2];
-        if (
-          lastAssistant.role === 'assistant' &&
-          lastAssistant.status === 'error' &&
-          lastUser.role === 'user'
-        ) {
+        const lastMsg = newMessages[newMessages.length - 1];
+        const secondLast = newMessages[newMessages.length - 2];
+        if (lastMsg.role === 'assistant' && lastMsg.status === 'error' && secondLast.role === 'user') {
           newMessages.pop();
           newMessages.pop();
         }
@@ -527,13 +427,12 @@ export function useProviderChat(options: UseProviderChatOptions): UseMastraAgent
       return newMessages;
     });
 
-    // Retry with the last message
     await sendMessage(lastUserMessageRef.current);
   }, [sendMessage]);
 
-  // ---------------------------------------------------------------------------
-  // cancelStream
-  // ---------------------------------------------------------------------------
+  /**
+   * Cancel the current streaming request.
+   */
   const cancelStream = useCallback(() => {
     if (abortControllerRef.current) {
       abortControllerRef.current.abort();
@@ -543,9 +442,15 @@ export function useProviderChat(options: UseProviderChatOptions): UseMastraAgent
     setConnectionState('idle');
   }, []);
 
-  // ---------------------------------------------------------------------------
-  // Return UseMastraAgentReturn-compatible object
-  // ---------------------------------------------------------------------------
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
+    };
+  }, []);
+
   return {
     sendMessage,
     messages,

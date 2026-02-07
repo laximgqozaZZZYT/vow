@@ -258,10 +258,10 @@ export function createApp(): Hono {
   // Requirements: 3.1, 3.6, 4.1
   app.route('/api/ai', aiRouter);
 
-  // Provider chat router - mounted at /api/ai/provider-chat
-  // Endpoint: POST /api/ai/provider-chat (SSE streaming)
-  // Note: Separate mount path to avoid conflict with aiRouter at /api/ai
-  app.route('/api/ai/provider-chat', providerChatRouter);
+  // Provider chat router - mounted at /api/provider-chat
+  // Endpoint: POST /api/provider-chat (SSE streaming)
+  // Note: Mounted separately from /api/ai to avoid Hono route prefix conflicts
+  app.route('/api/provider-chat', providerChatRouter);
 
   // Coaching router - mounted at /api/coaching
   // Endpoints: /api/coaching/proposals, /api/coaching/apply/:id,
