@@ -74,6 +74,10 @@ import {
   getActiveMcpServer,
   callMcpChat,
 } from '../services/mcp-settings-service.js';
+import {
+  checkChatRateLimit,
+  incrementChatUsage,
+} from '../services/rateLimitService.js';
 
 const logger = getLogger('agentsRouter');
 
@@ -225,6 +229,89 @@ async function requirePremiumOrAdmin(
   }
 }
 
+/**
+ * Auth middleware that allows free users with rate limiting.
+ * - Guest (unauthenticated) → 401
+ * - Admin → bypass all limits
+ * - Premium → bypass rate limits
+ * - Free user → rate limit check (5/day)
+ *
+ * Sets context variables: isAdmin, isPremium (both as `any` to match existing pattern)
+ */
+async function requireAuthWithRateLimit(
+  c: Context<{ Variables: AuthContext }>,
+  next: Next
+): Promise<Response | void> {
+  const user = c.get('user');
+  if (!user) {
+    return c.json({ error: 'Unauthorized' }, 401);
+  }
+
+  const userId = user.sub;
+  const userEmail = user.email?.toLowerCase() ?? '';
+  const supabase = getSupabaseClient();
+  const adminService = getAdminService(supabase);
+
+  // Check for admin access first
+  const isAdmin = await adminService.isAdmin(userId, userEmail);
+  if (isAdmin) {
+    c.set('isAdmin' as any, true);
+    c.set('isPremium' as any, true);
+    logger.info('Admin access granted (rate limit bypass)', { userId });
+    await next();
+    return;
+  }
+
+  // Check premium subscription
+  let isPremium = false;
+  try {
+    const subscriptionService = getSubscriptionService(supabase);
+    isPremium = await subscriptionService.hasPremiumAccess(userId);
+  } catch (error) {
+    logger.warning('Subscription check failed, treating as free user', {
+      userId,
+      error: (error as Error).message,
+    });
+  }
+
+  if (isPremium) {
+    c.set('isAdmin' as any, false);
+    c.set('isPremium' as any, true);
+    await next();
+    return;
+  }
+
+  // Free user - check rate limit
+  const ipAddress = c.req.header('x-forwarded-for') || c.req.header('x-real-ip') || 'unknown';
+  const rateLimitResult = await checkChatRateLimit(supabase, userId, ipAddress, false);
+
+  if (!rateLimitResult.allowed) {
+    const messages: Record<string, string> = {
+      daily_limit: '本日のAIチャット利用回数（5回）の上限に達しました。明日また利用できます。',
+      total_limit: 'AIチャットの累計利用回数の上限に達しました。Premiumプランへのアップグレードをご検討ください。',
+      ip_limit: 'このIPアドレスからの利用上限に達しました。',
+    };
+    return c.json(
+      {
+        error: 'RATE_LIMIT_EXCEEDED',
+        message: messages[rateLimitResult.reason!] || 'Rate limit exceeded',
+        remaining: rateLimitResult.remaining,
+        current: rateLimitResult.current,
+        upgradeUrl: '/settings/subscription',
+      },
+      429
+    );
+  }
+
+  c.set('isAdmin' as any, false);
+  c.set('isPremium' as any, false);
+  logger.info('Free user access granted with rate limit', {
+    userId,
+    remaining: rateLimitResult.remaining,
+  });
+  await next();
+}
+
 // =============================================================================
 // Router
 // =============================================================================
@@ -236,12 +323,13 @@ const agentsRouter = new Hono<{ Variables: AuthContext }>();
  *
  * Chat with VOW Coach Agent.
  * Supports both JSON response and SSE streaming.
+ * Free users can use this with rate limiting (5/day).
  *
  * Requirements: B-005
  */
 agentsRouter.post(
   '/chat',
-  requirePremiumOrAdmin,
+  requireAuthWithRateLimit,
   zValidator('json', ChatRequestSchema),
   async (c: Context<{ Variables: AuthContext }>) => {
     const user = c.get('user');
@@ -344,6 +432,13 @@ agentsRouter.post(
                 suggestions: response.suggestions,
               }),
             });
+
+            // Increment usage for free users after successful chat
+            const isPremiumSSE = c.get('isPremium' as any);
+            if (!isPremiumSSE) {
+              const ipAddr = c.req.header('x-forwarded-for') || c.req.header('x-real-ip') || 'unknown';
+              await incrementChatUsage(supabase, userId, ipAddr);
+            }
           } catch (error) {
             await stream.writeSSE({
               event: 'error',
@@ -357,10 +452,23 @@ agentsRouter.post(
       }
 
       // JSON response
+      logger.info('Processing chat (JSON mode)', {
+        userId,
+        sessionId: executionContext.sessionId,
+        sessionIdSource: body.sessionId ? 'client' : 'generated',
+        messagePreview: body.message.substring(0, 50),
+      });
       const response: CoachResponse = await coachAgent.processMessage(
         body.message,
         executionContext
       );
+
+      // Increment usage for free users after successful chat
+      const isPremium = c.get('isPremium' as any);
+      if (!isPremium) {
+        const ipAddr = c.req.header('x-forwarded-for') || c.req.header('x-real-ip') || 'unknown';
+        await incrementChatUsage(supabase, userId, ipAddr);
+      }
 
       logger.info('Chat response generated', {
         userId,
@@ -395,12 +503,13 @@ agentsRouter.post(
  *
  * Chat with Mastra Multi-Agent System.
  * Manager agent coordinates responses from multiple specialized agents.
+ * Free users can use this with rate limiting (5/day).
  *
  * Requirements: B-005, Multi-Agent System
  */
 agentsRouter.post(
   '/multi-chat',
-  requirePremiumOrAdmin,
+  requireAuthWithRateLimit,
   zValidator('json', MultiAgentChatRequestSchema),
   async (c: Context<{ Variables: AuthContext }>) => {
     const user = c.get('user');
@@ -591,6 +700,13 @@ agentsRouter.post(
                 timestamp: response.timestamp,
               }),
             });
+
+            // Increment usage for free users after successful chat
+            const isPremiumSSE = c.get('isPremium' as any);
+            if (!isPremiumSSE) {
+              const ipAddr = c.req.header('x-forwarded-for') || c.req.header('x-real-ip') || 'unknown';
+              await incrementChatUsage(supabase, userId, ipAddr);
+            }
           } catch (error) {
             await stream.writeSSE({
               event: 'error',
@@ -654,6 +770,13 @@ agentsRouter.post(
       };
 
       const response: MultiAgentResponse = await getMultiAgentResponse(body.message, userId, options);
+
+      // Increment usage for free users after successful chat
+      const isPremium = c.get('isPremium' as any);
+      if (!isPremium) {
+        const ipAddr = c.req.header('x-forwarded-for') || c.req.header('x-real-ip') || 'unknown';
+        await incrementChatUsage(supabase, userId, ipAddr);
+      }
 
       logger.info('Multi-agent chat response generated', {
         userId,

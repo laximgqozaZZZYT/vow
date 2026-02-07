@@ -211,9 +211,13 @@ export function MOCSection({
   }, [server.agents, locale]);
 
   // Mastra agent hook - default AI chat
+  // SSE streaming disabled: handle() from hono/aws-lambda buffers streamSSE() responses,
+  // causing empty body on Lambda/API Gateway timeout. JSON response is more reliable
+  // and appropriate for structured AICandidateResponse JSON format.
   const mastraAgent = useMastraAgent({
     authToken,
-    enableStreaming: true,
+    enableStreaming: false,
+    userId,
   });
 
   // Get the selected MCP server for chat

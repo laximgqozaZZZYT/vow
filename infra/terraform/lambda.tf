@@ -191,8 +191,10 @@ resource "aws_lambda_function" "hono_api" {
       CORS_ORIGINS = jsonencode(var.cors_origins)
 
       # DynamoDB Tables
-      AGENT_SESSIONS_TABLE   = aws_dynamodb_table.agent_sessions.name
-      MCP_CONNECTIONS_TABLE  = aws_dynamodb_table.mcp_connections.name
+      AGENT_SESSIONS_TABLE       = aws_dynamodb_table.agent_sessions.name
+      MCP_CONNECTIONS_TABLE      = aws_dynamodb_table.mcp_connections.name
+      USER_CREDENTIALS_TABLE     = aws_dynamodb_table.user_credentials.name
+      CREDENTIALS_ENCRYPTION_KEY = var.credentials_encryption_key
     }
   }
 

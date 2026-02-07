@@ -87,6 +87,42 @@ resource "aws_dynamodb_table" "mcp_connections" {
 }
 
 # =================================================================
+# User Credentials Table
+# Stores encrypted user API credentials (OpenAI, Anthropic, etc.)
+# =================================================================
+
+resource "aws_dynamodb_table" "user_credentials" {
+  name         = "vow_user_credentials"
+  billing_mode = "PAY_PER_REQUEST"
+
+  # Primary Key: userId
+  hash_key = "userId"
+
+  # Sort Key: credentialType (openai, anthropic, gemini, codex, custom)
+  range_key = "credentialType"
+
+  attribute {
+    name = "userId"
+    type = "S"
+  }
+
+  attribute {
+    name = "credentialType"
+    type = "S"
+  }
+
+  point_in_time_recovery {
+    enabled = true
+  }
+
+  tags = {
+    Name        = "vow-user-credentials"
+    Purpose     = "User API Credentials Storage"
+    Environment = var.environment
+  }
+}
+
+# =================================================================
 # IAM Policy for Lambda DynamoDB Access
 # =================================================================
 
@@ -110,7 +146,8 @@ resource "aws_iam_role_policy" "lambda_dynamodb" {
         Resource = [
           aws_dynamodb_table.agent_sessions.arn,
           "${aws_dynamodb_table.agent_sessions.arn}/index/*",
-          aws_dynamodb_table.mcp_connections.arn
+          aws_dynamodb_table.mcp_connections.arn,
+          aws_dynamodb_table.user_credentials.arn
         ]
       }
     ]
@@ -139,4 +176,14 @@ output "mcp_connections_table_name" {
 output "mcp_connections_table_arn" {
   description = "DynamoDB table ARN for MCP connections"
   value       = aws_dynamodb_table.mcp_connections.arn
+}
+
+output "user_credentials_table_name" {
+  description = "DynamoDB table name for user credentials"
+  value       = aws_dynamodb_table.user_credentials.name
+}
+
+output "user_credentials_table_arn" {
+  description = "DynamoDB table ARN for user credentials"
+  value       = aws_dynamodb_table.user_credentials.arn
 }

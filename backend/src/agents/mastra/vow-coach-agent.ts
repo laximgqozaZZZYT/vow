@@ -36,7 +36,7 @@ import { getPersonalizationEngine } from '../../services/personalizationEngine.j
 import { getSubscriptionService } from '../../services/subscriptionService.js';
 import { getSessionStore, type SessionStore, type SessionOptions } from '../../services/session-store.js';
 import { getLogger } from '../../utils/logger.js';
-import { getSettings } from '../../config.js';
+import { getOpenAIApiKey, getOpenAIModel } from '../../services/credentials-store.js';
 import type { UserContext } from '../../types/personalization.js';
 import type { BabyStepPlan } from '../../types/thli.js';
 
@@ -2240,6 +2240,16 @@ export class VowCoachAgent {
       },
     });
 
+    logger.info('[processMessage] Session loaded', {
+      userId: context.userId,
+      sessionId: session.id,
+      existingMessageCount: session.messages.length,
+      existingMessages: session.messages.map(m => ({
+        role: m.role,
+        contentPreview: m.content.substring(0, 40),
+      })),
+    });
+
     // Add user message to session
     const userMessage: CoachMessage = {
       role: 'user',
@@ -2247,6 +2257,11 @@ export class VowCoachAgent {
       timestamp: new Date(),
     };
     await addMessageToSessionAsync(session, userMessage);
+
+    logger.info('[processMessage] After adding user message', {
+      sessionId: session.id,
+      totalMessageCount: session.messages.length,
+    });
 
     // Load user context if not provided
     if (!context.userContext) {
@@ -2295,21 +2310,24 @@ export class VowCoachAgent {
   ): Promise<CoachResponse> {
     const isJa = (context.locale ?? this.config.defaultLocale) === 'ja';
     const userContext = session.userContext ?? context.userContext;
-    const settings = getSettings();
 
     // Check for Manager Mode
     const isManagerMode = message.startsWith('[Manager Mode]');
     const actualMessage = isManagerMode ? message.replace('[Manager Mode] ', '') : message;
 
+    // Get API key: user-saved key > env var (via credentials-store helper)
+    const effectiveApiKey = await getOpenAIApiKey(context.userId);
+    const effectiveModel = await getOpenAIModel(context.userId) || this.config.model;
+
     // Check if OpenAI is configured
-    if (!settings.openaiApiKey) {
+    if (!effectiveApiKey) {
       logger.warning('OpenAI API key not configured, returning fallback response');
       return this.getFallbackResponse(isJa, userContext, session.messages.length, isManagerMode, actualMessage);
     }
 
     try {
-      // Initialize OpenAI client
-      const openai = new OpenAI({ apiKey: settings.openaiApiKey });
+      // Initialize OpenAI client with user's key or project key
+      const openai = new OpenAI({ apiKey: effectiveApiKey });
 
       // Build system prompt - use manager prompt for Manager Mode
       const systemPrompt = isManagerMode
@@ -2323,6 +2341,12 @@ export class VowCoachAgent {
 
       // Add conversation history (last 10 messages)
       const historyMessages = session.messages.slice(-10);
+      logger.info('[generateResponse] Building OpenAI messages', {
+        sessionId: context.sessionId,
+        sessionMessageCount: session.messages.length,
+        historyMessageCount: historyMessages.length,
+        historyRoles: historyMessages.map(m => m.role),
+      });
       for (const msg of historyMessages) {
         if (msg.role === 'user' || msg.role === 'assistant') {
           // Clean up Manager Mode prefix from history if present
@@ -2343,6 +2367,12 @@ export class VowCoachAgent {
         messages.push({ role: 'user', content: actualMessage });
       }
 
+      logger.info('[generateResponse] Final messages to OpenAI', {
+        sessionId: context.sessionId,
+        totalMessages: messages.length,
+        messageRoles: messages.map(m => m.role),
+      });
+
       // Use JSON candidate format mode (AICandidateResponse)
       // This mode outputs structured JSON with candidates instead of using tools
       const useCandidateJsonMode = true; // Enable for all responses
@@ -2351,14 +2381,14 @@ export class VowCoachAgent {
         logger.info('Calling OpenAI with JSON candidate format mode', {
           userId: context.userId,
           sessionId: context.sessionId,
-          model: this.config.model,
+          model: effectiveModel,
           messageCount: messages.length,
           isManagerMode,
         });
 
         // Call OpenAI with JSON response format (no tools)
         const response = await openai.chat.completions.create({
-          model: this.config.model,
+          model: effectiveModel,
           messages,
           temperature: this.config.temperature,
           max_tokens: this.config.maxTokens,
@@ -2410,7 +2440,7 @@ export class VowCoachAgent {
       logger.info('Calling OpenAI for coach response', {
         userId: context.userId,
         sessionId: context.sessionId,
-        model: this.config.model,
+        model: effectiveModel,
         messageCount: messages.length,
         toolCount: tools.length,
         toolNames: tools.map(t => t.type === 'function' ? t.function.name : 'unknown'),
@@ -2422,7 +2452,7 @@ export class VowCoachAgent {
       // IMPORTANT: tool_choice: 'required' forces the AI to always call at least one tool
       // This ensures that every response includes clickable buttons (候補ボタン)
       const response = await openai.chat.completions.create({
-        model: this.config.model,
+        model: effectiveModel,
         messages,
         temperature: this.config.temperature,
         max_tokens: this.config.maxTokens,
@@ -2525,7 +2555,7 @@ export class VowCoachAgent {
 
         // Get final response with tool results
         const finalResponse = await openai.chat.completions.create({
-          model: this.config.model,
+          model: effectiveModel,
           messages: toolResultMessages,
           temperature: this.config.temperature,
           max_tokens: this.config.maxTokens,

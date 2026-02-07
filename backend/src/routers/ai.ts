@@ -449,7 +449,7 @@ aiRouter.post(
 
       // Use the new AI Coach Service with Function Calling
       const { createAICoachService } = await import('../services/aiCoachService.js');
-      const coachService = createAICoachService(supabase, userId);
+      const coachService = await createAICoachService(supabase, userId);
 
       if (!coachService.isAvailable()) {
         throw new AIServiceError('AIサービスが利用できません', AIErrorCode.PROVIDER_ERROR);

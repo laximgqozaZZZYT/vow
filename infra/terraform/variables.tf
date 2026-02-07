@@ -293,6 +293,13 @@ variable "token_encryption_key" {
   sensitive   = true
 }
 
+variable "credentials_encryption_key" {
+  description = "Encryption key for user API credentials (AES-256-GCM via scrypt)"
+  type        = string
+  default     = ""
+  sensitive   = true
+}
+
 # =================================================================
 # Supabase Variables (for Slack connection storage)
 # =================================================================

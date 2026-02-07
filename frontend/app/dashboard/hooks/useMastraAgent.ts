@@ -65,6 +65,8 @@ export interface UseMastraAgentOptions {
   apiEndpoint?: string;
   /** Initial system message */
   systemMessage?: string;
+  /** User ID for user-specific session isolation */
+  userId?: string;
   /** Callback when a message is received */
   onMessage?: (message: MastraMessage) => void;
   /** Callback when an error occurs */
@@ -112,6 +114,7 @@ export function useMastraAgent(options?: UseMastraAgentOptions): UseMastraAgentR
     enableStreaming = true,
     apiEndpoint,
     systemMessage,
+    userId,
     onMessage,
     onError,
   } = options ?? {};
@@ -144,8 +147,46 @@ export function useMastraAgent(options?: UseMastraAgentOptions): UseMastraAgentR
   const [isStreaming, setIsStreaming] = useState(false);
   const [error, setError] = useState<Error | null>(null);
   const [connectionState, setConnectionState] = useState<'idle' | 'connecting' | 'streaming' | 'error'>('idle');
-  // Session ID for multi-turn conversations - persisted across messages
-  const [sessionId, setSessionId] = useState<string | null>(null);
+
+  // Session ID for multi-turn conversations - persisted in localStorage across page reloads
+  // Uses user-specific key for isolation between users (same pattern as useMcpChat)
+  const getSessionStorageKey = (): string => {
+    if (userId) {
+      return `vow_mastra_session_${userId}`;
+    }
+    return 'vow_mastra_session_anonymous';
+  };
+
+  const getStoredSessionId = (): string | null => {
+    if (typeof window === 'undefined') return null;
+    const key = getSessionStorageKey();
+    const stored = localStorage.getItem(key);
+    if (stored) {
+      console.log('[useMastraAgent] Restored sessionId from localStorage:', { key, sessionId: stored });
+    }
+    return stored;
+  };
+
+  const [sessionId, setSessionId] = useState<string | null>(() => getStoredSessionId());
+
+  // Update sessionId in localStorage when it changes
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const key = getSessionStorageKey();
+    if (sessionId) {
+      localStorage.setItem(key, sessionId);
+      console.log('[useMastraAgent] Persisted sessionId to localStorage:', { key, sessionId });
+    }
+  }, [sessionId, userId]);
+
+  // Update sessionId when userId changes
+  useEffect(() => {
+    const newSessionId = getStoredSessionId();
+    if (sessionId !== newSessionId) {
+      console.log('[useMastraAgent] userId changed, updating sessionId:', { oldId: sessionId, newId: newSessionId, userId });
+      setSessionId(newSessionId);
+    }
+  }, [userId]);
 
   // Refs
   const abortControllerRef = useRef<AbortController | null>(null);
@@ -572,8 +613,12 @@ export function useMastraAgent(options?: UseMastraAgentOptions): UseMastraAgentR
     setError(null);
     setConnectionState('idle');
     setSessionId(null); // Reset session for new conversation
+    // Clear persisted sessionId from localStorage
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem(getSessionStorageKey());
+    }
     lastUserMessageRef.current = null;
-  }, [systemMessage]);
+  }, [systemMessage, userId]);
 
   /**
    * Clear error state

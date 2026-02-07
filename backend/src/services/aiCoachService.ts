@@ -18,6 +18,7 @@ import OpenAI from 'openai';
 import type { ChatCompletionMessageParam, ChatCompletionTool } from 'openai/resources/chat/completions';
 import { getSettings } from '../config.js';
 import { getLogger } from '../utils/logger.js';
+import { getOpenAIApiKey } from './credentials-store.js';
 import { HabitRepository } from '../repositories/habitRepository.js';
 import { ActivityRepository } from '../repositories/activityRepository.js';
 import { GoalRepository } from '../repositories/goalRepository.js';
@@ -935,6 +936,21 @@ export class AICoachService {
       mode: getMigrationMode(),
       openaiConfigured: !!this.openai,
     });
+  }
+
+  /**
+   * Load user-saved API key from credentials store.
+   * Call after construction to override the env var key with user's saved key.
+   */
+  async loadUserApiKey(): Promise<void> {
+    const userApiKey = await getOpenAIApiKey(this.userId);
+    if (userApiKey) {
+      this.openai = new OpenAI({ apiKey: userApiKey });
+      logger.info('AICoachService loaded user API key', {
+        userId: this.userId,
+        source: userApiKey !== getSettings().openaiApiKey ? 'user-saved' : 'env-var',
+      });
+    }
   }
 
   /**
@@ -3485,13 +3501,16 @@ ${clarification.questions.map((q, i) => `${i + 1}. ${q}`).join('\n')}
 }
 
 /**
- * Factory function to create AI Coach Service
+ * Factory function to create AI Coach Service.
+ * Loads user-saved API key from credentials store if available.
  */
-export function createAICoachService(
+export async function createAICoachService(
   supabase: SupabaseClient,
   userId: string
-): AICoachService {
-  return new AICoachService(supabase, userId);
+): Promise<AICoachService> {
+  const service = new AICoachService(supabase, userId);
+  await service.loadUserApiKey();
+  return service;
 }
 
 // =============================================================================

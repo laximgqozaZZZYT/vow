@@ -22,10 +22,18 @@ import {
   QueryCommand,
   UpdateCommand,
 } from '@aws-sdk/lib-dynamodb';
+import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'node:fs';
+import { join, dirname } from 'node:path';
 import { getLogger } from '../utils/logger.js';
 import type { CoachSession, CoachMessage } from '../agents/mastra/vow-coach-agent.js';
 
 const logger = getLogger('services.session-store');
+
+/** File path for persisting in-memory sessions across dev server restarts */
+const DEV_SESSION_FILE = join(
+  process.env['HOME'] || '/tmp',
+  '.vow-dev-sessions.json'
+);
 
 // =============================================================================
 // Constants
@@ -473,14 +481,74 @@ export class DynamoDBSessionStore implements SessionStore {
 export class InMemorySessionStore implements SessionStore {
   private readonly sessions: Map<string, StoredSession>;
   private readonly defaultTtlSeconds: number;
+  private readonly persistFile: string;
 
   constructor(options?: { ttlSeconds?: number }) {
     this.sessions = new Map();
     this.defaultTtlSeconds = options?.ttlSeconds || DEFAULT_TTL_SECONDS;
+    this.persistFile = DEV_SESSION_FILE;
+
+    // Load persisted sessions from file (survives tsx watch restarts)
+    this.loadFromFile();
 
     logger.info('InMemorySessionStore initialized', {
       ttlSeconds: this.defaultTtlSeconds,
+      persistFile: this.persistFile,
+      loadedSessions: this.sessions.size,
     });
+  }
+
+  /**
+   * Load sessions from persistence file (for dev server restart survival)
+   */
+  private loadFromFile(): void {
+    try {
+      if (!existsSync(this.persistFile)) {
+        return;
+      }
+      const data = readFileSync(this.persistFile, 'utf-8');
+      const entries: Array<[string, StoredSession]> = JSON.parse(data);
+      const now = Math.floor(Date.now() / 1000);
+      let loaded = 0;
+      let expired = 0;
+      for (const [key, session] of entries) {
+        if (session.ttl >= now) {
+          this.sessions.set(key, session);
+          loaded++;
+        } else {
+          expired++;
+        }
+      }
+      logger.info('Loaded sessions from file', {
+        file: this.persistFile,
+        loaded,
+        expired,
+      });
+    } catch (err) {
+      logger.warning('Failed to load sessions from file (starting fresh)', {
+        file: this.persistFile,
+        error: (err as Error).message,
+      });
+    }
+  }
+
+  /**
+   * Persist sessions to file (fire-and-forget, best effort)
+   */
+  private saveToFile(): void {
+    try {
+      const dir = dirname(this.persistFile);
+      if (!existsSync(dir)) {
+        mkdirSync(dir, { recursive: true });
+      }
+      const entries = Array.from(this.sessions.entries());
+      writeFileSync(this.persistFile, JSON.stringify(entries), 'utf-8');
+    } catch (err) {
+      logger.warning('Failed to persist sessions to file', {
+        file: this.persistFile,
+        error: (err as Error).message,
+      });
+    }
   }
 
   /**
@@ -515,6 +583,7 @@ export class InMemorySessionStore implements SessionStore {
     const stored = this.sessions.get(key);
 
     if (!stored) {
+      logger.info('Session not found in memory', { sessionId, userId, key, totalSessions: this.sessions.size });
       return null;
     }
 
@@ -522,9 +591,15 @@ export class InMemorySessionStore implements SessionStore {
     const now = Math.floor(Date.now() / 1000);
     if (stored.ttl < now) {
       this.sessions.delete(key);
+      logger.info('Session expired (TTL)', { sessionId, userId });
       return null;
     }
 
+    logger.info('Session found in memory', {
+      sessionId,
+      userId,
+      messageCount: stored.messages.length,
+    });
     return this.toCoachSession(stored);
   }
 
@@ -553,7 +628,7 @@ export class InMemorySessionStore implements SessionStore {
     };
 
     await this.saveSession(session, options);
-    logger.info('Created new in-memory session', { sessionId: id, userId });
+    logger.info('Created new in-memory session', { sessionId: id, userId, totalSessions: this.sessions.size });
 
     return session;
   }
@@ -582,6 +657,7 @@ export class InMemorySessionStore implements SessionStore {
 
     const key = this.getKey(session.id, session.userId);
     this.sessions.set(key, stored);
+    this.saveToFile();
 
     logger.debug('In-memory session saved', {
       sessionId: session.id,
@@ -613,17 +689,20 @@ export class InMemorySessionStore implements SessionStore {
     stored.ttl = Math.floor(now.getTime() / 1000) + this.defaultTtlSeconds;
 
     this.sessions.set(key, stored);
+    this.saveToFile();
 
-    logger.debug('Message added to in-memory session', {
+    logger.info('Message added to in-memory session', {
       sessionId,
       userId,
       role: message.role,
+      totalMessages: stored.messages.length,
     });
   }
 
   async deleteSession(sessionId: string, userId: string): Promise<void> {
     const key = this.getKey(sessionId, userId);
     this.sessions.delete(key);
+    this.saveToFile();
     logger.info('In-memory session deleted', { sessionId, userId });
   }
 
@@ -661,6 +740,7 @@ export class InMemorySessionStore implements SessionStore {
     stored.updatedAt = new Date().toISOString();
 
     this.sessions.set(key, stored);
+    this.saveToFile();
     logger.debug('In-memory quota incremented', { sessionId, userId });
   }
 
