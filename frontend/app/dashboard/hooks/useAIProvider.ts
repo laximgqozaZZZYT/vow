@@ -216,10 +216,18 @@ export function useAIProvider(authToken: string | null): UseAIProviderReturn {
   // Resolve selected provider
   // -------------------------------------------------------------------------
   const selectedProvider = useMemo((): AIProviderOption | null => {
-    if (!selectedId) return availableProviders[0] ?? null;
+    if (!selectedId) {
+      // Prefer the first available provider over unavailable ones
+      const firstAvailable = availableProviders.find((p) => p.isAvailable);
+      return firstAvailable ?? availableProviders[0] ?? null;
+    }
     const found = availableProviders.find((p) => p.id === selectedId);
     // Fall back to first available if saved selection no longer exists
-    return found ?? availableProviders[0] ?? null;
+    if (!found) {
+      const firstAvailable = availableProviders.find((p) => p.isAvailable);
+      return firstAvailable ?? availableProviders[0] ?? null;
+    }
+    return found;
   }, [selectedId, availableProviders]);
 
   // -------------------------------------------------------------------------

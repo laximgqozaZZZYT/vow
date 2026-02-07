@@ -251,8 +251,9 @@ export function MOCSection({
     },
   });
 
-  // Active chat agent - MCP or API provider based on selection
-  const activeAgent = isMcp ? mcpChat : providerChat;
+  // Active chat agent - use MCP only if selected AND server is actually configured
+  const canUseMcp = isMcp && selectedMcpServer != null;
+  const activeAgent = canUseMcp ? mcpChat : providerChat;
 
   // Clear provider chat messages when switching providers to prevent confusion
   const prevProviderIdRef = useRef<string | null>(null);
