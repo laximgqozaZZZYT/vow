@@ -46,6 +46,7 @@ import { createCredentialsRouter } from './routers/credentials.js';
 import { createIssuesRouter } from './routers/issues.js';
 import { createMcpInstallerRouter } from './routers/mcpInstaller.js';
 import { cliTokenRouter } from './routers/cliTokens.js';
+import { providerChatRouter } from './routers/providerChat.js';
 
 // Error handling imports
 import { AppError, getUserFriendlyMessage } from './errors/index.js';
@@ -256,6 +257,11 @@ export function createApp(): Hono {
   // Note: Requires Premium subscription
   // Requirements: 3.1, 3.6, 4.1
   app.route('/api/ai', aiRouter);
+
+  // Provider chat router - mounted at /api/ai
+  // Endpoints: /api/ai/provider-chat (POST, SSE streaming)
+  // Note: Unified AI provider abstraction for streaming chat
+  app.route('/api/ai', providerChatRouter);
 
   // Coaching router - mounted at /api/coaching
   // Endpoints: /api/coaching/proposals, /api/coaching/apply/:id,

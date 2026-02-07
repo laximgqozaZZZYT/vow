@@ -53,6 +53,9 @@ import { AgentListView } from './Agent.ListView';
 import { RemoteAgentInstaller } from './Agent.RemoteInstaller';
 import { RemoteAgentGuide } from './Agent.RemoteGuide';
 import { RemoteTaskExecutor } from './Agent.RemoteTaskExecutor';
+import { useAIProvider } from '../hooks/useAIProvider';
+import { useProviderChat } from '../hooks/useProviderChat';
+import { ProviderSelector } from './Chat.ProviderSelector';
 
 // Type definitions moved to types/moc.types.ts
 // Re-export commonly used types for backward compatibility
@@ -233,8 +236,33 @@ export function MOCSection({
     },
   });
 
-  // Active chat agent - always MCP
-  const activeAgent = mcpChat;
+  // AI Provider selection (MCP servers + API providers like OpenAI)
+  const { availableProviders, selectedProvider, switchProvider, isMcp } = useAIProvider(authToken ?? null);
+
+  // API provider chat hook (used when an API provider is selected)
+  const providerChat = useProviderChat({
+    authToken: authToken ?? null,
+    provider: selectedProvider?.apiProvider || 'openai',
+    model: selectedProvider?.model,
+    systemMessage: aiCoachSystemPrompt,
+    userId,
+    onError: (error) => {
+      console.error('[MOCSection] Provider chat error:', error);
+    },
+  });
+
+  // Active chat agent - MCP or API provider based on selection
+  const activeAgent = isMcp ? mcpChat : providerChat;
+
+  // Clear provider chat messages when switching providers to prevent confusion
+  const prevProviderIdRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (selectedProvider && prevProviderIdRef.current !== null && prevProviderIdRef.current !== selectedProvider.id) {
+      providerChat.clearMessages();
+    }
+    prevProviderIdRef.current = selectedProvider?.id ?? null;
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedProvider?.id]);
 
   // Connection status
   const isConnected = useMemo(() => {
@@ -1106,12 +1134,12 @@ export function MOCSection({
           {/* Chat Agent Status Indicator */}
           {(() => {
             const hasConnectedServers = Array.from(server.connections.values()).some(c => c.connectionState === 'connected');
-            const isUsingMcp = server.chatAgentSettings.useMcpAgent && hasConnectedServers;
+            const isUsingMcp = isMcp && server.chatAgentSettings.useMcpAgent && hasConnectedServers;
             return (
               <div className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-muted/50 text-xs">
-                <div className={`w-2 h-2 rounded-full ${isUsingMcp ? 'bg-green-500' : 'bg-gray-400'}`} />
+                <div className={`w-2 h-2 rounded-full ${isUsingMcp || !isMcp ? 'bg-green-500' : 'bg-gray-400'}`} />
                 <span className="text-muted-foreground">
-                  {isUsingMcp ? 'MCP' : 'AI'}
+                  {isMcp ? 'MCP' : (selectedProvider?.name || 'API')}
                 </span>
               </div>
             );
@@ -1184,6 +1212,14 @@ export function MOCSection({
       <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
         {activeTab === 'chat' ? (
           <>
+            {/* Provider Selector - shown when multiple AI providers are available */}
+            {availableProviders.length > 1 && (
+              <ProviderSelector
+                providers={availableProviders}
+                selectedId={selectedProvider?.id || ''}
+                onSelect={switchProvider}
+              />
+            )}
             {/* Chat Messages - Scrollable area */}
             <div className="flex-1 overflow-y-auto min-h-0">
               <GroupChatView
@@ -1353,7 +1389,7 @@ export function MOCSection({
                   </p>
                   <div className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-green-500/10 text-green-600 dark:text-green-400">
                     <span className="w-1.5 h-1.5 rounded-full bg-current"></span>
-                    <span>Claude Code (MCP)</span>
+                    <span>{selectedProvider ? selectedProvider.name : 'Claude Code (MCP)'}</span>
                   </div>
                 </div>
               </div>
