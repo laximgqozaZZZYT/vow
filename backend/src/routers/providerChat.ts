@@ -62,7 +62,7 @@ const providerChatRouter = new Hono<{ Variables: AuthContext }>();
  * Requires JWT authentication.
  */
 providerChatRouter.post(
-  '/provider-chat',
+  '/',
   zValidator('json', ProviderChatSchema),
   async (c: Context<{ Variables: AuthContext }>) => {
     const user = c.get('user');
