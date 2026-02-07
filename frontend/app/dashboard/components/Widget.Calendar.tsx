@@ -39,11 +39,14 @@ export default function CalendarWidget({
     return x;
   }
   
-  function parseYmd(s?: string) { 
-    if (!s) return undefined; 
-    const parts = s.split('-').map(x => Number(x)); 
-    if (parts.length>=3 && !Number.isNaN(parts[0])) return new Date(parts[0], parts[1]-1, parts[2]); 
-    const dd = new Date(s); 
+  function parseYmd(s?: string) {
+    if (!s || typeof s !== 'string') return undefined;
+    const parts = s.slice(0, 10).split('-').map(x => Number(x));
+    if (parts.length >= 3 && parts.every(p => !Number.isNaN(p))) {
+      const d = new Date(parts[0], parts[1] - 1, parts[2]);
+      return isNaN(d.getTime()) ? undefined : d;
+    }
+    const dd = new Date(s);
     return isNaN(dd.getTime()) ? undefined : dd;
   }
 
