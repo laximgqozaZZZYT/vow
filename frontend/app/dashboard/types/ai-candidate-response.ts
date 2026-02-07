@@ -487,33 +487,93 @@ export function isReplyCandidate(candidate: AnyCandidate): candidate is ReplyCan
 
 /**
  * JSONコードブロックからAICandidateResponseを抽出
+ * 複数のパターンに対応し、パース失敗時はテキストフォールバックを返す
  */
 export function extractAICandidateResponse(content: string): AICandidateResponse | null {
-  // JSONコードブロックを探す
-  const jsonMatch = content.match(/```json\s*([\s\S]*?)\s*```/);
-  if (!jsonMatch) {
-    // コードブロックなしの場合、直接JSONとしてパースを試みる
-    try {
-      const parsed = JSON.parse(content);
-      if (isAICandidateResponse(parsed)) {
-        return parsed;
-      }
-    } catch {
-      return null;
-    }
-    return null;
+  if (!content || !content.trim()) return null;
+
+  const trimmed = content.trim();
+
+  // Pattern 1: ```json { ... } ``` コードブロック (最優先)
+  const jsonBlockMatch = trimmed.match(/```(?:json)?\s*(\{[\s\S]*?\})\s*```/);
+  if (jsonBlockMatch) {
+    const result = tryParseCandidate(jsonBlockMatch[1]);
+    if (result) return result;
   }
 
+  // Pattern 2: コンテンツ全体が JSON オブジェクト
+  if (trimmed.startsWith('{') && trimmed.endsWith('}')) {
+    const result = tryParseCandidate(trimmed);
+    if (result) return result;
+  }
+
+  // Pattern 3: テキスト中に埋め込まれた JSON オブジェクトを検出
+  // "message" フィールドを含むJSONオブジェクトを後方から探す
+  const embeddedJsonMatch = trimmed.match(/(\{[\s\S]*"message"\s*:[\s\S]*\})\s*$/);
+  if (embeddedJsonMatch) {
+    const result = tryParseCandidate(embeddedJsonMatch[1]);
+    if (result) return result;
+  }
+
+  // Pattern 4: パース失敗 -- テキスト応答としてフォールバック
+  return createTextFallbackResponse(trimmed);
+}
+
+/**
+ * JSON文字列をパースしてAICandidateResponseとして検証
+ */
+export function tryParseCandidate(jsonStr: string): AICandidateResponse | null {
   try {
-    const parsed = JSON.parse(jsonMatch[1]);
+    const parsed = JSON.parse(jsonStr);
     if (isAICandidateResponse(parsed)) {
       return parsed;
     }
   } catch {
+    // JSON parse failed - not a valid JSON string
+  }
+  return null;
+}
+
+/**
+ * テキスト応答のフォールバックレスポンスを生成
+ * AIがJSON形式を返さなかった場合に、テキストをmessageとして表示
+ */
+export function createTextFallbackResponse(content: string): AICandidateResponse | null {
+  // 不完全なJSON/コードブロックマーカーを除去
+  const cleanContent = content
+    .replace(/```json\s*/g, '')
+    .replace(/```\s*/g, '')
+    .trim();
+
+  // 空または非常に短いコンテンツは無視
+  if (!cleanContent || cleanContent.length < 2) return null;
+
+  // 明らかにJSON断片（ストリーミング中の不完全データ）の場合はnullを返す
+  // これにより呼び出し元でストリーミング完了後に再試行できる
+  if (cleanContent.startsWith('{') && !cleanContent.endsWith('}')) {
     return null;
   }
 
-  return null;
+  return {
+    message: cleanContent,
+    context: {
+      aboutType: null,
+      aboutOperation: null,
+      categories: [],
+    },
+    gatheredRequirements: {
+      explicit: {},
+      inferred: {},
+      completeness: 0,
+    },
+    candidateTypes: {
+      showGoals: false,
+      showHabits: false,
+      showStickies: false,
+      showReplies: false,
+    },
+    replies: [],
+  };
 }
 
 /**
