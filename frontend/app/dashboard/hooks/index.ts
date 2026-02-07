@@ -102,3 +102,11 @@ export {
   type Selectable,
   type UseBulkSelectionReturn
 } from './useBulkSelection';
+
+// Role selection (TASK-04)
+export {
+  useRoleSelection,
+  type RoleOption,
+  type UseRoleSelectionOptions,
+  type UseRoleSelectionReturn
+} from './useRoleSelection';

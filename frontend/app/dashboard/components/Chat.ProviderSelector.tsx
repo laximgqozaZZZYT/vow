@@ -48,7 +48,7 @@ export function ProviderSelector({
   if (providers.length === 0) return null;
 
   return (
-    <div className="flex items-center gap-2 px-2 py-1 border-b border-border">
+    <div className="flex items-center gap-2 px-2 py-1">
       <label className="text-xs text-muted-foreground whitespace-nowrap">AI:</label>
       <select
         value={selectedId}

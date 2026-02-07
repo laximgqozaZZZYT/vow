@@ -56,6 +56,8 @@ import { RemoteTaskExecutor } from './Agent.RemoteTaskExecutor';
 import { useAIProvider } from '../hooks/useAIProvider';
 import { useProviderChat } from '../hooks/useProviderChat';
 import { ProviderSelector } from './Chat.ProviderSelector';
+import { RoleSelector } from './Chat.RoleSelector';
+import { useRoleSelection } from '../hooks/useRoleSelection';
 import { usePromptTemplate } from '../hooks/usePromptTemplate';
 
 // Type definitions moved to types/moc.types.ts
@@ -305,28 +307,42 @@ export function MOCSection({
     return serverAgents[0]?.id;
   }, [server.chatAgentSettings, selectedMcpServer, server.agents]);
 
-  // Get AI Coach system prompt for JSON format responses
-  // Uses backend API with SWR caching, falls back to local ai-coach-prompt.ts
-  const { prompt: aiCoachSystemPrompt, source: promptSource } = useRolePrompt('AICoach', locale, {
+  // AI Provider selection (MCP servers + API providers like OpenAI)
+  const { availableProviders, selectedProvider, switchProvider, isMcp } = useAIProvider(authToken ?? null);
+
+  // Role selection (AICoach, remoteCli, etc.)
+  const {
+    selectedRole,
+    switchRole,
+    availableRoles,
+    isRemoteCli,
+    isRemoteCliEnabled,
+    roleConfig,
+  } = useRoleSelection({ isMcpSelected: selectedProvider?.source === 'mcp', locale });
+
+  // Get system prompt for the currently selected role
+  // Uses backend API with SWR caching, falls back to local role-prompts.ts
+  const { prompt: currentSystemPrompt, source: promptSource } = useRolePrompt(selectedRole, locale, {
     authToken,
   });
   useEffect(() => {
-    console.log('[MOCSection] AI Coach system prompt loaded:', {
+    console.log('[MOCSection] System prompt loaded:', {
+      role: selectedRole,
       locale,
-      promptLength: aiCoachSystemPrompt?.length ?? 0,
+      promptLength: currentSystemPrompt?.length ?? 0,
       source: promptSource,
     });
-  }, [aiCoachSystemPrompt, locale, promptSource]);
+  }, [currentSystemPrompt, selectedRole, locale, promptSource]);
 
   // MCP chat hook - no automatic fallback, let user see errors and retry
   // userId is passed for user-specific session isolation
-  // systemMessage is the AI Coach prompt that instructs JSON format response
+  // systemMessage is the role-specific prompt
   const mcpChat = useMcpChat({
     server: selectedMcpServer,
     agentId: selectedMcpAgentId,
     settings: server.chatAgentSettings,
     enableStreaming: true,
-    systemMessage: aiCoachSystemPrompt,  // AI Coach system prompt for JSON responses
+    systemMessage: currentSystemPrompt,  // Role-specific system prompt
     userId: userId,
     // Don't use onFallback - it causes permanent switch to OpenAI
     // Instead, show errors to user and let them retry
@@ -335,14 +351,11 @@ export function MOCSection({
     },
   });
 
-  // AI Provider selection (MCP servers + API providers like OpenAI)
-  const { availableProviders, selectedProvider, switchProvider, isMcp } = useAIProvider(authToken ?? null);
-
   // Provider chat hook for API providers (OpenAI, Anthropic, etc.)
   const providerChat = useProviderChat({
     provider: selectedProvider?.apiProvider || 'openai',
     model: selectedProvider?.model,
-    systemPrompt: aiCoachSystemPrompt,
+    systemPrompt: currentSystemPrompt,
     authToken: authToken ?? null,
   });
 
@@ -426,6 +439,14 @@ export function MOCSection({
 
           const existingIdx = updated.findIndex(m => m.id === messageId);
 
+          // Map mcpSuggestions to quickReplies for Reply button display
+          const quickReplies = msg.mcpSuggestions?.map(s => ({
+            id: `mcp-${s.label}`,
+            label: s.label,
+            value: s.value,
+            icon: s.icon,
+          }));
+
           if (existingIdx === -1) {
             // Add new message (may be streaming or complete)
             hasChanges = true;
@@ -438,16 +459,19 @@ export function MOCSection({
               senderIcon: '🤖',
               content: displayContent,
               timestamp: msg.timestamp || new Date(),
+              ...(quickReplies && quickReplies.length > 0 ? { quickReplies } : {}),
             });
           } else {
             const existingMsg = updated[existingIdx];
             const contentChanged = existingMsg.content !== displayContent;
+            const suggestionsChanged = quickReplies && quickReplies.length > 0 && !existingMsg.quickReplies;
 
-            if (contentChanged) {
+            if (contentChanged || suggestionsChanged) {
               hasChanges = true;
               updated[existingIdx] = {
                 ...existingMsg,
                 content: displayContent || existingMsg.content,
+                ...(suggestionsChanged ? { quickReplies } : {}),
               };
             }
           }
@@ -459,7 +483,16 @@ export function MOCSection({
   }, [activeAgent.messages]); // Depend on activeAgent.messages
 
   // Parse AI candidate responses from messages
+  // Remote CLIモードではAICandidateResponseのパースをスキップ
   useEffect(() => {
+    if (isRemoteCli) {
+      // Remote CLIモードでは候補パースを行わない
+      if (candidateResponses.size > 0) {
+        setCandidateResponses(new Map());
+      }
+      return;
+    }
+
     const newCandidates = new Map<string, AICandidateResponse>();
 
     messages.forEach(msg => {
@@ -521,7 +554,7 @@ export function MOCSection({
         setAdoptionStates(newAdoptionStates);
       }
     }
-  }, [messages, candidateResponses, adoptedCandidates, adoptionStates]);
+  }, [messages, candidateResponses, adoptedCandidates, adoptionStates, isRemoteCli]);
 
   // Batch registration handler
   // Goals are registered first, and their IDs are mapped to link Habits with parentGoalId
@@ -711,18 +744,18 @@ export function MOCSection({
 
     // Debug: Show which prompt the MCP path is loading
     if (messageText === 'プロンプトテスト') {
-      const promptLen = aiCoachSystemPrompt?.length ?? 0;
-      const promptPreview = aiCoachSystemPrompt?.substring(0, 300) ?? '(undefined)';
+      const promptLen = currentSystemPrompt?.length ?? 0;
+      const promptPreview = currentSystemPrompt?.substring(0, 300) ?? '(undefined)';
       // Simple hash for quick comparison
       const simpleHash = promptLen > 0
-        ? Array.from(aiCoachSystemPrompt).reduce((h, c) => ((h << 5) - h + c.charCodeAt(0)) | 0, 0).toString(16)
+        ? Array.from(currentSystemPrompt).reduce((h, c) => ((h << 5) - h + c.charCodeAt(0)) | 0, 0).toString(16)
         : 'N/A';
 
       const info = [
         `=== プロンプトテスト (MCP パス) ===`,
         ``,
         `■ パス: MCP (useMcpChat → MCPサーバー)`,
-        `■ プロンプト取得元: useRolePrompt('AICoach')`,
+        `■ プロンプト取得元: useRolePrompt('${selectedRole}')`,
         `■ ソース: ${promptSource} (api=バックエンドAPI / cache=localStorage / local=ai-coach-prompt.ts)`,
         `■ 文字数: ${promptLen}`,
         `■ ハッシュ: ${simpleHash}`,
@@ -778,7 +811,7 @@ export function MOCSection({
       const requestUrl = `${BACKEND_API_URL}/api/provider-chat`;
       const requestBody = {
         message: 'テスト',
-        systemPrompt: (aiCoachSystemPrompt || '').substring(0, 100) + '...',
+        systemPrompt: (currentSystemPrompt || '').substring(0, 100) + '...',
         provider: testProvider,
         ...(testModel && { model: testModel }),
       };
@@ -794,7 +827,7 @@ export function MOCSection({
           },
           body: JSON.stringify({
             message: 'テスト',
-            systemPrompt: aiCoachSystemPrompt || 'You are a helpful assistant.',
+            systemPrompt: currentSystemPrompt || 'You are a helpful assistant.',
             provider: testProvider,
             ...(testModel && { model: testModel }),
           }),
@@ -929,7 +962,16 @@ export function MOCSection({
   }, [inputValue, activeAgent, locale, adoptedCandidates, handleBatchRegister]);
 
   // Quick actions - enhanced to match AICoaching section features
+  // When remoteCli role is active, use role-specific quickActions
   const quickActions = useMemo(() => {
+    if (isRemoteCli && roleConfig.quickActions) {
+      return roleConfig.quickActions.map(action => ({
+        id: action.id,
+        label: locale === 'ja' ? action.label.ja : action.label.en,
+        command: locale === 'ja' ? action.command.ja : action.command.en,
+      }));
+    }
+
     const baseActions = [
       { id: 'add-habit', label: locale === 'ja' ? '➕ 習慣追加' : '➕ Add Habit', command: locale === 'ja' ? '新しい習慣を追加したい' : 'I want to add a new habit' },
       { id: 'set-goal', label: locale === 'ja' ? '🎯 ゴール設定' : '🎯 Set Goal', command: locale === 'ja' ? 'ゴールを設定したい' : 'I want to set a goal' },
@@ -966,7 +1008,7 @@ export function MOCSection({
     }
 
     return [...contextualActions, ...baseActions].slice(0, 6);
-  }, [locale, habits, goals]);
+  }, [locale, habits, goals, isRemoteCli, roleConfig]);
 
   const handleQuickAction = useCallback((command: string) => {
     // Auto-send the quick action message (reply-type behavior)
@@ -1516,12 +1558,21 @@ export function MOCSection({
       <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
         {activeTab === 'chat' ? (
           <>
-            {/* Provider Selector - always shown so user can see/switch AI provider */}
-            <ProviderSelector
-              providers={availableProviders}
-              selectedId={selectedProvider?.id || ''}
-              onSelect={switchProvider}
-            />
+            {/* Provider & Role Selectors - always shown so user can see/switch AI provider and role */}
+            <div className="flex items-center gap-0 border-b border-border">
+              <ProviderSelector
+                providers={availableProviders}
+                selectedId={selectedProvider?.id || ''}
+                onSelect={switchProvider}
+              />
+              <RoleSelector
+                availableRoles={availableRoles}
+                selectedRoleId={selectedRole}
+                onSelect={switchRole}
+                isMcpSelected={selectedProvider?.source === 'mcp'}
+                locale={locale || 'ja'}
+              />
+            </div>
             {/* Chat Messages - Scrollable area */}
             <div className="flex-1 overflow-y-auto min-h-0">
               <GroupChatView
@@ -1599,7 +1650,9 @@ export function MOCSection({
                 <div className="px-4 pt-3">
                   <div className="text-center mb-3">
                     <p className="text-sm font-medium text-foreground">
-                      {locale === 'ja' ? 'ようこそ！何をお手伝いしましょうか？' : 'Welcome! How can I help you?'}
+                      {isRemoteCli
+                        ? (locale === 'ja' ? 'Remote CLI - 何を実行しますか？' : 'Remote CLI - What would you like to run?')
+                        : (locale === 'ja' ? 'ようこそ！何をお手伝いしましょうか？' : 'Welcome! How can I help you?')}
                     </p>
                     <p className="text-xs text-muted-foreground mt-1">
                       {locale === 'ja' ? '以下から選択するか、メッセージを入力してください' : 'Choose from below or type a message'}
@@ -2289,6 +2342,25 @@ function GroupChatView({
                       onReplySelect={onReplySelect}
                       adoptionStates={adoptionStates}
                     />
+                  </div>
+                )}
+                {/* Show MCP quickReplies as Reply buttons */}
+                {msg.quickReplies && msg.quickReplies.length > 0 && isLastInGroup && (
+                  <div className="ml-13 pl-3 flex flex-wrap gap-2 mt-2">
+                    {msg.quickReplies.map(reply => (
+                      <button
+                        key={reply.id}
+                        onClick={() => onReplySelect?.({
+                          type: 'reply',
+                          label: reply.value,
+                          detail: { action: 'more_suggestions', icon: reply.icon },
+                        })}
+                        className="px-3 py-1.5 text-xs rounded-full border border-primary/30 bg-primary/5 text-primary hover:bg-primary/10 transition-colors"
+                      >
+                        {reply.icon && <span className="mr-1">{reply.icon}</span>}
+                        {reply.label}
+                      </button>
+                    ))}
                   </div>
                 )}
               </React.Fragment>

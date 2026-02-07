@@ -21,6 +21,7 @@ export type AgentRole =
   | 'tester'     // Tester - test execution
   | 'analyst'    // Analyst - data analysis
   | 'architect'  // Architect - system design
+  | 'remoteCli'  // Remote CLI - remote Claude Code CLI
   | 'default';   // Default assistant
 
 /**
@@ -40,6 +41,16 @@ export interface RoleConfig {
   capabilities: string[];
   restrictions: string[];
   getSystemPrompt: (locale: 'ja' | 'en') => string;
+  /** MCP限定ロールかどうか (default: false) */
+  mcpOnly?: boolean;
+  /** レスポンス形式 (default: 'json') */
+  responseFormat?: 'json' | 'markdown' | 'plain';
+  /** このロール用の候補ボタン定義 */
+  quickActions?: Array<{
+    id: string;
+    label: { ja: string; en: string; };
+    command: { ja: string; en: string; };
+  }>;
 }
 
 /**
@@ -427,6 +438,112 @@ Clearly explain trade-offs.`;
 };
 
 /**
+ * Remote CLI role - operates remote Claude Code CLI via MCP
+ */
+const remoteCliRole: RoleConfig = {
+  id: 'remoteCli',
+  name: { ja: 'Remote CLI', en: 'Remote CLI' },
+  icon: '>_',
+  description: {
+    ja: 'リモートClaude Code CLIを操作',
+    en: 'Operate remote Claude Code CLI',
+  },
+  capabilities: [
+    'ファイル操作（読み書き）',
+    'コマンド実行',
+    'プロジェクト管理',
+    'コードレビュー',
+    'テスト実行',
+  ],
+  restrictions: [
+    'MCPサーバ接続が必要',
+    'サーバ側のパーミッションに依存',
+  ],
+  mcpOnly: true,
+  responseFormat: 'markdown',
+  quickActions: [
+    {
+      id: 'project-status',
+      label: { ja: '>_ プロジェクト状態確認', en: '>_ Project Status' },
+      command: { ja: 'プロジェクトの状態を確認して（git status, ブランチ情報, 未コミットの変更）', en: 'Check project status (git status, branch info, uncommitted changes)' },
+    },
+    {
+      id: 'file-list',
+      label: { ja: '>_ ファイル一覧', en: '>_ File List' },
+      command: { ja: 'プロジェクトのファイル構造を見せて', en: 'Show project file structure' },
+    },
+    {
+      id: 'run-tests',
+      label: { ja: '>_ テスト実行', en: '>_ Run Tests' },
+      command: { ja: 'テストを実行して結果を報告して', en: 'Run tests and report results' },
+    },
+    {
+      id: 'build-check',
+      label: { ja: '>_ ビルド確認', en: '>_ Build Check' },
+      command: { ja: 'ビルドが通るか確認して', en: 'Check if build passes' },
+    },
+    {
+      id: 'recent-changes',
+      label: { ja: '>_ 最近の変更', en: '>_ Recent Changes' },
+      command: { ja: '最近のgitコミット履歴を見せて', en: 'Show recent git commit history' },
+    },
+    {
+      id: 'code-review',
+      label: { ja: '>_ コードレビュー', en: '>_ Code Review' },
+      command: { ja: '現在の差分をレビューして', en: 'Review current diff' },
+    },
+  ],
+  getSystemPrompt: (locale: 'ja' | 'en') => {
+    if (locale === 'ja') {
+      return `あなたはリモートClaude Code CLIエージェントです。
+ユーザーからの指示に基づいて、ファイル操作、コマンド実行、プロジェクト管理を行います。
+
+## 応答形式
+- Markdown形式で応答してください
+- コードブロックを活用してください
+- JSON形式の応答は不要です
+- コマンド実行結果は\`\`\`で囲んで表示してください
+
+## ツール使用
+- 利用可能なツールを積極的に使用してください
+- ファイルの読み書き、ディレクトリ操作が可能です
+- gitコマンド、npm/yarn コマンドが実行可能です
+
+## 安全性
+- 破壊的な操作（rm -rf, git push -f等）の前にユーザーに確認してください
+- 機密ファイル（.env, credentials等）の内容は表示しないでください
+
+## 応答スタイル
+- 簡潔に、結果を先に報告してください
+- エラーが発生した場合は原因と対処法を提示してください
+- 複数のステップがある場合は進捗を逐次報告してください`;
+    }
+    return `You are a remote Claude Code CLI agent.
+You perform file operations, command execution, and project management based on user instructions.
+
+## Response Format
+- Respond in Markdown format
+- Use code blocks actively
+- JSON format responses are not required
+- Display command execution results wrapped in \`\`\`
+
+## Tool Usage
+- Actively use available tools
+- File read/write and directory operations are available
+- git commands and npm/yarn commands can be executed
+
+## Safety
+- Confirm with user before destructive operations (rm -rf, git push -f, etc.)
+- Do not display contents of sensitive files (.env, credentials, etc.)
+
+## Response Style
+- Be concise, report results first
+- If errors occur, provide cause and solution
+- Report progress incrementally for multi-step operations`;
+  },
+};
+
+/**
  * Default role - general assistant
  */
 const defaultRole: RoleConfig = {
@@ -471,6 +588,7 @@ export const ROLE_CONFIGS: Record<AgentRole, RoleConfig> = {
   tester: testerRole,
   analyst: analystRole,
   architect: architectRole,
+  remoteCli: remoteCliRole,
   default: defaultRole,
 };
 

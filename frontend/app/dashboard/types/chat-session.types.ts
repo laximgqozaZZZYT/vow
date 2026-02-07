@@ -123,6 +123,7 @@ export const DEFAULT_SESSION_NAMES_JA: Record<AgentRole, string> = {
   tester: 'テスター',
   analyst: 'アナリスト',
   architect: 'アーキテクト',
+  remoteCli: 'Remote CLI',
   default: 'アシスタント',
 };
 
@@ -138,6 +139,7 @@ export const DEFAULT_SESSION_NAMES_EN: Record<AgentRole, string> = {
   tester: 'Tester',
   analyst: 'Analyst',
   architect: 'Architect',
+  remoteCli: 'Remote CLI',
   default: 'Assistant',
 };
 

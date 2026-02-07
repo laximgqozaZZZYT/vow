@@ -20,6 +20,7 @@ import {
   getViolationMessage,
   logViolation,
 } from '../utils/chatGuardrails';
+import { extractMcpSuggestions, type McpSuggestion } from '../utils/mcpSuggestions';
 
 /**
  * Tool call result from agent.
@@ -50,6 +51,8 @@ export interface MastraMessage {
     completionTokens: number;
     totalTokens: number;
   };
+  /** MCP server suggestions extracted from toolCalls */
+  mcpSuggestions?: McpSuggestion[];
 }
 
 /**
@@ -345,6 +348,11 @@ export function useMcpChat(options: UseMcpChatOptions): UseMastraAgentReturn {
 
         let fullContent = '';
         let lastServerError: string | null = null; // Track error messages from server
+        // Multi-response support: track how many complete events have been received
+        let responseCount = 0;
+        let currentAssistantId = assistantMessageId;
+        // Timeout for auto-completing after a complete event if no more tokens arrive
+        let completeTimeout: ReturnType<typeof setTimeout> | null = null;
         setConnectionState('streaming');
 
         try {
@@ -411,8 +419,24 @@ export function useMcpChat(options: UseMcpChatOptions): UseMastraAgentReturn {
                 const jsonStr = trimmedLine.slice(5).trim();
                 console.log('[useMcpChat] Received:', { eventType: currentEventType, data: jsonStr.substring(0, 100) });
 
-                // Handle [DONE] marker
+                // Handle [DONE] marker - finalize the last assistant message
                 if (jsonStr === '[DONE]') {
+                  if (completeTimeout) {
+                    clearTimeout(completeTimeout);
+                    completeTimeout = null;
+                  }
+                  // Finalize the last message content and remove empty placeholders
+                  setMessages(prev => {
+                    const updated = prev.map(msg =>
+                      msg.id === currentAssistantId
+                        ? { ...msg, content: fullContent, status: 'complete' as const }
+                        : msg
+                    );
+                    // Remove empty placeholder if the last assistant message has no content
+                    return updated.filter(m => m.content !== '' || m.id !== currentAssistantId);
+                  });
+                  setIsStreaming(false);
+                  setConnectionState('idle');
                   currentEventType = null;
                   continue;
                 }
@@ -434,10 +458,15 @@ export function useMcpChat(options: UseMcpChatOptions): UseMastraAgentReturn {
                   } else if (effectiveType === 'token' || effectiveType === 'text') {
                     const token = data.token || data.text || data.content || '';
                     if (token) {
+                      // Clear complete timeout since new tokens are arriving
+                      if (completeTimeout) {
+                        clearTimeout(completeTimeout);
+                        completeTimeout = null;
+                      }
                       fullContent += token;
 
                       setMessages(prev => prev.map(msg =>
-                        msg.id === assistantMessageId
+                        msg.id === currentAssistantId
                           ? { ...msg, content: fullContent, status: 'streaming' as const }
                           : msg
                       ));
@@ -470,25 +499,78 @@ export function useMcpChat(options: UseMcpChatOptions): UseMastraAgentReturn {
                       })),
                       // Debug: Show full content length for text fallback
                       contentLength: fullContent?.length ?? 0,
+                      responseCount,
                     });
 
-                    setMessages(prev => prev.map(msg =>
-                      msg.id === assistantMessageId
-                        ? {
-                            ...msg,
-                            content: fullContent || data.content || data.message || '',
-                            status: 'complete' as const,
-                            toolCalls,
-                          }
-                        : msg
-                    ));
+                    // Extract MCP suggestions from toolCalls for Reply button display
+                    const mcpSuggestions = extractMcpSuggestions(toolCalls);
+
+                    if (responseCount > 0) {
+                      // 2nd+ complete: finalize current message and prepare for next response
+                      setMessages(prev => {
+                        const updated = prev.map(msg =>
+                          msg.id === currentAssistantId
+                            ? {
+                                ...msg,
+                                content: fullContent || data.content || data.message || '',
+                                status: 'complete' as const,
+                                toolCalls,
+                                ...(mcpSuggestions.length > 0 ? { mcpSuggestions } : {}),
+                              }
+                            : msg
+                        );
+                        return updated;
+                      });
+
+                      // Generate new assistant message ID for the next response
+                      responseCount++;
+                      currentAssistantId = `assistant-${Date.now()}-${responseCount}`;
+                      fullContent = '';
+
+                      // Add new placeholder message for the next response
+                      const newMsg: MastraMessage = {
+                        id: currentAssistantId,
+                        role: 'assistant',
+                        content: '',
+                        status: 'pending',
+                        timestamp: new Date(),
+                      };
+                      setMessages(prev => [...prev, newMsg]);
+                    } else {
+                      // First complete: finalize the message but keep streaming open
+                      // (more responses may follow from the MCP server)
+                      setMessages(prev => prev.map(msg =>
+                        msg.id === currentAssistantId
+                          ? {
+                              ...msg,
+                              content: fullContent || data.content || data.message || '',
+                              status: 'complete' as const,
+                              toolCalls,
+                              ...(mcpSuggestions.length > 0 ? { mcpSuggestions } : {}),
+                            }
+                          : msg
+                      ));
+                      responseCount++;
+                    }
+
+                    // Set a timeout: if no new tokens arrive within 30s, auto-complete the stream
+                    if (completeTimeout) {
+                      clearTimeout(completeTimeout);
+                    }
+                    completeTimeout = setTimeout(() => {
+                      console.log('[useMcpChat] Complete timeout reached, auto-finishing stream');
+                      setIsStreaming(false);
+                      setConnectionState('idle');
+                      // Remove empty placeholder messages
+                      setMessages(prev => prev.filter(m => m.content !== '' || m.role !== 'assistant'));
+                    }, 30000);
                   } else if (effectiveType === 'error') {
                     // Store the error message for later display instead of throwing
                     lastServerError = data.error || data.message || 'Unknown error from MCP agent';
                     console.error('[useMcpChat] Server error:', lastServerError);
                     // Update message with error status
                     setMessages(prev => prev.map(msg =>
-                      msg.id === assistantMessageId
+                      msg.id === currentAssistantId
                         ? { ...msg, content: lastServerError || 'エラーが発生しました', status: 'error' as const }
                         : msg
                     ));
@@ -503,9 +585,14 @@ export function useMcpChat(options: UseMcpChatOptions): UseMastraAgentReturn {
                       || data.choices?.[0]?.message?.content;
 
                     if (content) {
+                      // Clear complete timeout since new content is arriving
+                      if (completeTimeout) {
+                        clearTimeout(completeTimeout);
+                        completeTimeout = null;
+                      }
                       fullContent += content;
                       setMessages(prev => prev.map(msg =>
-                        msg.id === assistantMessageId
+                        msg.id === currentAssistantId
                           ? { ...msg, content: fullContent, status: 'streaming' as const }
                           : msg
                       ));
@@ -514,9 +601,14 @@ export function useMcpChat(options: UseMcpChatOptions): UseMastraAgentReturn {
                 } catch (parseErr) {
                   // Not JSON, might be raw text
                   if (jsonStr && jsonStr !== '[DONE]') {
+                    // Clear complete timeout since new content is arriving
+                    if (completeTimeout) {
+                      clearTimeout(completeTimeout);
+                      completeTimeout = null;
+                    }
                     fullContent += jsonStr;
                     setMessages(prev => prev.map(msg =>
-                      msg.id === assistantMessageId
+                      msg.id === currentAssistantId
                         ? { ...msg, content: fullContent, status: 'streaming' as const }
                         : msg
                     ));
@@ -529,7 +621,11 @@ export function useMcpChat(options: UseMcpChatOptions): UseMastraAgentReturn {
             }
           }
 
-          // Stream complete
+          // Stream complete - clean up timeout
+          if (completeTimeout) {
+            clearTimeout(completeTimeout);
+            completeTimeout = null;
+          }
           setIsStreaming(false);
           setConnectionState('idle');
 
@@ -538,7 +634,7 @@ export function useMcpChat(options: UseMcpChatOptions): UseMastraAgentReturn {
             // No error but also no content - likely a silent failure
             const noResponseMessage = '応答がありませんでした。MCPサーバーの状態を確認してください。Claude CLIが正しく認証されているか確認してください。';
             setMessages(prev => prev.map(msg =>
-              msg.id === assistantMessageId
+              msg.id === currentAssistantId
                 ? { ...msg, content: noResponseMessage, status: 'error' as const }
                 : msg
             ));
@@ -546,14 +642,24 @@ export function useMcpChat(options: UseMcpChatOptions): UseMastraAgentReturn {
             // Stream ended with content - ensure message is marked as complete
             // This handles cases where MCP server doesn't send explicit 'complete' event
             console.log('[useMcpChat] Stream ended with content, marking as complete');
-            setMessages(prev => prev.map(msg =>
-              msg.id === assistantMessageId && msg.status !== 'complete'
-                ? { ...msg, content: fullContent, status: 'complete' as const }
-                : msg
-            ));
+            setMessages(prev => {
+              const updated = prev.map(msg =>
+                msg.id === currentAssistantId && msg.status !== 'complete'
+                  ? { ...msg, content: fullContent, status: 'complete' as const }
+                  : msg
+              );
+              // Remove empty placeholder messages from multi-response
+              return updated.filter(m => m.content !== '' || m.role !== 'assistant');
+            });
           }
           // If there was a server error, it was already handled in the error event processing above
         } catch (streamErr) {
+          // Clean up timeout on error
+          if (completeTimeout) {
+            clearTimeout(completeTimeout);
+            completeTimeout = null;
+          }
+
           const errorMessage = streamErr instanceof Error ? streamErr.message : String(streamErr);
           const isAbortError = errorMessage.includes('aborted') || errorMessage.includes('AbortError');
 
@@ -568,21 +674,29 @@ export function useMcpChat(options: UseMcpChatOptions): UseMastraAgentReturn {
           // This handles the "BodyStreamBuffer was aborted" error gracefully
           if (fullContent) {
             console.log('[useMcpChat] Recovering from stream error with partial content');
-            setMessages(prev => prev.map(msg =>
-              msg.id === assistantMessageId
-                ? { ...msg, content: fullContent, status: 'complete' as const }
-                : msg
-            ));
+            setMessages(prev => {
+              const updated = prev.map(msg =>
+                msg.id === currentAssistantId
+                  ? { ...msg, content: fullContent, status: 'complete' as const }
+                  : msg
+              );
+              // Remove empty placeholder messages from multi-response
+              return updated.filter(m => m.content !== '' || m.role !== 'assistant');
+            });
             setIsStreaming(false);
             setConnectionState('idle');
           } else if (isAbortError) {
             // Abort error with no content - show cancelled message
             console.log('[useMcpChat] Stream aborted with no content');
-            setMessages(prev => prev.map(msg =>
-              msg.id === assistantMessageId
-                ? { ...msg, status: 'complete' as const, content: msg.content || '(通信が中断されました)' }
-                : msg
-            ));
+            setMessages(prev => {
+              const updated = prev.map(msg =>
+                msg.id === currentAssistantId
+                  ? { ...msg, status: 'complete' as const, content: msg.content || '(通信が中断されました)' }
+                  : msg
+              );
+              // Remove empty placeholder messages from multi-response
+              return updated.filter(m => m.content !== '' || m.role !== 'assistant');
+            });
             setIsStreaming(false);
             setConnectionState('idle');
           } else {
@@ -591,11 +705,15 @@ export function useMcpChat(options: UseMcpChatOptions): UseMastraAgentReturn {
             setConnectionState('error');
             setIsStreaming(false);
 
-            setMessages(prev => prev.map(msg =>
-              msg.id === assistantMessageId
-                ? { ...msg, status: 'error' as const, content: `Error: ${err.message}` }
-                : msg
-            ));
+            setMessages(prev => {
+              const updated = prev.map(msg =>
+                msg.id === currentAssistantId
+                  ? { ...msg, status: 'error' as const, content: `Error: ${err.message}` }
+                  : msg
+              );
+              // Remove empty placeholder messages from multi-response
+              return updated.filter(m => m.content !== '' || m.role !== 'assistant');
+            });
 
             if (settings?.fallbackToApi && onFallback) {
               onFallback();
