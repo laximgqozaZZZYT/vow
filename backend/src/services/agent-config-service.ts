@@ -54,19 +54,16 @@ export interface AgentConfigUpdate {
 }
 
 /**
- * Default agent IDs available in the system
+ * The only built-in agent. All other agents are user-created custom agents.
  */
-export const DEFAULT_AGENT_IDS = ['AICoach', 'habit-coach', 'goal-planner', 'progress-tracker'] as const;
-export type DefaultAgentId = typeof DEFAULT_AGENT_IDS[number];
+export const BUILTIN_AGENT_ID = 'AICoach' as const;
 
 /**
- * Available tools for each agent type
+ * Available tools for the built-in AICoach agent.
+ * Custom agents do not have predefined tools.
  */
-export const AGENT_AVAILABLE_TOOLS: Record<DefaultAgentId, string[]> = {
+export const AGENT_AVAILABLE_TOOLS: Record<string, string[]> = {
   'AICoach': ['analyze_habits', 'suggest_habits', 'generate_baby_steps', 'suggest_goals', 'check_progress'],
-  'habit-coach': ['analyze_habits', 'suggest_habits', 'generate_baby_steps'],
-  'goal-planner': ['create_smart_goal', 'suggest_goals', 'breakdown_milestones', 'prioritize_goals'],
-  'progress-tracker': ['check_progress', 'generate_report', 'analyze_trends'],
 };
 
 /**
@@ -135,12 +132,10 @@ export async function getAllAgentConfigs(
   userId: string
 ): Promise<AgentConfig[]> {
   try {
-    // First ensure all default agents have configs
-    for (const agentId of DEFAULT_AGENT_IDS) {
-      await getAgentConfig(supabase, userId, agentId);
-    }
+    // Ensure the built-in AICoach agent exists for this user
+    await getAgentConfig(supabase, userId, BUILTIN_AGENT_ID);
 
-    // Now fetch all configs
+    // Fetch all configs (AICoach + user's custom agents)
     const { data, error } = await supabase
       .from('agent_configs')
       .select('*')
@@ -380,10 +375,7 @@ export async function isAgentEnabled(
  * Get available tools for an agent
  */
 export function getAvailableTools(agentId: string): string[] {
-  if (agentId in AGENT_AVAILABLE_TOOLS) {
-    return AGENT_AVAILABLE_TOOLS[agentId as DefaultAgentId];
-  }
-  return [];
+  return AGENT_AVAILABLE_TOOLS[agentId] || [];
 }
 
 export default {
@@ -396,6 +388,6 @@ export default {
   createCustomAgentConfig,
   bulkCreateCustomAgentConfigs,
   deleteCustomAgentConfig,
-  DEFAULT_AGENT_IDS,
+  BUILTIN_AGENT_ID,
   AGENT_AVAILABLE_TOOLS,
 };
