@@ -34,6 +34,25 @@ const nextConfig: NextConfig = {
     NEXT_PUBLIC_SITE_URL: process.env.NEXT_PUBLIC_SITE_URL,
   },
   
+  // .md ファイルを raw string としてインポートするための設定
+  // Turbopack (Next.js 16 default, dev)
+  turbopack: {
+    rules: {
+      '*.md': {
+        loaders: ['raw-loader'],
+        as: '*.js',
+      },
+    },
+  },
+  // Webpack (production build fallback)
+  webpack(config) {
+    config.module.rules.push({
+      test: /\.md$/,
+      type: 'asset/source',
+    });
+    return config;
+  },
+
   // セキュリティヘッダー（Vercel環境で有効）
   async headers() {
     return [

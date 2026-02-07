@@ -45,6 +45,7 @@ import { createConversationsRouter } from './routers/conversations.js';
 import { createCredentialsRouter } from './routers/credentials.js';
 import { createIssuesRouter } from './routers/issues.js';
 import { createMcpInstallerRouter } from './routers/mcpInstaller.js';
+import { createPromptTemplatesRouter } from './routers/promptTemplates.js';
 import { cliTokenRouter } from './routers/cliTokens.js';
 import { providerChatRouter } from './routers/providerChat.js';
 
@@ -352,6 +353,12 @@ export function createApp(): Hono {
   // Requirements: Role-Based Prompt System spec
   const promptsRouter = createPromptsRouter();
   app.route('/api/prompts', promptsRouter);
+
+  // Prompt Templates router - mounted at /api/prompt-templates
+  // Endpoints: GET /api/prompt-templates/:key?locale=ja
+  // Note: Markdown prompt templates with {{variable}} placeholders
+  const promptTemplatesRouter = createPromptTemplatesRouter();
+  app.route('/api/prompt-templates', promptTemplatesRouter);
 
   // Agent Configs router - mounted at /api/agent-configs
   // Endpoints: GET/POST /api/agent-configs, GET/PUT/DELETE /api/agent-configs/:agentId,

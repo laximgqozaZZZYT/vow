@@ -56,6 +56,7 @@ import { RemoteTaskExecutor } from './Agent.RemoteTaskExecutor';
 import { useAIProvider } from '../hooks/useAIProvider';
 import { useProviderChat } from '../hooks/useProviderChat';
 import { ProviderSelector } from './Chat.ProviderSelector';
+import { usePromptTemplate } from '../hooks/usePromptTemplate';
 
 // Type definitions moved to types/moc.types.ts
 // Re-export commonly used types for backward compatibility
@@ -347,6 +348,9 @@ export function MOCSection({
 
   // Active chat agent - dynamically switch between MCP and API provider
   const activeAgent = selectedProvider?.source === 'api' ? providerChat : mcpChat;
+
+  // Prompt template fetcher (for resume conversation etc.)
+  const { getTemplate } = usePromptTemplate(authToken ?? null);
 
   // Connection status
   const isConnected = useMemo(() => {
@@ -1194,6 +1198,77 @@ export function MOCSection({
     setAdoptionStates(new Map());
   }, [activeAgent]);
 
+  // Resume a past conversation from the history tab
+  const handleResumeConversation = useCallback(async (contextMessages: GroupChatMessage[]) => {
+    // 1. Switch to chat tab
+    setActiveTab('chat');
+
+    // 2. Clear current chat (start fresh for the resumed conversation)
+    activeAgent.clearMessages();
+    setMessages([]);
+    setCandidateResponses(new Map());
+    setAdoptedCandidates(new Map());
+    setAdoptionStates(new Map());
+
+    // 3. Build conversation history text from context messages
+    const historyText = contextMessages
+      .map((msg) => {
+        const role = msg.senderType === 'user' ? 'ユーザー'
+          : msg.senderType === 'coach' ? 'AIコーチ'
+          : msg.senderName;
+
+        // For coach messages with JSON candidates, extract readable content
+        let content = msg.content;
+        if (msg.senderType === 'coach') {
+          try {
+            const trimmed = content.trim();
+            if (trimmed.startsWith('{')) {
+              const parsed = JSON.parse(trimmed);
+              if (typeof parsed.message === 'string' && parsed.message.length > 0) {
+                content = parsed.message;
+              }
+            }
+          } catch { /* use raw content */ }
+        }
+        // Truncate very long messages
+        if (content.length > 500) {
+          content = content.substring(0, 500) + '...';
+        }
+
+        return `[${role}]: ${content}`;
+      })
+      .join('\n\n');
+
+    // 4. Try backend template first, fall back to local buildResumePrompt
+    let resumePrompt: string;
+    const template = await getTemplate('resume-conversation', locale);
+
+    if (template) {
+      // Replace {{conversation_history}} placeholder from backend template
+      resumePrompt = template.replace('{{conversation_history}}', historyText);
+    } else {
+      // Inline fallback when backend template is unavailable
+      resumePrompt = locale === 'ja'
+        ? `以下の過去の会話の続きをお願いします。\n\n${historyText}\n\n続きをお願いします。`
+        : `Please continue from this conversation:\n\n${historyText}\n\nPlease continue.`;
+    }
+
+    // 5. Small delay to let the tab switch render, then send
+    setTimeout(() => {
+      const userMessage: GroupChatMessage = {
+        id: `user-${Date.now()}`,
+        senderId: 'user',
+        senderName: 'You',
+        senderType: 'user',
+        senderIcon: ROLE_ICONS.user,
+        content: resumePrompt,
+        timestamp: new Date(),
+      };
+      setMessages(prev => [...prev, userMessage]);
+      activeAgent.sendMessage(resumePrompt);
+    }, 100);
+  }, [activeAgent, getTemplate, locale]);
+
   const handleHabitCreated = useCallback(async (payload: { name: string; goalId?: string; type: 'do' | 'avoid'; timings?: any[]; workloadUnit?: string; workloadTotal?: number; workloadTotalEnd?: number; workloadPerCount?: number; notes?: string; relatedHabitIds?: string[] }) => {
     // Call API to create habit in database
     console.log('[handleHabitCreated] Creating habit with payload:', payload);
@@ -1700,6 +1775,7 @@ export function MOCSection({
               <HistoryView
                 messages={historyMessages}
                 locale={locale}
+                onResumeConversation={handleResumeConversation}
               />
             )}
           </div>
@@ -2641,9 +2717,10 @@ function TaskDetailModal({ task, locale, onClose, onStatusChange }: TaskDetailMo
 interface HistoryViewProps {
   messages: GroupChatMessage[];
   locale: 'ja' | 'en';
+  onResumeConversation?: (contextMessages: GroupChatMessage[]) => void;
 }
 
-function HistoryView({ messages, locale }: HistoryViewProps) {
+function HistoryView({ messages, locale, onResumeConversation }: HistoryViewProps) {
   const [activeFilter, setActiveFilter] = useState<HistoryFilter>('all');
   const [activeSearch, setActiveSearch] = useState('');
 
@@ -2664,6 +2741,20 @@ function HistoryView({ messages, locale }: HistoryViewProps) {
     }
     return result;
   }, [messages, activeFilter, activeSearch]);
+
+  // Pre-parse candidate responses from coach messages for performance
+  const candidateMap = useMemo(() => {
+    const map = new Map<string, AICandidateResponse>();
+    for (const msg of filteredMsgs) {
+      if (msg.senderType === 'coach') {
+        const parsed = extractAICandidateResponse(msg.content);
+        if (parsed) {
+          map.set(msg.id, parsed);
+        }
+      }
+    }
+    return map;
+  }, [filteredMsgs]);
 
   return (
     <div className="space-y-3">
@@ -2704,38 +2795,74 @@ function HistoryView({ messages, locale }: HistoryViewProps) {
             {locale === 'ja' ? 'メッセージがありません' : 'No messages'}
           </div>
         ) : (
-          filteredMsgs.map(msg => (
-            <div
-              key={msg.id}
-              className="p-3 bg-muted/50 rounded-lg border border-border hover:bg-muted/70 transition-colors"
-            >
-              {/* Header */}
-              <div className="flex items-center justify-between mb-2">
-                <div className="flex items-center gap-2">
-                  <span className="text-sm">
-                    {msg.senderType === 'user' && '👤'}
-                    {msg.senderType === 'coach' && '🤖'}
-                    {msg.senderType === 'agent' && '👔'}
-                    {msg.senderType === 'system' && '⚙️'}
-                  </span>
-                  <span className="text-sm font-medium text-foreground">{msg.senderName}</span>
-                </div>
-                <span className="text-xs text-muted-foreground">
-                  {new Date(msg.timestamp).toLocaleString(locale === 'ja' ? 'ja-JP' : 'en-US', {
-                    month: 'short',
-                    day: 'numeric',
-                    hour: '2-digit',
-                    minute: '2-digit'
-                  })}
-                </span>
-              </div>
+          filteredMsgs.map(msg => {
+            const candidateResponse = candidateMap.get(msg.id) ?? null;
 
-              {/* Content */}
-              <div className="text-sm text-foreground whitespace-pre-wrap break-words">
-                {msg.content}
+            // Build context: up to 10 messages ending at this message
+            const handleResume = () => {
+              if (!onResumeConversation) return;
+              const msgIndex = messages.findIndex(m => m.id === msg.id);
+              if (msgIndex === -1) return;
+              const startIdx = Math.max(0, msgIndex - 9);
+              const contextMessages = messages.slice(startIdx, msgIndex + 1);
+              onResumeConversation(contextMessages);
+            };
+
+            return (
+              <div
+                key={msg.id}
+                className="p-3 bg-muted/50 rounded-lg border border-border hover:bg-muted/70 transition-colors"
+              >
+                {/* Header */}
+                <div className="flex items-center justify-between mb-2">
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm">
+                      {msg.senderType === 'user' && '👤'}
+                      {msg.senderType === 'coach' && '🤖'}
+                      {msg.senderType === 'agent' && '👔'}
+                      {msg.senderType === 'system' && '⚙️'}
+                    </span>
+                    <span className="text-sm font-medium text-foreground">{msg.senderName}</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {onResumeConversation && (
+                      <button
+                        onClick={handleResume}
+                        className="px-2 py-0.5 text-xs font-medium text-primary hover:text-primary-foreground hover:bg-primary rounded transition-colors"
+                        title={locale === 'ja' ? 'この会話から再開' : 'Resume from here'}
+                      >
+                        {locale === 'ja' ? '↩ 再開' : '↩ Resume'}
+                      </button>
+                    )}
+                    <span className="text-xs text-muted-foreground">
+                      {new Date(msg.timestamp).toLocaleString(locale === 'ja' ? 'ja-JP' : 'en-US', {
+                        month: 'short',
+                        day: 'numeric',
+                        hour: '2-digit',
+                        minute: '2-digit'
+                      })}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Content - show parsed message for candidates, raw content otherwise */}
+                <div className="text-sm text-foreground whitespace-pre-wrap break-words">
+                  {candidateResponse?.message || msg.content}
+                </div>
+
+                {/* Candidate cards (read-only, no adoption callbacks) */}
+                {candidateResponse && (
+                  <div className="mt-2">
+                    <CandidateDisplay
+                      response={candidateResponse}
+                      locale={locale}
+                      disabled={true}
+                    />
+                  </div>
+                )}
               </div>
-            </div>
-          ))
+            );
+          })
         )}
       </div>
     </div>

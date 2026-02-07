@@ -34,12 +34,15 @@ import { createLevelConfigRouter } from './routers/levelConfig.js';
 import { createMcpConnectionsRouter } from './routers/mcpConnections.js';
 import { createRagRouter } from './routers/rag.js';
 import { createAgentsRouter } from './routers/agents.js';
+import { createPromptsRouter } from './routers/prompts.js';
+import { createAgentConfigsRouter } from './routers/agentConfigs.js';
 import { createSuggestionsRouter } from './routers/suggestions.js';
 import { createConversationsRouter } from './routers/conversations.js';
 import { createCredentialsRouter } from './routers/credentials.js';
 import { createIssuesRouter } from './routers/issues.js';
 import { createMcpInstallerRouter } from './routers/mcpInstaller.js';
 import { cliTokenRouter } from './routers/cliTokens.js';
+import { providerChatRouter } from './routers/providerChat.js';
 // Error handling imports
 import { AppError, getUserFriendlyMessage } from './errors/index.js';
 import { getLogger } from './utils/logger.js';
@@ -203,6 +206,10 @@ export function createApp() {
     // Note: Requires Premium subscription
     // Requirements: 3.1, 3.6, 4.1
     app.route('/api/ai', aiRouter);
+    // Provider chat router - mounted at /api/ai/provider-chat
+    // Endpoint: POST /api/ai/provider-chat (SSE streaming)
+    // Note: Separate mount path to avoid conflict with aiRouter at /api/ai
+    app.route('/api/ai/provider-chat', providerChatRouter);
     // Coaching router - mounted at /api/coaching
     // Endpoints: /api/coaching/proposals, /api/coaching/apply/:id,
     //            /api/coaching/dismiss/:id, /api/coaching/snooze/:id,
@@ -271,10 +278,22 @@ export function createApp() {
     // Endpoints: POST /api/agents/chat, POST /api/agents/tasks,
     //            GET /api/agents/status, POST /api/agents/workflow/:workflowId,
     //            GET /api/agents/orchestration-log
-    // Note: Unified AI agents API (VowCoachAgent, TaskOrchestratorAgent, workflows)
-    // Requirements: B-005, B-006, B-007, B-008
+    // Note: Unified AI agents API (TaskOrchestratorAgent, MCP chat)
+    // Requirements: B-005, B-008
     const agentsRouter = createAgentsRouter();
     app.route('/api/agents', agentsRouter);
+    // Prompts router - mounted at /api/prompts
+    // Endpoints: GET /api/prompts/:role?locale=ja
+    // Note: Canonical system prompt API for role-based prompt system
+    // Requirements: Role-Based Prompt System spec
+    const promptsRouter = createPromptsRouter();
+    app.route('/api/prompts', promptsRouter);
+    // Agent Configs router - mounted at /api/agent-configs
+    // Endpoints: GET/POST /api/agent-configs, GET/PUT/DELETE /api/agent-configs/:agentId,
+    //            POST /api/agent-configs/migrate
+    // Note: CRUD API for agent configurations (built-in + custom roles)
+    const agentConfigsRouter = createAgentConfigsRouter();
+    app.route('/api/agent-configs', agentConfigsRouter);
     // Suggestions router - mounted at /api/suggestions
     // Endpoints: POST /api/suggestions, GET /api/suggestions,
     //            PATCH /api/suggestions/:id, DELETE /api/suggestions/:id,
