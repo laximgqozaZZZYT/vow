@@ -9,6 +9,7 @@
  */
 
 import type { AIChatProvider } from './types.js';
+import { GeminiChatProvider } from './gemini-provider.js';
 import { OpenAIChatProvider } from './openai-provider.js';
 
 /**
@@ -33,6 +34,8 @@ export function createProvider(
   switch (providerType) {
     case 'openai':
       return new OpenAIChatProvider(userId, model);
+    case 'gemini':
+      return new GeminiChatProvider(userId, model);
     default:
       throw new Error(`Unsupported provider: ${providerType}`);
   }

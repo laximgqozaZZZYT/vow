@@ -14,6 +14,7 @@ export type {
   ProviderInfo,
 } from './types.js';
 
+export { GeminiChatProvider } from './gemini-provider.js';
 export { OpenAIChatProvider } from './openai-provider.js';
 
 export { createProvider } from './provider-factory.js';
