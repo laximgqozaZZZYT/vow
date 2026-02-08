@@ -677,7 +677,7 @@ export function MOCSection({
         const createdGoal = await supabaseDirectClient.createGoal({
           name: candidate.detail.name,
           details: candidate.detail.details || '',
-          dueDate: candidate.detail.dueDate || null,
+          dueDate: candidate.detail.dueDate || undefined,
           parentId: candidate.detail.parentId || null,
         });
         if (createdGoal) {
