@@ -257,32 +257,28 @@ export function MOCSection({
   // Multi-agent server from context (shared SSE connection)
   const server = useMultiAgentServerContext();
 
-  // Get the selected MCP server for chat
-  const selectedMcpServer = useMemo(() => {
-    const settings = server.chatAgentSettings;
-    console.log('[MOC] Resolving MCP server:', {
-      useMcpAgent: settings.useMcpAgent,
-      mcpServerId: settings.mcpServerId,
-      availableServers: server.config.servers.map(s => ({
-        id: s.id,
-        name: s.name,
-        url: s.serverUrl,
-        // Show token debug info to track synchronization
-        tokenMatch: s.serverToken === 'mcp-multi-agent-token-f75a6267',
-        tokenPreview: s.serverToken ? `${s.serverToken.slice(0, 8)}...` : 'none',
-      })),
-      connections: Array.from(server.connections.entries()).map(([id, conn]) => ({
-        id,
-        state: conn.connectionState,
-      })),
-    });
+  // AI Provider selection (MCP servers + API providers like OpenAI)
+  // NOTE: Must be before selectedMcpServer so provider selection can drive MCP server resolution
+  const { availableProviders, selectedProvider, switchProvider, isMcp } = useAIProvider(authToken ?? null);
 
+  // Get the selected MCP server for chat
+  // Uses provider selection as primary source (localStorage-based, works in production)
+  // Falls back to chatAgentSettings (DynamoDB-based, may not have useMcpAgent saved)
+  const selectedMcpServer = useMemo(() => {
+    // Primary: if provider dropdown selected an MCP server, use it directly
+    // This bypasses the chatAgentSettings.useMcpAgent gate which defaults to false
+    // and may not be saved in DynamoDB (production issue)
+    if (selectedProvider?.source === 'mcp' && selectedProvider.mcpServer) {
+      console.log('[MOC] Using MCP server from provider selection:', selectedProvider.mcpServer.name);
+      return selectedProvider.mcpServer;
+    }
+
+    // Fallback: use chatAgentSettings-based resolution
+    const settings = server.chatAgentSettings;
     if (!settings.useMcpAgent) return null;
 
-    // If specific server is selected
     if (settings.mcpServerId) {
       const found = server.config.servers.find(s => s.id === settings.mcpServerId);
-      console.log('[MOC] Found server by ID:', found?.name, found?.serverUrl);
       return found || null;
     }
 
@@ -291,21 +287,19 @@ export function MOCSection({
       .filter(([_, conn]) => conn.connectionState === 'connected')
       .map(([id]) => id);
 
-    console.log('[MOC] Connected server IDs:', connectedServerIds);
-
     if (connectedServerIds.length > 0) {
       return server.config.servers.find(s => s.id === connectedServerIds[0]) || null;
     }
 
     return null;
-  }, [server.chatAgentSettings, server.config.servers, server.connections]);
+  }, [selectedProvider, server.chatAgentSettings, server.config.servers, server.connections]);
 
   // Get the selected MCP agent ID
   const selectedMcpAgentId = useMemo(() => {
-    const settings = server.chatAgentSettings;
-    if (!settings.useMcpAgent || !selectedMcpServer) return undefined;
+    if (!selectedMcpServer) return undefined;
 
-    // If specific agent is selected
+    // If specific agent is selected via chatAgentSettings
+    const settings = server.chatAgentSettings;
     if (settings.mcpAgentId) {
       return settings.mcpAgentId;
     }
@@ -314,9 +308,6 @@ export function MOCSection({
     const serverAgents = server.agents.filter(a => a.serverId === selectedMcpServer.id);
     return serverAgents[0]?.id;
   }, [server.chatAgentSettings, selectedMcpServer, server.agents]);
-
-  // AI Provider selection (MCP servers + API providers like OpenAI)
-  const { availableProviders, selectedProvider, switchProvider, isMcp } = useAIProvider(authToken ?? null);
 
   // Role selection (AICoach, remoteCli, etc.)
   const {
