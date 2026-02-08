@@ -96,7 +96,9 @@ export class SupabaseDirectClient {
       'guest-stickies',
       'guest-sticky-tags',
       'guest-sticky-goals',
-      'guest-sticky-habits'
+      'guest-sticky-habits',
+      'guest-notes',
+      'guest-skill-sets'
     ];
     
     guestKeys.forEach(key => {
@@ -3525,6 +3527,372 @@ export class SupabaseDirectClient {
     
     if (error) throw error;
     return { success: true };
+  }
+
+  // ============================================================================
+  // Notes CRUD
+  // ============================================================================
+
+  async getNotes() {
+    this.checkEnvironment();
+    const { data: session } = await supabase.auth.getSession();
+    if (!session?.session?.user) {
+      return JSON.parse(localStorage.getItem('guest-notes') || '[]');
+    }
+    const { data, error } = await supabase
+      .from('notes')
+      .select('*')
+      .eq('owner_type', 'user')
+      .eq('owner_id', session.session.user.id)
+      .order('created_at', { ascending: false });
+    if (error) throw error;
+    return (data || []).map((n: any) => ({
+      id: n.id,
+      title: n.title,
+      content: n.content ?? '',
+      ownerType: n.owner_type,
+      ownerId: n.owner_id,
+      createdAt: n.created_at,
+      updatedAt: n.updated_at,
+    }));
+  }
+
+  async createNote(payload: any) {
+    this.checkEnvironment();
+    const { data: session } = await supabase.auth.getSession();
+    if (!session?.session?.user) {
+      const guestNotes = JSON.parse(localStorage.getItem('guest-notes') || '[]');
+      const now = new Date().toISOString();
+      const newNote = {
+        id: `n${Date.now()}`,
+        title: payload.title || '',
+        content: payload.content || '',
+        ownerType: 'user',
+        ownerId: 'guest',
+        createdAt: now,
+        updatedAt: now,
+      };
+      guestNotes.push(newNote);
+      localStorage.setItem('guest-notes', JSON.stringify(guestNotes));
+      return newNote;
+    }
+    const { data, error } = await supabase
+      .from('notes')
+      .insert({
+        title: payload.title || '',
+        content: payload.content || '',
+        owner_type: 'user',
+        owner_id: session.session.user.id,
+      })
+      .select()
+      .single();
+    if (error) throw error;
+    return {
+      id: data.id,
+      title: data.title,
+      content: data.content ?? '',
+      ownerType: data.owner_type,
+      ownerId: data.owner_id,
+      createdAt: data.created_at,
+      updatedAt: data.updated_at,
+    };
+  }
+
+  async updateNote(id: string, payload: any) {
+    this.checkEnvironment();
+    const { data: session } = await supabase.auth.getSession();
+    if (!session?.session?.user) {
+      const guestNotes = JSON.parse(localStorage.getItem('guest-notes') || '[]');
+      const idx = guestNotes.findIndex((n: any) => n.id === id);
+      if (idx >= 0) {
+        if (payload.title !== undefined) guestNotes[idx].title = payload.title;
+        if (payload.content !== undefined) guestNotes[idx].content = payload.content;
+        guestNotes[idx].updatedAt = new Date().toISOString();
+        localStorage.setItem('guest-notes', JSON.stringify(guestNotes));
+        return guestNotes[idx];
+      }
+      return null;
+    }
+    const updateData: Record<string, unknown> = {};
+    if (payload.title !== undefined) updateData['title'] = payload.title;
+    if (payload.content !== undefined) updateData['content'] = payload.content;
+    const { data, error } = await supabase
+      .from('notes')
+      .update(updateData)
+      .eq('id', id)
+      .select()
+      .single();
+    if (error) throw error;
+    return {
+      id: data.id,
+      title: data.title,
+      content: data.content ?? '',
+      ownerType: data.owner_type,
+      ownerId: data.owner_id,
+      createdAt: data.created_at,
+      updatedAt: data.updated_at,
+    };
+  }
+
+  async deleteNote(id: string) {
+    this.checkEnvironment();
+    const { data: session } = await supabase.auth.getSession();
+    if (!session?.session?.user) {
+      const guestNotes = JSON.parse(localStorage.getItem('guest-notes') || '[]');
+      const filtered = guestNotes.filter((n: any) => n.id !== id);
+      localStorage.setItem('guest-notes', JSON.stringify(filtered));
+      return true;
+    }
+    const { error } = await supabase
+      .from('notes')
+      .delete()
+      .eq('id', id);
+    if (error) throw error;
+    return true;
+  }
+
+  // ============================================================================
+  // Skill Sets CRUD
+  // ============================================================================
+
+  async getSkillSets() {
+    this.checkEnvironment();
+    const { data: session } = await supabase.auth.getSession();
+    if (!session?.session?.user) {
+      return JSON.parse(localStorage.getItem('guest-skill-sets') || '[]');
+    }
+    const { data, error } = await supabase
+      .from('skill_sets')
+      .select('*, note:notes(*), skill_set_stickies(*, sticky:stickies(*)), skill_set_goals(*, goal:goals(*)), skill_set_habits(*, habit:habits(*))')
+      .eq('owner_type', 'user')
+      .eq('owner_id', session.session.user.id)
+      .order('display_order', { ascending: true });
+    if (error) throw error;
+    return data || [];
+  }
+
+  async createSkillSet(payload: any) {
+    this.checkEnvironment();
+    const { data: session } = await supabase.auth.getSession();
+    if (!session?.session?.user) {
+      const guestSets = JSON.parse(localStorage.getItem('guest-skill-sets') || '[]');
+      const now = new Date().toISOString();
+      const newSet = { id: `ss${Date.now()}`, ...payload, createdAt: now, updatedAt: now };
+      guestSets.push(newSet);
+      localStorage.setItem('guest-skill-sets', JSON.stringify(guestSets));
+      return newSet;
+    }
+    const { data, error } = await supabase
+      .from('skill_sets')
+      .insert({
+        name: payload.name,
+        description: payload.description || null,
+        note_id: payload.noteId || null,
+        status: payload.status || 'todo',
+        display_order: payload.displayOrder ?? 0,
+        owner_type: 'user',
+        owner_id: session.session.user.id,
+      })
+      .select('*, note:notes(*), skill_set_stickies(*, sticky:stickies(*)), skill_set_goals(*, goal:goals(*)), skill_set_habits(*, habit:habits(*))')
+      .single();
+    if (error) throw error;
+
+    // Create linked stickies
+    if (payload.stickyIds?.length > 0) {
+      const stickyLinks = payload.stickyIds.map((stickyId: string, i: number) => ({
+        skill_set_id: data.id,
+        sticky_id: stickyId,
+        display_order: i,
+        owner_type: 'user',
+        owner_id: session.session.user.id,
+      }));
+      const { error: stickyErr } = await supabase.from('skill_set_stickies').insert(stickyLinks);
+      if (stickyErr) console.error('[createSkillSet] Failed to link stickies:', stickyErr);
+    }
+
+    // Create linked goals
+    if (payload.goalIds?.length > 0) {
+      const goalLinks = payload.goalIds.map((goalId: string) => ({
+        skill_set_id: data.id,
+        goal_id: goalId,
+        owner_type: 'user',
+        owner_id: session.session.user.id,
+      }));
+      const { error: goalErr } = await supabase.from('skill_set_goals').insert(goalLinks);
+      if (goalErr) console.error('[createSkillSet] Failed to link goals:', goalErr);
+    }
+
+    // Create linked habits
+    if (payload.habitIds?.length > 0) {
+      const habitLinks = payload.habitIds.map((habitId: string) => ({
+        skill_set_id: data.id,
+        habit_id: habitId,
+        owner_type: 'user',
+        owner_id: session.session.user.id,
+      }));
+      const { error: habitErr } = await supabase.from('skill_set_habits').insert(habitLinks);
+      if (habitErr) console.error('[createSkillSet] Failed to link habits:', habitErr);
+    }
+
+    // Re-fetch with all relations
+    const { data: full, error: refetchError } = await supabase
+      .from('skill_sets')
+      .select('*, note:notes(*), skill_set_stickies(*, sticky:stickies(*)), skill_set_goals(*, goal:goals(*)), skill_set_habits(*, habit:habits(*))')
+      .eq('id', data.id)
+      .single();
+    if (refetchError) throw refetchError;
+    return full;
+  }
+
+  async updateSkillSet(id: string, payload: any) {
+    this.checkEnvironment();
+    const { data: session } = await supabase.auth.getSession();
+    if (!session?.session?.user) {
+      return null;
+    }
+    const updateData: Record<string, unknown> = {};
+    if (payload.name !== undefined) updateData['name'] = payload.name;
+    if (payload.description !== undefined) updateData['description'] = payload.description;
+    if (payload.noteId !== undefined) updateData['note_id'] = payload.noteId;
+    if (payload.status !== undefined) updateData['status'] = payload.status;
+    if (payload.displayOrder !== undefined) updateData['display_order'] = payload.displayOrder;
+    if (payload.executionResult !== undefined) updateData['execution_result'] = payload.executionResult;
+
+    const { data, error } = await supabase
+      .from('skill_sets')
+      .update(updateData)
+      .eq('id', id)
+      .select('*, note:notes(*), skill_set_stickies(*, sticky:stickies(*)), skill_set_goals(*, goal:goals(*)), skill_set_habits(*, habit:habits(*))')
+      .single();
+    if (error) throw error;
+
+    // Update linked stickies (full replace)
+    if (payload.stickyIds !== undefined) {
+      await supabase.from('skill_set_stickies').delete().eq('skill_set_id', id);
+      if (payload.stickyIds.length > 0) {
+        const stickyLinks = payload.stickyIds.map((stickyId: string, i: number) => ({
+          skill_set_id: id,
+          sticky_id: stickyId,
+          display_order: i,
+          owner_type: 'user',
+          owner_id: session.session.user.id,
+        }));
+        await supabase.from('skill_set_stickies').insert(stickyLinks);
+      }
+    }
+
+    // Update linked stickies (incremental add/remove)
+    if (payload.addStickyIds?.length > 0) {
+      const existing = await supabase.from('skill_set_stickies').select('display_order').eq('skill_set_id', id).order('display_order', { ascending: false }).limit(1);
+      const maxOrder = existing.data?.[0]?.display_order ?? -1;
+      const stickyLinks = payload.addStickyIds.map((stickyId: string, i: number) => ({
+        skill_set_id: id,
+        sticky_id: stickyId,
+        display_order: maxOrder + 1 + i,
+        owner_type: 'user',
+        owner_id: session.session.user.id,
+      }));
+      await supabase.from('skill_set_stickies').insert(stickyLinks);
+    }
+    if (payload.removeStickyIds?.length > 0) {
+      await supabase.from('skill_set_stickies').delete().eq('skill_set_id', id).in('sticky_id', payload.removeStickyIds);
+    }
+
+    // Update linked goals (full replace)
+    if (payload.goalIds !== undefined) {
+      await supabase.from('skill_set_goals').delete().eq('skill_set_id', id);
+      if (payload.goalIds.length > 0) {
+        const goalLinks = payload.goalIds.map((goalId: string) => ({
+          skill_set_id: id,
+          goal_id: goalId,
+          owner_type: 'user',
+          owner_id: session.session.user.id,
+        }));
+        await supabase.from('skill_set_goals').insert(goalLinks);
+      }
+    }
+
+    // Update linked goals (incremental add/remove)
+    if (payload.addGoalIds?.length > 0) {
+      const goalLinks = payload.addGoalIds.map((goalId: string) => ({
+        skill_set_id: id,
+        goal_id: goalId,
+        owner_type: 'user',
+        owner_id: session.session.user.id,
+      }));
+      await supabase.from('skill_set_goals').insert(goalLinks);
+    }
+    if (payload.removeGoalIds?.length > 0) {
+      await supabase.from('skill_set_goals').delete().eq('skill_set_id', id).in('goal_id', payload.removeGoalIds);
+    }
+
+    // Update linked habits (full replace)
+    if (payload.habitIds !== undefined) {
+      await supabase.from('skill_set_habits').delete().eq('skill_set_id', id);
+      if (payload.habitIds.length > 0) {
+        const habitLinks = payload.habitIds.map((habitId: string) => ({
+          skill_set_id: id,
+          habit_id: habitId,
+          owner_type: 'user',
+          owner_id: session.session.user.id,
+        }));
+        await supabase.from('skill_set_habits').insert(habitLinks);
+      }
+    }
+
+    // Update linked habits (incremental add/remove)
+    if (payload.addHabitIds?.length > 0) {
+      const habitLinks = payload.addHabitIds.map((habitId: string) => ({
+        skill_set_id: id,
+        habit_id: habitId,
+        owner_type: 'user',
+        owner_id: session.session.user.id,
+      }));
+      await supabase.from('skill_set_habits').insert(habitLinks);
+    }
+    if (payload.removeHabitIds?.length > 0) {
+      await supabase.from('skill_set_habits').delete().eq('skill_set_id', id).in('habit_id', payload.removeHabitIds);
+    }
+
+    // Re-fetch with all relations after link updates
+    const { data: full, error: refetchError } = await supabase
+      .from('skill_sets')
+      .select('*, note:notes(*), skill_set_stickies(*, sticky:stickies(*)), skill_set_goals(*, goal:goals(*)), skill_set_habits(*, habit:habits(*))')
+      .eq('id', id)
+      .single();
+    if (refetchError) throw refetchError;
+    return full;
+  }
+
+  async deleteSkillSet(id: string) {
+    this.checkEnvironment();
+    const { data: session } = await supabase.auth.getSession();
+    if (!session?.session?.user) {
+      const guestSets = JSON.parse(localStorage.getItem('guest-skill-sets') || '[]');
+      const filtered = guestSets.filter((s: any) => s.id !== id);
+      localStorage.setItem('guest-skill-sets', JSON.stringify(filtered));
+      return true;
+    }
+    const { error } = await supabase
+      .from('skill_sets')
+      .delete()
+      .eq('id', id);
+    if (error) throw error;
+    return true;
+  }
+
+  async updateSkillSetStatus(id: string, status: string) {
+    this.checkEnvironment();
+    const { data: session } = await supabase.auth.getSession();
+    if (!session?.session?.user) return null;
+    const { data, error } = await supabase
+      .from('skill_sets')
+      .update({ status })
+      .eq('id', id)
+      .select()
+      .single();
+    if (error) throw error;
+    return data;
   }
 
   // ============================================================================

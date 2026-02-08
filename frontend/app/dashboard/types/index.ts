@@ -385,3 +385,6 @@ export {
   createDebugModeResponse,
 } from './ai-candidate-response';
 
+// Skill Set Types (MOC Task Kanban)
+export * from './skill-set.types';
+

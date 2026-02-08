@@ -11,15 +11,21 @@
 
 import React, { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import { useMultiAgentServerContext } from '../contexts/MultiAgentServerContext';
-import type { ServerConnection } from '../hooks/useMultiAgentServer';
 import { useMcpChat, type MastraMessage } from '../hooks/useMcpChat';
 import type { Goal, Habit, Sticky, Tag } from '../types';
+import type {
+  SkillSetStatus,
+  CreateSkillSetPayload,
+  UpdateSkillSetPayload,
+  CreateNotePayload,
+  UpdateNotePayload,
+  Note,
+} from '../types';
 import type { ChatAgentSettings, McpServer } from '../types/agent.types';
 import type {
   TabId,
   GroupChatMessage,
   MOCSectionProps,
-  TaskWithDetail,
   HistoryFilter,
   AgentResponse,
   AggregationSession,
@@ -40,7 +46,7 @@ import {
   createDebugModeResponse,
 } from '../types/ai-candidate-response';
 import { CandidateDisplay } from './Chat.CandidateDisplay';
-import api from '../../../lib/api';
+import { supabaseDirectClient } from '../../../lib/supabase-direct';
 import { HabitModal } from './Modal.Habit';
 import { GoalModal } from './Modal.Goal';
 import { StickyModal } from './Modal.Sticky';
@@ -59,6 +65,11 @@ import { ProviderSelector } from './Chat.ProviderSelector';
 import { RoleSelector } from './Chat.RoleSelector';
 import { useRoleSelection } from '../hooks/useRoleSelection';
 import { usePromptTemplate } from '../hooks/usePromptTemplate';
+import TaskKanban from './MOC.TaskKanban';
+import { useSkillSets } from '../hooks/useSkillSets';
+import { useNotes } from '../hooks/useNotes';
+import { useSkillSetExecution } from '../hooks/useSkillSetExecution';
+import { buildTaskListPrompt } from '../utils/skillSetPromptBuilder';
 
 // Type definitions moved to types/moc.types.ts
 // Re-export commonly used types for backward compatibility
@@ -179,9 +190,6 @@ export function MOCSection({
   const [inputValue, setInputValue] = useState('');
   // selectedAgent state removed - manager-only mode is now default
 
-
-  // Task detail view state
-  const [selectedTask, setSelectedTask] = useState<TaskWithDetail | null>(null);
 
   // History filter state
   const [historyFilter, setHistoryFilter] = useState<HistoryFilter>('all');
@@ -334,6 +342,31 @@ export function MOCSection({
     });
   }, [currentSystemPrompt, selectedRole, locale, promptSource]);
 
+  // Skill Sets data layer (must be before useMcpChat for enhancedSystemPrompt)
+  const {
+    skillSets,
+    loading: skillSetsLoading,
+    createSkillSet,
+    updateSkillSet,
+    deleteSkillSet,
+    changeStatus: changeSkillSetStatus,
+  } = useSkillSets({ authToken });
+
+  // Notes data layer
+  const {
+    notes,
+    loading: notesLoading,
+    createNote,
+    updateNote,
+  } = useNotes({ authToken });
+
+  // Enhanced system prompt with task list injected for Remote CLI
+  const enhancedSystemPrompt = useMemo(() => {
+    if (!isRemoteCli || skillSets.length === 0) return currentSystemPrompt;
+    const taskList = buildTaskListPrompt(skillSets, locale);
+    return `${currentSystemPrompt}\n\n${taskList}`;
+  }, [currentSystemPrompt, isRemoteCli, skillSets, locale]);
+
   // MCP chat hook - no automatic fallback, let user see errors and retry
   // userId is passed for user-specific session isolation
   // systemMessage is the role-specific prompt
@@ -342,7 +375,7 @@ export function MOCSection({
     agentId: selectedMcpAgentId,
     settings: server.chatAgentSettings,
     enableStreaming: true,
-    systemMessage: currentSystemPrompt,  // Role-specific system prompt
+    systemMessage: enhancedSystemPrompt,  // Role-specific system prompt + task list
     userId: userId,
     // Don't use onFallback - it causes permanent switch to OpenAI
     // Instead, show errors to user and let them retry
@@ -375,6 +408,23 @@ export function MOCSection({
     const connections = Array.from(server.connections.values());
     return connections.reduce((sum, c) => sum + (c.agents?.length || 0), 0);
   }, [server.connections]);
+
+  // Skill Set execution lifecycle
+  const skillSetExecution = useSkillSetExecution({
+    sendMessage: activeAgent.sendMessage,
+    changeStatus: changeSkillSetStatus,
+    isRemoteCli,
+    isConnected,
+    skillSets,
+  });
+
+  // Handle skill set execution from TaskKanban
+  const handleExecuteSkillSet = useCallback(async (skillSetId: string) => {
+    const skillSet = skillSets.find(ss => ss.id === skillSetId);
+    if (skillSet) {
+      await skillSetExecution.execute(skillSet);
+    }
+  }, [skillSets, skillSetExecution]);
 
   // Convert agent activities to chat messages
   useEffect(() => {
@@ -447,6 +497,20 @@ export function MOCSection({
             icon: s.icon,
           }));
 
+          // Inject pending progress replies into the latest assistant message
+          const isLatestAssistant = msg === activeAgent.messages
+            .filter(m => m.role === 'assistant')
+            .at(-1);
+          const progressReplies = (isLatestAssistant && skillSetExecution.pendingReplies.length > 0)
+            ? skillSetExecution.pendingReplies.map((r, i) => ({
+                id: `progress-reply-${i}`,
+                label: r.label,
+                value: r.label,
+                icon: r.icon,
+              }))
+            : [];
+          const allQuickReplies = [...(quickReplies || []), ...progressReplies];
+
           if (existingIdx === -1) {
             // Add new message (may be streaming or complete)
             hasChanges = true;
@@ -459,12 +523,12 @@ export function MOCSection({
               senderIcon: '🤖',
               content: displayContent,
               timestamp: msg.timestamp || new Date(),
-              ...(quickReplies && quickReplies.length > 0 ? { quickReplies } : {}),
+              ...(allQuickReplies.length > 0 ? { quickReplies: allQuickReplies } : {}),
             });
           } else {
             const existingMsg = updated[existingIdx];
             const contentChanged = existingMsg.content !== displayContent;
-            const suggestionsChanged = quickReplies && quickReplies.length > 0 && !existingMsg.quickReplies;
+            const suggestionsChanged = allQuickReplies.length > 0 && !existingMsg.quickReplies;
 
             if (contentChanged || suggestionsChanged) {
               hasChanges = true;
@@ -480,7 +544,28 @@ export function MOCSection({
 
       return hasChanges ? updated : prev;
     });
-  }, [activeAgent.messages]); // Depend on activeAgent.messages
+  }, [activeAgent.messages, skillSetExecution.pendingReplies]); // Depend on activeAgent.messages and pendingReplies
+
+  // Process incoming messages for skill set execution progress
+  // Uses message dedup to prevent re-processing the same progress report
+  const processedProgressMsgIds = useRef(new Set<string>());
+  useEffect(() => {
+    const msgs = activeAgent.messages;
+    if (msgs.length === 0) return;
+
+    const latestMessage = msgs[msgs.length - 1];
+    if (!latestMessage || latestMessage.role !== 'assistant') return;
+
+    // Generate stable key for dedup
+    const msgKey = latestMessage.id ?? `idx-${msgs.length - 1}`;
+    if (processedProgressMsgIds.current.has(msgKey)) return;
+
+    // Only process once message contains a progress report (handles streaming)
+    if (latestMessage.content?.includes('skill_set_progress')) {
+      processedProgressMsgIds.current.add(msgKey);
+      skillSetExecution.handleMessage(latestMessage);
+    }
+  }, [activeAgent.messages, skillSetExecution.handleMessage]);
 
   // Parse AI candidate responses from messages
   // Remote CLIモードではAICandidateResponseのパースをスキップ
@@ -589,7 +674,7 @@ export function MOCSection({
     for (const { candidate } of goalCandidates) {
       try {
         const tempId = candidate.id; // temporary ID for linking
-        const createdGoal = await api.createGoal({
+        const createdGoal = await supabaseDirectClient.createGoal({
           name: candidate.detail.name,
           details: candidate.detail.details || '',
           dueDate: candidate.detail.dueDate || null,
@@ -618,7 +703,7 @@ export function MOCSection({
           resolvedGoalId = goalIdMap.get(candidate.parentGoalId) || null;
         }
 
-        const createdHabit = await api.createHabit({
+        const createdHabit = await supabaseDirectClient.createHabit({
           name: candidate.detail.name,
           type: candidate.detail.habitType || 'do',
           must: candidate.detail.must || 1,
@@ -644,7 +729,7 @@ export function MOCSection({
     // 5. Register Sticky candidates
     for (const { candidate } of stickyCandidates) {
       try {
-        const createdSticky = await api.createSticky({
+        const createdSticky = await supabaseDirectClient.createSticky({
           name: candidate.detail.name,
           description: candidate.detail.description || '',
           completed: candidate.detail.completed || false,
@@ -1025,35 +1110,6 @@ export function MOCSection({
     activeAgent.sendMessage(command);
   }, [activeAgent]);
 
-  // Handle task status change
-  const handleTaskStatusChange = useCallback(async (
-    task: TaskWithDetail,
-    newStatus: string
-  ) => {
-    if (!task.serverId) return;
-
-    try {
-      // Note: This would need the actual API endpoint for updating task status
-      // For now, show a message and refresh data
-      setMessages(prev => [...prev, {
-        id: `system-${Date.now()}`,
-        senderId: 'system',
-        senderName: 'System',
-        senderType: 'system',
-        senderIcon: ROLE_ICONS.system,
-        content: locale === 'ja'
-          ? `📋 タスク「${task.title}」のステータスを ${newStatus} に変更しました`
-          : `📋 Changed task "${task.title}" status to ${newStatus}`,
-        timestamp: new Date(),
-      }]);
-
-      // Refresh data
-      await server.refreshData();
-    } catch (error) {
-      console.error('Failed to update task status:', error);
-    }
-  }, [server, locale]);
-
   // Handle retry for failed messages
   const handleRetry = useCallback(() => {
     if (activeAgent.error) {
@@ -1204,7 +1260,9 @@ export function MOCSection({
 
     // 通常のAI送信
     activeAgent.sendMessage(candidate.label);
-  }, [activeAgent, adoptedCandidates, handleBatchRegister]);
+    // Clear pending progress replies after selection
+    skillSetExecution.clearPendingReplies();
+  }, [activeAgent, adoptedCandidates, handleBatchRegister, skillSetExecution]);
 
   // Copy chat history to clipboard
   const [copySuccess, setCopySuccess] = useState(false);
@@ -1315,7 +1373,7 @@ export function MOCSection({
     // Call API to create habit in database
     console.log('[handleHabitCreated] Creating habit with payload:', payload);
 
-    const createdHabit = await api.createHabit(payload);
+    const createdHabit = await supabaseDirectClient.createHabit(payload);
     console.log('[handleHabitCreated] API response:', createdHabit);
 
     // Verify the habit was actually created
@@ -1347,7 +1405,7 @@ export function MOCSection({
   const handleGoalCreated = useCallback(async (payload: { name: string; parentId?: string | null }) => {
     // Call API to create goal in database
     // Note: Error handling and modal closing is done in Modal.Goal.tsx
-    const createdGoal = await api.createGoal(payload);
+    const createdGoal = await supabaseDirectClient.createGoal(payload);
 
     // Add success message
     setMessages(prev => [...prev, {
@@ -1371,7 +1429,7 @@ export function MOCSection({
   const handleStickyCreated = useCallback(async (payload: { name: string; description?: string; parentStickyId?: string | null }) => {
     // Call API to create sticky in database
     // Note: Error handling and modal closing is done in Modal.Sticky.tsx
-    const createdSticky = await api.createSticky(payload);
+    const createdSticky = await supabaseDirectClient.createSticky(payload);
 
     // Add success message
     setMessages(prev => [...prev, {
@@ -1756,10 +1814,29 @@ export function MOCSection({
         ) : (
           <div className="flex-1 overflow-y-auto">
             {activeTab === 'tasks' && (
-              <TaskListView
-                connections={server.connections}
+              <TaskKanban
+                skillSets={skillSets}
+                goals={goals}
+                habits={habits}
+                stickies={stickies}
+                notes={notes}
                 locale={locale}
-                onStatusChange={handleTaskStatusChange}
+                onCreateSkillSet={async (payload) => { await createSkillSet(payload); }}
+                onUpdateSkillSet={updateSkillSet}
+                onDeleteSkillSet={deleteSkillSet}
+                onExecuteSkillSet={handleExecuteSkillSet}
+                onCreateNote={createNote}
+                onUpdateNote={updateNote}
+                onCreateSticky={async (name, description) => {
+                  const created = await supabaseDirectClient.createSticky({ name, description });
+                  if (onStickyCreated && created) {
+                    onStickyCreated(created);
+                  }
+                  return created;
+                }}
+                onStatusChange={changeSkillSetStatus}
+                executionProgress={skillSetExecution.progressMap}
+                isRemoteCliConnected={isRemoteCli && isConnected}
               />
             )}
             {activeTab === 'agents' && (
@@ -2479,312 +2556,6 @@ function GroupChatView({
 }
 
 // ChatMessageBubble component moved to Chat.MessageBubble.tsx
-
-interface TaskListViewProps {
-  connections: Map<string, ServerConnection>;
-  locale: 'ja' | 'en';
-  onTaskClick?: (task: TaskWithDetail) => void;
-  onStatusChange?: (task: TaskWithDetail, newStatus: string) => void;
-}
-
-function TaskListView({ connections, locale, onTaskClick, onStatusChange }: TaskListViewProps) {
-  const [selectedTask, setSelectedTask] = useState<TaskWithDetail | null>(null);
-
-  // Convert connection tasks to TaskWithDetail format
-  const allTasks: TaskWithDetail[] = [];
-  connections.forEach((conn, serverId) => {
-    conn.tasks.forEach(t => {
-      allTasks.push({
-        id: t.id,
-        title: t.title,
-        description: t.description,
-        status: t.status,
-        priority: t.priority,
-        assignedTo: t.assignedTo || undefined,
-        createdAt: t.createdAt,
-        updatedAt: t.updatedAt,
-        serverId,
-      });
-    });
-  });
-
-  const inProgress = allTasks.filter(t => t.status === 'in_progress');
-  const pending = allTasks.filter(t => t.status === 'pending');
-  const completed = allTasks.filter(t => t.status === 'completed').slice(0, 5);
-
-  const handleTaskClick = (task: TaskWithDetail) => {
-    setSelectedTask(task);
-    onTaskClick?.(task);
-  };
-
-  const handleCloseModal = () => {
-    setSelectedTask(null);
-  };
-
-  const handleStatusChange = (newStatus: string) => {
-    if (selectedTask) {
-      onStatusChange?.(selectedTask, newStatus);
-      setSelectedTask(null);
-    }
-  };
-
-  return (
-    <div className="p-4 space-y-4 overflow-y-auto h-full">
-      {/* In Progress */}
-      <TaskSection
-        title={locale === 'ja' ? '🔄 進行中' : '🔄 In Progress'}
-        tasks={inProgress}
-        locale={locale}
-        onTaskClick={handleTaskClick}
-      />
-
-      {/* Pending */}
-      <TaskSection
-        title={locale === 'ja' ? '⏳ 待機中' : '⏳ Pending'}
-        tasks={pending}
-        locale={locale}
-        onTaskClick={handleTaskClick}
-      />
-
-      {/* Completed */}
-      <TaskSection
-        title={locale === 'ja' ? '✅ 完了 (最近)' : '✅ Completed (Recent)'}
-        tasks={completed}
-        locale={locale}
-        onTaskClick={handleTaskClick}
-      />
-
-      {allTasks.length === 0 && (
-        <div className="text-center text-muted-foreground py-8">
-          <span className="text-3xl mb-2 block">📋</span>
-          <p>{locale === 'ja' ? 'タスクはありません' : 'No tasks'}</p>
-        </div>
-      )}
-
-      {/* Task Detail Modal */}
-      {selectedTask && (
-        <TaskDetailModal
-          task={selectedTask}
-          locale={locale}
-          onClose={handleCloseModal}
-          onStatusChange={handleStatusChange}
-        />
-      )}
-    </div>
-  );
-}
-
-interface TaskSectionProps {
-  title: string;
-  tasks: TaskWithDetail[];
-  locale: 'ja' | 'en';
-  onTaskClick?: (task: TaskWithDetail) => void;
-}
-
-function TaskSection({ title, tasks, locale, onTaskClick }: TaskSectionProps) {
-  if (tasks.length === 0) return null;
-
-  const priorityColors: Record<string, string> = {
-    urgent: 'text-red-600 dark:text-red-400',
-    high: 'text-orange-600 dark:text-orange-400',
-    medium: 'text-yellow-600 dark:text-yellow-400',
-    low: 'text-gray-600 dark:text-gray-400',
-  };
-
-  const priorityBgColors: Record<string, string> = {
-    urgent: 'bg-red-100 dark:bg-red-900/20',
-    high: 'bg-orange-100 dark:bg-orange-900/20',
-    medium: 'bg-yellow-100 dark:bg-yellow-900/20',
-    low: 'bg-gray-100 dark:bg-gray-800/50',
-  };
-
-  return (
-    <div>
-      <h3 className="text-sm font-medium text-foreground mb-2">
-        {title} ({tasks.length})
-      </h3>
-      <div className="space-y-2">
-        {tasks.map(task => (
-          <div
-            key={task.id}
-            onClick={() => onTaskClick?.(task)}
-            className="p-3 bg-muted rounded-lg border border-border cursor-pointer hover:bg-muted/80 hover:border-primary/50 transition-all group"
-          >
-            <div className="flex items-center justify-between">
-              <span className="font-medium text-foreground group-hover:text-primary transition-colors">{task.title}</span>
-              <span className={`text-xs font-medium px-2 py-0.5 rounded ${priorityBgColors[task.priority] || priorityBgColors.medium} ${priorityColors[task.priority] || priorityColors.medium}`}>
-                {task.priority}
-              </span>
-            </div>
-            {task.assignedTo && (
-              <p className="text-xs text-muted-foreground mt-1">
-                {locale === 'ja' ? '担当' : 'Assigned'}: {task.assignedTo}
-              </p>
-            )}
-            {/* Click hint */}
-            <div className="flex items-center gap-1 mt-2 text-[10px] text-muted-foreground/70 opacity-0 group-hover:opacity-100 transition-opacity">
-              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-              </svg>
-              {locale === 'ja' ? '詳細を見る' : 'View details'}
-            </div>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-// Task Detail Modal Component
-interface TaskDetailModalProps {
-  task: TaskWithDetail;
-  locale: 'ja' | 'en';
-  onClose: () => void;
-  onStatusChange?: (newStatus: string) => void;
-}
-
-function TaskDetailModal({ task, locale, onClose, onStatusChange }: TaskDetailModalProps) {
-  const [newStatus, setNewStatus] = useState(task.status);
-
-  const statusOptions = [
-    { value: 'pending', label: locale === 'ja' ? '待機中' : 'Pending', icon: '⏳' },
-    { value: 'in_progress', label: locale === 'ja' ? '進行中' : 'In Progress', icon: '🔄' },
-    { value: 'completed', label: locale === 'ja' ? '完了' : 'Completed', icon: '✅' },
-    { value: 'cancelled', label: locale === 'ja' ? 'キャンセル' : 'Cancelled', icon: '❌' },
-  ];
-
-  const priorityLabels: Record<string, { ja: string; en: string }> = {
-    urgent: { ja: '緊急', en: 'Urgent' },
-    high: { ja: '高', en: 'High' },
-    medium: { ja: '中', en: 'Medium' },
-    low: { ja: '低', en: 'Low' },
-  };
-
-  const handleSave = () => {
-    if (newStatus !== task.status) {
-      onStatusChange?.(newStatus);
-    }
-    onClose();
-  };
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
-      <div
-        className="bg-card border border-border rounded-xl shadow-xl max-w-md w-full max-h-[80vh] overflow-hidden"
-        onClick={(e) => e.stopPropagation()}
-      >
-        {/* Header */}
-        <div className="flex items-center justify-between p-4 border-b border-border">
-          <h3 className="text-lg font-semibold text-foreground">
-            {locale === 'ja' ? 'タスク詳細' : 'Task Details'}
-          </h3>
-          <button
-            onClick={onClose}
-            className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
-          >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-            </svg>
-          </button>
-        </div>
-
-        {/* Content */}
-        <div className="p-4 space-y-4 overflow-y-auto">
-          {/* Title */}
-          <div>
-            <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
-              {locale === 'ja' ? 'タイトル' : 'Title'}
-            </label>
-            <p className="mt-1 text-foreground font-medium">{task.title}</p>
-          </div>
-
-          {/* Description */}
-          {task.description && (
-            <div>
-              <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
-                {locale === 'ja' ? '説明' : 'Description'}
-              </label>
-              <p className="mt-1 text-sm text-muted-foreground">{task.description}</p>
-            </div>
-          )}
-
-          {/* Status Selector */}
-          <div>
-            <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
-              {locale === 'ja' ? 'ステータス' : 'Status'}
-            </label>
-            <div className="mt-2 grid grid-cols-2 gap-2">
-              {statusOptions.map((option) => (
-                <button
-                  key={option.value}
-                  onClick={() => setNewStatus(option.value)}
-                  className={`flex items-center gap-2 p-2 rounded-lg border text-sm transition-all ${
-                    newStatus === option.value
-                      ? 'border-primary bg-primary/10 text-primary'
-                      : 'border-border bg-muted text-muted-foreground hover:border-primary/50 hover:bg-muted/80'
-                  }`}
-                >
-                  <span>{option.icon}</span>
-                  <span>{option.label}</span>
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* Meta Info */}
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
-                {locale === 'ja' ? '優先度' : 'Priority'}
-              </label>
-              <p className="mt-1 text-sm text-foreground">
-                {priorityLabels[task.priority]?.[locale] || task.priority}
-              </p>
-            </div>
-            {task.assignedTo && (
-              <div>
-                <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
-                  {locale === 'ja' ? '担当者' : 'Assigned To'}
-                </label>
-                <p className="mt-1 text-sm text-foreground">{task.assignedTo}</p>
-              </div>
-            )}
-          </div>
-
-          {/* Timestamps */}
-          {task.createdAt && (
-            <div>
-              <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
-                {locale === 'ja' ? '作成日時' : 'Created'}
-              </label>
-              <p className="mt-1 text-xs text-muted-foreground">
-                {new Date(task.createdAt).toLocaleString(locale === 'ja' ? 'ja-JP' : 'en-US')}
-              </p>
-            </div>
-          )}
-        </div>
-
-        {/* Footer */}
-        <div className="flex items-center justify-end gap-2 p-4 border-t border-border bg-muted/30">
-          <button
-            onClick={onClose}
-            className="px-4 py-2 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
-          >
-            {locale === 'ja' ? 'キャンセル' : 'Cancel'}
-          </button>
-          <button
-            onClick={handleSave}
-            disabled={newStatus === task.status}
-            className="px-4 py-2 text-sm font-medium bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-          >
-            {locale === 'ja' ? '保存' : 'Save'}
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
 
 interface HistoryViewProps {
   messages: GroupChatMessage[];

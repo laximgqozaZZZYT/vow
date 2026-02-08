@@ -325,8 +325,40 @@ async function request(path: string, opts: RequestInit = {}) {
       } else if (opts.method === 'DELETE') {
         return await supabaseDirectClient.deleteSticky(id);
       }
+    } else if (path === '/notes') {
+      if (opts.method === 'POST') {
+        const payload = JSON.parse(opts.body as string);
+        return await supabaseDirectClient.createNote(payload);
+      }
+      return await supabaseDirectClient.getNotes();
+    } else if (path.startsWith('/notes/')) {
+      const noteId = path.split('/')[2];
+      if (opts.method === 'PUT' || opts.method === 'PATCH') {
+        const payload = JSON.parse(opts.body as string);
+        return await supabaseDirectClient.updateNote(noteId, payload);
+      } else if (opts.method === 'DELETE') {
+        return await supabaseDirectClient.deleteNote(noteId);
+      }
+    } else if (path === '/skill-sets') {
+      if (opts.method === 'POST') {
+        const payload = JSON.parse(opts.body as string);
+        return await supabaseDirectClient.createSkillSet(payload);
+      }
+      return await supabaseDirectClient.getSkillSets();
+    } else if (path.startsWith('/skill-sets/')) {
+      const parts = path.split('/');
+      const ssId = parts[2];
+      if (parts[3] === 'status' && (opts.method === 'PATCH' || opts.method === 'PUT')) {
+        const payload = JSON.parse(opts.body as string);
+        return await supabaseDirectClient.updateSkillSetStatus(ssId, payload.status);
+      } else if (opts.method === 'PUT' || opts.method === 'PATCH') {
+        const payload = JSON.parse(opts.body as string);
+        return await supabaseDirectClient.updateSkillSet(ssId, payload);
+      } else if (opts.method === 'DELETE') {
+        return await supabaseDirectClient.deleteSkillSet(ssId);
+      }
     }
-    
+
     throw new ApiError('Endpoint not implemented for direct Supabase client', path);
   }
 }
@@ -634,6 +666,44 @@ export async function removeStickyHabit(stickyId: string, habitId: string) {
   return await request(`/stickies/${stickyId}/habits/${habitId}`, { method: 'DELETE' });
 }
 
+// Notes API
+export async function getNotes() {
+  return await request('/notes');
+}
+
+export async function createNote(payload: any) {
+  return await request('/notes', { method: 'POST', body: JSON.stringify(payload) });
+}
+
+export async function updateNote(id: string, payload: any) {
+  return await request(`/notes/${id}`, { method: 'PUT', body: JSON.stringify(payload) });
+}
+
+export async function deleteNote(id: string) {
+  return await request(`/notes/${id}`, { method: 'DELETE' });
+}
+
+// Skill Sets API
+export async function getSkillSets() {
+  return await request('/skill-sets');
+}
+
+export async function createSkillSetApi(payload: any) {
+  return await request('/skill-sets', { method: 'POST', body: JSON.stringify(payload) });
+}
+
+export async function updateSkillSetApi(id: string, payload: any) {
+  return await request(`/skill-sets/${id}`, { method: 'PUT', body: JSON.stringify(payload) });
+}
+
+export async function deleteSkillSetApi(id: string) {
+  return await request(`/skill-sets/${id}`, { method: 'DELETE' });
+}
+
+export async function updateSkillSetStatusApi(id: string, status: string) {
+  return await request(`/skill-sets/${id}/status`, { method: 'PATCH', body: JSON.stringify({ status }) });
+}
+
 // Mindmap API
 export async function getMindmaps() {
   return await request('/mindmaps');
@@ -859,6 +929,15 @@ const api = {
   getStickyHabits,
   addStickyHabit,
   removeStickyHabit,
+  getNotes,
+  createNote,
+  updateNote,
+  deleteNote,
+  getSkillSets,
+  createSkillSet: createSkillSetApi,
+  updateSkillSet: updateSkillSetApi,
+  deleteSkillSet: deleteSkillSetApi,
+  updateSkillSetStatus: updateSkillSetStatusApi,
   getMindmaps,
   createMindmap,
   updateMindmap,
@@ -872,7 +951,71 @@ const api = {
   deleteMindmapConnection,
   me,
   claim,
-  
+
+  // Notes API (Backend - /api/notes)
+  notes: {
+    list: async () => {
+      return await api.get('/api/notes');
+    },
+    get: async (id: string) => {
+      return await api.get(`/api/notes/${id}`);
+    },
+    create: async (payload: { title: string; content: string }) => {
+      return await api.post('/api/notes', payload);
+    },
+    update: async (id: string, payload: { title?: string; content?: string }) => {
+      return await api.put(`/api/notes/${id}`, payload);
+    },
+    delete: async (id: string) => {
+      return await api.delete(`/api/notes/${id}`);
+    },
+  },
+
+  // Skill Sets API (Backend - /api/skill-sets)
+  skillSets: {
+    list: async () => {
+      return await api.get('/api/skill-sets');
+    },
+    get: async (id: string) => {
+      return await api.get(`/api/skill-sets/${id}`);
+    },
+    create: async (payload: {
+      name: string;
+      description?: string;
+      noteId?: string;
+      newNote?: { title: string; content: string };
+      stickyIds?: string[];
+      goalIds?: string[];
+      habitIds?: string[];
+    }) => {
+      return await api.post('/api/skill-sets', payload);
+    },
+    update: async (id: string, payload: {
+      name?: string;
+      description?: string;
+      noteId?: string | null;
+      status?: 'todo' | 'in_progress' | 'done';
+      displayOrder?: number;
+      addStickyIds?: string[];
+      removeStickyIds?: string[];
+      addGoalIds?: string[];
+      removeGoalIds?: string[];
+      addHabitIds?: string[];
+      removeHabitIds?: string[];
+    }) => {
+      return await api.put(`/api/skill-sets/${id}`, payload);
+    },
+    delete: async (id: string) => {
+      return await api.delete(`/api/skill-sets/${id}`);
+    },
+    changeStatus: async (id: string, status: 'todo' | 'in_progress' | 'done') => {
+      return await api.patch(`/api/skill-sets/${id}/status`, { status });
+    },
+    execute: async (id: string) => {
+      return await api.post(`/api/skill-sets/${id}/execute`);
+    },
+  },
+
   logout: async () => {
     const { supabase } = await import('./supabaseClient');
     if (!supabase) throw new Error('Supabase client not available');

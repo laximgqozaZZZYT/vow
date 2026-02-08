@@ -407,6 +407,7 @@ export function createApp(): Hono {
   const mcpInstallerRouter = createMcpInstallerRouter();
   app.route('/api/mcp-installer', mcpInstallerRouter);
 
+
   logger.info('Application initialized', {
     version: settings.appVersion,
     debug: settings.debug,

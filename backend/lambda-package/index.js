@@ -41,6 +41,7 @@ import { createConversationsRouter } from './routers/conversations.js';
 import { createCredentialsRouter } from './routers/credentials.js';
 import { createIssuesRouter } from './routers/issues.js';
 import { createMcpInstallerRouter } from './routers/mcpInstaller.js';
+import { createPromptTemplatesRouter } from './routers/promptTemplates.js';
 import { cliTokenRouter } from './routers/cliTokens.js';
 import { providerChatRouter } from './routers/providerChat.js';
 // Error handling imports
@@ -206,10 +207,10 @@ export function createApp() {
     // Note: Requires Premium subscription
     // Requirements: 3.1, 3.6, 4.1
     app.route('/api/ai', aiRouter);
-    // Provider chat router - mounted at /api/ai/provider-chat
-    // Endpoint: POST /api/ai/provider-chat (SSE streaming)
-    // Note: Separate mount path to avoid conflict with aiRouter at /api/ai
-    app.route('/api/ai/provider-chat', providerChatRouter);
+    // Provider chat router - mounted at /api/provider-chat
+    // Endpoint: POST /api/provider-chat (SSE streaming)
+    // Note: Mounted separately from /api/ai to avoid Hono route prefix conflicts
+    app.route('/api/provider-chat', providerChatRouter);
     // Coaching router - mounted at /api/coaching
     // Endpoints: /api/coaching/proposals, /api/coaching/apply/:id,
     //            /api/coaching/dismiss/:id, /api/coaching/snooze/:id,
@@ -288,6 +289,11 @@ export function createApp() {
     // Requirements: Role-Based Prompt System spec
     const promptsRouter = createPromptsRouter();
     app.route('/api/prompts', promptsRouter);
+    // Prompt Templates router - mounted at /api/prompt-templates
+    // Endpoints: GET /api/prompt-templates/:key?locale=ja
+    // Note: Markdown prompt templates with {{variable}} placeholders
+    const promptTemplatesRouter = createPromptTemplatesRouter();
+    app.route('/api/prompt-templates', promptTemplatesRouter);
     // Agent Configs router - mounted at /api/agent-configs
     // Endpoints: GET/POST /api/agent-configs, GET/PUT/DELETE /api/agent-configs/:agentId,
     //            POST /api/agent-configs/migrate

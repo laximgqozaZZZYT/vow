@@ -30,6 +30,8 @@ MOCセクションへのMCPリモート接続統合により、VOWプロジェ�
 
 | Spec ID | Name | Status | Lead Agent |
 |---------|------|--------|------------|
+| **MOC-TASK-KANBAN-001** | **MOC Task Kanban + Remote CLI Skill Set** | **Specification Complete** | **vow-spec-architect** |
+| **REMOTE-CLI-001** | **Remote CLI Role** | **Specification Complete** | **vow-spec-architect** |
 | **MOC-REFACTOR-001** | **Section.MOC.tsx Refactoring** | **Specification Complete** | **vow-spec-architect** |
 | **VOW-INSTALLER-001** | **VOW Application Installer** | **Draft** | **vow-spec-architect** |
 | **MOC-CANDIDATE-BTN-001** | **MOC Chat Candidate Buttons Enhancement** | **Draft** | **vow-spec-architect** |
