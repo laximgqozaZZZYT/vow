@@ -168,25 +168,31 @@ resource "aws_lambda_function" "hono_api" {
       SLACK_CLIENT_ID      = var.slack_client_id
       SLACK_CLIENT_SECRET  = var.slack_client_secret
       SLACK_SIGNING_SECRET = var.slack_signing_secret
+      SLACK_CALLBACK_URI   = "https://${aws_api_gateway_rest_api.hono[0].id}.execute-api.${var.aws_region}.amazonaws.com/${var.environment}/api/slack/oauth/callback"
+      SLACK_ENABLED        = var.lambda_env_slack_enabled
       TOKEN_ENCRYPTION_KEY = var.token_encryption_key
-      
+
       # Stripe Integration
       STRIPE_SECRET_KEY      = var.stripe_secret_key
       STRIPE_WEBHOOK_SECRET  = var.stripe_webhook_secret
       STRIPE_PRICE_ID_BASIC  = var.stripe_price_id_basic
       STRIPE_PRICE_ID_PRO    = var.stripe_price_id_pro
-      
+
       # OpenAI Integration
       OPENAI_API_KEY = var.openai_api_key
       OPENAI_ENABLED = var.openai_enabled
       OPENAI_MODEL   = var.openai_model
-      
+
       # Admin Access
       ADMIN_EMAILS = var.admin_emails
-      
+
+      # Authentication
+      ENV           = var.lambda_env_env != "" ? var.lambda_env_env : var.environment
+      AUTH_PROVIDER = "supabase"
+
       # Frontend URL
       FRONTEND_URL = var.frontend_url
-      
+
       # CORS
       CORS_ORIGINS = jsonencode(var.cors_origins)
 
