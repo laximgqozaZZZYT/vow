@@ -4,7 +4,7 @@
 
 # WAF Web ACL
 resource "aws_wafv2_web_acl" "api" {
-  count = var.lambda_nodejs_s3_bucket != "" ? 1 : 0
+  count = var.lambda_s3_bucket != "" ? 1 : 0
 
   name        = "${var.project_name}-${var.environment}-api-waf"
   description = "WAF for Vow API Gateway"
@@ -119,18 +119,18 @@ resource "aws_wafv2_web_acl" "api" {
 
 # WAF → API Gateway Association
 resource "aws_wafv2_web_acl_association" "api" {
-  count = var.lambda_nodejs_s3_bucket != "" ? 1 : 0
+  count = var.lambda_s3_bucket != "" ? 1 : 0
 
-  resource_arn = aws_api_gateway_stage.hono[0].arn
+  resource_arn = aws_api_gateway_stage.main[0].arn
   web_acl_arn  = aws_wafv2_web_acl.api[0].arn
 }
 
 # API Gateway Throttling
-resource "aws_api_gateway_method_settings" "hono_throttling" {
-  count = var.lambda_nodejs_s3_bucket != "" ? 1 : 0
+resource "aws_api_gateway_method_settings" "api_throttling" {
+  count = var.lambda_s3_bucket != "" ? 1 : 0
 
-  rest_api_id = aws_api_gateway_rest_api.hono[0].id
-  stage_name  = aws_api_gateway_stage.hono[0].stage_name
+  rest_api_id = aws_api_gateway_rest_api.main[0].id
+  stage_name  = aws_api_gateway_stage.main[0].stage_name
   method_path = "*/*"
 
   settings {

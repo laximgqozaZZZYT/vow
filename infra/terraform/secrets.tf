@@ -9,7 +9,7 @@
 # 3. Lambda環境変数からシークレットを削除し、SECRET_ARN環境変数に置き換え
 # 4. terraform apply で反映
 #
-# 対象シークレット (hono_api Lambda):
+# 対象シークレット (api Lambda):
 #   - JWT_SECRET
 #   - STRIPE_SECRET_KEY
 #   - STRIPE_WEBHOOK_SECRET
@@ -27,7 +27,7 @@
 # 1つのSecretに全シークレットをJSON形式で格納（コスト削減のため個別Secretにしない）
 
 resource "aws_secretsmanager_secret" "lambda_secrets" {
-  count = var.lambda_nodejs_s3_bucket != "" ? 1 : 0
+  count = var.lambda_s3_bucket != "" ? 1 : 0
 
   name        = "${var.project_name}/${var.environment}/lambda-secrets"
   description = "Lambda function secrets for ${var.project_name} ${var.environment}"
@@ -38,7 +38,7 @@ resource "aws_secretsmanager_secret" "lambda_secrets" {
 }
 
 resource "aws_secretsmanager_secret_version" "lambda_secrets" {
-  count = var.lambda_nodejs_s3_bucket != "" ? 1 : 0
+  count = var.lambda_s3_bucket != "" ? 1 : 0
 
   secret_id = aws_secretsmanager_secret.lambda_secrets[0].id
   secret_string = jsonencode({
@@ -61,7 +61,7 @@ resource "aws_secretsmanager_secret_version" "lambda_secrets" {
 # こちらは Lambda 環境変数シークレット用の別ポリシー。
 
 resource "aws_iam_role_policy" "lambda_secrets_manager" {
-  count = var.lambda_nodejs_s3_bucket != "" ? 1 : 0
+  count = var.lambda_s3_bucket != "" ? 1 : 0
 
   name = "${var.project_name}-${var.environment}-lambda-secrets-manager"
   role = aws_iam_role.lambda.id
@@ -88,11 +88,11 @@ resource "aws_iam_role_policy" "lambda_secrets_manager" {
 
 output "lambda_secrets_arn" {
   description = "Secrets Manager ARN for Lambda secrets"
-  value       = var.lambda_nodejs_s3_bucket != "" ? aws_secretsmanager_secret.lambda_secrets[0].arn : null
+  value       = var.lambda_s3_bucket != "" ? aws_secretsmanager_secret.lambda_secrets[0].arn : null
   sensitive   = true
 }
 
 output "lambda_secrets_name" {
   description = "Secrets Manager name for Lambda secrets"
-  value       = var.lambda_nodejs_s3_bucket != "" ? aws_secretsmanager_secret.lambda_secrets[0].name : null
+  value       = var.lambda_s3_bucket != "" ? aws_secretsmanager_secret.lambda_secrets[0].name : null
 }

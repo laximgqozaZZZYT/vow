@@ -424,6 +424,43 @@ CLAUDE.md (このファイル)
 | MCP設定ファイル | `/home/ubuntu/.mcp-multi-agent/mcp-config.json` |
 | セットアップスクリプト | `/home/ubuntu/.mcp-multi-agent/setup_multi_agent.sh` |
 
+## Infrastructure Status & Known Issues
+
+**Last Updated**: 2026-02-10
+
+### Security Audit Summary (2026-02-10)
+
+セキュリティ監査により以下のコミットが作成済み:
+- `5aff3e98` — フロントエンド・バックエンドの脆弱性修正（10件）
+- `8942019c` — インフラセキュリティ基盤（WAF, Secrets Manager, RLS, S3 Backend）
+- `5d1f7ab2` — セキュリティ運用手順書
+
+運用手順書: `scripts/security/SECURITY-OPS-RUNBOOK.md`
+
+### IaC管理の現状
+
+| 環境 | 管理ツール | 状態 |
+|------|-----------|------|
+| Production (Lambda, API GW, Cognito, VPC) | Terraform | ステート管理中 |
+| Production (Amplify) | 手動/Terraform定義あり | ステートに未反映 |
+| Development (全リソース) | CloudFormation/CDK/手動 | Terraform管理外 |
+| CDK残骸 (VowBackendTsStack) | CDK | 使用状況要確認 |
+
+### 未適用のTerraformリソース
+- WAF (`waf.tf`) — `terraform apply` が必要
+- Secrets Manager (`secrets.tf`) — `terraform apply` が必要
+- Supabase RLSマイグレーション — `supabase db push` が必要
+- S3バックエンド移行 — `terraform init -migrate-state` が必要
+
+### コスト最適化
+- NAT Gateway x2 が稼働中 (~$65/月) — Aurora未使用のため削除検討
+- CDK残骸のS3バケット (9個) — 削除検討
+
+### 関連ドキュメント
+- セキュリティ運用手順書: `scripts/security/SECURITY-OPS-RUNBOOK.md`
+- シークレットローテーション: `scripts/security/secrets-rotation-runbook.sh`
+- Terraform定義: `infra/terraform/` (15ファイル, ~3,570行)
+
 ## Getting Help
 
 - Project overview: `.kiro/specs/project-overview/`
