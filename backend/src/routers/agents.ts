@@ -760,13 +760,27 @@ agentsRouter.post(
     }
 
     const userId = user.sub;
+    const userEmail = user.email?.toLowerCase() ?? '';
     const body = c.req.valid('json' as never) as z.infer<typeof RemoteTaskRequestSchema>;
     const { prompt, workingDirectory, timeoutMs, allowedTools, dangerouslySkipPermissions } = body;
+
+    // Only allow dangerouslySkipPermissions for admin users (identified by ADMIN_EMAILS env var)
+    const ADMIN_EMAILS = (process.env['ADMIN_EMAILS'] || '').split(',').map(e => e.trim()).filter(Boolean);
+    const isAdmin = userEmail !== '' && ADMIN_EMAILS.includes(userEmail);
+    const safeDangerouslySkipPermissions = isAdmin ? dangerouslySkipPermissions : false;
+
+    if (dangerouslySkipPermissions && !isAdmin) {
+      logger.warning('Non-admin user attempted to use dangerouslySkipPermissions', {
+        userId,
+        userEmail,
+      });
+    }
 
     logger.info('Creating remote task', {
       userId,
       promptLength: prompt.length,
       workingDirectory,
+      dangerouslySkipPermissions: safeDangerouslySkipPermissions,
     });
 
     try {
@@ -782,7 +796,7 @@ agentsRouter.post(
           workingDirectory,
           timeoutMs,
           allowedTools,
-          dangerouslySkipPermissions,
+          dangerouslySkipPermissions: safeDangerouslySkipPermissions,
         }),
       });
 
@@ -898,9 +912,10 @@ agentsRouter.get(
 
     return streamSSE(c, async (stream) => {
       try {
-        const response = await fetch(`${MCP_SERVER_URL}/tasks/${taskId}/output?token=${MCP_SERVER_TOKEN}`, {
+        const response = await fetch(`${MCP_SERVER_URL}/tasks/${taskId}/output`, {
           headers: {
             'Accept': 'text/event-stream',
+            'Authorization': `Bearer ${MCP_SERVER_TOKEN}`,
           },
         });
 

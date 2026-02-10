@@ -12,6 +12,7 @@
 
 import { Hono } from 'hono';
 import type { Context } from 'hono';
+import { timingSafeEqual } from 'crypto';
 import { getLogger } from '../utils/logger.js';
 import { AppError } from '../errors/index.js';
 import { ScheduledJobsService } from '../services/scheduledJobsService.js';
@@ -56,8 +57,11 @@ function requireServiceRole(c: Context): void {
   const apiKey = c.req.header('x-api-key');
   
   // Allow if API key matches service key (for EventBridge/CloudWatch)
+  // Use timing-safe comparison to prevent timing attacks
   const serviceKey = process.env['JOBS_SERVICE_KEY'];
-  if (serviceKey && apiKey === serviceKey) {
+  if (serviceKey && apiKey &&
+      apiKey.length === serviceKey.length &&
+      timingSafeEqual(Buffer.from(apiKey), Buffer.from(serviceKey))) {
     return;
   }
 

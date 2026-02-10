@@ -39,7 +39,7 @@ const envSchema = z.object({
   SUPABASE_SERVICE_ROLE_KEY: z.string().optional(),
 
   // JWT Authentication (Supabase)
-  JWT_SECRET: z.string().default('dev-secret-key-change-in-production'),
+  JWT_SECRET: z.string().optional(),
   JWT_ALGORITHM: z.enum(['HS256', 'RS256', 'ES256']).default('HS256'),
   JWT_AUDIENCE: z.string().default('authenticated'),
   JWT_ISSUER: z.string().optional(),
@@ -184,7 +184,16 @@ function loadSettings(): Settings {
     supabaseServiceRoleKey: env.SUPABASE_SERVICE_ROLE_KEY,
 
     // JWT Authentication
-    jwtSecret: env.JWT_SECRET,
+    jwtSecret: (() => {
+      if (env.JWT_SECRET) {
+        return env.JWT_SECRET;
+      }
+      // Allow fallback in development/test environments only
+      if (env.NODE_ENV === 'development' || env.NODE_ENV === 'test') {
+        return 'dev-secret-key-change-in-production';
+      }
+      throw new Error('JWT_SECRET environment variable is required in production');
+    })(),
     jwtAlgorithm: env.JWT_ALGORITHM,
     jwtAudience: env.JWT_AUDIENCE,
     jwtIssuer: env.JWT_ISSUER,
@@ -231,8 +240,8 @@ function loadSettings(): Settings {
 export function validateRequiredSettings(settings: Settings): void {
   const errors: string[] = [];
 
-  if (settings.jwtSecret === 'dev-secret-key-change-in-production' && !settings.debug) {
-    errors.push('JWT_SECRET must be set in production');
+  if (settings.jwtSecret === 'dev-secret-key-change-in-production' && settings.nodeEnv === 'production') {
+    errors.push('JWT_SECRET must be set in production (do not use the default dev secret)');
   }
 
   if (errors.length > 0) {

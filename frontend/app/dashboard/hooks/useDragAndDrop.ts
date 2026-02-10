@@ -74,9 +74,15 @@ export function useDragAndDrop({
       top: ${y - 25}px;
     `;
     
-    const icon = item.type === 'goal' ? '🎯' : '📄';
-    preview.innerHTML = `<span style="margin-right: 8px;">${icon}</span>${item.data.name}`;
-    
+    const icon = item.type === 'goal' ? '\u{1F3AF}' : '\u{1F4C4}';
+    const iconSpan = document.createElement('span');
+    iconSpan.style.marginRight = '8px';
+    iconSpan.textContent = icon;
+    preview.appendChild(iconSpan);
+    const nameSpan = document.createElement('span');
+    nameSpan.textContent = item.data.name;
+    preview.appendChild(nameSpan);
+
     document.body.appendChild(preview);
     dragPreviewRef.current = preview;
   }, []);
@@ -102,8 +108,14 @@ export function useDragAndDrop({
         padding: 8px 12px;
         font-size: 14px;
       `;
-      const icon = item.type === 'goal' ? '🎯' : '📄';
-      dragImage.innerHTML = `<span style="margin-right: 8px;">${icon}</span>${item.data.name}`;
+      const icon = item.type === 'goal' ? '\u{1F3AF}' : '\u{1F4C4}';
+      const iconSpan = document.createElement('span');
+      iconSpan.style.marginRight = '8px';
+      iconSpan.textContent = icon;
+      dragImage.appendChild(iconSpan);
+      const nameSpan = document.createElement('span');
+      nameSpan.textContent = item.data.name;
+      dragImage.appendChild(nameSpan);
       document.body.appendChild(dragImage);
       event.dataTransfer.setDragImage(dragImage, 50, 25);
       

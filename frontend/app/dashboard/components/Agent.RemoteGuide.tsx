@@ -10,6 +10,7 @@
 
 import React, { useState, useEffect } from 'react';
 import ReactMarkdown from 'react-markdown';
+import rehypeSanitize from 'rehype-sanitize';
 
 interface RemoteAgentGuideProps {
   locale: 'ja' | 'en';
@@ -67,7 +68,7 @@ export function RemoteAgentGuide({ locale }: RemoteAgentGuideProps) {
             </div>
           ) : content ? (
             <div className="max-h-96 overflow-y-auto pr-2 prose prose-sm dark:prose-invert prose-headings:text-foreground prose-p:text-muted-foreground prose-li:text-muted-foreground prose-code:text-purple-600 dark:prose-code:text-purple-400 prose-code:bg-muted prose-code:px-1 prose-code:py-0.5 prose-code:rounded prose-pre:bg-gray-900 prose-pre:text-gray-100 prose-a:text-purple-600 dark:prose-a:text-purple-400 prose-table:text-xs prose-th:bg-muted prose-th:border prose-th:border-border prose-th:px-2 prose-th:py-1 prose-td:border prose-td:border-border prose-td:px-2 prose-td:py-1 max-w-none text-xs">
-              <ReactMarkdown>{content}</ReactMarkdown>
+              <ReactMarkdown rehypePlugins={[rehypeSanitize]}>{content}</ReactMarkdown>
             </div>
           ) : (
             <p className="text-xs text-muted-foreground">

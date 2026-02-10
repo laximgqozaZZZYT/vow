@@ -155,7 +155,12 @@ export function useKanbanDragDrop({
       left: ${x - 50}px;
       top: ${y - 25}px;
     `;
-    preview.innerHTML = `<span style="margin-right: 8px;">📋</span>移動中...`;
+    const iconSpan = document.createElement('span');
+    iconSpan.style.marginRight = '8px';
+    iconSpan.textContent = '\u{1F4CB}';
+    preview.appendChild(iconSpan);
+    const textNode = document.createTextNode('\u79FB\u52D5\u4E2D...');
+    preview.appendChild(textNode);
 
     document.body.appendChild(preview);
     dragPreviewRef.current = preview;
@@ -192,7 +197,12 @@ export function useKanbanDragDrop({
         padding: 8px 12px;
         font-size: 14px;
       `;
-      dragImage.innerHTML = `<span style="margin-right: 8px;">📋</span>移動中...`;
+      const iconSpan = document.createElement('span');
+      iconSpan.style.marginRight = '8px';
+      iconSpan.textContent = '\u{1F4CB}';
+      dragImage.appendChild(iconSpan);
+      const textNode = document.createTextNode('\u79FB\u52D5\u4E2D...');
+      dragImage.appendChild(textNode);
       document.body.appendChild(dragImage);
       event.dataTransfer.setDragImage(dragImage, 50, 25);
 

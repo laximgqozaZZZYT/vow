@@ -92,8 +92,11 @@ export function createApp(): Hono {
   // Issues CLI endpoint uses API key authentication for external access
   addExcludedPath('/api/issues/cli');
 
-  // MCP installer endpoint is public (for remote machine downloads)
-  addExcludedPath('/api/mcp-installer');
+  // MCP installer endpoints: only public download/config endpoints are excluded
+  // /api/mcp-installer/token requires JWT authentication (returns sensitive server token)
+  addExcludedPath('/api/mcp-installer/config');
+  addExcludedPath('/api/mcp-installer/install.sh');
+  addExcludedPath('/api/mcp-installer/quick-install');
 
   // CLI token refresh endpoint uses refresh token for auth (not JWT)
   addExcludedPath('/api/cli-tokens/refresh');

@@ -67,11 +67,11 @@ function MermaidBlock({ code }: { code: string }) {
             mm.initialize({
               startOnLoad: false,
               theme: 'dark',
-              securityLevel: 'loose',
+              securityLevel: 'strict',
               deterministicIds: false,
               flowchart: {
                 useMaxWidth: true,
-                htmlLabels: true
+                htmlLabels: false
               }
             })
           }
