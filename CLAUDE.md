@@ -426,7 +426,7 @@ CLAUDE.md (このファイル)
 
 ## Infrastructure Status & Known Issues
 
-**Last Updated**: 2026-02-10
+**Last Updated**: 2026-02-11
 
 ### Security Audit Summary (2026-02-10)
 
@@ -442,19 +442,24 @@ CLAUDE.md (このファイル)
 | 環境 | 管理ツール | 状態 |
 |------|-----------|------|
 | Production (Lambda, API GW, Cognito, VPC) | Terraform | ステート管理中 |
-| Production (Amplify) | 手動/Terraform定義あり | ステートに未反映 |
-| Development (全リソース) | CloudFormation/CDK/手動 | Terraform管理外 |
-| CDK残骸 (VowBackendTsStack) | CDK | 使用状況要確認 |
+| Production (Amplify, EventBridge, SNS, CloudWatch) | Terraform | `imports.tf`でimport準備済み → `terraform apply`で統合 |
+| Development (VPC, Lambda) | CloudFormation (vow-development-network) | Terraform管理外 |
+
+### 完了済みクリーンアップ (2026-02-11)
+- hono_api Lambda重複問題 — `lambda_nodejs_s3_bucket`空化、TF定義~200行削除
+- CDKスタック削除 — VowDevStack, VowBackendTsStack, CDKToolkit 全削除
+- CDK S3バケット削除 — lambdaartifactbucket×9, cdk-assets, cfn バケット全削除 (計11個)
 
 ### 未適用のTerraformリソース
+- `imports.tf` — 既存11リソースのimport定義 → `terraform apply` で統合
 - WAF (`waf.tf`) — `terraform apply` が必要
 - Secrets Manager (`secrets.tf`) — `terraform apply` が必要
 - Supabase RLSマイグレーション — `supabase db push` が必要
 - S3バックエンド移行 — `terraform init -migrate-state` が必要
 
 ### コスト最適化
-- NAT Gateway x2 が稼働中 (~$65/月) — Aurora未使用のため削除検討
-- CDK残骸のS3バケット (9個) — 削除検討
+- **本番 NAT Gateway** — Terraform定義を条件付きに変更済み (enable_aurora/enable_dms=false時は作成しない)。`terraform apply` で削除される。年間約$388削減。
+- **開発 NAT Gateway** (nat-03e1c4cc94c765236) — Lambda (vow-development-api) がVPC内に配置されているため削除不可。LambdaをVPC外に移動すれば削除可能。
 
 ### 関連ドキュメント
 - セキュリティ運用手順書: `scripts/security/SECURITY-OPS-RUNBOOK.md`

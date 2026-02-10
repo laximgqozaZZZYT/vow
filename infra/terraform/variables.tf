@@ -144,13 +144,13 @@ variable "lambda_s3_key" {
 }
 
 variable "lambda_nodejs_s3_bucket" {
-  description = "S3 bucket for Node.js Lambda deployment package"
+  description = "[DEPRECATED] S3 bucket for Node.js Lambda deployment package. No longer used — hono_api Lambda has been removed. Keep empty."
   type        = string
   default     = ""
 }
 
 variable "lambda_nodejs_s3_key" {
-  description = "S3 key for Node.js Lambda deployment package"
+  description = "[DEPRECATED] S3 key for Node.js Lambda deployment package. No longer used — hono_api Lambda has been removed. Keep empty."
   type        = string
   default     = ""
 }

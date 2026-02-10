@@ -115,12 +115,12 @@ resource "aws_amplify_branch" "main" {
     NODE_ENV                         = "production"
     NEXT_PUBLIC_API_URL              = var.amplify_env_next_public_api_url
     NEXT_PUBLIC_SITE_URL             = var.amplify_env_next_public_site_url
-    NEXT_PUBLIC_SLACK_API_URL        = var.lambda_nodejs_s3_bucket != "" ? "https://${aws_api_gateway_rest_api.hono[0].id}.execute-api.${var.aws_region}.amazonaws.com/${var.environment}" : var.amplify_env_next_public_slack_api_url
+    NEXT_PUBLIC_SLACK_API_URL        = var.amplify_env_next_public_slack_api_url
     NEXT_PUBLIC_SUPABASE_ANON_KEY    = var.amplify_env_next_public_supabase_anon_key
     NEXT_PUBLIC_SUPABASE_URL         = var.amplify_env_next_public_supabase_url
     NEXT_PUBLIC_USE_EDGE_FUNCTIONS   = var.amplify_env_next_public_use_edge_functions
     NEXT_PUBLIC_USE_SUPABASE_API     = var.amplify_env_next_public_use_supabase_api
-    NEXT_PUBLIC_BACKEND_API_URL      = var.lambda_nodejs_s3_bucket != "" ? "https://${aws_api_gateway_rest_api.hono[0].id}.execute-api.${var.aws_region}.amazonaws.com/${var.environment}" : var.amplify_env_next_public_backend_api_url
+    NEXT_PUBLIC_BACKEND_API_URL      = var.amplify_env_next_public_backend_api_url
     NEXT_PUBLIC_ENABLE_AI_COACH      = tostring(var.enable_ai_coach)
     NEXT_PUBLIC_ENABLE_SUBSCRIPTION  = tostring(var.enable_subscription)
     NEXT_PUBLIC_ENABLE_MOC           = "true"
