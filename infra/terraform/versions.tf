@@ -29,16 +29,13 @@ terraform {
   # - 本番環境: terraform workspace select production
   # =================================================================
   
-  # backend "s3" {
-  #   bucket         = "vow-terraform-state-257784614320"  # AWSアカウントIDを含むバケット名
-  #   key            = "terraform.tfstate"
-  #   region         = "ap-northeast-1"
-  #   encrypt        = true
-  #   dynamodb_table = "vow-terraform-locks"
-  #   
-  #   # Workspaceを使用して環境を分離
-  #   # ステートファイルパス: env:/{workspace}/terraform.tfstate
-  # }
+  backend "s3" {
+    bucket         = "vow-terraform-state-257784614320"
+    key            = "terraform.tfstate"
+    region         = "ap-northeast-1"
+    encrypt        = true
+    dynamodb_table = "vow-terraform-locks"
+  }
 }
 
 provider "aws" {
