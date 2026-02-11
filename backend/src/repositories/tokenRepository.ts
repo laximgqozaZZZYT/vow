@@ -185,25 +185,15 @@ export class TokenQuotaRepository {
   }
 
   /**
-   * Increment used quota.
+   * Increment used quota atomically via DB function.
+   * Uses increment_used_quota() to avoid read-then-write race conditions.
    */
   async incrementUsedQuota(userId: string, tokensUsed: number): Promise<TokenQuota | null> {
-    // First get current quota
-    const current = await this.getByUserId(userId);
-    if (!current) {
-      return null;
-    }
-
-    const newUsedQuota = current.used_quota + tokensUsed;
-
     const { data, error } = await this.supabase
-      .from(this.tableName)
-      .update({
-        used_quota: newUsedQuota,
-        updated_at: new Date().toISOString(),
+      .rpc('increment_used_quota', {
+        p_user_id: userId,
+        p_tokens: tokensUsed,
       })
-      .eq('user_id', userId)
-      .select()
       .single();
 
     if (error || !data) {

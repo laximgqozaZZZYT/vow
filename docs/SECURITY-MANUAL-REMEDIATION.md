@@ -223,16 +223,14 @@ URLに含めるトークンを短命（30秒）にし、漏洩リスクを軽減
 
 ---
 
-## ~~手動対応 5: チャット利用カウンターの Race Condition 修正~~
+## ~~手動対応 5: トークン利用カウンターの Race Condition 修正~~ (修正済み)
 
 **重要度**: MEDIUM
-**現状**: **対応不要** — `chat_usage` / `ip_chat_usage` テーブルがSupabaseに未作成。
-テーブルが存在しないためカウンター更新処理自体が実行されず、Race Conditionは発生しない。
-バックエンドコード (`rateLimitService.ts`) はテーブルを参照しているが、
-テーブル不在時はSupabaseクエリエラー → fail-closed パス（修正済み）に入るのみ。
-
-将来 `chat_usage` テーブルを作成する際は、アトミックなインクリメント
-（`UPDATE ... SET count = count + 1` または `SELECT FOR UPDATE`）で実装すること。
+**現状**: **修正完了**
+- Supabase: `increment_used_quota()` 関数を作成（アトミックなインクリメント）
+- Backend: `tokenRepository.ts` の `incrementUsedQuota()` を RPC 呼び出しに変更
+- 旧コード: read-then-write パターン（SELECT → アプリ側加算 → UPDATE）で Lost Update の可能性
+- 新コード: `UPDATE token_quotas SET used_quota = used_quota + $amount` で PostgreSQL が行ロックを自動取得
 
 ---
 
