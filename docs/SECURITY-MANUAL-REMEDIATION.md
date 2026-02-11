@@ -109,7 +109,8 @@ BUCKET_NAME="vow-production-cloudtrail-logs-${ACCOUNT_ID}"
 ## 手動対応 3: DMS supabase_ip_ranges 設定
 
 **重要度**: HIGH
-**理由**: DMS Security Groupのegress (5432) が `0.0.0.0/0` にフォールバックしており、任意のIPへのPostgreSQL接続が許可されています。SupabaseのIPに制限すべきです。
+**現状**: **対応不要** — `enable_dms = false` (デフォルト) のためDMSリソースは未作成。
+DMS を有効化する際に以下の手順で設定すること。
 **前提**: DMS機能が有効（`enable_dms = true`）の場合のみ該当。
 
 ### 手順
@@ -222,74 +223,16 @@ URLに含めるトークンを短命（30秒）にし、漏洩リスクを軽減
 
 ---
 
-## 手動対応 5: チャット利用カウンターの Race Condition 修正
+## ~~手動対応 5: チャット利用カウンターの Race Condition 修正~~
 
 **重要度**: MEDIUM
-**理由**: ユーザーのチャット利用回数カウンターにおいて、同時リクエスト時にカウントが正確にインクリメントされない可能性があります（Lost Update問題）。
-**制約**: Supabase SQLの実行が必要。
+**現状**: **対応不要** — `chat_usage` / `ip_chat_usage` テーブルがSupabaseに未作成。
+テーブルが存在しないためカウンター更新処理自体が実行されず、Race Conditionは発生しない。
+バックエンドコード (`rateLimitService.ts`) はテーブルを参照しているが、
+テーブル不在時はSupabaseクエリエラー → fail-closed パス（修正済み）に入るのみ。
 
-### ユーザールール
-
-> まず現行のスキーマ確認用SQLを提示 → ユーザーから結果共有 → 修正SQL作成
-
-### Step 1: スキーマ確認SQL
-
-以下のSQLをSupabase SQL Editorで実行し、結果を共有してください:
-
-```sql
--- 1. chat_usage テーブルのスキーマ確認
-SELECT
-  column_name,
-  data_type,
-  column_default,
-  is_nullable
-FROM information_schema.columns
-WHERE table_schema = 'public'
-  AND table_name = 'chat_usage'
-ORDER BY ordinal_position;
-
--- 2. 既存のトリガー確認
-SELECT
-  trigger_name,
-  event_manipulation,
-  action_statement
-FROM information_schema.triggers
-WHERE event_object_schema = 'public'
-  AND event_object_table = 'chat_usage';
-
--- 3. 既存のRLSポリシー確認
-SELECT
-  policyname,
-  cmd,
-  qual,
-  with_check
-FROM pg_policies
-WHERE tablename = 'chat_usage';
-
--- 4. 関連する関数確認
-SELECT
-  routine_name,
-  routine_definition
-FROM information_schema.routines
-WHERE routine_schema = 'public'
-  AND routine_name LIKE '%chat%usage%';
-```
-
-### Step 2: 修正SQL（スキーマ確認後に作成）
-
-確認結果に基づいて、以下のいずれかの方式で修正します:
-
-**方式A: SELECT FOR UPDATE**
-```sql
--- トランザクション内でロックを取得してからインクリメント
--- （具体的なSQLはスキーマ確認後に提示）
-```
-
-**方式B: SECURITY DEFINER 関数 + 排他ロック**
-```sql
--- アトミックなインクリメント関数を作成
--- （具体的なSQLはスキーマ確認後に提示）
-```
+将来 `chat_usage` テーブルを作成する際は、アトミックなインクリメント
+（`UPDATE ... SET count = count + 1` または `SELECT FOR UPDATE`）で実装すること。
 
 ---
 
