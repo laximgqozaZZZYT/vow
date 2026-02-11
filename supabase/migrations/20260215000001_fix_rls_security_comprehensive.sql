@@ -30,139 +30,121 @@ CREATE POLICY "api_keys_service_role" ON api_keys
   USING (true);
 
 -- =========================================
--- 2. rate_limits - CRITICAL: Restrict to service_role only
+-- 2. rate_limits - Restrict to service_role only (if table exists)
 -- =========================================
--- Current state: All 4 policies use USING(true) without role restriction,
--- meaning ANY authenticated user can read/write/delete rate limit records.
---
--- Table schema: id, key_id (FK to api_keys), window_start, request_count
--- There is NO user_id or identifier column, so user-scoped policies
--- are not feasible. Rate limits should only be managed by the backend
--- via service_role.
+-- Table may not exist if API key rate limiting was never enabled.
 
-DROP POLICY IF EXISTS "Service role can select rate limits" ON rate_limits;
-DROP POLICY IF EXISTS "Service role can insert rate limits" ON rate_limits;
-DROP POLICY IF EXISTS "Service role can update rate limits" ON rate_limits;
-DROP POLICY IF EXISTS "Service role can delete rate limits" ON rate_limits;
-
--- Single policy: only service_role can perform any operation
-CREATE POLICY "rate_limits_service_role_only" ON rate_limits
-  FOR ALL TO service_role
-  USING (true);
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'rate_limits') THEN
+    EXECUTE 'DROP POLICY IF EXISTS "Service role can select rate limits" ON rate_limits';
+    EXECUTE 'DROP POLICY IF EXISTS "Service role can insert rate limits" ON rate_limits';
+    EXECUTE 'DROP POLICY IF EXISTS "Service role can update rate limits" ON rate_limits';
+    EXECUTE 'DROP POLICY IF EXISTS "Service role can delete rate limits" ON rate_limits';
+    EXECUTE 'CREATE POLICY "rate_limits_service_role_only" ON rate_limits FOR ALL TO service_role USING (true)';
+  END IF;
+END
+$$;
 
 -- =========================================
--- 3. feature_flags - Tighten management policies
+-- 3. feature_flags - Tighten management policies (if table exists)
 -- =========================================
--- Current state:
---   SELECT: authenticated USING(true) -- OK (public config)
---   INSERT/UPDATE/DELETE: service_role -- Already correct role
---
--- The individual service_role policies are fine, but we consolidate
--- them into a single ALL policy for clarity and add explicit
--- WITH CHECK for the ALL policy.
 
-DROP POLICY IF EXISTS "feature_flags_insert_policy" ON feature_flags;
-DROP POLICY IF EXISTS "feature_flags_update_policy" ON feature_flags;
-DROP POLICY IF EXISTS "feature_flags_delete_policy" ON feature_flags;
--- Keep "feature_flags_select_policy" for authenticated users (read-only)
-
--- Consolidated service_role policy for all operations
-DROP POLICY IF EXISTS "feature_flags_manage_service" ON feature_flags;
-CREATE POLICY "feature_flags_manage_service" ON feature_flags
-  FOR ALL TO service_role
-  USING (true)
-  WITH CHECK (true);
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'feature_flags') THEN
+    EXECUTE 'DROP POLICY IF EXISTS "feature_flags_insert_policy" ON feature_flags';
+    EXECUTE 'DROP POLICY IF EXISTS "feature_flags_update_policy" ON feature_flags';
+    EXECUTE 'DROP POLICY IF EXISTS "feature_flags_delete_policy" ON feature_flags';
+    EXECUTE 'DROP POLICY IF EXISTS "feature_flags_manage_service" ON feature_flags';
+    EXECUTE 'CREATE POLICY "feature_flags_manage_service" ON feature_flags FOR ALL TO service_role USING (true) WITH CHECK (true)';
+  END IF;
+END
+$$;
 
 -- =========================================
--- 4. level_config - Same consolidation pattern
+-- 4. level_config - Same consolidation pattern (if table exists)
 -- =========================================
--- Current state: Same as feature_flags (SELECT for authenticated OK,
--- INSERT/UPDATE/DELETE for service_role). Consolidate.
 
-DROP POLICY IF EXISTS "level_config_insert_policy" ON level_config;
-DROP POLICY IF EXISTS "level_config_update_policy" ON level_config;
-DROP POLICY IF EXISTS "level_config_delete_policy" ON level_config;
--- Keep "level_config_select_policy" for authenticated users (read-only)
-
-DROP POLICY IF EXISTS "level_config_manage_service" ON level_config;
-CREATE POLICY "level_config_manage_service" ON level_config
-  FOR ALL TO service_role
-  USING (true)
-  WITH CHECK (true);
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'level_config') THEN
+    EXECUTE 'DROP POLICY IF EXISTS "level_config_insert_policy" ON level_config';
+    EXECUTE 'DROP POLICY IF EXISTS "level_config_update_policy" ON level_config';
+    EXECUTE 'DROP POLICY IF EXISTS "level_config_delete_policy" ON level_config';
+    EXECUTE 'DROP POLICY IF EXISTS "level_config_manage_service" ON level_config';
+    EXECUTE 'CREATE POLICY "level_config_manage_service" ON level_config FOR ALL TO service_role USING (true) WITH CHECK (true)';
+  END IF;
+END
+$$;
 
 -- =========================================
--- 5. user_levels_backup - Same consolidation pattern
+-- 5. user_levels_backup - Same consolidation pattern (if table exists)
 -- =========================================
--- Current state:
---   SELECT: authenticated USING(auth.uid() = user_id) -- Already correct
---   INSERT/UPDATE/DELETE: service_role -- Already correct role
--- Consolidate service_role policies into single ALL policy.
 
-DROP POLICY IF EXISTS "user_levels_backup_insert_policy" ON user_levels_backup;
-DROP POLICY IF EXISTS "user_levels_backup_update_policy" ON user_levels_backup;
-DROP POLICY IF EXISTS "user_levels_backup_delete_policy" ON user_levels_backup;
--- Keep "user_levels_backup_select_policy" for authenticated users
-
-DROP POLICY IF EXISTS "user_levels_backup_manage_service" ON user_levels_backup;
-CREATE POLICY "user_levels_backup_manage_service" ON user_levels_backup
-  FOR ALL TO service_role
-  USING (true)
-  WITH CHECK (true);
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'user_levels_backup') THEN
+    EXECUTE 'DROP POLICY IF EXISTS "user_levels_backup_insert_policy" ON user_levels_backup';
+    EXECUTE 'DROP POLICY IF EXISTS "user_levels_backup_update_policy" ON user_levels_backup';
+    EXECUTE 'DROP POLICY IF EXISTS "user_levels_backup_delete_policy" ON user_levels_backup';
+    EXECUTE 'DROP POLICY IF EXISTS "user_levels_backup_manage_service" ON user_levels_backup';
+    EXECUTE 'CREATE POLICY "user_levels_backup_manage_service" ON user_levels_backup FOR ALL TO service_role USING (true) WITH CHECK (true)';
+  END IF;
+END
+$$;
 
 -- =========================================
 -- 6. search_embeddings() - SECURITY DEFINER -> SECURITY INVOKER
 -- =========================================
--- Current issue: SECURITY DEFINER allows the function to bypass RLS,
--- meaning a caller can pass any target_user_id and access other users'
--- embeddings. Changing to SECURITY INVOKER means RLS on the embeddings
--- table (auth.uid() = user_id) will be enforced, restricting results
--- to the calling user's own data.
---
--- Additionally, add an explicit auth.uid() check so that even if called
--- directly, the target_user_id must match the authenticated user.
+-- Only apply if the function exists (requires pgvector extension)
 
-CREATE OR REPLACE FUNCTION search_embeddings(
-  query_embedding vector(1536),
-  target_user_id UUID,
-  target_entity_types TEXT[] DEFAULT NULL,
-  match_count INT DEFAULT 10,
-  similarity_threshold FLOAT DEFAULT 0.7
-)
-RETURNS TABLE (
-  id UUID,
-  entity_type TEXT,
-  entity_id UUID,
-  similarity FLOAT,
-  metadata JSONB
-)
-LANGUAGE plpgsql
-SECURITY INVOKER
-AS $$
+DO $$
 BEGIN
-  -- Verify the caller is requesting their own data
-  IF auth.uid() IS NULL THEN
-    RAISE EXCEPTION 'Not authenticated';
+  IF EXISTS (SELECT 1 FROM pg_proc WHERE proname = 'search_embeddings') THEN
+    EXECUTE '
+      CREATE OR REPLACE FUNCTION search_embeddings(
+        query_embedding vector(1536),
+        target_user_id UUID,
+        target_entity_types TEXT[] DEFAULT NULL,
+        match_count INT DEFAULT 10,
+        similarity_threshold FLOAT DEFAULT 0.7
+      )
+      RETURNS TABLE (
+        id UUID,
+        entity_type TEXT,
+        entity_id UUID,
+        similarity FLOAT,
+        metadata JSONB
+      )
+      LANGUAGE plpgsql
+      SECURITY INVOKER
+      AS $fn$
+      BEGIN
+        IF auth.uid() IS NULL THEN
+          RAISE EXCEPTION ''Not authenticated'';
+        END IF;
+        IF auth.uid() != target_user_id THEN
+          RAISE EXCEPTION ''Access denied: cannot search other users embeddings'';
+        END IF;
+        RETURN QUERY
+        SELECT
+          e.id,
+          e.entity_type,
+          e.entity_id,
+          1 - (e.embedding <=> query_embedding) AS similarity,
+          e.metadata
+        FROM embeddings e
+        WHERE
+          e.user_id = target_user_id
+          AND (target_entity_types IS NULL OR e.entity_type = ANY(target_entity_types))
+          AND 1 - (e.embedding <=> query_embedding) > similarity_threshold
+        ORDER BY e.embedding <=> query_embedding
+        LIMIT match_count;
+      END;
+      $fn$';
   END IF;
-
-  IF auth.uid() != target_user_id THEN
-    RAISE EXCEPTION 'Access denied: cannot search other users'' embeddings';
-  END IF;
-
-  RETURN QUERY
-  SELECT
-    e.id,
-    e.entity_type,
-    e.entity_id,
-    1 - (e.embedding <=> query_embedding) AS similarity,
-    e.metadata
-  FROM embeddings e
-  WHERE
-    e.user_id = target_user_id
-    AND (target_entity_types IS NULL OR e.entity_type = ANY(target_entity_types))
-    AND 1 - (e.embedding <=> query_embedding) > similarity_threshold
-  ORDER BY e.embedding <=> query_embedding
-  LIMIT match_count;
-END;
+END
 $$;
 
 -- =========================================
