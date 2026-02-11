@@ -82,9 +82,8 @@ function createCliTokenService(supabase: SupabaseClient): CliTokenService {
  */
 export function createCliTokenRouter(): Hono {
   const router = new Hono();
-  const settings = getSettings();
-  // Use anon key client for public /refresh endpoint
-  const supabaseAnon = getSupabaseClientAnon(settings);
+  // Use anon key client for public /refresh endpoint (anon key is always in env vars)
+  const supabaseAnon = getSupabaseClientAnon(getSettings());
 
   // ---------------------------------------------------------------------------
   // Public Endpoint (uses refresh token for auth)
@@ -181,7 +180,7 @@ export function createCliTokenRouter(): Hono {
 
     try {
       // Use service role client to bypass RLS
-      const supabaseClient = getSupabaseClientFromContext(c, settings);
+      const supabaseClient = getSupabaseClientFromContext(c, getSettings());
       const cliTokenService = createCliTokenService(supabaseClient);
       const tokens = await cliTokenService.listTokens(userId);
 
@@ -244,7 +243,7 @@ export function createCliTokenRouter(): Hono {
       const { name, scopes, expirationDays } = parseResult.data;
 
       // Use service role client to bypass RLS
-      const supabaseClient = getSupabaseClientFromContext(c, settings);
+      const supabaseClient = getSupabaseClientFromContext(c, getSettings());
       const cliTokenService = createCliTokenService(supabaseClient);
       const createdToken = await cliTokenService.createToken(userId, name, scopes, expirationDays);
 
@@ -326,7 +325,7 @@ export function createCliTokenRouter(): Hono {
       const { extensionDays } = parseResult.data;
 
       // Use service role client to bypass RLS
-      const supabaseClient = getSupabaseClientFromContext(c, settings);
+      const supabaseClient = getSupabaseClientFromContext(c, getSettings());
       const cliTokenService = createCliTokenService(supabaseClient);
       const updatedToken = await cliTokenService.extendExpiration(userId, tokenId, extensionDays);
 
@@ -384,7 +383,7 @@ export function createCliTokenRouter(): Hono {
 
     try {
       // Use service role client to bypass RLS
-      const supabaseClient = getSupabaseClientFromContext(c, settings);
+      const supabaseClient = getSupabaseClientFromContext(c, getSettings());
       const cliTokenService = createCliTokenService(supabaseClient);
       const revoked = await cliTokenService.revokeToken(userId, tokenId);
 

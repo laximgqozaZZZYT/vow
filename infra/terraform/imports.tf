@@ -19,68 +19,44 @@ import {
 }
 
 # -----------------------------------------------------------------
-# EventBridge Scheduler
+# Terraform Backend Resources (S3 + DynamoDB)
 # -----------------------------------------------------------------
+# S3バケットとDynamoDBテーブルは既にAWSに存在するがstateに未登録
 
 import {
-  to = aws_scheduler_schedule.reminder_check[0]
-  id = "default/vow-production-reminder-check"
+  to = aws_s3_bucket.terraform_state
+  id = "vow-terraform-state-257784614320"
 }
 
 import {
-  to = aws_scheduler_schedule.follow_up_check[0]
-  id = "default/vow-production-follow-up-check"
-}
-
-import {
-  to = aws_scheduler_schedule.weekly_report[0]
-  id = "default/vow-production-weekly-report"
-}
-
-# EventBridge Scheduler IAM Role
-import {
-  to = aws_iam_role.scheduler[0]
-  id = "vow-production-scheduler-role"
-}
-
-import {
-  to = aws_iam_role_policy.scheduler_lambda_invoke[0]
-  id = "vow-production-scheduler-role:vow-production-scheduler-lambda-invoke"
+  to = aws_dynamodb_table.terraform_locks
+  id = "vow-terraform-locks"
 }
 
 # -----------------------------------------------------------------
-# SNS Topic
+# CloudWatch Log Groups (Amplify)
 # -----------------------------------------------------------------
 
 import {
-  to = aws_sns_topic.alerts[0]
-  id = "arn:aws:sns:ap-northeast-1:257784614320:vow-production-alerts"
-}
-
-# -----------------------------------------------------------------
-# Amplify App
-# -----------------------------------------------------------------
-
-import {
-  to = aws_amplify_app.frontend[0]
-  id = "do1k9oyyorn24"
-}
-
-# -----------------------------------------------------------------
-# CloudWatch Monitoring
-# -----------------------------------------------------------------
-
-import {
-  to = aws_cloudwatch_metric_alarm.lambda_errors[0]
-  id = "vow-production-lambda-errors"
+  to = aws_cloudwatch_log_group.amplify_production[0]
+  id = "/aws/amplify/do1k9oyyorn24"
 }
 
 import {
-  to = aws_cloudwatch_metric_alarm.lambda_duration[0]
-  id = "vow-production-lambda-duration"
+  to = aws_cloudwatch_log_group.amplify_dev[0]
+  id = "/aws/amplify/d1zmna50iwo9dv"
 }
 
-import {
-  to = aws_cloudwatch_dashboard.main[0]
-  id = "vow-production"
-}
+# -----------------------------------------------------------------
+# 以下のリソースは既にTerraform stateに存在（import不要）
+# - EventBridge Scheduler: reminder_check, follow_up_check, weekly_report
+# - IAM Role: scheduler, scheduler_lambda_invoke
+# - SNS Topic: alerts
+# - CloudWatch: lambda_errors, lambda_duration, dashboard
+# -----------------------------------------------------------------
+# Note: Amplify App (do1k9oyyorn24) は github_access_token 未設定のため
+#       count=0 → import不可。トークン設定後に以下を追加:
+# import {
+#   to = aws_amplify_app.frontend[0]
+#   id = "do1k9oyyorn24"
+# }

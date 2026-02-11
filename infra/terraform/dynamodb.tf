@@ -47,6 +47,10 @@ resource "aws_dynamodb_table" "agent_sessions" {
     projection_type = "ALL"
   }
 
+  server_side_encryption {
+    enabled = true
+  }
+
   point_in_time_recovery {
     enabled = true
   }
@@ -73,6 +77,10 @@ resource "aws_dynamodb_table" "mcp_connections" {
   attribute {
     name = "userId"
     type = "S"
+  }
+
+  server_side_encryption {
+    enabled = true
   }
 
   point_in_time_recovery {
@@ -111,6 +119,10 @@ resource "aws_dynamodb_table" "user_credentials" {
     type = "S"
   }
 
+  server_side_encryption {
+    enabled = true
+  }
+
   point_in_time_recovery {
     enabled = true
   }
@@ -140,8 +152,7 @@ resource "aws_iam_role_policy" "lambda_dynamodb" {
           "dynamodb:PutItem",
           "dynamodb:UpdateItem",
           "dynamodb:DeleteItem",
-          "dynamodb:Query",
-          "dynamodb:Scan"
+          "dynamodb:Query"
         ]
         Resource = [
           aws_dynamodb_table.agent_sessions.arn,

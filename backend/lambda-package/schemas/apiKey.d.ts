@@ -34,9 +34,9 @@ export declare const apiKeyDbSchema: z.ZodObject<{
     /** Whether the key is currently active */
     is_active: z.ZodBoolean;
 }, "strip", z.ZodTypeAny, {
+    name: string;
     created_at: string;
     id: string;
-    name: string;
     user_id: string;
     is_active: boolean;
     key_hash: string;
@@ -45,9 +45,9 @@ export declare const apiKeyDbSchema: z.ZodObject<{
     revoked_at: string | null;
     expires_at?: string | undefined;
 }, {
+    name: string;
     created_at: string;
     id: string;
-    name: string;
     user_id: string;
     is_active: boolean;
     key_hash: string;
@@ -113,16 +113,16 @@ export declare const apiKeyResponseSchema: z.ZodObject<{
     /** Whether the key is currently active */
     isActive: z.ZodBoolean;
 }, "strip", z.ZodTypeAny, {
-    id: string;
     name: string;
+    id: string;
     isActive: boolean;
     expiresAt: string;
     keyPrefix: string;
     createdAt: string;
     lastUsedAt: string | null;
 }, {
-    id: string;
     name: string;
+    id: string;
     isActive: boolean;
     expiresAt: string;
     keyPrefix: string;
@@ -148,15 +148,15 @@ export declare const createApiKeyResponseSchema: z.ZodObject<{
     /** Timestamp when the key expires */
     expiresAt: z.ZodString;
 }, "strip", z.ZodTypeAny, {
-    id: string;
     name: string;
+    id: string;
     expiresAt: string;
     key: string;
     keyPrefix: string;
     createdAt: string;
 }, {
-    id: string;
     name: string;
+    id: string;
     expiresAt: string;
     key: string;
     keyPrefix: string;
@@ -190,13 +190,13 @@ export declare const stickyToggleResponseSchema: z.ZodObject<{
     /** Timestamp when completed (null if not completed) */
     completedAt: z.ZodNullable<z.ZodString>;
 }, "strip", z.ZodTypeAny, {
-    id: string;
     name: string;
+    id: string;
     completed: boolean;
     completedAt: string | null;
 }, {
-    id: string;
     name: string;
+    id: string;
     completed: boolean;
     completedAt: string | null;
 }>;

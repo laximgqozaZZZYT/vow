@@ -29,9 +29,9 @@ export declare const habitSchema: z.ZodObject<{
     created_at: z.ZodString;
     updated_at: z.ZodOptional<z.ZodNullable<z.ZodString>>;
 }, "strip", z.ZodTypeAny, {
+    name: string;
     created_at: string;
     id: string;
-    name: string;
     owner_type: string;
     owner_id: string;
     active: boolean;
@@ -48,9 +48,9 @@ export declare const habitSchema: z.ZodObject<{
     level_last_assessed_at?: string | null | undefined;
     updated_at?: string | null | undefined;
 }, {
+    name: string;
     created_at: string;
     id: string;
-    name: string;
     owner_id: string;
     owner_type?: string | undefined;
     description?: string | null | undefined;
@@ -384,10 +384,10 @@ export declare const goalSchema: z.ZodObject<{
     created_at: z.ZodString;
     updated_at: z.ZodOptional<z.ZodNullable<z.ZodString>>;
 }, "strip", z.ZodTypeAny, {
+    name: string;
     status: "active" | "completed" | "archived";
     created_at: string;
     id: string;
-    name: string;
     owner_type: string;
     owner_id: string;
     domain_codes: string[];
@@ -398,9 +398,9 @@ export declare const goalSchema: z.ZodObject<{
     updated_at?: string | null | undefined;
     parent_id?: string | null | undefined;
 }, {
+    name: string;
     created_at: string;
     id: string;
-    name: string;
     owner_id: string;
     status?: "active" | "completed" | "archived" | undefined;
     owner_type?: string | undefined;
@@ -443,14 +443,14 @@ export declare const goalUpdateSchema: z.ZodObject<{
     status: z.ZodOptional<z.ZodEnum<["active", "completed", "archived"]>>;
     domain_codes: z.ZodOptional<z.ZodArray<z.ZodString, "many">>;
 }, "strip", z.ZodTypeAny, {
-    status?: "active" | "completed" | "archived" | undefined;
     name?: string | undefined;
+    status?: "active" | "completed" | "archived" | undefined;
     description?: string | null | undefined;
     domain_codes?: string[] | undefined;
     parent_id?: string | null | undefined;
 }, {
-    status?: "active" | "completed" | "archived" | undefined;
     name?: string | undefined;
+    status?: "active" | "completed" | "archived" | undefined;
     description?: string | null | undefined;
     domain_codes?: string[] | undefined;
     parent_id?: string | null | undefined;

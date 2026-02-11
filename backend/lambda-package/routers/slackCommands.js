@@ -790,15 +790,15 @@ export function createSlackCommandsRouter() {
         catch {
             return c.json({ error: 'Invalid JSON' }, 400);
         }
-        // Handle URL verification challenge
-        if (payload['type'] === 'url_verification') {
-            return c.json({ challenge: payload['challenge'] });
-        }
-        // Verify signature for other events
+        // Verify signature FIRST (before handling any event type, including url_verification)
         const timestamp = c.req.header('X-Slack-Request-Timestamp') ?? '';
         const signature = c.req.header('X-Slack-Signature') ?? '';
         if (!(await slackService.verifySignature(timestamp, rawBody, signature))) {
             return c.json({ error: 'Invalid signature' }, 401);
+        }
+        // Handle URL verification challenge (only after signature is verified)
+        if (payload['type'] === 'url_verification') {
+            return c.json({ challenge: payload['challenge'] });
         }
         // Handle events
         const event = payload['event'];

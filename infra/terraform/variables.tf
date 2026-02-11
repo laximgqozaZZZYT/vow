@@ -102,17 +102,15 @@ variable "github_client_secret" {
 }
 
 variable "callback_urls" {
-  description = "OAuth callback URLs"
+  description = "OAuth callback URLs (override in tfvars; add localhost for development only)"
   type        = list(string)
-  default     = ["http://localhost:3000/auth/callback"]
-  # 本番環境では追加: "https://your-domain.com/auth/callback"
+  default     = []
 }
 
 variable "logout_urls" {
-  description = "OAuth logout URLs"
+  description = "OAuth logout URLs (override in tfvars; add localhost for development only)"
   type        = list(string)
-  default     = ["http://localhost:3000"]
-  # 本番環境では追加: "https://your-domain.com"
+  default     = []
 }
 
 # =================================================================
@@ -261,6 +259,12 @@ variable "alert_email" {
   default     = ""
 }
 
+variable "enable_monitoring" {
+  description = "Enable CloudWatch monitoring alarms and dashboard (recommended for all environments)"
+  type        = bool
+  default     = true
+}
+
 # =================================================================
 # Slack Integration Variables
 # =================================================================
@@ -322,12 +326,9 @@ variable "supabase_anon_key" {
 # =================================================================
 
 variable "cors_origins" {
-  description = "Allowed CORS origins"
+  description = "Allowed CORS origins (override in tfvars; add localhost for development only)"
   type        = list(string)
-  default     = [
-    "http://localhost:3000",
-    "https://main.do1k9oyyorn24.amplifyapp.com"
-  ]
+  default     = ["https://main.do1k9oyyorn24.amplifyapp.com"]
 }
 
 variable "frontend_url" {

@@ -15,6 +15,7 @@ import OpenAI from 'openai';
 import { createHash } from 'crypto';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { getLogger } from '../utils/logger.js';
+import { getSettings } from '../config.js';
 
 const logger = getLogger('embeddingService');
 
@@ -83,7 +84,7 @@ export class EmbeddingService {
     openaiApiKey?: string
   ) {
     this.openai = new OpenAI({
-      apiKey: openaiApiKey || process.env['OPENAI_API_KEY'],
+      apiKey: openaiApiKey || getSettings().openaiApiKey,
     });
 
     logger.info('EmbeddingService initialized', {

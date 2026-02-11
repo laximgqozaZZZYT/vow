@@ -27,6 +27,7 @@ import {
 } from '@aws-sdk/lib-dynamodb';
 import { createCipheriv, createDecipheriv, randomBytes, scryptSync } from 'crypto';
 import { getLogger } from '../utils/logger.js';
+import { getSettings } from '../config.js';
 
 const logger = getLogger('services.credentials-store');
 
@@ -61,7 +62,7 @@ const KEY_SALT = 'vow-credentials-salt-v1';
  * Derives a 32-byte key using scrypt.
  */
 function getEncryptionKey(): Buffer {
-  const secretKey = process.env['CREDENTIALS_ENCRYPTION_KEY'];
+  const secretKey = getSettings().credentialsEncryptionKey;
 
   if (!secretKey) {
     logger.warning('CREDENTIALS_ENCRYPTION_KEY not set, using fallback key (NOT SECURE FOR PRODUCTION)');
@@ -668,9 +669,9 @@ export function resetCredentialsStore(): void {
  * Falls back to environment variable if user doesn't have a saved key.
  */
 export async function getOpenAIApiKey(userId?: string): Promise<string | null> {
-  // If no userId, use environment variable
+  // If no userId, use settings (Secrets Manager > process.env)
   if (!userId) {
-    return process.env['OPENAI_API_KEY'] || null;
+    return getSettings().openaiApiKey || null;
   }
 
   // Try to get user's saved key
@@ -681,8 +682,8 @@ export async function getOpenAIApiKey(userId?: string): Promise<string | null> {
     return userKey;
   }
 
-  // Fall back to environment variable
-  return process.env['OPENAI_API_KEY'] || null;
+  // Fall back to settings (Secrets Manager > process.env)
+  return getSettings().openaiApiKey || null;
 }
 
 /**
@@ -782,9 +783,9 @@ export async function getAnthropicModel(userId?: string): Promise<string> {
  * Falls back to OpenAI API key if user doesn't have a saved Codex key.
  */
 export async function getCodexApiKey(userId?: string): Promise<string | null> {
-  // If no userId, use environment variable
+  // If no userId, use environment variable / settings
   if (!userId) {
-    return process.env['CODEX_API_KEY'] || process.env['OPENAI_API_KEY'] || null;
+    return process.env['CODEX_API_KEY'] || getSettings().openaiApiKey || null;
   }
 
   // Try to get user's saved Codex key
@@ -795,13 +796,13 @@ export async function getCodexApiKey(userId?: string): Promise<string | null> {
     return userKey;
   }
 
-  // Fall back to OpenAI key or environment variable
+  // Fall back to OpenAI key or settings
   const openaiKey = await store.getApiKey(userId, 'openai');
   if (openaiKey) {
     return openaiKey;
   }
 
-  return process.env['CODEX_API_KEY'] || process.env['OPENAI_API_KEY'] || null;
+  return process.env['CODEX_API_KEY'] || getSettings().openaiApiKey || null;
 }
 
 /**

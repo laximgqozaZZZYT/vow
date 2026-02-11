@@ -58,9 +58,15 @@ function createApiKeyService(supabase) {
  */
 export function createApiKeyRouter() {
     const router = new Hono();
-    const settings = getSettings();
-    // Use service role client to bypass RLS for server-side operations
-    const supabase = getSupabaseClientServiceRole(settings);
+    // Lazy-initialized Supabase client (Secrets Manager not yet loaded at module import time in Lambda)
+    let _supabase = null;
+    function getSupabase() {
+        if (!_supabase) {
+            const settings = getSettings();
+            _supabase = getSupabaseClientServiceRole(settings);
+        }
+        return _supabase;
+    }
     // ---------------------------------------------------------------------------
     // JWT Authentication Middleware
     // ---------------------------------------------------------------------------
@@ -83,7 +89,7 @@ export function createApiKeyRouter() {
         const userId = getUserId(c);
         logger.info('List API keys request', { userId });
         try {
-            const apiKeyService = createApiKeyService(supabase);
+            const apiKeyService = createApiKeyService(getSupabase());
             const keys = await apiKeyService.listKeys(userId);
             logger.info('List API keys request successful', {
                 userId,
@@ -132,7 +138,7 @@ export function createApiKeyRouter() {
                 }, 400);
             }
             const { name, expirationDays } = parseResult.data;
-            const apiKeyService = createApiKeyService(supabase);
+            const apiKeyService = createApiKeyService(getSupabase());
             const createdKey = await apiKeyService.createKey(userId, name, expirationDays);
             logger.info('Create API key request successful', {
                 userId,
@@ -189,7 +195,7 @@ export function createApiKeyRouter() {
                 }, 400);
             }
             const { extensionDays } = parseResult.data;
-            const apiKeyService = createApiKeyService(supabase);
+            const apiKeyService = createApiKeyService(getSupabase());
             const updatedKey = await apiKeyService.extendExpiration(userId, keyId, extensionDays);
             if (!updatedKey) {
                 logger.warning('API key not found or not owned by user', {
@@ -234,7 +240,7 @@ export function createApiKeyRouter() {
         const keyId = c.req.param('keyId');
         logger.info('Revoke API key request', { userId, keyId });
         try {
-            const apiKeyService = createApiKeyService(supabase);
+            const apiKeyService = createApiKeyService(getSupabase());
             const revoked = await apiKeyService.revokeKey(userId, keyId);
             if (!revoked) {
                 logger.warning('API key not found or not owned by user', {

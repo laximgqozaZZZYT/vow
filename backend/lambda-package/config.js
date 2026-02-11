@@ -18,6 +18,7 @@ dotenv.config({
     path: existsSync(envLocalPath) ? envLocalPath : envPath,
     override: true,
 });
+import { getSecrets } from './utils/secrets-manager.js';
 import { z } from 'zod';
 /**
  * Environment variable schema with Zod validation.
@@ -33,7 +34,7 @@ const envSchema = z.object({
     SUPABASE_ANON_KEY: z.string().optional(),
     SUPABASE_SERVICE_ROLE_KEY: z.string().optional(),
     // JWT Authentication (Supabase)
-    JWT_SECRET: z.string().default('dev-secret-key-change-in-production'),
+    JWT_SECRET: z.string().optional(),
     JWT_ALGORITHM: z.enum(['HS256', 'RS256', 'ES256']).default('HS256'),
     JWT_AUDIENCE: z.string().default('authenticated'),
     JWT_ISSUER: z.string().optional(),
@@ -52,6 +53,7 @@ const envSchema = z.object({
     SLACK_SIGNING_SECRET: z.string().optional(),
     SLACK_CALLBACK_URI: z.string().url().optional(),
     TOKEN_ENCRYPTION_KEY: z.string().optional(),
+    CREDENTIALS_ENCRYPTION_KEY: z.string().optional(),
     // OpenAI Integration
     OPENAI_API_KEY: z.string().optional(),
     OPENAI_ENABLED: z.string().transform((v) => v === 'true').default('false'),
@@ -88,8 +90,36 @@ function parseCorsOrigins(corsOriginsStr) {
     // Fall back to comma-separated format
     return corsOriginsStr.split(',').map((o) => o.trim()).filter(Boolean);
 }
+// =============================================================================
+// Secrets Manager Integration
+// =============================================================================
+/**
+ * Cached secrets from AWS Secrets Manager.
+ * Populated by initializeSecrets() on Lambda cold start.
+ */
+let secretsOverrides = {};
+/**
+ * Initialize secrets from AWS Secrets Manager.
+ *
+ * Must be called once before getSettings() is used in Lambda.
+ * In development (no SECRETS_ARN), this is a no-op that leaves
+ * secretsOverrides empty so process.env is used as fallback.
+ */
+export async function initializeSecrets() {
+    try {
+        secretsOverrides = await getSecrets();
+        // Reset cached settings so next getSettings() picks up secrets
+        _settings = null;
+    }
+    catch (error) {
+        console.error('Failed to load secrets from Secrets Manager:', error);
+        // Fallback: continue with process.env
+        secretsOverrides = {};
+    }
+}
 /**
  * Load and validate settings from environment variables.
+ * Secrets Manager values (via secretsOverrides) take priority over process.env.
  */
 function loadSettings() {
     const env = envSchema.parse(process.env);
@@ -103,9 +133,19 @@ function loadSettings() {
         // Database - Supabase
         supabaseUrl: env.SUPABASE_URL,
         supabaseAnonKey: env.SUPABASE_ANON_KEY,
-        supabaseServiceRoleKey: env.SUPABASE_SERVICE_ROLE_KEY,
+        supabaseServiceRoleKey: secretsOverrides['SUPABASE_SERVICE_ROLE_KEY'] || env.SUPABASE_SERVICE_ROLE_KEY,
         // JWT Authentication
-        jwtSecret: env.JWT_SECRET,
+        jwtSecret: (() => {
+            const secret = secretsOverrides['JWT_SECRET'] || env.JWT_SECRET;
+            if (secret) {
+                return secret;
+            }
+            // Allow fallback in development/test environments only
+            if (env.NODE_ENV === 'development' || env.NODE_ENV === 'test') {
+                return 'dev-secret-key-change-in-production';
+            }
+            throw new Error('JWT_SECRET environment variable is required in production');
+        })(),
         jwtAlgorithm: env.JWT_ALGORITHM,
         jwtAudience: env.JWT_AUDIENCE,
         jwtIssuer: env.JWT_ISSUER,
@@ -120,18 +160,20 @@ function loadSettings() {
         slackWebhookUrl: env.SLACK_WEBHOOK_URL,
         slackEnabled: env.SLACK_ENABLED,
         slackClientId: env.SLACK_CLIENT_ID,
-        slackClientSecret: env.SLACK_CLIENT_SECRET,
-        slackSigningSecret: env.SLACK_SIGNING_SECRET,
+        slackClientSecret: secretsOverrides['SLACK_CLIENT_SECRET'] || env.SLACK_CLIENT_SECRET,
+        slackSigningSecret: secretsOverrides['SLACK_SIGNING_SECRET'] || env.SLACK_SIGNING_SECRET,
         slackCallbackUri: env.SLACK_CALLBACK_URI,
-        tokenEncryptionKey: env.TOKEN_ENCRYPTION_KEY,
+        tokenEncryptionKey: secretsOverrides['TOKEN_ENCRYPTION_KEY'] || env.TOKEN_ENCRYPTION_KEY,
+        // Credentials
+        credentialsEncryptionKey: secretsOverrides['CREDENTIALS_ENCRYPTION_KEY'] || env.CREDENTIALS_ENCRYPTION_KEY,
         // OpenAI Integration
-        openaiApiKey: env.OPENAI_API_KEY,
+        openaiApiKey: secretsOverrides['OPENAI_API_KEY'] || env.OPENAI_API_KEY,
         openaiEnabled: env.OPENAI_ENABLED,
         openaiModel: env.OPENAI_MODEL,
         openaiMaxRequestsPerMinute: env.OPENAI_MAX_REQUESTS_PER_MINUTE,
         // Stripe Integration
-        stripeSecretKey: env.STRIPE_SECRET_KEY,
-        stripeWebhookSecret: env.STRIPE_WEBHOOK_SECRET,
+        stripeSecretKey: secretsOverrides['STRIPE_SECRET_KEY'] || env.STRIPE_SECRET_KEY,
+        stripeWebhookSecret: secretsOverrides['STRIPE_WEBHOOK_SECRET'] || env.STRIPE_WEBHOOK_SECRET,
         stripePriceIdBasic: env.STRIPE_PRICE_ID_BASIC,
         stripePriceIdPro: env.STRIPE_PRICE_ID_PRO,
         // Admin Access
@@ -144,8 +186,8 @@ function loadSettings() {
  */
 export function validateRequiredSettings(settings) {
     const errors = [];
-    if (settings.jwtSecret === 'dev-secret-key-change-in-production' && !settings.debug) {
-        errors.push('JWT_SECRET must be set in production');
+    if (settings.jwtSecret === 'dev-secret-key-change-in-production' && settings.nodeEnv === 'production') {
+        errors.push('JWT_SECRET must be set in production (do not use the default dev secret)');
     }
     if (errors.length > 0) {
         throw new Error(`Configuration errors: ${errors.join(', ')}`);
@@ -195,6 +237,7 @@ export function getSettings() {
 export function resetSettings() {
     _settings = null;
 }
-// Export settings as default for convenience
-export const settings = getSettings();
+// Note: Do NOT eagerly export `getSettings()` here.
+// In Lambda, Secrets Manager must be initialized first via initializeSecrets()
+// before getSettings() returns correct values for secrets.
 //# sourceMappingURL=config.js.map

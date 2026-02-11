@@ -350,14 +350,14 @@ export declare const stickyItemSchema: z.ZodObject<{
     /** Display order */
     displayOrder: z.ZodNumber;
 }, "strip", z.ZodTypeAny, {
-    id: string;
     name: string;
+    id: string;
     description: string | null;
     completed: boolean;
     displayOrder: number;
 }, {
-    id: string;
     name: string;
+    id: string;
     description: string | null;
     completed: boolean;
     displayOrder: number;
@@ -381,14 +381,14 @@ export declare const stickiesDataSchema: z.ZodObject<{
         /** Display order */
         displayOrder: z.ZodNumber;
     }, "strip", z.ZodTypeAny, {
-        id: string;
         name: string;
+        id: string;
         description: string | null;
         completed: boolean;
         displayOrder: number;
     }, {
-        id: string;
         name: string;
+        id: string;
         description: string | null;
         completed: boolean;
         displayOrder: number;
@@ -399,8 +399,8 @@ export declare const stickiesDataSchema: z.ZodObject<{
     completedCount: z.ZodNumber;
 }, "strip", z.ZodTypeAny, {
     stickies: {
-        id: string;
         name: string;
+        id: string;
         description: string | null;
         completed: boolean;
         displayOrder: number;
@@ -409,8 +409,8 @@ export declare const stickiesDataSchema: z.ZodObject<{
     completedCount: number;
 }, {
     stickies: {
-        id: string;
         name: string;
+        id: string;
         description: string | null;
         completed: boolean;
         displayOrder: number;
@@ -434,9 +434,9 @@ export declare const stickyDbSchema: z.ZodObject<{
     created_at: z.ZodString;
     updated_at: z.ZodOptional<z.ZodNullable<z.ZodString>>;
 }, "strip", z.ZodTypeAny, {
+    name: string;
     created_at: string;
     id: string;
-    name: string;
     owner_type: string;
     owner_id: string;
     completed: boolean;
@@ -445,9 +445,9 @@ export declare const stickyDbSchema: z.ZodObject<{
     updated_at?: string | null | undefined;
     completed_at?: string | null | undefined;
 }, {
+    name: string;
     created_at: string;
     id: string;
-    name: string;
     owner_id: string;
     owner_type?: string | undefined;
     description?: string | null | undefined;

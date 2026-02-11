@@ -67,12 +67,15 @@ resource "aws_security_group" "dms" {
   vpc_id      = aws_vpc.main.id
 
   # Outbound to Supabase (external PostgreSQL)
+  # Note: 0.0.0.0/0 is used because Supabase has dynamic IPs.
+  # This is acceptable because: (1) DMS is conditional (enable_dms=false by default),
+  # (2) only port 5432 is open, (3) DMS runs in private subnets.
   egress {
     from_port   = 5432
     to_port     = 5432
     protocol    = "tcp"
     cidr_blocks = ["0.0.0.0/0"]
-    description = "Allow PostgreSQL to Supabase"
+    description = "Allow PostgreSQL to Supabase (dynamic IP)"
   }
 
   # Outbound to Aurora (internal)

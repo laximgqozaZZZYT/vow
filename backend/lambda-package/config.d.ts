@@ -18,7 +18,7 @@ declare const envSchema: z.ZodObject<{
     SUPABASE_URL: z.ZodOptional<z.ZodString>;
     SUPABASE_ANON_KEY: z.ZodOptional<z.ZodString>;
     SUPABASE_SERVICE_ROLE_KEY: z.ZodOptional<z.ZodString>;
-    JWT_SECRET: z.ZodDefault<z.ZodString>;
+    JWT_SECRET: z.ZodOptional<z.ZodString>;
     JWT_ALGORITHM: z.ZodDefault<z.ZodEnum<["HS256", "RS256", "ES256"]>>;
     JWT_AUDIENCE: z.ZodDefault<z.ZodString>;
     JWT_ISSUER: z.ZodOptional<z.ZodString>;
@@ -34,6 +34,7 @@ declare const envSchema: z.ZodObject<{
     SLACK_SIGNING_SECRET: z.ZodOptional<z.ZodString>;
     SLACK_CALLBACK_URI: z.ZodOptional<z.ZodString>;
     TOKEN_ENCRYPTION_KEY: z.ZodOptional<z.ZodString>;
+    CREDENTIALS_ENCRYPTION_KEY: z.ZodOptional<z.ZodString>;
     OPENAI_API_KEY: z.ZodOptional<z.ZodString>;
     OPENAI_ENABLED: z.ZodDefault<z.ZodEffects<z.ZodString, boolean, string>>;
     OPENAI_MODEL: z.ZodDefault<z.ZodString>;
@@ -48,7 +49,6 @@ declare const envSchema: z.ZodObject<{
     APP_VERSION: string;
     NODE_ENV: "development" | "production" | "test";
     PORT: number;
-    JWT_SECRET: string;
     JWT_ALGORITHM: "HS256" | "RS256" | "ES256";
     JWT_AUDIENCE: string;
     COGNITO_REGION: string;
@@ -61,6 +61,7 @@ declare const envSchema: z.ZodObject<{
     SUPABASE_URL?: string | undefined;
     SUPABASE_ANON_KEY?: string | undefined;
     SUPABASE_SERVICE_ROLE_KEY?: string | undefined;
+    JWT_SECRET?: string | undefined;
     JWT_ISSUER?: string | undefined;
     COGNITO_USER_POOL_ID?: string | undefined;
     COGNITO_CLIENT_ID?: string | undefined;
@@ -70,6 +71,7 @@ declare const envSchema: z.ZodObject<{
     SLACK_SIGNING_SECRET?: string | undefined;
     SLACK_CALLBACK_URI?: string | undefined;
     TOKEN_ENCRYPTION_KEY?: string | undefined;
+    CREDENTIALS_ENCRYPTION_KEY?: string | undefined;
     OPENAI_API_KEY?: string | undefined;
     STRIPE_SECRET_KEY?: string | undefined;
     STRIPE_WEBHOOK_SECRET?: string | undefined;
@@ -100,6 +102,7 @@ declare const envSchema: z.ZodObject<{
     SLACK_SIGNING_SECRET?: string | undefined;
     SLACK_CALLBACK_URI?: string | undefined;
     TOKEN_ENCRYPTION_KEY?: string | undefined;
+    CREDENTIALS_ENCRYPTION_KEY?: string | undefined;
     OPENAI_API_KEY?: string | undefined;
     OPENAI_ENABLED?: string | undefined;
     OPENAI_MODEL?: string | undefined;
@@ -146,12 +149,21 @@ export interface Settings {
     openaiEnabled: boolean;
     openaiModel: string;
     openaiMaxRequestsPerMinute: number;
+    credentialsEncryptionKey: string | undefined;
     stripeSecretKey: string | undefined;
     stripeWebhookSecret: string | undefined;
     stripePriceIdBasic: string | undefined;
     stripePriceIdPro: string | undefined;
     adminEmails: string[];
 }
+/**
+ * Initialize secrets from AWS Secrets Manager.
+ *
+ * Must be called once before getSettings() is used in Lambda.
+ * In development (no SECRETS_ARN), this is a no-op that leaves
+ * secretsOverrides empty so process.env is used as fallback.
+ */
+export declare function initializeSecrets(): Promise<void>;
 /**
  * Validate required settings on startup.
  * @throws Error if required settings are missing
@@ -171,6 +183,5 @@ export declare function getSettings(): Settings;
  * Reset settings (useful for testing).
  */
 export declare function resetSettings(): void;
-export declare const settings: Settings;
 export {};
 //# sourceMappingURL=config.d.ts.map

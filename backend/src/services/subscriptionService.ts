@@ -11,6 +11,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { SubscriptionRepository } from '../repositories/subscriptionRepository.js';
 import { TokenQuotaRepository } from '../repositories/tokenRepository.js';
 import { getLogger } from '../utils/logger.js';
+import { getSettings } from '../config.js';
 import { getAdminService } from './adminService.js';
 import type {
   SubscriptionInfo,
@@ -44,7 +45,7 @@ export class SubscriptionService {
   private readonly supabase: SupabaseClient;
 
   constructor(supabase: SupabaseClient) {
-    const stripeSecretKey = process.env['STRIPE_SECRET_KEY'];
+    const stripeSecretKey = getSettings().stripeSecretKey;
 
     if (!stripeSecretKey) {
       throw new Error('STRIPE_SECRET_KEY is required');

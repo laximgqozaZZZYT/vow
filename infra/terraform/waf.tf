@@ -10,6 +10,9 @@ resource "aws_wafv2_web_acl" "api" {
   description = "WAF for Vow API Gateway"
   scope       = "REGIONAL"
 
+  # Default action: Allow — managed rules (Common, BadInputs, SQLi) block known
+  # attack patterns; rate limiting handles volumetric abuse. An explicit allowlist
+  # approach is impractical for API backends with diverse legitimate traffic.
   default_action {
     allow {}
   }
@@ -25,7 +28,7 @@ resource "aws_wafv2_web_acl" "api" {
 
     statement {
       rate_based_statement {
-        limit              = 2000
+        limit              = 1000
         aggregate_key_type = "IP"
       }
     }

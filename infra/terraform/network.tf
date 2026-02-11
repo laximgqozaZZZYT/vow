@@ -33,7 +33,7 @@ resource "aws_subnet" "public" {
   vpc_id                  = aws_vpc.main.id
   cidr_block              = cidrsubnet(var.vpc_cidr, 8, count.index + 1)
   availability_zone       = var.availability_zones[count.index]
-  map_public_ip_on_launch = true
+  map_public_ip_on_launch = false
 
   tags = {
     Name = "${var.project_name}-${var.environment}-public-${count.index + 1}"
@@ -171,12 +171,30 @@ resource "aws_security_group" "lambda" {
   description = "Security group for Lambda functions"
   vpc_id      = aws_vpc.main.id
 
+  # HTTPS for external APIs (Supabase, Slack, OpenAI, Stripe, Secrets Manager, etc.)
   egress {
-    from_port   = 0
-    to_port     = 0
-    protocol    = "-1"
+    from_port   = 443
+    to_port     = 443
+    protocol    = "tcp"
     cidr_blocks = ["0.0.0.0/0"]
-    description = "Allow all outbound traffic"
+    description = "Allow HTTPS to external services and AWS APIs"
+  }
+
+  # DNS resolution
+  egress {
+    from_port   = 53
+    to_port     = 53
+    protocol    = "udp"
+    cidr_blocks = ["0.0.0.0/0"]
+    description = "Allow DNS resolution"
+  }
+
+  egress {
+    from_port   = 53
+    to_port     = 53
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+    description = "Allow DNS resolution (TCP)"
   }
 
   tags = {
@@ -200,4 +218,15 @@ resource "aws_security_group" "aurora" {
   tags = {
     Name = "${var.project_name}-${var.environment}-aurora-sg"
   }
+}
+
+# PostgreSQL egress from Lambda to Aurora (separate rule to avoid SG cycle)
+resource "aws_security_group_rule" "lambda_to_aurora" {
+  type                     = "egress"
+  from_port                = 5432
+  to_port                  = 5432
+  protocol                 = "tcp"
+  source_security_group_id = aws_security_group.aurora.id
+  security_group_id        = aws_security_group.lambda.id
+  description              = "Allow PostgreSQL to Aurora"
 }

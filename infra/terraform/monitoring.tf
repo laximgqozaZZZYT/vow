@@ -1,5 +1,6 @@
 # =================================================================
-# CloudWatch Monitoring and Alarms for Production
+# CloudWatch Monitoring and Alarms
+# Enabled for all environments via var.enable_monitoring (default: true)
 # =================================================================
 
 # =================================================================
@@ -7,7 +8,7 @@
 # =================================================================
 
 resource "aws_sns_topic" "alerts" {
-  count = var.environment == "production" ? 1 : 0
+  count = var.enable_monitoring ? 1 : 0
 
   name = "${var.project_name}-${var.environment}-alerts"
 
@@ -18,7 +19,7 @@ resource "aws_sns_topic" "alerts" {
 
 # Email subscription (optional)
 resource "aws_sns_topic_subscription" "email" {
-  count = var.environment == "production" && var.alert_email != "" ? 1 : 0
+  count = var.enable_monitoring && var.alert_email != "" ? 1 : 0
 
   topic_arn = aws_sns_topic.alerts[0].arn
   protocol  = "email"
@@ -26,11 +27,11 @@ resource "aws_sns_topic_subscription" "email" {
 }
 
 # =================================================================
-# CloudWatch Dashboard (Lambda + API Gateway only when Aurora disabled)
+# CloudWatch Dashboard (Lambda + API Gateway)
 # =================================================================
 
 resource "aws_cloudwatch_dashboard" "main" {
-  count = var.environment == "production" ? 1 : 0
+  count = var.enable_monitoring && var.lambda_s3_bucket != "" ? 1 : 0
 
   dashboard_name = "${var.project_name}-${var.environment}"
 
@@ -120,12 +121,50 @@ resource "aws_cloudwatch_dashboard" "main" {
 }
 
 # =================================================================
+# Amplify CloudWatch Log Groups (Retention Policy)
+# Log groups are auto-created by Amplify; we manage retention only.
+# =================================================================
+
+resource "aws_cloudwatch_log_group" "amplify_production" {
+  count = var.environment == "production" ? 1 : 0
+
+  name              = "/aws/amplify/do1k9oyyorn24"
+  retention_in_days = 90
+
+  tags = {
+    Name        = "${var.project_name}-${var.environment}-amplify-logs"
+    Environment = var.environment
+  }
+
+  lifecycle {
+    # Amplify creates the log group; prevent Terraform from deleting it
+    prevent_destroy = true
+  }
+}
+
+resource "aws_cloudwatch_log_group" "amplify_dev" {
+  count = var.environment == "production" ? 1 : 0
+
+  name              = "/aws/amplify/d1zmna50iwo9dv"
+  retention_in_days = 90
+
+  tags = {
+    Name        = "${var.project_name}-dev-amplify-logs"
+    Environment = "development"
+  }
+
+  lifecycle {
+    prevent_destroy = true
+  }
+}
+
+# =================================================================
 # CloudWatch Alarms
 # =================================================================
 
 # Lambda Error Alarm
 resource "aws_cloudwatch_metric_alarm" "lambda_errors" {
-  count = var.environment == "production" ? 1 : 0
+  count = var.enable_monitoring && var.lambda_s3_bucket != "" ? 1 : 0
 
   alarm_name          = "${var.project_name}-${var.environment}-lambda-errors"
   comparison_operator = "GreaterThanThreshold"
@@ -153,7 +192,7 @@ resource "aws_cloudwatch_metric_alarm" "lambda_errors" {
 
 # Lambda Duration Alarm (p99 > 2s)
 resource "aws_cloudwatch_metric_alarm" "lambda_duration" {
-  count = var.environment == "production" ? 1 : 0
+  count = var.enable_monitoring && var.lambda_s3_bucket != "" ? 1 : 0
 
   alarm_name          = "${var.project_name}-${var.environment}-lambda-duration"
   comparison_operator = "GreaterThanThreshold"
@@ -180,7 +219,7 @@ resource "aws_cloudwatch_metric_alarm" "lambda_duration" {
 
 # Aurora CPU Alarm (only if enabled)
 resource "aws_cloudwatch_metric_alarm" "aurora_cpu" {
-  count = var.environment == "production" && var.enable_aurora ? 1 : 0
+  count = var.enable_monitoring && var.enable_aurora ? 1 : 0
 
   alarm_name          = "${var.project_name}-${var.environment}-aurora-cpu"
   comparison_operator = "GreaterThanThreshold"
@@ -207,7 +246,7 @@ resource "aws_cloudwatch_metric_alarm" "aurora_cpu" {
 
 # Aurora Connections Alarm (only if enabled)
 resource "aws_cloudwatch_metric_alarm" "aurora_connections" {
-  count = var.environment == "production" && var.enable_aurora ? 1 : 0
+  count = var.enable_monitoring && var.enable_aurora ? 1 : 0
 
   alarm_name          = "${var.project_name}-${var.environment}-aurora-connections"
   comparison_operator = "GreaterThanThreshold"

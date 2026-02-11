@@ -16,7 +16,7 @@
 import { handle } from 'hono/aws-lambda';
 import { app } from './index.js';
 import { getLogger } from './utils/logger.js';
-import { getSettings } from './config.js';
+import { getSettings, initializeSecrets } from './config.js';
 // Configure logger for Lambda
 const logger = getLogger('lambda');
 // =============================================================================
@@ -276,6 +276,8 @@ async function handleWeeklyReport(event, _context) {
  * API Gateway events.
  */
 const apiHandler = handle(app);
+// Track whether Secrets Manager has been initialized (cold start guard)
+let secretsInitialized = false;
 /**
  * Unified Lambda handler supporting both EventBridge and API Gateway.
  *
@@ -301,6 +303,11 @@ const apiHandler = handle(app);
  * @returns Response from the appropriate handler
  */
 export async function handler(event, context) {
+    // Initialize Secrets Manager on cold start (before any getSettings() calls)
+    if (!secretsInitialized) {
+        await initializeSecrets();
+        secretsInitialized = true;
+    }
     // Set Lambda context for structured logging
     const lambdaContext = {
         awsRequestId: context.awsRequestId,

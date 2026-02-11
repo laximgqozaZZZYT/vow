@@ -92,33 +92,32 @@ resource "aws_lambda_function" "api" {
     variables = {
       # Core settings
       ENV = var.lambda_env_env != "" ? var.lambda_env_env : var.environment
-      
-      # Authentication (Supabase)
+
+      # Authentication
       AUTH_PROVIDER = "supabase"
-      JWT_SECRET    = var.jwt_secret
-      
-      # Slack Integration
-      SLACK_CLIENT_ID      = var.slack_client_id
-      SLACK_CLIENT_SECRET  = var.slack_client_secret
-      SLACK_SIGNING_SECRET = var.slack_signing_secret
-      SLACK_CALLBACK_URI   = var.lambda_env_slack_callback_uri != "" ? var.lambda_env_slack_callback_uri : "https://${aws_api_gateway_rest_api.main[0].id}.execute-api.${var.aws_region}.amazonaws.com/${var.environment}/api/slack/callback"
-      SLACK_ENABLED        = var.lambda_env_slack_enabled
-      TOKEN_ENCRYPTION_KEY = var.token_encryption_key
-      
-      # Supabase
-      SUPABASE_URL              = var.supabase_url
-      SUPABASE_ANON_KEY         = var.supabase_anon_key
-      SUPABASE_SERVICE_ROLE_KEY = var.supabase_service_role_key
-      
-      # Stripe Integration
-      STRIPE_SECRET_KEY     = var.stripe_secret_key
-      STRIPE_WEBHOOK_SECRET = var.stripe_webhook_secret
+
+      # Secrets Manager ARN (replaces direct secret env vars)
+      # Migrated to Secrets Manager: JWT_SECRET, SLACK_CLIENT_SECRET,
+      # SLACK_SIGNING_SECRET, TOKEN_ENCRYPTION_KEY, SUPABASE_SERVICE_ROLE_KEY,
+      # STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET
+      SECRETS_ARN = aws_secretsmanager_secret.lambda_secrets[0].arn
+
+      # Slack Integration (non-secret values only)
+      SLACK_CLIENT_ID    = var.slack_client_id
+      SLACK_CALLBACK_URI = var.lambda_env_slack_callback_uri != "" ? var.lambda_env_slack_callback_uri : "https://${aws_api_gateway_rest_api.main[0].id}.execute-api.${var.aws_region}.amazonaws.com/${var.environment}/api/slack/callback"
+      SLACK_ENABLED      = var.lambda_env_slack_enabled
+
+      # Supabase (non-secret values only)
+      SUPABASE_URL      = var.supabase_url
+      SUPABASE_ANON_KEY = var.supabase_anon_key
+
+      # Stripe (non-secret values only)
       STRIPE_PRICE_ID_BASIC = var.stripe_price_id_basic
       STRIPE_PRICE_ID_PRO   = var.stripe_price_id_pro
-      
+
       # Frontend URL
       FRONTEND_URL = var.frontend_url
-      
+
       # CORS
       CORS_ORIGINS = jsonencode(var.cors_origins)
     }
@@ -141,7 +140,7 @@ resource "aws_cloudwatch_log_group" "lambda" {
   count = var.lambda_s3_bucket != "" ? 1 : 0
 
   name              = "/aws/lambda/${var.project_name}-${var.environment}-api"
-  retention_in_days = 30
+  retention_in_days = 90
 
   tags = {
     Name = "${var.project_name}-${var.environment}-lambda-logs"
@@ -175,6 +174,10 @@ resource "aws_api_gateway_resource" "proxy" {
   path_part   = "{proxy+}"
 }
 
+# Note: authorization = "NONE" — auth is handled by the Hono backend (Supabase JWT middleware).
+# Edge-level protection is provided by WAF (waf.tf) + API Gateway throttling.
+# A Lambda Authorizer was considered but rejected due to mixed-auth requirements
+# (webhooks/health need no auth, API endpoints need Supabase JWT).
 resource "aws_api_gateway_method" "proxy" {
   count = var.lambda_s3_bucket != "" ? 1 : 0
 
