@@ -164,9 +164,8 @@ async function getPublicKeyFromJWKS(
 
   if (kid) {
     key = keys.find((k) => k.kid === kid);
-    if (!key && keys.length > 0) {
-      logger.warning('No key found with matching kid, using first available key', { kid });
-      key = keys[0];
+    if (!key) {
+      throw new AuthenticationError(`No key found with matching kid: ${kid}`);
     }
   } else if (keys.length > 0) {
     key = keys[0];

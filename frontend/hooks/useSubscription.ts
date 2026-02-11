@@ -223,6 +223,10 @@ export function useSubscription(): UseSubscriptionReturn {
       }
       
       const { checkoutUrl } = await response.json();
+      const parsedCheckoutUrl = new URL(checkoutUrl);
+      if (parsedCheckoutUrl.protocol !== 'https:' || !parsedCheckoutUrl.hostname.endsWith('stripe.com')) {
+        throw new Error('Invalid checkout URL');
+      }
       window.location.href = checkoutUrl;
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Unknown error');
@@ -253,6 +257,10 @@ export function useSubscription(): UseSubscriptionReturn {
       }
       
       const { portalUrl } = await response.json();
+      const parsedPortalUrl = new URL(portalUrl);
+      if (parsedPortalUrl.protocol !== 'https:' || !parsedPortalUrl.hostname.endsWith('stripe.com')) {
+        throw new Error('Invalid portal URL');
+      }
       window.location.href = portalUrl;
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Unknown error');

@@ -157,7 +157,7 @@ resource "aws_cloudwatch_log_group" "lambda" {
   count = var.lambda_s3_bucket != "" ? 1 : 0
 
   name              = "/aws/lambda/${var.project_name}-${var.environment}-api"
-  retention_in_days = 90
+  retention_in_days = var.environment == "production" ? 365 : 90
 
   tags = {
     Name = "${var.project_name}-${var.environment}-lambda-logs"
@@ -518,7 +518,7 @@ resource "aws_cloudwatch_log_group" "api_gateway_access_logs" {
   count = var.lambda_s3_bucket != "" ? 1 : 0
 
   name              = "/aws/apigateway/${var.project_name}-${var.environment}-api/access-logs"
-  retention_in_days = 90
+  retention_in_days = var.environment == "production" ? 365 : 90
 
   tags = {
     Name = "${var.project_name}-${var.environment}-api-gateway-access-logs"

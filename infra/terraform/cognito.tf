@@ -48,8 +48,8 @@ resource "aws_cognito_user_pool" "main" {
     }
   }
 
-  # MFA Configuration - OPTIONAL so existing users are not forced
-  mfa_configuration = "OPTIONAL"
+  # MFA Configuration - REQUIRED in production, OPTIONAL in development
+  mfa_configuration = var.environment == "production" ? "ON" : "OPTIONAL"
 
   software_token_mfa_configuration {
     enabled = true

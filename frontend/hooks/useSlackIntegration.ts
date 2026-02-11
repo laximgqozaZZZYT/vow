@@ -130,7 +130,11 @@ export function useSlackIntegration(): UseSlackIntegrationReturn {
         throw new Error('No OAuth URL returned from server');
       }
 
-      // Navigate to Slack OAuth page
+      // Navigate to Slack OAuth page (validate URL before redirect)
+      const oauthUrl = new URL(data.oauth_url);
+      if (oauthUrl.protocol !== 'https:' || !oauthUrl.hostname.endsWith('slack.com')) {
+        throw new Error('Invalid OAuth URL returned from server');
+      }
       window.location.href = data.oauth_url;
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to initiate Slack connection');
