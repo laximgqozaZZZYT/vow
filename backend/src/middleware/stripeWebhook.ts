@@ -13,6 +13,8 @@ import { getLogger } from '../utils/logger.js';
 
 const logger = getLogger('stripeWebhook');
 
+const STRIPE_API_VERSION = (process.env.STRIPE_API_VERSION || '2025-02-24.acacia') as Stripe.StripeConfig['apiVersion'];
+
 /**
  * Stripe webhook signature verification middleware.
  *
@@ -44,7 +46,7 @@ export async function verifyStripeSignature(c: Context, next: Next): Promise<Res
 
     // Verify signature using Stripe SDK
     const stripe = new Stripe(settings.stripeSecretKey ?? '', {
-      apiVersion: '2025-02-24.acacia',
+      apiVersion: STRIPE_API_VERSION,
     });
 
     const event = stripe.webhooks.constructEvent(rawBody, signature, webhookSecret);

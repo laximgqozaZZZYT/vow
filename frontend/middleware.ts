@@ -89,6 +89,8 @@ export async function middleware(request: NextRequest) {
   // メールアドレスチェック
   const userEmail = user.email?.toLowerCase();
   if (userEmail !== ADMIN_EMAIL.toLowerCase()) {
+    // HTMLエスケープ（XSS防止）
+    const safeEmail = (userEmail || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
     // 管理者以外はアクセス拒否
     return new NextResponse(
       `<html>
@@ -105,9 +107,9 @@ export async function middleware(request: NextRequest) {
         </head>
         <body>
           <div class="container">
-            <h1>🚫 Access Denied</h1>
+            <h1>Access Denied</h1>
             <p>この開発環境へのアクセスは管理者のみに制限されています。</p>
-            <p>ログイン中: ${userEmail}</p>
+            <p>ログイン中: ${safeEmail}</p>
             <p><a href="/login">別のアカウントでログイン</a></p>
           </div>
         </body>

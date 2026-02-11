@@ -60,6 +60,41 @@ export const DEFAULT_RATE_LIMIT_CONFIG: RateLimitConfig = {
  * - 3.2: Return 429 with Retry-After when exceeded
  * - 3.3: Track request counts using sliding window algorithm
  */
+/**
+ * In-memory fallback counter for when the database is unavailable.
+ * Keyed by `${keyId}:${windowStartMs}` to provide basic per-key,
+ * per-window rate limiting even without DB connectivity.
+ *
+ * Uses a conservative limit (10% of configured max) to reduce abuse
+ * surface while the primary store is down.
+ */
+interface InMemoryEntry {
+  count: number;
+  windowStartMs: number;
+}
+
+const inMemoryFallback = new Map<string, InMemoryEntry>();
+
+/**
+ * Conservative multiplier applied to maxRequests when using the
+ * in-memory fallback. A value of 0.1 means only 10% of the normal
+ * limit is allowed while the DB is unreachable.
+ */
+const FALLBACK_LIMIT_RATIO = 0.1;
+
+/**
+ * Evict stale entries from the in-memory fallback map.
+ * Called periodically to prevent unbounded memory growth.
+ */
+function evictStaleFallbackEntries(windowMs: number): void {
+  const now = Date.now();
+  for (const [key, entry] of inMemoryFallback) {
+    if (now - entry.windowStartMs > windowMs * 2) {
+      inMemoryFallback.delete(key);
+    }
+  }
+}
+
 export class RateLimiter {
   private readonly supabase: SupabaseClient;
   private readonly config: RateLimitConfig;
@@ -101,11 +136,61 @@ export class RateLimiter {
   }
 
   /**
+   * In-memory fallback rate limit check used when the database is unavailable.
+   *
+   * Applies a conservative limit (FALLBACK_LIMIT_RATIO * maxRequests) so that
+   * some traffic is still allowed, but abuse is significantly harder.
+   *
+   * @param keyId - The API key ID to check.
+   * @param windowStart - The start of the current window.
+   * @param resetAt - When the current window resets.
+   * @returns Rate limit result based on in-memory counters.
+   */
+  private checkLimitInMemoryFallback(keyId: string, windowStart: Date, resetAt: Date): RateLimitResult {
+    const fallbackMax = Math.max(1, Math.floor(this.config.maxRequests * FALLBACK_LIMIT_RATIO));
+    const windowStartMs = windowStart.getTime();
+    const fallbackKey = `${keyId}:${windowStartMs}`;
+
+    // Periodically evict stale entries (roughly every 100 calls)
+    if (Math.random() < 0.01) {
+      evictStaleFallbackEntries(this.config.windowMs);
+    }
+
+    const entry = inMemoryFallback.get(fallbackKey);
+    if (!entry || entry.windowStartMs !== windowStartMs) {
+      // New window -- create entry with count 1 (this request)
+      inMemoryFallback.set(fallbackKey, { count: 1, windowStartMs });
+      return {
+        allowed: true,
+        remaining: Math.max(0, fallbackMax - 1),
+        resetAt,
+      };
+    }
+
+    entry.count += 1;
+    const allowed = entry.count <= fallbackMax;
+    const remaining = Math.max(0, fallbackMax - entry.count);
+
+    logger.warning('Rate limit fallback (in-memory) check', {
+      keyId,
+      fallbackCount: entry.count,
+      fallbackMax,
+      allowed,
+      remaining,
+    });
+
+    return { allowed, remaining, resetAt };
+  }
+
+  /**
    * Check if a request is allowed under the rate limit.
    *
    * This method checks the current request count for the API key
    * in the current time window and determines if another request
    * is allowed.
+   *
+   * On database errors, falls back to an in-memory counter with a
+   * conservative limit (fail-closed) rather than allowing all traffic.
    *
    * Requirements:
    * - 3.1: Limit each API key to 100 requests per minute
@@ -130,13 +215,12 @@ export class RateLimiter {
 
       if (error && error.code !== 'PGRST116') {
         // PGRST116 is "no rows returned" which is expected for new windows
-        logger.error('Error checking rate limit', new Error(error.message), { keyId });
-        // On error, allow the request but log it
-        return {
-          allowed: true,
-          remaining: this.config.maxRequests,
-          resetAt,
-        };
+        logger.error('Rate limit DB error — falling back to in-memory limiter (fail-closed)', new Error(error.message), {
+          keyId,
+          errorCode: error.code,
+        });
+        // Fail closed: use conservative in-memory fallback instead of allowing all traffic
+        return this.checkLimitInMemoryFallback(keyId, windowStart, resetAt);
       }
 
       const currentCount = data?.request_count ?? 0;
@@ -159,13 +243,9 @@ export class RateLimiter {
         resetAt,
       };
     } catch (error) {
-      logger.error('Unexpected error in checkLimit', error instanceof Error ? error : new Error(String(error)), { keyId });
-      // On unexpected error, allow the request
-      return {
-        allowed: true,
-        remaining: this.config.maxRequests,
-        resetAt,
-      };
+      logger.error('Unexpected error in checkLimit — falling back to in-memory limiter (fail-closed)', error instanceof Error ? error : new Error(String(error)), { keyId });
+      // Fail closed: use conservative in-memory fallback instead of allowing all traffic
+      return this.checkLimitInMemoryFallback(keyId, windowStart, resetAt);
     }
   }
 
@@ -285,6 +365,14 @@ export function createCustomRateLimiter(
   config: RateLimitConfig
 ): RateLimiter {
   return new RateLimiter(supabase, config);
+}
+
+/**
+ * Reset the in-memory fallback counters.
+ * Intended for use in tests only.
+ */
+export function _resetInMemoryFallback(): void {
+  inMemoryFallback.clear();
 }
 
 /**

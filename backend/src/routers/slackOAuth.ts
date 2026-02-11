@@ -329,11 +329,104 @@ function getSupabaseClient(settings: Settings): SupabaseClient {
 }
 
 /**
+ * Default frontend URL used when no valid redirect_uri is provided.
+ */
+const DEFAULT_FRONTEND_URL = 'https://main.do1k9oyyorn24.amplifyapp.com';
+
+/**
+ * Get the list of allowed redirect URI hostnames.
+ *
+ * Includes the configured FRONTEND_URL hostname and the default production hostname.
+ * In development, localhost origins from CORS_ORIGINS are also permitted.
+ */
+function getAllowedRedirectHosts(): string[] {
+  const hosts = new Set<string>();
+
+  // Always allow the default production frontend
+  try {
+    hosts.add(new URL(DEFAULT_FRONTEND_URL).hostname);
+  } catch {
+    // Static URL; should never fail
+  }
+
+  // Allow the configured FRONTEND_URL
+  const frontendUrl = process.env['FRONTEND_URL'];
+  if (frontendUrl) {
+    try {
+      hosts.add(new URL(frontendUrl).hostname);
+    } catch {
+      // Ignore malformed FRONTEND_URL
+    }
+  }
+
+  // In non-production, also allow localhost origins from CORS_ORIGINS
+  const corsOrigins = process.env['CORS_ORIGINS'] ?? '';
+  if (corsOrigins) {
+    const origins = corsOrigins.startsWith('[')
+      ? (() => { try { return JSON.parse(corsOrigins) as string[]; } catch { return []; } })()
+      : corsOrigins.split(',');
+    for (const origin of origins) {
+      try {
+        const parsed = new URL(origin.trim());
+        if (parsed.hostname === 'localhost' || parsed.hostname === '127.0.0.1') {
+          hosts.add(parsed.hostname);
+        }
+      } catch {
+        // Skip unparseable origins
+      }
+    }
+  }
+
+  return Array.from(hosts);
+}
+
+/**
+ * Validate a redirect URI.
+ *
+ * Returns the validated URL string on success, or an error message on failure.
+ * Validation rules:
+ * - Must be a valid URL
+ * - Must use https (or http for localhost in development)
+ * - Hostname must match one of the allowed frontend hosts
+ */
+function validateRedirectUri(uri: string): { valid: true; url: string } | { valid: false; error: string } {
+  let parsed: URL;
+  try {
+    parsed = new URL(uri);
+  } catch {
+    return { valid: false, error: 'Invalid redirect_uri: malformed URL' };
+  }
+
+  // Only allow http/https schemes
+  if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') {
+    return { valid: false, error: 'Invalid redirect_uri: only http and https schemes are allowed' };
+  }
+
+  // Enforce https for non-localhost
+  const isLocalhost = parsed.hostname === 'localhost' || parsed.hostname === '127.0.0.1';
+  if (parsed.protocol === 'http:' && !isLocalhost) {
+    return { valid: false, error: 'Invalid redirect_uri: https is required for non-localhost URLs' };
+  }
+
+  // Check hostname against whitelist
+  const allowedHosts = getAllowedRedirectHosts();
+  if (!allowedHosts.includes(parsed.hostname)) {
+    logger.warning('Redirect URI rejected: hostname not in whitelist', {
+      hostname: parsed.hostname,
+      allowed: allowedHosts,
+    });
+    return { valid: false, error: 'Invalid redirect_uri: hostname not allowed' };
+  }
+
+  return { valid: true, url: parsed.toString() };
+}
+
+/**
  * Build error redirect URL.
  */
 function getErrorRedirect(errorCode: string, message: string, redirectBase?: string): string {
   const base =
-    redirectBase ?? process.env['FRONTEND_URL'] ?? 'https://main.do1k9oyyorn24.amplifyapp.com';
+    redirectBase ?? process.env['FRONTEND_URL'] ?? DEFAULT_FRONTEND_URL;
   return `${base}/settings?error=${errorCode}&message=${encodeURIComponent(message)}`;
 }
 
@@ -365,6 +458,16 @@ export function createSlackOAuthRouter(): Hono {
       redirectUri = body.redirect_uri;
     } catch {
       // Body is optional; redirect_uri will be undefined
+    }
+
+    // Validate redirect_uri if provided
+    if (redirectUri) {
+      const validation = validateRedirectUri(redirectUri);
+      if (!validation.valid) {
+        logger.warning('POST /connect: redirect_uri validation failed', { error: validation.error });
+        return c.json({ error: validation.error }, 400);
+      }
+      redirectUri = validation.url;
     }
 
     // Get user from Authorization header (via middleware)
@@ -459,7 +562,18 @@ export function createSlackOAuthRouter(): Hono {
       return c.json({ error: 'Invalid query parameters' }, 400);
     }
 
-    const { redirect_uri: redirectUri, token } = query.data;
+    let { redirect_uri: redirectUri } = query.data;
+    const { token } = query.data;
+
+    // Validate redirect_uri if provided
+    if (redirectUri) {
+      const validation = validateRedirectUri(redirectUri);
+      if (!validation.valid) {
+        logger.warning('GET /connect: redirect_uri validation failed', { error: validation.error });
+        return c.json({ error: validation.error }, 400);
+      }
+      redirectUri = validation.url;
+    }
 
     // Get user from token (query param) or middleware
     let currentUser: { id: string; type: string };
@@ -553,16 +667,21 @@ export function createSlackOAuthRouter(): Hono {
       return c.redirect(getErrorRedirect('invalid_state', 'OAuth state invalid or expired'));
     }
 
-    // Get redirect URI from state
-    const redirectUri = stateData.redirect_uri;
+    // Get redirect URI from state and validate (defense in depth)
+    let redirectUri = stateData.redirect_uri;
     let frontendBase: string | undefined;
 
     if (redirectUri) {
-      try {
-        const parsed = new URL(redirectUri);
+      const validation = validateRedirectUri(redirectUri);
+      if (!validation.valid) {
+        // Stored redirect_uri is invalid -- log and discard it
+        logger.warning('GET /callback: stored redirect_uri failed validation, using default', {
+          error: validation.error,
+        });
+        redirectUri = '';
+      } else {
+        const parsed = new URL(validation.url);
         frontendBase = `${parsed.protocol}//${parsed.host}`;
-      } catch {
-        // Ignore URL parsing errors
       }
     }
 
@@ -602,7 +721,7 @@ export function createSlackOAuthRouter(): Hono {
     // Redirect to settings with success
     const finalRedirect =
       redirectUri ||
-      `${frontendBase ?? 'https://main.do1k9oyyorn24.amplifyapp.com'}/settings`;
+      `${frontendBase ?? DEFAULT_FRONTEND_URL}/settings`;
     return c.redirect(`${finalRedirect}?slack_connected=true`);
   });
 
@@ -789,7 +908,7 @@ export function createSlackOAuthRouter(): Hono {
     try {
       logger.info('Slack test: Decrypting token');
       const token = await decryptToken(connection['access_token'] as string);
-      logger.info('Slack test: Token decrypted', { tokenLength: token.length, tokenPrefix: token.substring(0, 10) });
+      logger.info('Slack test: Token decrypted', { tokenLength: token.length });
       
       const slackUserId = connection['slack_user_id'] as string;
 
