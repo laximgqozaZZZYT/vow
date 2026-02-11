@@ -33,7 +33,10 @@ function LoginContent() {
       if (!supabase) throw new Error('Supabase is not configured (missing NEXT_PUBLIC_SUPABASE_URL / NEXT_PUBLIC_SUPABASE_ANON_KEY)')
       
       // リダイレクト先を決定
-      const redirectPath = searchParams.get('redirect') || '/dashboard';
+      const rawRedirect = searchParams.get('redirect') || '/dashboard';
+      const redirectPath = rawRedirect.startsWith('/') && !rawRedirect.startsWith('//')
+        ? rawRedirect
+        : '/dashboard';
       const redirectTo = `${window.location.origin}${redirectPath}`;
       
       const { error } = await supabase.auth.signInWithOAuth({

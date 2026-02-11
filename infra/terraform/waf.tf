@@ -28,7 +28,10 @@ resource "aws_wafv2_web_acl" "api" {
 
     statement {
       rate_based_statement {
-        limit              = 1000
+        # Security: 300 requests per 5 minutes (~1 req/sec) to mitigate
+        # brute-force and credential-stuffing attacks against API endpoints.
+        # Previous value of 1000 was too permissive for this API's traffic profile.
+        limit              = 300
         aggregate_key_type = "IP"
       }
     }

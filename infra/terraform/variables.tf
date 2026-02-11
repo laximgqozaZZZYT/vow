@@ -238,11 +238,8 @@ variable "supabase_ip_ranges" {
   default     = []
 
   validation {
-    condition = alltrue([
-      for cidr in var.supabase_ip_ranges :
-      can(cidrhost(cidr, 0))
-    ])
-    error_message = "All entries in supabase_ip_ranges must be valid CIDR blocks (e.g., \"13.210.1.100/32\")."
+    condition     = length(var.supabase_ip_ranges) == 0 || alltrue([for cidr in var.supabase_ip_ranges : can(cidrhost(cidr, 0))])
+    error_message = "supabase_ip_ranges must contain valid CIDR blocks (e.g., \"13.210.1.100/32\")."
   }
 }
 

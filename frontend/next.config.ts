@@ -6,6 +6,29 @@ const isStaticExport = process.env.NEXT_STATIC_EXPORT === 'true';
 const isDockerBuild = process.env.DOCKER_BUILD === 'true';
 const isDevelopment = process.env.NODE_ENV === 'development';
 
+// Content-Security-Policy ヘッダー値の構築
+// NOTE: Next.js はハイドレーション用のインラインスクリプト (<script> タグ) を生成するため、
+// script-src に 'unsafe-inline' が必要です。本来は nonce ベースの CSP が望ましいですが、
+// Next.js の App Router では middleware で nonce を注入する追加実装が必要になります。
+// 将来的に nonce 方式への移行を検討してください。
+const cspDirectives = [
+  "default-src 'self'",
+  "script-src 'self' 'unsafe-inline'",
+  "style-src 'self' 'unsafe-inline'",
+  "img-src 'self' https:",
+  "font-src 'self' data:",
+  "connect-src 'self' https://*.supabase.co",
+  "object-src 'none'",
+  "base-uri 'self'",
+  "form-action 'self'",
+];
+
+// 通常ページ用 CSP（iframe埋め込み禁止）
+const cspHeader = [...cspDirectives, "frame-ancestors 'none'"].join('; ');
+
+// /embed/* ページ用 CSP（iframe埋め込みを許可）
+const cspHeaderEmbed = [...cspDirectives, "frame-ancestors *"].join('; ');
+
 const nextConfig: NextConfig = {
   // 出力モードの設定:
   // - Docker/Amplify: standalone (最適化されたサーバー出力)
@@ -73,7 +96,11 @@ const nextConfig: NextConfig = {
             value: '1; mode=block',
           },
           // Note: X-Frame-Options is intentionally omitted to allow embedding
-          // Content-Security-Policy frame-ancestors could be used for more control
+          // CSP frame-ancestors * で埋め込みを許可しつつ他のディレクティブで保護
+          {
+            key: 'Content-Security-Policy',
+            value: cspHeaderEmbed,
+          },
         ],
       },
       // All other pages - deny iframe embedding
@@ -95,6 +122,10 @@ const nextConfig: NextConfig = {
           {
             key: 'X-XSS-Protection',
             value: '1; mode=block',
+          },
+          {
+            key: 'Content-Security-Policy',
+            value: cspHeader,
           },
           // HSTS は本番環境のみで有効化（開発環境ではHTTPを使用するため除外）
           ...(isDevelopment ? [] : [{

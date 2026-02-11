@@ -3,7 +3,7 @@ import type { NextRequest } from 'next/server';
 import { createServerClient } from '@supabase/ssr';
 
 // 開発環境で許可されるメールアドレス
-const ADMIN_EMAIL = 'k6285620@gmail.com';
+const ADMIN_EMAIL = process.env.ADMIN_EMAIL || process.env.NEXT_PUBLIC_ADMIN_EMAIL || '';
 
 // 認証不要のパス（静的ファイル、API、ログインページなど）
 const PUBLIC_PATHS = [

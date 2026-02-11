@@ -183,7 +183,7 @@ export function handleError(
   let logDetails = `Error type: ${type}`;
   if (error instanceof Error) {
     logDetails += `, Message: ${error.message}`;
-    if (error.stack) {
+    if (error.stack && process.env['NODE_ENV'] !== 'production') {
       logDetails += `, Stack: ${error.stack.split('\n')[0]}`;
     }
   }

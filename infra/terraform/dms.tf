@@ -87,13 +87,18 @@ resource "aws_security_group" "dms" {
     description     = "Allow PostgreSQL to Aurora"
   }
 
-  # HTTPS for AWS APIs
+  # HTTPS for AWS APIs (e.g., CloudWatch, Secrets Manager, DMS control plane)
+  # TODO: Replace 0.0.0.0/0 with VPC Endpoint prefix list IDs once VPC Endpoints
+  # for the required AWS services (com.amazonaws.{region}.dms, logs, secretsmanager)
+  # are provisioned. This will eliminate the need for NAT Gateway egress and
+  # restrict HTTPS traffic to AWS-internal paths only.
+  # See: https://docs.aws.amazon.com/dms/latest/userguide/CHAP_Security.html
   egress {
     from_port   = 443
     to_port     = 443
     protocol    = "tcp"
     cidr_blocks = ["0.0.0.0/0"]
-    description = "Allow HTTPS for AWS APIs"
+    description = "Allow HTTPS for AWS APIs (restrict to VPC Endpoints when available)"
   }
 
   tags = {

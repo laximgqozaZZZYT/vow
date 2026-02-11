@@ -54,7 +54,7 @@ interface JWKSCache {
 
 // Cache for JWKS (JSON Web Key Set)
 const jwksCache: Map<string, JWKSCache> = new Map();
-const JWKS_CACHE_TTL = 3600 * 1000; // 1 hour in milliseconds
+const JWKS_CACHE_TTL = 5 * 60 * 1000; // 5 minutes in milliseconds
 
 /**
  * Paths that don't require authentication (without stage prefix).
@@ -413,7 +413,7 @@ export function jwtAuthMiddleware(): MiddlewareHandler {
         throw error;
       }
       logger.error('Authentication error', error as Error);
-      throw new AuthenticationError(`Authentication error: ${(error as Error).message}`);
+      throw new AuthenticationError('Authentication failed');
     }
 
     return next();

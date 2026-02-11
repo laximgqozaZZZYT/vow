@@ -90,7 +90,17 @@ function MermaidBlock({ code }: { code: string }) {
                   mm.render(`${instanceId}-legacy-${Date.now()}`, code, (svgCode: string) => {
                     clearTimeout(renderTimeout)
                     try {
-                      mermaidDiv.innerHTML = svgCode
+                      while (mermaidDiv.firstChild) {
+                        mermaidDiv.removeChild(mermaidDiv.firstChild);
+                      }
+                      const parser = new DOMParser();
+                      const svgDoc = parser.parseFromString(svgCode, 'image/svg+xml');
+                      const svgElement = svgDoc.documentElement;
+                      if (svgElement && svgElement.nodeName === 'svg') {
+                        mermaidDiv.appendChild(document.importNode(svgElement, true));
+                      } else {
+                        mermaidDiv.textContent = 'Failed to render diagram';
+                      }
                       resolve()
                     } catch (e) {
                       reject(e)
@@ -105,11 +115,21 @@ function MermaidBlock({ code }: { code: string }) {
             // Legacy render method
             await new Promise<void>((resolve, reject) => {
               const renderTimeout = setTimeout(() => reject(new Error('Render timeout')), 5000)
-              
+
               mm.render(`${instanceId}-legacy-${Date.now()}`, code, (svgCode: string) => {
                 clearTimeout(renderTimeout)
                 try {
-                  mermaidDiv.innerHTML = svgCode
+                  while (mermaidDiv.firstChild) {
+                    mermaidDiv.removeChild(mermaidDiv.firstChild);
+                  }
+                  const parser = new DOMParser();
+                  const svgDoc = parser.parseFromString(svgCode, 'image/svg+xml');
+                  const svgElement = svgDoc.documentElement;
+                  if (svgElement && svgElement.nodeName === 'svg') {
+                    mermaidDiv.appendChild(document.importNode(svgElement, true));
+                  } else {
+                    mermaidDiv.textContent = 'Failed to render diagram';
+                  }
                   resolve()
                 } catch (e) {
                   reject(e)

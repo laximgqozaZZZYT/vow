@@ -61,6 +61,8 @@ resource "aws_iam_role_policy" "vpc_flow_logs" {
   name = "${var.project_name}-${var.environment}-vpc-flow-logs-publish"
   role = aws_iam_role.vpc_flow_logs.id
 
+  # Security: Restrict IAM policy to the specific VPC Flow Logs log group
+  # instead of Resource="*" to follow least-privilege principle.
   policy = jsonencode({
     Version = "2012-10-17"
     Statement = [{
@@ -71,8 +73,11 @@ resource "aws_iam_role_policy" "vpc_flow_logs" {
         "logs:DescribeLogGroups",
         "logs:DescribeLogStreams"
       ]
-      Effect   = "Allow"
-      Resource = "*"
+      Effect = "Allow"
+      Resource = [
+        aws_cloudwatch_log_group.vpc_flow_logs.arn,
+        "${aws_cloudwatch_log_group.vpc_flow_logs.arn}:*"
+      ]
     }]
   })
 }
