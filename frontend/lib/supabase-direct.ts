@@ -3758,17 +3758,20 @@ export class SupabaseDirectClient {
     if (payload.displayOrder !== undefined) updateData['display_order'] = payload.displayOrder;
     if (payload.executionResult !== undefined) updateData['execution_result'] = payload.executionResult;
 
+    const userId = session.session.user.id;
+
     const { data, error } = await supabase
       .from('skill_sets')
       .update(updateData)
       .eq('id', id)
+      .eq('owner_id', userId)
       .select('*, note:notes(*), skill_set_stickies(*, sticky:stickies(*)), skill_set_goals(*, goal:goals(*)), skill_set_habits(*, habit:habits(*))')
       .single();
     if (error) throw error;
 
     // Update linked stickies (full replace)
     if (payload.stickyIds !== undefined) {
-      await supabase.from('skill_set_stickies').delete().eq('skill_set_id', id);
+      await supabase.from('skill_set_stickies').delete().eq('skill_set_id', id).eq('owner_id', userId);
       if (payload.stickyIds.length > 0) {
         const stickyLinks = payload.stickyIds.map((stickyId: string, i: number) => ({
           skill_set_id: id,
@@ -3795,12 +3798,12 @@ export class SupabaseDirectClient {
       await supabase.from('skill_set_stickies').insert(stickyLinks);
     }
     if (payload.removeStickyIds?.length > 0) {
-      await supabase.from('skill_set_stickies').delete().eq('skill_set_id', id).in('sticky_id', payload.removeStickyIds);
+      await supabase.from('skill_set_stickies').delete().eq('skill_set_id', id).eq('owner_id', userId).in('sticky_id', payload.removeStickyIds);
     }
 
     // Update linked goals (full replace)
     if (payload.goalIds !== undefined) {
-      await supabase.from('skill_set_goals').delete().eq('skill_set_id', id);
+      await supabase.from('skill_set_goals').delete().eq('skill_set_id', id).eq('owner_id', userId);
       if (payload.goalIds.length > 0) {
         const goalLinks = payload.goalIds.map((goalId: string) => ({
           skill_set_id: id,
@@ -3823,12 +3826,12 @@ export class SupabaseDirectClient {
       await supabase.from('skill_set_goals').insert(goalLinks);
     }
     if (payload.removeGoalIds?.length > 0) {
-      await supabase.from('skill_set_goals').delete().eq('skill_set_id', id).in('goal_id', payload.removeGoalIds);
+      await supabase.from('skill_set_goals').delete().eq('skill_set_id', id).eq('owner_id', userId).in('goal_id', payload.removeGoalIds);
     }
 
     // Update linked habits (full replace)
     if (payload.habitIds !== undefined) {
-      await supabase.from('skill_set_habits').delete().eq('skill_set_id', id);
+      await supabase.from('skill_set_habits').delete().eq('skill_set_id', id).eq('owner_id', userId);
       if (payload.habitIds.length > 0) {
         const habitLinks = payload.habitIds.map((habitId: string) => ({
           skill_set_id: id,
@@ -3851,7 +3854,7 @@ export class SupabaseDirectClient {
       await supabase.from('skill_set_habits').insert(habitLinks);
     }
     if (payload.removeHabitIds?.length > 0) {
-      await supabase.from('skill_set_habits').delete().eq('skill_set_id', id).in('habit_id', payload.removeHabitIds);
+      await supabase.from('skill_set_habits').delete().eq('skill_set_id', id).eq('owner_id', userId).in('habit_id', payload.removeHabitIds);
     }
 
     // Re-fetch with all relations after link updates
@@ -3859,6 +3862,7 @@ export class SupabaseDirectClient {
       .from('skill_sets')
       .select('*, note:notes(*), skill_set_stickies(*, sticky:stickies(*)), skill_set_goals(*, goal:goals(*)), skill_set_habits(*, habit:habits(*))')
       .eq('id', id)
+      .eq('owner_id', userId)
       .single();
     if (refetchError) throw refetchError;
     return full;
@@ -3873,10 +3877,12 @@ export class SupabaseDirectClient {
       localStorage.setItem('guest-skill-sets', JSON.stringify(filtered));
       return true;
     }
+    const userId = session.session.user.id;
     const { error } = await supabase
       .from('skill_sets')
       .delete()
-      .eq('id', id);
+      .eq('id', id)
+      .eq('owner_id', userId);
     if (error) throw error;
     return true;
   }
@@ -3885,10 +3891,12 @@ export class SupabaseDirectClient {
     this.checkEnvironment();
     const { data: session } = await supabase.auth.getSession();
     if (!session?.session?.user) return null;
+    const userId = session.session.user.id;
     const { data, error } = await supabase
       .from('skill_sets')
       .update({ status })
       .eq('id', id)
+      .eq('owner_id', userId)
       .select()
       .single();
     if (error) throw error;
@@ -4049,34 +4057,37 @@ export class SupabaseDirectClient {
       return;
     }
     
+    const userId = session.session.user.id;
     debug.log('[updateHabitDailyWorkload] Starting:', { habitId, date, workloadDelta });
-    
+
     try {
-      // Get current workload for this date
+      // Get current workload for this date (filtered by owner)
       const { data: existing, error: fetchError } = await supabase
         .from('habit_daily_workloads')
         .select('id, workload')
         .eq('habit_id', habitId)
         .eq('date', date)
+        .eq('owner_id', userId)
         .maybeSingle();
-      
+
       if (fetchError) {
         console.error('[updateHabitDailyWorkload] Fetch error:', JSON.stringify(fetchError, null, 2));
         return;
       }
-      
+
       const currentWorkload = existing?.workload || 0;
       const newWorkload = Math.max(0, currentWorkload + workloadDelta);
-      
+
       debug.log('[updateHabitDailyWorkload] Calculated:', { currentWorkload, newWorkload, existing: !!existing });
-      
+
       if (newWorkload === 0 && existing) {
         // Delete the row if workload becomes 0
         const { error: deleteError } = await supabase
           .from('habit_daily_workloads')
           .delete()
           .eq('habit_id', habitId)
-          .eq('date', date);
+          .eq('date', date)
+          .eq('owner_id', userId);
         
         if (deleteError) {
           console.error('[updateHabitDailyWorkload] Delete error:', JSON.stringify(deleteError, null, 2));
@@ -4092,7 +4103,8 @@ export class SupabaseDirectClient {
               workload: newWorkload,
               updated_at: new Date().toISOString()
             })
-            .eq('id', existing.id);
+            .eq('id', existing.id)
+            .eq('owner_id', userId);
           
           if (updateError) {
             console.error('[updateHabitDailyWorkload] Update error:', JSON.stringify(updateError, null, 2));
