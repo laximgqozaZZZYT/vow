@@ -348,13 +348,101 @@ export function createSlackOAuthRouter(): Hono {
   const router = new Hono();
 
   /**
+   * POST /api/slack/connect
+   *
+   * Initiate Slack OAuth flow (secure).
+   * Accepts token via Authorization header and returns OAuth URL as JSON.
+   * This avoids exposing the access_token in URL parameters.
+   */
+  router.post('/connect', async (c) => {
+    const settings = getSettings();
+    const slackService = getSlackService();
+
+    // Parse request body for redirect_uri
+    let redirectUri: string | undefined;
+    try {
+      const body = await c.req.json() as { redirect_uri?: string };
+      redirectUri = body.redirect_uri;
+    } catch {
+      // Body is optional; redirect_uri will be undefined
+    }
+
+    // Get user from Authorization header (via middleware)
+    let currentUser: { id: string; type: string };
+    try {
+      currentUser = getCurrentUser(c);
+    } catch {
+      // Fallback: try to extract token from Authorization header directly
+      const authHeader = c.req.header('Authorization');
+      if (authHeader?.startsWith('Bearer ')) {
+        const token = authHeader.slice(7);
+        try {
+          currentUser = await verifyJwtToken(token, settings);
+        } catch {
+          return c.json(
+            { error: 'Not authenticated. Please provide a valid token.' },
+            401
+          );
+        }
+      } else {
+        return c.json(
+          { error: 'Not authenticated. Please provide Authorization header.' },
+          401
+        );
+      }
+    }
+
+    // Validate Slack configuration
+    if (!settings.slackClientId) {
+      logger.error('Slack integration not configured: missing SLACK_CLIENT_ID');
+      return c.json(
+        { error: 'Slack integration is not configured. Please contact administrator.' },
+        500
+      );
+    }
+
+    // Generate state token
+    const state = generateState();
+
+    // Store state in database (for Lambda stateless environment)
+    const supabase = getSupabaseClient(settings);
+    const redirectUriValue = redirectUri ?? settings.slackCallbackUri ?? '';
+
+    if (!(await saveOAuthState(supabase, state, currentUser.type, currentUser.id, redirectUriValue))) {
+      return c.json(
+        { error: 'Failed to initialize OAuth flow. Please try again.' },
+        500
+      );
+    }
+
+    // Clean up expired states in background
+    cleanupExpiredOAuthStates(supabase).catch(() => {
+      // Ignore cleanup errors
+    });
+
+    // Get OAuth URL
+    const callbackUri =
+      process.env['SLACK_CALLBACK_URI'] ??
+      `${new URL(c.req.url).origin}/api/slack/callback`;
+
+    const oauthUrl = slackService.getOAuthUrl(callbackUri, state);
+
+    // Return OAuth URL as JSON instead of redirecting
+    // This allows the frontend to use fetch() with Authorization header
+    return c.json({ oauth_url: oauthUrl });
+  });
+
+  /**
    * GET /api/slack/connect
    *
-   * Initiate Slack OAuth flow.
+   * Initiate Slack OAuth flow (legacy).
    * Redirects user to Slack authorization page.
    *
+   * @deprecated Use POST /api/slack/connect with Authorization header instead.
+   * Token passed via query parameter is a security risk (exposed in URL, logs, Referer headers).
+   *
    * Token can be passed via:
-   * 1. Query parameter (for redirect-based flow)
+   * 1. Query parameter (for redirect-based flow) — DEPRECATED
    * 2. Authorization header (via middleware)
    */
   router.get('/connect', async (c) => {
@@ -377,6 +465,7 @@ export function createSlackOAuthRouter(): Hono {
     let currentUser: { id: string; type: string };
     try {
       if (token) {
+        logger.warning('Slack connect: token passed via query parameter (deprecated). Use POST with Authorization header instead.');
         currentUser = await verifyJwtToken(token, settings);
       } else {
         currentUser = getCurrentUser(c);

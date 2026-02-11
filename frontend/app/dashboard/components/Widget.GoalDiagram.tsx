@@ -75,8 +75,8 @@ export default function GoalMermaid({ goals, showErrorDetails = false, compact =
 
         if (cancelled) return;
         
-        // Clear previous content
-        el.innerHTML = '';
+        // Clear previous content (safe: avoids innerHTML to prevent XSS)
+        while (el.firstChild) el.removeChild(el.firstChild);
 
         // Create mermaid element
         const mermaidEl = document.createElement('div');
@@ -96,9 +96,24 @@ export default function GoalMermaid({ goals, showErrorDetails = false, compact =
             const res = api.render(renderId, graph);
             const out = res && typeof (res as any).then === 'function' ? await res : res;
             if (cancelled) return;
-            if (typeof out === 'string') el.innerHTML = out;
-            else if (out && typeof out === 'object' && typeof (out as any).svg === 'string') el.innerHTML = (out as any).svg;
-            else el.innerText = String(out);
+            const svgString = typeof out === 'string'
+              ? out
+              : (out && typeof out === 'object' && typeof (out as any).svg === 'string')
+                ? (out as any).svg
+                : null;
+            if (svgString) {
+              while (el.firstChild) el.removeChild(el.firstChild);
+              const parser = new DOMParser();
+              const svgDoc = parser.parseFromString(svgString, 'image/svg+xml');
+              const svgElement = svgDoc.documentElement;
+              if (svgElement && svgElement.nodeName === 'svg') {
+                el.appendChild(document.importNode(svgElement, true));
+              } else {
+                el.textContent = 'Failed to render diagram';
+              }
+            } else {
+              el.innerText = String(out);
+            }
           } else if (api?.init) {
             api.init(undefined, mermaidEl);
           } else {

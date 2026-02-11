@@ -62,8 +62,14 @@ resource "aws_secretsmanager_secret" "lambda_secrets" {
   name        = "${var.project_name}/${var.environment}/lambda-secrets"
   description = "[LEGACY] Lambda function secrets for ${var.project_name} ${var.environment} - Use group-specific secrets instead"
 
+  # TODO: Enable automatic rotation when Lambda rotation function is implemented.
+  # Requires: Lambda rotation function ARN (see rotation section at end of file).
+  # rotation_rules {
+  #   automatically_after_days = 90
+  # }
+
   tags = {
-    Name = "${var.project_name}-${var.environment}-lambda-secrets"
+    Name   = "${var.project_name}-${var.environment}-lambda-secrets"
     Status = "legacy"
   }
 }
@@ -97,6 +103,11 @@ resource "aws_secretsmanager_secret" "auth_secrets" {
   name        = "${var.project_name}/${var.environment}/auth-secrets"
   description = "Authentication secrets (JWT, Supabase) for ${var.project_name} ${var.environment}"
 
+  # TODO: Enable automatic rotation (requires Lambda rotation function).
+  # rotation_rules {
+  #   automatically_after_days = 90
+  # }
+
   tags = {
     Name  = "${var.project_name}-${var.environment}-auth-secrets"
     Group = "auth"
@@ -120,6 +131,11 @@ resource "aws_secretsmanager_secret" "slack_secrets" {
 
   name        = "${var.project_name}/${var.environment}/slack-secrets"
   description = "Slack integration secrets for ${var.project_name} ${var.environment}"
+
+  # TODO: Enable automatic rotation (requires Lambda rotation function).
+  # rotation_rules {
+  #   automatically_after_days = 90
+  # }
 
   tags = {
     Name  = "${var.project_name}-${var.environment}-slack-secrets"
@@ -146,6 +162,11 @@ resource "aws_secretsmanager_secret" "api_secrets" {
   name        = "${var.project_name}/${var.environment}/api-secrets"
   description = "Third-party API secrets (OpenAI, Stripe) for ${var.project_name} ${var.environment}"
 
+  # TODO: Enable automatic rotation (requires Lambda rotation function).
+  # rotation_rules {
+  #   automatically_after_days = 90
+  # }
+
   tags = {
     Name  = "${var.project_name}-${var.environment}-api-secrets"
     Group = "api"
@@ -170,6 +191,11 @@ resource "aws_secretsmanager_secret" "credentials_secrets" {
 
   name        = "${var.project_name}/${var.environment}/credentials-secrets"
   description = "Credentials encryption secrets for ${var.project_name} ${var.environment}"
+
+  # TODO: Enable automatic rotation (requires Lambda rotation function).
+  # rotation_rules {
+  #   automatically_after_days = 180
+  # }
 
   tags = {
     Name  = "${var.project_name}-${var.environment}-credentials-secrets"
@@ -365,3 +391,61 @@ output "credentials_secrets_name" {
   description = "Secrets Manager name for credentials encryption secrets"
   value       = var.lambda_s3_bucket != "" ? aws_secretsmanager_secret.credentials_secrets[0].name : null
 }
+
+# =================================================================
+# TODO: Automatic Secret Rotation (HIGH security finding)
+# =================================================================
+# AWS Secrets Manager の自動ローテーションにはカスタム Lambda 関数が必要。
+# 以下はローテーション Lambda 実装後に有効化するためのテンプレート。
+#
+# 実装手順:
+#   1. Lambda 関数を作成 (create_secret, set_secret, test_secret, finish_secret の4ステップ)
+#   2. Lambda に SecretsManager へのアクセス権限を付与
+#   3. 以下のリソースのコメントを解除
+#   4. terraform apply で自動ローテーションを有効化
+#
+# 参考: https://docs.aws.amazon.com/secretsmanager/latest/userguide/rotating-secrets.html
+#
+# resource "aws_secretsmanager_secret_rotation" "auth_secrets" {
+#   count = var.lambda_s3_bucket != "" ? 1 : 0
+#
+#   secret_id           = aws_secretsmanager_secret.auth_secrets[0].id
+#   rotation_lambda_arn = aws_lambda_function.secret_rotation.arn  # TODO: Create this Lambda
+#
+#   rotation_rules {
+#     automatically_after_days = 90
+#   }
+# }
+#
+# resource "aws_secretsmanager_secret_rotation" "slack_secrets" {
+#   count = var.lambda_s3_bucket != "" ? 1 : 0
+#
+#   secret_id           = aws_secretsmanager_secret.slack_secrets[0].id
+#   rotation_lambda_arn = aws_lambda_function.secret_rotation.arn
+#
+#   rotation_rules {
+#     automatically_after_days = 90
+#   }
+# }
+#
+# resource "aws_secretsmanager_secret_rotation" "api_secrets" {
+#   count = var.lambda_s3_bucket != "" ? 1 : 0
+#
+#   secret_id           = aws_secretsmanager_secret.api_secrets[0].id
+#   rotation_lambda_arn = aws_lambda_function.secret_rotation.arn
+#
+#   rotation_rules {
+#     automatically_after_days = 90
+#   }
+# }
+#
+# resource "aws_secretsmanager_secret_rotation" "credentials_secrets" {
+#   count = var.lambda_s3_bucket != "" ? 1 : 0
+#
+#   secret_id           = aws_secretsmanager_secret.credentials_secrets[0].id
+#   rotation_lambda_arn = aws_lambda_function.secret_rotation.arn
+#
+#   rotation_rules {
+#     automatically_after_days = 180
+#   }
+# }

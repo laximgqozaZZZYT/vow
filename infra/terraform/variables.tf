@@ -608,10 +608,10 @@ variable "enable_s3_access_logging" {
       - Terraform state bucket
       - CloudTrail logs bucket
     Note: S3 access logs may increase storage costs. Monitor the logging bucket size.
-    Default is false to avoid unexpected cost increases.
+    Default is true for security compliance (HIGH: S3 bucket access logging).
   EOT
   type        = bool
-  default     = false
+  default     = true
 }
 
 variable "enable_api_gateway_auth" {

@@ -99,7 +99,7 @@ function MermaidBlock({ code }: { code: string }) {
       try {
         const el = containerRef.current
         if (!el) return
-        el.innerHTML = ''
+        while (el.firstChild) el.removeChild(el.firstChild);
 
         const m = document.createElement('div')
         m.className = 'mermaid'

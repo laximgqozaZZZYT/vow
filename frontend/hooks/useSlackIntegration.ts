@@ -85,7 +85,8 @@ export function useSlackIntegration(): UseSlackIntegrationReturn {
 
   /**
    * Initiate Slack OAuth flow
-   * Token is passed via query parameter since redirect cannot use Authorization header
+   * Token is sent via Authorization header (POST request) to avoid URL exposure.
+   * The backend returns the OAuth URL which we then navigate to.
    */
   const connectSlack = useCallback(async () => {
     try {
@@ -93,23 +94,44 @@ export function useSlackIntegration(): UseSlackIntegrationReturn {
         setError('Slack API URL is not configured');
         return;
       }
-      
+
       if (!supabase) {
         setError('Supabase client not initialized');
         return;
       }
-      
+
       const { data: { session } } = await supabase.auth.getSession();
       if (!session?.access_token) {
         setError('Please log in to connect Slack');
         return;
       }
-      
-      const redirectUri = encodeURIComponent(window.location.origin + '/settings');
-      const token = encodeURIComponent(session.access_token);
-      
-      // Token is passed via query parameter since redirect cannot use Authorization header
-      window.location.href = `${SLACK_API_URL}/api/slack/connect?redirect_uri=${redirectUri}&token=${token}`;
+
+      const redirectUri = window.location.origin + '/settings';
+
+      // Send token via Authorization header instead of URL parameter
+      // to prevent exposure in browser history, server logs, and Referer headers
+      const response = await fetch(`${SLACK_API_URL}/api/slack/connect`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${session.access_token}`,
+          'Content-Type': 'application/json',
+        },
+        credentials: 'include',
+        body: JSON.stringify({ redirect_uri: redirectUri }),
+      });
+
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.error || 'Failed to initiate Slack connection');
+      }
+
+      const data = await response.json();
+      if (!data.oauth_url) {
+        throw new Error('No OAuth URL returned from server');
+      }
+
+      // Navigate to Slack OAuth page
+      window.location.href = data.oauth_url;
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to initiate Slack connection');
     }

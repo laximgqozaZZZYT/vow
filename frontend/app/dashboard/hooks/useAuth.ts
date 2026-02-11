@@ -12,8 +12,8 @@ import type { AuthContext } from '../types';
 const ALLOWED_EMAILS_DEV = process.env.NEXT_PUBLIC_ALLOWED_EMAILS_DEV?.split(',').map(e => e.trim().toLowerCase()) || [];
 const IS_DEV_ENV = process.env.NEXT_PUBLIC_ENV === 'development';
 
-// 管理者メールアドレス
-const ADMIN_EMAIL = 'k6285620@gmail.com';
+// 管理者メールアドレス（環境変数から取得）
+const ADMIN_EMAIL = process.env.NEXT_PUBLIC_ADMIN_EMAIL || '';
 
 export function useAuth(): AuthContext {
   const router = useRouter();

@@ -45,7 +45,7 @@ function MermaidBlock({ code }: { code: string }) {
         
         try {
           // Clear container
-          container.innerHTML = ''
+          while (container.firstChild) container.removeChild(container.firstChild);
           
           const mermaidDiv = document.createElement('div')
           mermaidDiv.className = 'mermaid'
