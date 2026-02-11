@@ -90,8 +90,9 @@ function isOriginAllowed(origin: string, allowedOrigins: string[]): boolean {
   // Check for pattern match (e.g., *.example.com)
   for (const allowed of allowedOrigins) {
     if (allowed.startsWith('*.')) {
-      const domain = allowed.slice(2);
-      if (origin.endsWith(domain) || origin.endsWith(`.${domain}`)) {
+      const domain = allowed.slice(2); // e.g., "example.com"
+      // Must match ".example.com" suffix to prevent "notexample.com" bypass
+      if (origin.endsWith(`.${domain}`)) {
         return true;
       }
     }

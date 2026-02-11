@@ -249,7 +249,20 @@ async function verifyWithJWKS(
     throw new AuthenticationError('SUPABASE_URL is not configured');
   }
 
-  const jwksUrl = `${settings.supabaseUrl}/auth/v1/.well-known/jwks.json`;
+  // Validate Supabase URL uses HTTPS to prevent MITM attacks on JWKS fetch
+  let supabaseOrigin: string;
+  try {
+    const parsed = new URL(settings.supabaseUrl);
+    if (parsed.protocol !== 'https:' && process.env['NODE_ENV'] === 'production') {
+      throw new AuthenticationError('SUPABASE_URL must use HTTPS in production');
+    }
+    supabaseOrigin = parsed.origin;
+  } catch (e) {
+    if (e instanceof AuthenticationError) throw e;
+    throw new AuthenticationError('Invalid SUPABASE_URL configuration');
+  }
+
+  const jwksUrl = `${supabaseOrigin}/auth/v1/.well-known/jwks.json`;
   const publicKey = await getPublicKeyFromJWKS(jwksUrl, kid);
 
   const verifyOptions: jose.JWTVerifyOptions = {

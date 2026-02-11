@@ -93,6 +93,11 @@ export function createHealthRouter(): Hono {
   router.get('/health/detailed', (c) => {
     const settings = getSettings();
 
+    // In production, do not expose configuration details
+    if (settings.nodeEnv === 'production') {
+      return c.json({ status: 'healthy', timestamp: new Date().toISOString() });
+    }
+
     const response: DetailedHealthResponse = {
       status: 'healthy',
       version: settings.appVersion,
@@ -196,11 +201,14 @@ export function createHealthRouter(): Hono {
         instance_id: instanceId,
       });
 
+      const settings = getSettings();
       const response: SupabaseHealthStatus = {
         status: 'unhealthy',
         supabase_connected: false,
         latency_ms: null,
-        error: errorMessage,
+        error: settings.nodeEnv === 'production'
+          ? 'Supabase connection check failed'
+          : errorMessage,
         timestamp,
         instance_id: instanceId,
       };

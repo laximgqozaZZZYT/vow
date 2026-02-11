@@ -168,6 +168,18 @@ export function apiKeyAuthMiddleware(): MiddlewareHandler {
         );
       }
 
+      // Validate result contains required fields
+      if (!result.userId || !result.keyId) {
+        logger.info('API key validation returned incomplete data');
+        return c.json(
+          {
+            error: ApiKeyAuthErrorCodes.INVALID_API_KEY,
+            message: ApiKeyAuthErrorMessages.INVALID_API_KEY,
+          },
+          401
+        );
+      }
+
       // Set context variables for downstream handlers
       c.set('apiKeyUserId', result.userId);
       c.set('apiKeyId', result.keyId);

@@ -44,8 +44,7 @@ export class TokenEncryption {
 
     if (!key) {
       throw new Error(
-        'TOKEN_ENCRYPTION_KEY environment variable must be set. ' +
-          'Generate one with: openssl rand -base64 32'
+        'TOKEN_ENCRYPTION_KEY environment variable must be set'
       );
     }
 
