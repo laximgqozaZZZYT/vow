@@ -48,6 +48,7 @@ output "aurora_cluster_port" {
 output "aurora_secret_arn" {
   description = "Aurora master user secret ARN"
   value       = var.enable_aurora ? aws_rds_cluster.aurora[0].master_user_secret[0].secret_arn : null
+  sensitive   = true
 }
 
 output "aurora_cluster_identifier" {
@@ -101,6 +102,16 @@ output "lambda_function_arn" {
 output "lambda_function_name" {
   description = "Lambda function name"
   value       = var.lambda_s3_bucket != "" ? aws_lambda_function.api[0].function_name : null
+}
+
+output "api_gateway_auth_enabled" {
+  description = "Whether Cognito Authorizer is enabled on API Gateway"
+  value       = var.enable_api_gateway_auth
+}
+
+output "api_gateway_authorizer_id" {
+  description = "API Gateway Cognito Authorizer ID (null if disabled)"
+  value       = var.lambda_s3_bucket != "" && var.enable_api_gateway_auth ? aws_api_gateway_authorizer.cognito[0].id : null
 }
 
 # =================================================================

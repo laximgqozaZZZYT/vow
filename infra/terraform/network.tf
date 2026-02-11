@@ -13,6 +13,71 @@ resource "aws_vpc" "main" {
 }
 
 # =================================================================
+# VPC Flow Logs
+# =================================================================
+# ネットワークトラフィックの可視化とセキュリティ監査のため、
+# VPC Flow Logsを有効化する。ログはCloudWatch Logsに90日間保持。
+
+resource "aws_flow_log" "main" {
+  vpc_id          = aws_vpc.main.id
+  traffic_type    = "ALL"
+  log_destination = aws_cloudwatch_log_group.vpc_flow_logs.arn
+  iam_role_arn    = aws_iam_role.vpc_flow_logs.arn
+
+  tags = {
+    Name = "${var.project_name}-${var.environment}-vpc-flow-logs"
+  }
+}
+
+resource "aws_cloudwatch_log_group" "vpc_flow_logs" {
+  name              = "/aws/vpc/flow-logs/${var.project_name}-${var.environment}"
+  retention_in_days = 90
+
+  tags = {
+    Name = "${var.project_name}-${var.environment}-vpc-flow-logs"
+  }
+}
+
+resource "aws_iam_role" "vpc_flow_logs" {
+  name = "${var.project_name}-${var.environment}-vpc-flow-logs"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Action = "sts:AssumeRole"
+      Effect = "Allow"
+      Principal = {
+        Service = "vpc-flow-logs.amazonaws.com"
+      }
+    }]
+  })
+
+  tags = {
+    Name = "${var.project_name}-${var.environment}-vpc-flow-logs-role"
+  }
+}
+
+resource "aws_iam_role_policy" "vpc_flow_logs" {
+  name = "${var.project_name}-${var.environment}-vpc-flow-logs-publish"
+  role = aws_iam_role.vpc_flow_logs.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Action = [
+        "logs:CreateLogGroup",
+        "logs:CreateLogStream",
+        "logs:PutLogEvents",
+        "logs:DescribeLogGroups",
+        "logs:DescribeLogStreams"
+      ]
+      Effect   = "Allow"
+      Resource = "*"
+    }]
+  })
+}
+
+# =================================================================
 # Internet Gateway
 # =================================================================
 

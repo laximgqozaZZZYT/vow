@@ -48,6 +48,13 @@ resource "aws_cognito_user_pool" "main" {
     }
   }
 
+  # MFA Configuration - OPTIONAL so existing users are not forced
+  mfa_configuration = "OPTIONAL"
+
+  software_token_mfa_configuration {
+    enabled = true
+  }
+
   tags = {
     Name = "${var.project_name}-${var.environment}-user-pool"
   }
@@ -145,7 +152,7 @@ resource "aws_cognito_user_pool_client" "main" {
 
   access_token_validity  = 1
   id_token_validity      = 1
-  refresh_token_validity = 30
+  refresh_token_validity = 7
 
   token_validity_units {
     access_token  = "hours"

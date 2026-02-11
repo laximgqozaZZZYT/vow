@@ -67,15 +67,15 @@ resource "aws_security_group" "dms" {
   vpc_id      = aws_vpc.main.id
 
   # Outbound to Supabase (external PostgreSQL)
-  # Note: 0.0.0.0/0 is used because Supabase has dynamic IPs.
-  # This is acceptable because: (1) DMS is conditional (enable_dms=false by default),
-  # (2) only port 5432 is open, (3) DMS runs in private subnets.
+  # When supabase_ip_ranges is set, restrict to those IPs only.
+  # When unset, fall back to 0.0.0.0/0 to avoid breaking DMS connectivity.
+  # IMPORTANT: Set supabase_ip_ranges in terraform.tfvars for production.
   egress {
     from_port   = 5432
     to_port     = 5432
     protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
-    description = "Allow PostgreSQL to Supabase (dynamic IP)"
+    cidr_blocks = length(var.supabase_ip_ranges) > 0 ? var.supabase_ip_ranges : ["0.0.0.0/0"]
+    description = length(var.supabase_ip_ranges) > 0 ? "Allow PostgreSQL to Supabase (restricted)" : "WARN: Allow PostgreSQL to all (set supabase_ip_ranges to restrict)"
   }
 
   # Outbound to Aurora (internal)

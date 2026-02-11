@@ -129,6 +129,12 @@ variable "lambda_timeout" {
   default     = 30
 }
 
+variable "lambda_reserved_concurrency" {
+  description = "Reserved concurrent executions for Lambda function (prevents runaway invocations)"
+  type        = number
+  default     = 100
+}
+
 variable "lambda_s3_bucket" {
   description = "S3 bucket for Lambda deployment package"
   type        = string
@@ -210,6 +216,34 @@ variable "supabase_password" {
   type        = string
   default     = ""
   sensitive   = true
+}
+
+variable "supabase_ip_ranges" {
+  description = <<-EOT
+    CIDR blocks for Supabase IP ranges used in DMS security group egress rules.
+    Restricts outbound PostgreSQL (5432) traffic to only Supabase endpoints.
+
+    How to determine your Supabase IP:
+      1. Find your Supabase pooler host: nslookup <your-project-ref>.pooler.supabase.com
+      2. Use the resolved IP with /32 suffix (e.g., ["13.210.1.100/32"])
+      3. Set this value in terraform.tfvars:
+           supabase_ip_ranges = ["<resolved-ip>/32"]
+
+    Note: Supabase runs on AWS infrastructure. The pooler IP may change if
+    your project is migrated. Monitor DMS connectivity after Supabase maintenance.
+    If you cannot determine the IP, you may temporarily use ["0.0.0.0/0"] but
+    this is not recommended for production.
+  EOT
+  type        = list(string)
+  default     = []
+
+  validation {
+    condition = alltrue([
+      for cidr in var.supabase_ip_ranges :
+      can(cidrhost(cidr, 0))
+    ])
+    error_message = "All entries in supabase_ip_ranges must be valid CIDR blocks (e.g., \"13.210.1.100/32\")."
+  }
 }
 
 variable "aurora_master_username" {
@@ -568,4 +602,32 @@ variable "enable_subscription" {
   description = "Enable Subscription management feature"
   type        = bool
   default     = true
+}
+
+variable "enable_s3_access_logging" {
+  description = <<-EOT
+    Enable S3 access logging for all managed S3 buckets.
+    Creates a dedicated logging bucket and configures access logging on:
+      - Terraform state bucket
+      - CloudTrail logs bucket
+    Note: S3 access logs may increase storage costs. Monitor the logging bucket size.
+    Default is false to avoid unexpected cost increases.
+  EOT
+  type        = bool
+  default     = false
+}
+
+variable "enable_api_gateway_auth" {
+  description = <<-EOT
+    Enable Cognito Authorizer on API Gateway for Defense-in-Depth.
+    When true, adds a Cognito User Pool Authorizer to protected API Gateway routes.
+    Public endpoints (/health, /api/cli-tokens/refresh, Stripe webhooks, Slack endpoints,
+    widget API, etc.) are routed through separate resources without authorization.
+    Note: The Hono backend already enforces JWT authentication via middleware (auth.ts).
+    This adds an additional layer at the API Gateway level using Cognito User Pools.
+    Only effective when AUTH_PROVIDER is set to 'cognito'.
+    Default is false for backward compatibility and gradual rollout.
+  EOT
+  type        = bool
+  default     = false
 }

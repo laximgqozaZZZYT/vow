@@ -27,6 +27,16 @@ resource "aws_s3_bucket" "terraform_state" {
 }
 
 # S3バケットのバージョニング設定
+# M-06: MFA Delete は手動で有効化が必要 (Terraformでは設定不可)
+# 手順:
+#   1. ルートアカウントの MFA デバイスを用意
+#   2. AWS CLI でルートアカウント認証情報を使用:
+#      aws s3api put-bucket-versioning \
+#        --bucket vow-terraform-state-ACCOUNTID \
+#        --versioning-configuration Status=Enabled,MFADelete=Enabled \
+#        --mfa "arn:aws:iam::ACCOUNTID:mfa/root-account-mfa-device TOTP_CODE"
+#   3. 設定確認:
+#      aws s3api get-bucket-versioning --bucket vow-terraform-state-ACCOUNTID
 resource "aws_s3_bucket_versioning" "terraform_state" {
   bucket = aws_s3_bucket.terraform_state.id
 
@@ -54,6 +64,86 @@ resource "aws_s3_bucket_public_access_block" "terraform_state" {
   block_public_policy     = true
   ignore_public_acls      = true
   restrict_public_buckets = true
+}
+
+# =================================================================
+# S3 Access Logging (optional)
+# =================================================================
+# S3アクセスログを有効化するための専用バケットとlogging設定。
+# var.enable_s3_access_logging = true の場合のみ作成される。
+# コスト増加の可能性があるためデフォルトは無効。
+
+resource "aws_s3_bucket" "s3_access_logs" {
+  count  = var.enable_s3_access_logging ? 1 : 0
+  bucket = "vow-s3-access-logs-${data.aws_caller_identity.current.account_id}"
+
+  lifecycle {
+    prevent_destroy = true
+  }
+
+  tags = {
+    Name        = "vow-s3-access-logs"
+    Purpose     = "S3 Access Logging"
+    Environment = "shared"
+  }
+}
+
+resource "aws_s3_bucket_versioning" "s3_access_logs" {
+  count  = var.enable_s3_access_logging ? 1 : 0
+  bucket = aws_s3_bucket.s3_access_logs[0].id
+
+  versioning_configuration {
+    status = "Enabled"
+  }
+}
+
+resource "aws_s3_bucket_server_side_encryption_configuration" "s3_access_logs" {
+  count  = var.enable_s3_access_logging ? 1 : 0
+  bucket = aws_s3_bucket.s3_access_logs[0].id
+
+  rule {
+    apply_server_side_encryption_by_default {
+      sse_algorithm = "AES256"
+    }
+  }
+}
+
+resource "aws_s3_bucket_public_access_block" "s3_access_logs" {
+  count  = var.enable_s3_access_logging ? 1 : 0
+  bucket = aws_s3_bucket.s3_access_logs[0].id
+
+  block_public_acls       = true
+  block_public_policy     = true
+  ignore_public_acls      = true
+  restrict_public_buckets = true
+}
+
+resource "aws_s3_bucket_lifecycle_configuration" "s3_access_logs" {
+  count  = var.enable_s3_access_logging ? 1 : 0
+  bucket = aws_s3_bucket.s3_access_logs[0].id
+
+  rule {
+    id     = "expire-old-logs"
+    status = "Enabled"
+
+    expiration {
+      days = 90
+    }
+
+    transition {
+      days          = 30
+      storage_class = "STANDARD_IA"
+    }
+  }
+}
+
+# Terraform state バケットのアクセスログ設定
+resource "aws_s3_bucket_logging" "terraform_state" {
+  count  = var.enable_s3_access_logging ? 1 : 0
+  bucket = aws_s3_bucket.terraform_state.id
+
+  target_bucket = aws_s3_bucket.s3_access_logs[0].id
+  target_prefix = "terraform-state/"
 }
 
 # DynamoDBテーブル: Terraformステートロック用

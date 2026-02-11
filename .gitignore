@@ -30,6 +30,9 @@ infra/terraform/tfplan
 infra/terraform/tfplan-*
 infra/terraform/.env.terraform
 infra/terraform/.terraform.tfstate.lock.info
+infra/terraform/terraform.tfstate
+infra/terraform/terraform.tfstate.*
+infra/terraform/terraform.tfstate.d/
 !infra/terraform/.env.terraform.example
 !infra/terraform/terraform.tfvars.example
 

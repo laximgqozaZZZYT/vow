@@ -79,6 +79,12 @@ resource "aws_dynamodb_table" "mcp_connections" {
     type = "S"
   }
 
+  # TTL configuration for automatic expiration of stale connections
+  ttl {
+    attribute_name = "expiresAt"
+    enabled        = true
+  }
+
   server_side_encryption {
     enabled = true
   }
@@ -117,6 +123,12 @@ resource "aws_dynamodb_table" "user_credentials" {
   attribute {
     name = "credentialType"
     type = "S"
+  }
+
+  # TTL configuration for automatic expiration of revoked/expired credentials
+  ttl {
+    attribute_name = "expiresAt"
+    enabled        = true
   }
 
   server_side_encryption {
