@@ -95,21 +95,35 @@ export class ActivityRepository extends BaseRepository<Activity> {
    * Retrieves activities for a specific habit, ordered by timestamp descending.
    * This is commonly used for streak calculation and habit history display.
    *
+   * When ownerType and ownerId are provided, an additional ownership filter is applied
+   * to ensure the caller only accesses activities belonging to the specified owner.
+   *
    * @param habitId - The unique identifier of the habit.
    * @param kind - The type of activity to filter by. Defaults to "complete".
    * @param limit - Maximum number of activities to return. Defaults to 365.
+   * @param ownerType - Optional owner type filter for access control.
+   * @param ownerId - Optional owner ID filter for access control.
    * @returns List of activity objects for the habit, ordered by timestamp descending. Returns an empty list if no activities are found.
    */
   async getHabitActivities(
     habitId: string,
     kind: 'complete' | 'skip' | 'partial' = 'complete',
-    limit = 365
+    limit = 365,
+    ownerType?: string,
+    ownerId?: string
   ): Promise<Activity[]> {
-    const { data, error } = await this.supabase
+    let query = this.supabase
       .from(this.tableName)
       .select('*')
       .eq('habit_id', habitId)
-      .eq('kind', kind)
+      .eq('kind', kind);
+
+    // Apply owner filter when provided for access control
+    if (ownerType && ownerId) {
+      query = query.eq('owner_type', ownerType).eq('owner_id', ownerId);
+    }
+
+    const { data, error } = await query
       .order('timestamp', { ascending: false })
       .limit(limit);
 
@@ -347,9 +361,13 @@ export class ActivityRepository extends BaseRepository<Activity> {
       .eq('kind', 'complete')
       .order('timestamp', { ascending: true });
 
-    // Apply exclusion filter if provided
+    // Apply exclusion filter if provided (validate UUID format to prevent injection)
     if (excludeActivityIds && excludeActivityIds.length > 0) {
-      query = query.not('id', 'in', `(${excludeActivityIds.join(',')})`);
+      const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+      const validIds = excludeActivityIds.filter(id => UUID_REGEX.test(id));
+      if (validIds.length > 0) {
+        query = query.not('id', 'in', `(${validIds.join(',')})`);
+      }
     }
 
     // Apply pagination

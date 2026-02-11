@@ -441,6 +441,30 @@ export function useUnifiedSSE(options?: UseUnifiedSSEOptions): UseUnifiedSSERetu
     let finalUrl = url;
     if (authToken) {
       const urlObj = new URL(url, window.location.origin);
+
+      // Validate that SSE endpoint is same-origin or a trusted backend
+      // to prevent sending auth tokens to untrusted domains
+      const isSameOrigin = urlObj.origin === window.location.origin;
+      let isTrustedBackend = false;
+      const trustedBackendUrl = process.env.NEXT_PUBLIC_BACKEND_API_URL || process.env.NEXT_PUBLIC_SLACK_API_URL || '';
+      if (trustedBackendUrl) {
+        try {
+          const trustedHostname = new URL(trustedBackendUrl).hostname;
+          isTrustedBackend = urlObj.hostname === trustedHostname;
+        } catch {
+          // Invalid trusted URL configuration; skip trust check
+        }
+      }
+      const isLocalhost = urlObj.hostname === 'localhost' || urlObj.hostname === '127.0.0.1';
+
+      if (!isSameOrigin && !isTrustedBackend && !isLocalhost) {
+        console.error('[useUnifiedSSE] Refusing to send auth token to untrusted SSE endpoint:', urlObj.hostname);
+        setError('Untrusted SSE endpoint');
+        setConnectionState('error');
+        updateConnectionInfo({ state: 'error', error: 'Untrusted SSE endpoint' });
+        return;
+      }
+
       urlObj.searchParams.set('token', authToken);
       finalUrl = urlObj.toString();
     }

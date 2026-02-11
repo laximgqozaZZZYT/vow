@@ -408,9 +408,24 @@ export default function SettingsPage() {
     // Step 3: SSE connection test
     log(`[STEP 3] SSE接続テスト: EventSource ${url}/events`);
     try {
+      // Validate the SSE endpoint domain before sending tokens
+      const eventsUrl = new URL(`${url}/events`, window.location.origin);
+      const apiHostname = (() => {
+        const backendUrl = process.env.NEXT_PUBLIC_BACKEND_API_URL || process.env.NEXT_PUBLIC_SLACK_API_URL || '';
+        if (!backendUrl) return null;
+        try { return new URL(backendUrl).hostname; } catch { return null; }
+      })();
+      const isLocalhost = eventsUrl.hostname === 'localhost' || eventsUrl.hostname === '127.0.0.1';
+      const isTrustedHost = isLocalhost || (apiHostname !== null && eventsUrl.hostname === apiHostname);
+      if (!isTrustedHost && eventsUrl.hostname !== window.location.hostname) {
+        log(`[STEP 3] エラー: 信頼できないSSEエンドポイント (${eventsUrl.hostname})`);
+        throw new Error('Untrusted SSE endpoint');
+      }
+      if (token) {
+        eventsUrl.searchParams.set('token', token);
+      }
       await new Promise<void>((resolve) => {
-        const sseUrl = token ? `${url}/events?token=${encodeURIComponent(token)}` : `${url}/events`;
-        const es = new EventSource(sseUrl);
+        const es = new EventSource(eventsUrl.toString());
         const timeout = setTimeout(() => {
           log(`[STEP 3] 結果: 3秒タイムアウト（接続は開いたが、イベント受信なし）`);
           es.close();

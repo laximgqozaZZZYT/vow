@@ -33,10 +33,12 @@ function LoginContent() {
       if (!supabase) throw new Error('Supabase is not configured (missing NEXT_PUBLIC_SUPABASE_URL / NEXT_PUBLIC_SUPABASE_ANON_KEY)')
       
       // リダイレクト先を決定
+      // Only allow paths starting with / followed by an alphanumeric character.
+      // This blocks protocol-relative URLs (//evil.com), backslash tricks (/\evil.com),
+      // and other malformed path patterns.
       const rawRedirect = searchParams.get('redirect') || '/dashboard';
-      const redirectPath = rawRedirect.startsWith('/') && !rawRedirect.startsWith('//')
-        ? rawRedirect
-        : '/dashboard';
+      const isValidPath = /^\/[a-zA-Z0-9]/.test(rawRedirect);
+      const redirectPath = isValidPath ? rawRedirect : '/dashboard';
       const redirectTo = `${window.location.origin}${redirectPath}`;
       
       const { error } = await supabase.auth.signInWithOAuth({

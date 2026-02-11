@@ -31,7 +31,7 @@ resource "aws_flow_log" "main" {
 
 resource "aws_cloudwatch_log_group" "vpc_flow_logs" {
   name              = "/aws/vpc/flow-logs/${var.project_name}-${var.environment}"
-  retention_in_days = 90
+  retention_in_days = var.environment == "production" ? 365 : 90
 
   tags = {
     Name = "${var.project_name}-${var.environment}-vpc-flow-logs"

@@ -76,7 +76,7 @@ resource "aws_s3_bucket_lifecycle_configuration" "cloudtrail_logs" {
 
 # CloudTrail logs バケットのアクセスログ設定 (optional)
 resource "aws_s3_bucket_logging" "cloudtrail_logs" {
-  count  = var.enable_s3_access_logging ? 1 : 0
+  count  = (var.environment == "production" || var.enable_s3_access_logging) ? 1 : 0
   bucket = aws_s3_bucket.cloudtrail_logs.id
 
   target_bucket = aws_s3_bucket.s3_access_logs[0].id

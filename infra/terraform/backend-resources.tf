@@ -74,7 +74,7 @@ resource "aws_s3_bucket_public_access_block" "terraform_state" {
 # コスト増加の可能性があるためデフォルトは無効。
 
 resource "aws_s3_bucket" "s3_access_logs" {
-  count  = var.enable_s3_access_logging ? 1 : 0
+  count  = (var.environment == "production" || var.enable_s3_access_logging) ? 1 : 0
   bucket = "vow-s3-access-logs-${data.aws_caller_identity.current.account_id}"
 
   lifecycle {
@@ -89,7 +89,7 @@ resource "aws_s3_bucket" "s3_access_logs" {
 }
 
 resource "aws_s3_bucket_versioning" "s3_access_logs" {
-  count  = var.enable_s3_access_logging ? 1 : 0
+  count  = (var.environment == "production" || var.enable_s3_access_logging) ? 1 : 0
   bucket = aws_s3_bucket.s3_access_logs[0].id
 
   versioning_configuration {
@@ -98,7 +98,7 @@ resource "aws_s3_bucket_versioning" "s3_access_logs" {
 }
 
 resource "aws_s3_bucket_server_side_encryption_configuration" "s3_access_logs" {
-  count  = var.enable_s3_access_logging ? 1 : 0
+  count  = (var.environment == "production" || var.enable_s3_access_logging) ? 1 : 0
   bucket = aws_s3_bucket.s3_access_logs[0].id
 
   rule {
@@ -109,7 +109,7 @@ resource "aws_s3_bucket_server_side_encryption_configuration" "s3_access_logs" {
 }
 
 resource "aws_s3_bucket_public_access_block" "s3_access_logs" {
-  count  = var.enable_s3_access_logging ? 1 : 0
+  count  = (var.environment == "production" || var.enable_s3_access_logging) ? 1 : 0
   bucket = aws_s3_bucket.s3_access_logs[0].id
 
   block_public_acls       = true
@@ -119,7 +119,7 @@ resource "aws_s3_bucket_public_access_block" "s3_access_logs" {
 }
 
 resource "aws_s3_bucket_lifecycle_configuration" "s3_access_logs" {
-  count  = var.enable_s3_access_logging ? 1 : 0
+  count  = (var.environment == "production" || var.enable_s3_access_logging) ? 1 : 0
   bucket = aws_s3_bucket.s3_access_logs[0].id
 
   rule {
@@ -139,7 +139,7 @@ resource "aws_s3_bucket_lifecycle_configuration" "s3_access_logs" {
 
 # Terraform state バケットのアクセスログ設定
 resource "aws_s3_bucket_logging" "terraform_state" {
-  count  = var.enable_s3_access_logging ? 1 : 0
+  count  = (var.environment == "production" || var.enable_s3_access_logging) ? 1 : 0
   bucket = aws_s3_bucket.terraform_state.id
 
   target_bucket = aws_s3_bucket.s3_access_logs[0].id

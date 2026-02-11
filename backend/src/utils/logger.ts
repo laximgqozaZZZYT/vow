@@ -108,7 +108,9 @@ export class StructuredLogger {
       if (error) {
         errorExtra['error_type'] = error.name;
         errorExtra['error_message'] = error.message;
-        errorExtra['error_stack'] = error.stack;
+        if (process.env['NODE_ENV'] !== 'production') {
+          errorExtra['error_stack'] = error.stack;
+        }
       }
       this.log('ERROR', message, errorExtra);
     }

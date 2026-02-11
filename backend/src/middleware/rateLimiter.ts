@@ -37,11 +37,11 @@ export interface RateLimitResult {
 
 /**
  * Default rate limit configuration.
- * 100 requests per minute as specified in Requirements 3.1.
+ * 30 requests per minute (hardened from 100 for security).
  */
 export const DEFAULT_RATE_LIMIT_CONFIG: RateLimitConfig = {
   windowMs: 60000, // 1 minute
-  maxRequests: 100,
+  maxRequests: 30,
 };
 
 /**

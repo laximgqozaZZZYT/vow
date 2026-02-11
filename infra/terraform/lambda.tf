@@ -150,6 +150,64 @@ resource "aws_lambda_function" "api" {
 }
 
 # =================================================================
+# KMS Key for CloudWatch Logs Encryption
+# =================================================================
+
+resource "aws_kms_key" "cloudwatch_logs" {
+  count                   = var.lambda_s3_bucket != "" ? 1 : 0
+  description             = "KMS key for CloudWatch Logs encryption"
+  deletion_window_in_days = 30
+  enable_key_rotation     = true
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid    = "Enable IAM User Permissions"
+        Effect = "Allow"
+        Principal = {
+          AWS = "arn:aws:iam::${data.aws_caller_identity.current.account_id}:root"
+        }
+        Action   = "kms:*"
+        Resource = "*"
+      },
+      {
+        Sid    = "Allow CloudWatch Logs"
+        Effect = "Allow"
+        Principal = {
+          Service = "logs.${var.aws_region}.amazonaws.com"
+        }
+        Action = [
+          "kms:Encrypt*",
+          "kms:Decrypt*",
+          "kms:ReEncrypt*",
+          "kms:GenerateDataKey*",
+          "kms:Describe*"
+        ]
+        Resource = "*"
+        Condition = {
+          ArnLike = {
+            "kms:EncryptionContext:aws:logs:arn" = "arn:aws:logs:${var.aws_region}:${data.aws_caller_identity.current.account_id}:log-group:*"
+          }
+        }
+      }
+    ]
+  })
+
+  tags = {
+    Name        = "${var.project_name}-${var.environment}-cloudwatch-logs-key"
+    Environment = var.environment
+    Project     = var.project_name
+  }
+}
+
+resource "aws_kms_alias" "cloudwatch_logs" {
+  count         = var.lambda_s3_bucket != "" ? 1 : 0
+  name          = "alias/${var.project_name}-${var.environment}-cloudwatch-logs"
+  target_key_id = aws_kms_key.cloudwatch_logs[0].key_id
+}
+
+# =================================================================
 # CloudWatch Log Group for Lambda
 # =================================================================
 
@@ -158,6 +216,7 @@ resource "aws_cloudwatch_log_group" "lambda" {
 
   name              = "/aws/lambda/${var.project_name}-${var.environment}-api"
   retention_in_days = var.environment == "production" ? 365 : 90
+  kms_key_id        = aws_kms_key.cloudwatch_logs[0].arn
 
   tags = {
     Name = "${var.project_name}-${var.environment}-lambda-logs"
@@ -519,6 +578,7 @@ resource "aws_cloudwatch_log_group" "api_gateway_access_logs" {
 
   name              = "/aws/apigateway/${var.project_name}-${var.environment}-api/access-logs"
   retention_in_days = var.environment == "production" ? 365 : 90
+  kms_key_id        = aws_kms_key.cloudwatch_logs[0].arn
 
   tags = {
     Name = "${var.project_name}-${var.environment}-api-gateway-access-logs"
